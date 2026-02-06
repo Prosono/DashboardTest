@@ -287,7 +287,7 @@ export default function PersonModal({
               
               {/* Battery Card (Compact) */}
               {batteryLevel !== undefined && (
-                <div className="px-4 py-3 rounded-xl bg-[var(--glass-bg)] border border-[var(--glass-border)] flex items-center justify-between">
+                <div className="px-4 py-3 rounded-xl popup-surface flex items-center justify-between">
                    <div className="flex items-center gap-3">
                       <Battery className={`w-4 h-4 ${batteryLevel < 20 ? 'text-red-400' : 'text-green-400'}`} />
                       <span className="text-xs font-bold uppercase tracking-widest text-[var(--text-secondary)]">Batteri</span>

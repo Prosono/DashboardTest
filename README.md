@@ -29,6 +29,7 @@ You can add various card types to customize your dashboard:
 - **Sonos** - Dedicated Sonos player management with grouping
 - **Weather** - Display weather with 12h forecast and temperature graph
 - **Cost/Energy** - Track daily and monthly power costs
+- **Nordpool** - Monitor spot prices (requires Nordpool sensor)
 - **Calendar** - Show upcoming calendar events
 - **Automation** - Toggle automations and scripts
 - **Android TV** - Media control for Android TV devices

@@ -21,7 +21,7 @@ import {
   LayoutGrid,
   Columns,
   Sun,
-  Moon,
+  Moon
 } from '../icons';
 
 // Inline lightweight icons not in icons.js

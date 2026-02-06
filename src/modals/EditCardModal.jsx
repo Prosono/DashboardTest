@@ -241,7 +241,7 @@ export default function EditCardModal({
           {isEditCalendar && editSettingsKey && (
             <div className="space-y-3">
               <label className="text-xs uppercase font-bold text-gray-500 ml-1">{t('calendar.selectCalendars') || 'Select Calendars'}</label>
-              <div className="bg-[var(--glass-bg)] border border-[var(--glass-border)] rounded-2xl p-4 max-h-56 overflow-y-auto custom-scrollbar space-y-2">
+              <div className="popup-surface rounded-2xl p-4 max-h-56 overflow-y-auto custom-scrollbar space-y-2">
                 {calendarOptions.length === 0 && (
                   <p className="text-xs text-[var(--text-muted)] text-center py-4">{t('calendar.noCalendarsFound') || 'No calendars found'}</p>
                 )}
@@ -274,13 +274,13 @@ export default function EditCardModal({
                 <div className="flex gap-2">
                   <button
                     onClick={() => editSettingsKey && saveCardSetting(editSettingsKey, 'personDisplay', 'photo')}
-                    className={`flex-1 px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-widest border transition-colors ${personDisplay === 'photo' ? 'bg-blue-500 text-white border-blue-500' : 'bg-[var(--glass-bg)] text-[var(--text-secondary)] border-[var(--glass-border)] hover:bg-[var(--glass-bg-hover)]'}`}
+                    className={`flex-1 px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-widest border transition-colors ${personDisplay === 'photo' ? 'bg-blue-500 text-white border-blue-500' : 'popup-surface popup-surface-hover text-[var(--text-secondary)]'}`}
                   >
                     {t('person.display.photo')}
                   </button>
                   <button
                     onClick={() => editSettingsKey && saveCardSetting(editSettingsKey, 'personDisplay', 'icon')}
-                    className={`flex-1 px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-widest border transition-colors ${personDisplay === 'icon' ? 'bg-blue-500 text-white border-blue-500' : 'bg-[var(--glass-bg)] text-[var(--text-secondary)] border-[var(--glass-border)] hover:bg-[var(--glass-bg-hover)]'}`}
+                    className={`flex-1 px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-widest border transition-colors ${personDisplay === 'icon' ? 'bg-blue-500 text-white border-blue-500' : 'popup-surface popup-surface-hover text-[var(--text-secondary)]'}`}
                   >
                     {t('person.display.icon')}
                   </button>
@@ -290,7 +290,7 @@ export default function EditCardModal({
                {/* Mobile App / Battery Sensor */}
                <div>
                  <label className="text-xs uppercase font-bold text-gray-500 ml-4 pb-2 block">{t('person.mobileAppBattery') || 'Mobile App Battery'}</label>
-                 <div className="bg-[var(--glass-bg)] border border-[var(--glass-border)] rounded-2xl p-4 max-h-40 overflow-y-auto custom-scrollbar space-y-2">
+                 <div className="popup-surface rounded-2xl p-4 max-h-40 overflow-y-auto custom-scrollbar space-y-2">
                     {Object.keys(entities).filter(id => id.startsWith('sensor.') && (id.includes('battery_level') || id.includes('battery'))).length === 0 ? (
                         <p className="text-sm text-gray-500 text-center py-4">{t('addCard.noSensors') || 'No sensors found'}</p>
                     ) : (
@@ -319,7 +319,7 @@ export default function EditCardModal({
                {/* Device Tracker */}
                <div>
                  <label className="text-xs uppercase font-bold text-gray-500 ml-4 pb-2 block">{t('person.deviceTracker') || 'Device Tracker (Map)'}</label>
-                 <div className="bg-[var(--glass-bg)] border border-[var(--glass-border)] rounded-2xl p-4 max-h-40 overflow-y-auto custom-scrollbar space-y-2">
+                 <div className="popup-surface rounded-2xl p-4 max-h-40 overflow-y-auto custom-scrollbar space-y-2">
                     {Object.keys(entities).filter(id => id.startsWith('device_tracker.')).length === 0 ? (
                         <p className="text-sm text-gray-500 text-center py-4">{t('addCard.noSensors') || 'No trackers found'}</p>
                     ) : (
@@ -346,7 +346,7 @@ export default function EditCardModal({
                </div>
 
                {/* Show History Toggle */}
-               <div className="flex items-center justify-between px-6 py-4 bg-[var(--glass-bg)] border border-[var(--glass-border)] rounded-2xl">
+               <div className="flex items-center justify-between p-4 popup-surface rounded-2xl">
                 <span className="text-xs uppercase font-bold text-gray-500 tracking-widest">{t('person.showHistory') || 'Show History on Map'}</span>
                   <button 
                     onClick={() => editSettingsKey && saveCardSetting(editSettingsKey, 'showHistory', !(editSettings.showHistory))}
@@ -387,10 +387,10 @@ export default function EditCardModal({
                 placeholder="Search media players..." 
                 value={mediaSearch} 
                 onChange={(e) => setMediaSearch(e.target.value)} 
-                className="w-full px-3 py-2 rounded-xl bg-[var(--glass-bg)] border border-[var(--glass-border)] text-sm focus:border-blue-500/50 outline-none mb-2 text-[var(--text-primary)]"
+                className="w-full px-3 py-2 rounded-xl popup-surface text-sm focus:border-blue-500/50 outline-none mb-2 text-[var(--text-primary)]"
               />
 
-              <div className="bg-[var(--glass-bg)] border border-[var(--glass-border)] rounded-2xl p-4 max-h-56 overflow-y-auto custom-scrollbar space-y-2">
+              <div className="popup-surface rounded-2xl p-4 max-h-56 overflow-y-auto custom-scrollbar space-y-2">
                 {mediaPlayerOptions.filter(id => {
                   if (!mediaSearch) return true;
                   const name = entities[id]?.attributes?.friendly_name || id;
@@ -479,7 +479,7 @@ export default function EditCardModal({
                       const entityId = editSettings[st.key];
                       const entityName = entities[entityId]?.attributes?.friendly_name || entityId;
                       return (
-                        <div key={st.key} className="flex items-center justify-between px-3.5 sm:px-4 py-2.5 bg-[var(--glass-bg)] border border-[var(--glass-border)] rounded-xl">
+                        <div key={st.key} className="flex items-center justify-between px-3.5 sm:px-4 py-2.5 popup-surface rounded-xl">
                           <div className="flex-1 min-w-0 mr-4">
                             <div className="flex items-baseline gap-2">
                               <span className="text-xs font-bold text-gray-500 tracking-wide">{st.label}:</span>
@@ -511,7 +511,7 @@ export default function EditCardModal({
                 )}
 
                 {showAddSensor && (
-                  <div className="space-y-4 px-4 sm:px-5 py-4 bg-[var(--glass-bg)] border border-[var(--glass-border)] rounded-xl">
+                  <div className="space-y-4 px-4 sm:px-5 py-4 popup-surface rounded-xl">
                     <div className="flex items-center justify-between mb-2">
                       <span className="text-xs uppercase font-bold text-gray-500 tracking-widest">{t('car.addSensor') || 'Legg til sensor'}</span>
                       <button
@@ -534,8 +534,8 @@ export default function EditCardModal({
                           setSensorType(e.target.value);
                           setSensorEntity('');
                         }}
-                        className="w-full px-4 py-3 rounded-xl border text-sm outline-none focus:border-blue-500/50 transition-colors"
-                        style={{backgroundColor: 'var(--glass-bg)', borderColor: 'var(--glass-border)', color: 'var(--text-primary)'}}
+                        className="w-full px-4 py-3 rounded-xl popup-surface text-sm outline-none focus:border-blue-500/50 transition-colors"
+                        style={{color: 'var(--text-primary)'}}
                       >
                         <option value="" style={{backgroundColor: 'var(--modal-bg)', color: 'var(--text-primary)'}}>{t('car.selectSensorType') || 'Vel sensortype...'}</option>
                         {availableTypes.map(st => (
@@ -575,7 +575,7 @@ export default function EditCardModal({
                           setSensorType('');
                           setSensorEntity('');
                         }}
-                        className="px-4 py-3 rounded-xl bg-[var(--glass-bg)] hover:bg-[var(--glass-bg-hover)] text-[var(--text-secondary)] font-bold uppercase tracking-widest text-xs transition-colors"
+                        className="px-4 py-3 rounded-xl popup-surface popup-surface-hover text-[var(--text-secondary)] font-bold uppercase tracking-widest text-xs transition-colors"
                       >
                         {t('common.cancel') || 'Avbryt'}
                       </button>
@@ -694,7 +694,7 @@ export default function EditCardModal({
             <div className="space-y-6">
               <div>
                 <label className="text-xs uppercase font-bold text-gray-500 ml-4 pb-2 block">{t('energyCost.today') || 'Today'}</label>
-                <div className="bg-[var(--glass-bg)] border border-[var(--glass-border)] rounded-2xl p-4 max-h-40 overflow-y-auto custom-scrollbar space-y-2">
+                <div className="popup-surface rounded-2xl p-4 max-h-40 overflow-y-auto custom-scrollbar space-y-2">
                   {Object.keys(entities).filter(id => id.startsWith('sensor.') || id.startsWith('input_number.')).length === 0 ? (
                     <p className="text-sm text-gray-500 text-center py-4">{t('addCard.noSensors') || 'No sensors found'}</p>
                   ) : (
@@ -722,7 +722,7 @@ export default function EditCardModal({
 
               <div>
                 <label className="text-xs uppercase font-bold text-gray-500 ml-4 pb-2 block">{t('energyCost.thisMonth') || 'This Month'}</label>
-                <div className="bg-[var(--glass-bg)] border border-[var(--glass-border)] rounded-2xl p-4 max-h-40 overflow-y-auto custom-scrollbar space-y-2">
+                <div className="popup-surface rounded-2xl p-4 max-h-40 overflow-y-auto custom-scrollbar space-y-2">
                   {Object.keys(entities).filter(id => id.startsWith('sensor.') || id.startsWith('input_number.')).length === 0 ? (
                     <p className="text-sm text-gray-500 text-center py-4">{t('addCard.noSensors') || 'No sensors found'}</p>
                   ) : (
@@ -760,7 +760,7 @@ export default function EditCardModal({
                     onChange={(e) => saveCardSetting(editSettingsKey, 'decimals', parseInt(e.target.value, 10))}
                     className="flex-1"
                   />
-                  <div className="min-w-[48px] text-center text-sm font-bold uppercase tracking-widest text-[var(--text-secondary)] bg-[var(--glass-bg)] px-3 py-2 rounded-xl border border-[var(--glass-border)]">
+                  <div className="min-w-[48px] text-center text-sm font-bold uppercase tracking-widest text-[var(--text-secondary)] popup-surface px-3 py-2 rounded-xl">
                     {editSettings.decimals ?? 0}
                   </div>
                 </div>

@@ -2521,6 +2521,31 @@ function AppContent({ showOnboarding, setShowOnboarding }) {
               t={t}
             />
           </div>
+        ) : (pagesConfig[activePage] || []).filter(id => gridLayout[id]).length === 0 ? (
+          <div key={`${activePage}-empty`} className="flex flex-col items-center justify-center min-h-[60vh] text-center p-8 opacity-90 animate-in fade-in zoom-in duration-500 font-sans">
+             <div className="bg-[var(--glass-bg)] border border-[var(--glass-border)] p-5 rounded-full mb-6 shadow-lg shadow-black/5">
+                <LayoutGrid className="w-12 h-12 text-[var(--text-primary)] opacity-80" />
+             </div>
+             
+             <h2 className="text-3xl font-light mb-3 text-[var(--text-primary)] uppercase tracking-tight">{t('welcome.title')}</h2>
+             <p className="text-lg text-[var(--text-secondary)] mb-8 max-w-md leading-relaxed">{t('welcome.subtitle')}</p>
+             
+             <div className="flex gap-4">
+                  <button 
+                    onClick={() => setShowAddCardModal(true)} 
+                    className="flex items-center gap-3 px-8 py-4 bg-blue-500 hover:bg-blue-600 active:scale-95 text-white rounded-2xl shadow-lg shadow-blue-500/20 transition-all duration-200 font-bold uppercase tracking-widest text-sm"
+                  >
+                     <Plus className="w-5 h-5" />
+                     {t('welcome.addCard')}
+                  </button>
+             </div>
+
+             <div className="mt-12 max-w-xs mx-auto p-4 rounded-2xl bg-[var(--glass-bg)] border border-[var(--glass-border)]">
+                <p className="text-[10px] text-[var(--text-muted)] uppercase tracking-widest leading-relaxed">
+                   {t('welcome.editHint')}
+                </p>
+             </div>
+          </div>
         ) : (
           <div key={activePage} className="grid font-sans fade-in-anim items-start" style={{ gap: `${isMobile ? 12 : gridGap}px`, gridAutoRows: isMobile ? '82px' : '100px', gridTemplateColumns: `repeat(${gridColCount}, minmax(0, 1fr))` }}>
             {(pagesConfig[activePage] || [])

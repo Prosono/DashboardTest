@@ -1,40 +1,45 @@
 # Tunet Dashboard — Copilot Instructions
 
 ## Big picture
-- React 18 + Vite Home Assistant dashboard. Real‑time entity updates via `window.HAWS` WebSocket; all user changes persist to localStorage (no save button).
-- State is centralized in [src/App.jsx](../src/App.jsx); do not split it unless explicitly requested.
+- React 18 + Vite Home Assistant dashboard. Real‑time entity updates via `window.HAWS` WebSocket; all configuration persists to simple localStorage keys (no database).
+- **Architecture**:
+  - **Data/Config**: Managed in `src/contexts` (`ConfigContext`, `PageContext`, `HomeAssistantContext`).
+  - **UI Orchestration**: `src/App.jsx` handles main layout, modal visibility state, and drag-and-drop.
+  - **Modals**: Rendered inline in `App.jsx` (no portals), controlled by local state.
 
 ## Core data flow
-1. Read `ha_url`/`ha_token` from localStorage.
-2. `createConnection()` + `subscribeEntities()` updates `entities` keyed by `entity_id`.
-3. Cards read entity data, render, and persist user changes immediately.
+1. **Init**: Read `ha_url`/`ha_token` from localStorage (via context).
+2. **Connection**: `createConnection()` + `subscribeEntities()` updates global `entities` object.
+3. **Usage**: Components consume config/entities via hooks. User changes persist immediately to localStorage.
 
 ## Key files & modules
-- [src/App.jsx](../src/App.jsx): app orchestration, renderers, modals, drag/drop.
-- [src/contexts](../src/contexts): `useConfig`, `usePages`, `useHomeAssistant` (barrel at [src/contexts/index.js](../src/contexts/index.js)).
-- [src/services/haClient.js](../src/services/haClient.js): HA WebSocket helpers (barrel at [src/services/index.js](../src/services/index.js)).
-- [src/modals](../src/modals): all modal components (barrel at [src/modals/index.js](../src/modals/index.js)).
-- [src/components](../src/components): card components and UI primitives (barrel at [src/components/index.js](../src/components/index.js)).
+- [src/App.jsx](src/App.jsx): Main layout, grid rendering, modal managers.
+- [src/contexts](src/contexts): Global state managers.
+- [src/services/haClient.js](src/services/haClient.js): WebSocket wrapper.
+- [src/modals](src/modals): All dialogs (edit settings, device controls).
+- [src/components](src/components): Dashboard cards and widgets.
 
 ## Patterns & conventions
-- **Generic cards** read entity IDs from `cardSettings[settingsKey]` (e.g. `climateId`, `weatherId`, `mediaPlayerId`).
-- **Sizing**: `settings.size` is `'small'|'large'` and toggled via `canToggleSize()`.
-- **Hooks**: `useEnergyData(entity, now)` expects a single entity object (not the whole `entities`).
-- **Icons**: store icon names in localStorage and map via [src/iconMap.js](../src/iconMap.js).
-- **i18n**: keys live in [src/i18n/en.json](../src/i18n/en.json) and [src/i18n/nn.json](../src/i18n/nn.json) (barrel at [src/i18n/index.js](../src/i18n/index.js)).
-- **UI**: keep car-mapping sensor boxes minimal (smaller padding, smaller radius, no flashy hover) across themes.
-- **Modals**: Seamless design — avoid borders on internal elements (buttons, cards, groups) for a cleaner look. Applies especially to Vacuum and Android TV modals.
+- **Card Data**: Generic cards (e.g., `GenericClimateCard`) read entity IDs from `cardSettings[settingsKey]`.
+- **Sizing**: `settings.size` is `'small'|'large'`. Toggle capability checked via `canToggleSize()`.
+- **Hooks**: `useEnergyData(entity, now)` expects a single entity object.
+- **Icons**: selection stored as string names; mapped via `src/iconMap.js`.
+- **i18n**: keys in `src/i18n/{en,nn}.json`. Setup is manual (no i18next).
+- **Styling**:
+  - **Modals**: Use `.popup-surface` for boxed content (lists, groups) inside modals. Avoid manual `bg-[var(--glass-bg)]` where `.popup-surface` works.
+  - **Cards**: Keep minimal. No heavy borders. 
+  - **Glassmorphism**: heavily used via CSS variables (`--glass-bg`, `--glass-border`).
 
 ## LocalStorage keys (prefix `tunet_*`)
-- `tunet_pages_config`, `tunet_card_settings`, `tunet_hidden_cards`, `tunet_custom_names`, `tunet_custom_icons`, `tunet_grid_columns`, `tunet_theme`, `tunet_language`, `tunet_inactivity_timeout`.
+- `tunet_pages_config` (layout), `tunet_card_settings` (entity mappings), `tunet_hidden_cards`, `tunet_theme`, `tunet_language`.
 
 ## Dev workflow
-- `npm run dev` (Vite, port 5173), `npm run build`, `npm run postbuild`, `docker-compose up`.
+- `npm run dev` (Vite, port 5173)
+- `npm run build` -> `dist/`
+- `docker-compose up`
 
 ## Pitfalls to avoid
-- Don’t add a state library; keep localStorage + React state.
-- Always guard HA calls with `if (!conn)`.
-- Don’t change hook order (no early returns inside hooks).
-
-## Notes
-- Modals render inline (no portals) and are controlled by state in `App.jsx`.
+- **State split**: Don't put everything in `App.jsx`. Use contexts for data/config.
+- **HA Connection**: Always check `if (!conn)` or `!connected` before making calls.
+- **Hooks**: Don't change hook order.
+- **Modals**: Ensure they have `popup-anim` class for entry animation.
