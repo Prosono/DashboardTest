@@ -1,4 +1,5 @@
 import WeatherGraph from './WeatherGraph';
+import WeatherEffects from './WeatherEffects';
 
 const getWeatherInfo = (condition, t) => {
   const map = {
@@ -43,6 +44,9 @@ export default function WeatherTempCard({
   const tempId = settings.tempId;
   const weatherEntity = weatherId ? entities[weatherId] : null;
   const tempEntity = tempId ? entities[tempId] : null;
+
+  const showEffects = settings.showEffects !== false;
+
   if (!weatherEntity) return null;
 
   const state = weatherEntity?.state;
@@ -65,6 +69,7 @@ export default function WeatherTempCard({
     return (
       <div key={cardId} {...dragProps} data-haptic={editMode ? undefined : 'card'} onClick={(e) => { e.stopPropagation(); if (!editMode && onOpen) onOpen(); }} className={`touch-feedback p-4 pl-5 rounded-3xl flex items-center justify-between gap-4 transition-all duration-500 border group relative overflow-hidden font-sans h-full ${!editMode ? 'cursor-pointer active:scale-[0.98]' : 'cursor-move'}`} style={cardStyle}>
         {getControls(cardId)}
+        {showEffects && <WeatherEffects condition={state} />}
         <div className="absolute inset-0 opacity-30 z-0">
           <WeatherGraph history={history} currentTemp={currentTemp} />
         </div>
@@ -84,6 +89,7 @@ export default function WeatherTempCard({
   return (
     <div key={cardId} {...dragProps} data-haptic={editMode ? undefined : 'card'} onClick={(e) => { e.stopPropagation(); if (!editMode && onOpen) onOpen(); }} className={`touch-feedback p-7 rounded-3xl flex flex-col justify-between transition-all duration-500 border group relative overflow-hidden font-sans h-full ${!editMode ? 'cursor-pointer active:scale-98' : 'cursor-move'}`} style={cardStyle}>
       {getControls(cardId)}
+      {showEffects && <WeatherEffects condition={state} />}
       <div className="flex flex-col gap-3 relative z-10">
         <div className="flex justify-between items-start">
           <div className="w-20 h-20 -ml-2 -mt-2 filter drop-shadow-lg transition-transform duration-500 group-hover:scale-110">

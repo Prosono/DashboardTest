@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import ModernDropdown from '../components/ModernDropdown';
 import M3Slider from '../components/M3Slider';
 import { GRADIENT_PRESETS } from '../contexts/ConfigContext';
@@ -91,6 +91,12 @@ export default function ConfigModal({
   setBgGradient,
   bgImage,
   setBgImage,
+  cardTransparency,
+  setCardTransparency,
+  cardBorderOpacity,
+  setCardBorderOpacity,
+  sectionSpacing,
+  updateSectionSpacing,
   entities,
   getEntityImageUrl,
   callService,
@@ -100,6 +106,21 @@ export default function ConfigModal({
   const [installingIds, setInstallingIds] = useState({});
   const [expandedNotes, setExpandedNotes] = useState({});
   const [bgImageError, setBgImageError] = useState('');
+  const [layoutPreview, setLayoutPreview] = useState(false);
+
+  const isLayoutPreview = configTab === 'layout' && layoutPreview;
+
+  useEffect(() => {
+    if (configTab !== 'layout' && layoutPreview) {
+      setLayoutPreview(false);
+    }
+  }, [configTab, layoutPreview]);
+
+  useEffect(() => {
+    if (layoutPreview && configTab !== 'layout') {
+      setConfigTab('layout');
+    }
+  }, [layoutPreview, configTab, setConfigTab]);
 
   if (!open) return null;
 
@@ -113,6 +134,10 @@ export default function ConfigModal({
     { key: 'layout', icon: LayoutGrid, label: t('system.tabLayout') },
     { key: 'updates', icon: Download, label: t('updates.title') },
   ];
+
+  const availableTabs = isLayoutPreview
+    ? [{ key: 'layout', icon: LayoutGrid, label: t('system.tabLayout') }]
+    : TABS;
 
   const handleInstallUpdate = (entityId) => {
     setInstallingIds(prev => ({ ...prev, [entityId]: true }));
@@ -205,6 +230,7 @@ export default function ConfigModal({
       { key: 'theme', icon: Sparkles, label: t('settings.bgFollowTheme') },
       { key: 'solid', icon: Sun, label: t('settings.bgSolid') },
       { key: 'gradient', icon: Moon, label: t('settings.bgGradient') },
+      { key: 'animated', icon: Sparkles, label: 'Aurora' },
     ];
 
     const resetBackground = () => {
@@ -254,7 +280,7 @@ export default function ConfigModal({
           </div>
 
           {/* Mode Selector - Compact */}
-          <div className="grid grid-cols-3 gap-2">
+          <div className="grid grid-cols-4 gap-2">
             {bgModes.map(mode => {
               const active = bgMode === mode.key;
               const ModeIcon = mode.icon;
@@ -354,12 +380,57 @@ export default function ConfigModal({
               </div>
             </div>
           )}
+
+          {/* Behavior */}
+          <div className="pt-4 border-t border-[var(--glass-border)] space-y-6">
+            <div>
+              <div className="flex items-center justify-between mb-4">
+                <label className="text-sm font-bold text-[var(--text-primary)] flex items-center gap-2">
+                  <Home className="w-4 h-4 text-[var(--accent-color)]" />
+                  {t('settings.inactivity')}
+                </label>
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-bold text-[var(--text-secondary)]">
+                    {inactivityTimeout === 0 ? t('common.off') : `${inactivityTimeout}s`}
+                  </span>
+                  {inactivityTimeout !== 0 && (
+                    <button
+                      onClick={() => {
+                        setInactivityTimeout(0);
+                        try { localStorage.setItem('tunet_inactivity_timeout', '0'); } catch {}
+                      }}
+                      className="p-1 rounded-full text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--glass-bg-hover)] transition-all"
+                    >
+                      <RefreshCw className="w-3.5 h-3.5" />
+                    </button>
+                  )}
+                </div>
+              </div>
+              <div className="px-1">
+                <M3Slider
+                  min={0}
+                  max={300}
+                  step={10}
+                  value={inactivityTimeout}
+                  onChange={(e) => {
+                    const val = parseInt(e.target.value, 10);
+                    setInactivityTimeout(val);
+                    try { localStorage.setItem('tunet_inactivity_timeout', String(val)); } catch {}
+                  }}
+                  colorClass="bg-blue-500"
+                />
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     );
   };
 
   // ─── Layout Tab ───
+  const [layoutSections, setLayoutSections] = useState({ grid: true, spacing: false, cards: false });
+  const toggleSection = (key) => setLayoutSections(prev => ({ ...prev, [key]: !prev[key] }));
+
   const renderLayoutTab = () => {
 
     const ResetButton = ({ onClick }) => (
@@ -372,32 +443,81 @@ export default function ConfigModal({
       </button>
     );
 
-    return (
-      <div className="space-y-6 font-sans animate-in fade-in slide-in-from-right-4 duration-300 px-2">
-        {/* Layout Controls - Compact List */}
-        <div className="space-y-8">
-
-          {/* Grid Columns */}
-          <div>
-            <div className="flex items-center justify-between mb-4">
-              <label className="text-sm font-bold text-[var(--text-primary)] flex items-center gap-2">
-                <Columns className="w-4 h-4 text-[var(--accent-color)]" />
-                {t('settings.gridColumns')}
-              </label>
-              <div className="flex items-center gap-2">
-                <span className="text-xs font-bold text-[var(--text-secondary)]">{gridColumns} {t('nav.columns') || 'Columns'}</span>
-                {gridColumns !== 4 && <ResetButton onClick={() => setGridColumns(4)} />}
+    // Accordion section wrapper
+    const Section = ({ id, icon: Icon, title, children }) => {
+      const isOpen = layoutSections[id];
+      return (
+        <div className={`rounded-2xl px-3 py-0.5 transition-all ${isOpen ? 'bg-white/[0.03]' : ''}`}>
+          <button
+            type="button"
+            onClick={() => toggleSection(id)}
+            className="w-full flex items-center gap-3 py-2.5 text-left transition-colors group"
+          >
+            <div className={`p-1.5 rounded-xl transition-colors ${isOpen ? 'bg-[var(--accent-bg)] text-[var(--accent-color)]' : 'text-[var(--text-muted)] group-hover:text-[var(--text-secondary)]'}`}>
+              <Icon className="w-4 h-4" />
+            </div>
+            <span className={`flex-1 text-[13px] font-semibold transition-colors ${isOpen ? 'text-[var(--text-primary)]' : 'text-[var(--text-secondary)]'}`}>{title}</span>
+            <ChevronDownIcon className={`w-3.5 h-3.5 text-[var(--text-muted)] transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`} />
+          </button>
+          <div
+            className="grid transition-all duration-200 ease-in-out"
+            style={{ gridTemplateRows: isOpen ? '1fr' : '0fr' }}
+          >
+            <div className="overflow-hidden">
+              <div className="pl-7 pr-0 pb-3 pt-0.5 space-y-5">
+                {children}
               </div>
             </div>
-            <div className="flex gap-2 p-1 bg-[var(--glass-bg)] rounded-xl border border-[var(--glass-border)]">
+          </div>
+        </div>
+      );
+    };
+
+    const hts = sectionSpacing?.headerToStatus ?? 16;
+    const stn = sectionSpacing?.statusToNav ?? 24;
+    const ntg = sectionSpacing?.navToGrid ?? 24;
+
+    return (
+      <div className="space-y-1 font-sans animate-in fade-in slide-in-from-right-4 duration-300">
+        {/* Header row: title + live preview */}
+        <div className="flex items-center justify-between px-1 pb-3">
+          <p className="text-xs uppercase font-bold text-gray-500 tracking-widest">{t('settings.layout')}</p>
+          <button
+            type="button"
+            onClick={() => setLayoutPreview(prev => !prev)}
+            className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-[10px] font-bold uppercase tracking-widest transition-colors ${
+              layoutPreview
+                ? 'bg-[var(--accent-bg)] border-[var(--accent-color)] text-[var(--accent-color)]'
+                : 'bg-[var(--glass-bg)] border-[var(--glass-border)] text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
+            }`}
+            aria-pressed={layoutPreview}
+          >
+            <Monitor className="w-3 h-3" />
+            {t('settings.livePreview')}
+          </button>
+        </div>
+
+        {/* ── Grid Section ── */}
+        <Section
+          id="grid"
+          icon={Columns}
+          title={t('settings.layoutGrid')}
+        >
+          {/* Columns */}
+          <div>
+            <div className="flex items-center justify-between mb-2.5">
+              <span className="text-[12px] font-medium text-[var(--text-primary)]">{t('settings.gridColumns')}</span>
+              {gridColumns !== 4 && <ResetButton onClick={() => setGridColumns(4)} />}
+            </div>
+            <div className="flex gap-1.5 p-0.5 rounded-xl">
               {[2, 3, 4, 5].map(cols => (
                 <button
                   key={cols}
                   onClick={() => setGridColumns(cols)}
-                  className={`flex-1 py-2 rounded-lg font-bold uppercase tracking-widest text-xs transition-all ${
+                  className={`flex-1 py-2 rounded-lg font-bold text-xs transition-all ${
                     gridColumns === cols
-                      ? 'bg-blue-500 text-white shadow-lg shadow-blue-500/20'
-                      : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--glass-bg-hover)]'
+                      ? 'bg-[var(--accent-color)] text-white shadow-lg shadow-[var(--accent-color)]/20'
+                      : 'text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-white/5'
                   }`}
                 >
                   {cols}
@@ -406,87 +526,125 @@ export default function ConfigModal({
             </div>
           </div>
 
-          {/* Grid Gap */}
+          {/* Gap */}
           <div>
-            <div className="flex items-center justify-between mb-4">
-              <label className="text-sm font-bold text-[var(--text-primary)] flex items-center gap-2">
-                <LayoutGrid className="w-4 h-4 text-[var(--accent-color)]" />
-                {t('settings.gridGap')}
-              </label>
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-[12px] font-medium text-[var(--text-primary)]">{t('settings.gridGap')}</span>
               <div className="flex items-center gap-2">
-                <span className="text-xs font-bold text-[var(--text-secondary)]">{gridGap}px</span>
+                <span className="text-[11px] tabular-nums text-[var(--text-muted)]">{gridGap}px</span>
                 {gridGap !== 20 && <ResetButton onClick={() => setGridGap(20)} />}
               </div>
             </div>
-            <div className="px-1">
-              <M3Slider
-                min={0}
-                max={64}
-                step={4}
-                value={gridGap}
-                onChange={(e) => setGridGap(parseInt(e.target.value, 10))}
-                colorClass="bg-blue-500"
-              />
-            </div>
+            <M3Slider
+              min={0}
+              max={64}
+              step={4}
+              value={gridGap}
+              onChange={(e) => setGridGap(parseInt(e.target.value, 10))}
+              colorClass="bg-blue-500"
+            />
           </div>
+        </Section>
 
-          {/* Card Border Radius */}
+        {/* ── Spacing Section ── */}
+        <Section
+          id="spacing"
+          icon={LayoutGrid}
+          title={t('settings.sectionSpacing')}
+        >
           <div>
-            <div className="flex items-center justify-between mb-4">
-              <label className="text-sm font-bold text-[var(--text-primary)] flex items-center gap-2">
-                <EyeIcon className="w-4 h-4 text-[var(--accent-color)]" />
-                {t('settings.cardRadius')}
-              </label>
+            <div className="flex items-center justify-between mb-1.5">
+              <span className="text-[12px] font-medium text-[var(--text-primary)]">{t('settings.sectionSpacingHeader')}</span>
               <div className="flex items-center gap-2">
-                <span className="text-xs font-bold text-[var(--text-secondary)]">{cardBorderRadius}px</span>
+                <span className="text-[11px] tabular-nums text-[var(--text-muted)]">{hts}px</span>
+                {hts !== 16 && <ResetButton onClick={() => updateSectionSpacing({ headerToStatus: 16 })} />}
+              </div>
+            </div>
+            <M3Slider min={0} max={64} step={4} value={hts} onChange={(e) => updateSectionSpacing({ headerToStatus: parseInt(e.target.value, 10) })} colorClass="bg-blue-500" />
+          </div>
+          <div>
+            <div className="flex items-center justify-between mb-1.5">
+              <span className="text-[12px] font-medium text-[var(--text-primary)]">{t('settings.sectionSpacingNav')}</span>
+              <div className="flex items-center gap-2">
+                <span className="text-[11px] tabular-nums text-[var(--text-muted)]">{stn}px</span>
+                {stn !== 24 && <ResetButton onClick={() => updateSectionSpacing({ statusToNav: 24 })} />}
+              </div>
+            </div>
+            <M3Slider min={0} max={64} step={4} value={stn} onChange={(e) => updateSectionSpacing({ statusToNav: parseInt(e.target.value, 10) })} colorClass="bg-blue-500" />
+          </div>
+          <div>
+            <div className="flex items-center justify-between mb-1.5">
+              <span className="text-[12px] font-medium text-[var(--text-primary)]">{t('settings.sectionSpacingGrid')}</span>
+              <div className="flex items-center gap-2">
+                <span className="text-[11px] tabular-nums text-[var(--text-muted)]">{ntg}px</span>
+                {ntg !== 24 && <ResetButton onClick={() => updateSectionSpacing({ navToGrid: 24 })} />}
+              </div>
+            </div>
+            <M3Slider min={0} max={64} step={4} value={ntg} onChange={(e) => updateSectionSpacing({ navToGrid: parseInt(e.target.value, 10) })} colorClass="bg-blue-500" />
+          </div>
+        </Section>
+
+        {/* ── Card Style Section ── */}
+        <Section
+          id="cards"
+          icon={EyeIcon}
+          title={t('settings.layoutCards')}
+        >
+          {/* Border Radius */}
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-[12px] font-medium text-[var(--text-primary)]">{t('settings.cardRadius')}</span>
+              <div className="flex items-center gap-2">
+                <span className="text-[11px] tabular-nums text-[var(--text-muted)]">{cardBorderRadius}px</span>
                 {cardBorderRadius !== 16 && <ResetButton onClick={() => setCardBorderRadius(16)} />}
               </div>
             </div>
-            <div className="px-1">
-              <M3Slider
-                min={0}
-                max={64}
-                step={2}
-                value={cardBorderRadius}
-                onChange={(e) => setCardBorderRadius(parseInt(e.target.value, 10))}
-                colorClass="bg-blue-500"
-              />
-            </div>
+            <M3Slider
+              min={0}
+              max={64}
+              step={2}
+              value={cardBorderRadius}
+              onChange={(e) => setCardBorderRadius(parseInt(e.target.value, 10))}
+              colorClass="bg-blue-500"
+            />
           </div>
-
-          {/* Inactivity Behavior */}
+          {/* Transparency */}
           <div>
-            <div className="flex items-center justify-between mb-4">
-              <label className="text-sm font-bold text-[var(--text-primary)] flex items-center gap-2">
-                <Home className="w-4 h-4 text-[var(--accent-color)]" />
-                {t('settings.inactivity')}
-              </label>
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-[12px] font-medium text-[var(--text-primary)]">{t('settings.transparency')}</span>
               <div className="flex items-center gap-2">
-                <span className="text-xs font-bold text-[var(--text-secondary)]">
-                  {inactivityTimeout === 0 ? t('common.off') : `${inactivityTimeout}s`}
-                </span>
-                {inactivityTimeout !== 0 && <ResetButton onClick={() => {
-                  setInactivityTimeout(0);
-                  try { localStorage.setItem('tunet_inactivity_timeout', '0'); } catch {}
-                }} />}
+                <span className="text-[11px] tabular-nums text-[var(--text-muted)]">{cardTransparency}%</span>
+                {cardTransparency !== 40 && <ResetButton onClick={() => setCardTransparency(40)} />}
               </div>
             </div>
-            <div className="px-1">
-              <M3Slider
-                min={0}
-                max={300}
-                step={10}
-                value={inactivityTimeout}
-                onChange={(e) => {
-                  const val = parseInt(e.target.value, 10);
-                  setInactivityTimeout(val);
-                  try { localStorage.setItem('tunet_inactivity_timeout', String(val)); } catch {}
-                }}
-                colorClass="bg-blue-500"
-              />
-            </div>
+            <M3Slider
+              min={0}
+              max={100}
+              step={5}
+              value={cardTransparency}
+              onChange={(e) => setCardTransparency(parseInt(e.target.value, 10))}
+              colorClass="bg-blue-500"
+            />
           </div>
-        </div>
+          {/* Border Opacity */}
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-[12px] font-medium text-[var(--text-primary)]">{t('settings.borderOpacity')}</span>
+              <div className="flex items-center gap-2">
+                <span className="text-[11px] tabular-nums text-[var(--text-muted)]">{cardBorderOpacity}%</span>
+                {cardBorderOpacity !== 5 && <ResetButton onClick={() => setCardBorderOpacity(5)} />}
+              </div>
+            </div>
+            <M3Slider
+              min={0}
+              max={50}
+              step={5}
+              value={cardBorderOpacity}
+              onChange={(e) => setCardBorderOpacity(parseInt(e.target.value, 10))}
+              colorClass="bg-blue-500"
+            />
+          </div>
+        </Section>
       </div>
     );
   };
@@ -630,7 +788,16 @@ export default function ConfigModal({
 
   // ─── Main Render ───
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 md:p-8" style={{ backdropFilter: 'blur(20px)', backgroundColor: 'rgba(0,0,0,0.3)' }} onClick={handleClose}>
+    <div
+      className={`fixed inset-0 z-50 flex ${
+        isLayoutPreview ? 'items-stretch justify-end' : 'items-center justify-center p-4 md:p-8'
+      }`}
+      style={{
+        backdropFilter: isLayoutPreview ? 'none' : 'blur(20px)',
+        backgroundColor: isLayoutPreview ? 'transparent' : 'rgba(0,0,0,0.3)'
+      }}
+      onClick={handleClose}
+    >
       <style>{`
         .custom-scrollbar::-webkit-scrollbar {
           width: 4px;
@@ -648,8 +815,16 @@ export default function ConfigModal({
         }
       `}</style>
       <div
-        className="border w-full max-w-5xl rounded-3xl md:rounded-[3rem] shadow-2xl relative font-sans flex flex-col overflow-hidden backdrop-blur-xl popup-anim text-[var(--text-primary)] h-[75vh] max-h-[700px]"
-        style={{ background: 'linear-gradient(135deg, var(--card-bg) 0%, var(--modal-bg) 100%)', borderColor: 'var(--glass-border)', color: 'var(--text-primary)' }}
+        className={`border w-full relative font-sans flex flex-col overflow-hidden popup-anim text-[var(--text-primary)] ${
+          isLayoutPreview
+            ? 'max-w-[18rem] sm:max-w-[21rem] md:max-w-[23rem] h-full rounded-none md:rounded-l-[2.5rem] shadow-2xl origin-right scale-[0.94] sm:scale-[0.97] md:scale-100 animate-in slide-in-from-right-8 fade-in zoom-in-95 duration-300'
+            : 'max-w-5xl h-[75vh] max-h-[700px] rounded-3xl md:rounded-[3rem] shadow-2xl'
+        }`}
+        style={{
+          background: 'linear-gradient(160deg, var(--card-bg) 0%, var(--modal-bg) 70%)',
+          borderColor: 'var(--glass-border)',
+          color: 'var(--text-primary)'
+        }}
         onClick={(e) => e.stopPropagation()}
       >
         {isOnboardingActive ? (
@@ -830,67 +1005,79 @@ export default function ConfigModal({
           </div>
         ) : (
           // ═══ SYSTEM SETTINGS LAYOUT ═══
-          <div className="flex flex-col md:flex-row h-full">
+          <div className={`flex h-full ${isLayoutPreview ? 'flex-col' : 'flex-col md:flex-row'}`}>
             {/* Sidebar — icons only on mobile, full labels on desktop */}
-            <div className="w-full md:w-56 flex flex-row md:flex-col gap-1 p-2 md:p-3 border-b md:border-b-0 md:border-r border-[var(--glass-border)] flex-shrink-0">
-              <div className="hidden md:flex items-center gap-3 px-3 py-4 mb-2">
-                <div className="p-2 bg-blue-500/10 rounded-lg text-blue-400">
-                  <Settings className="w-5 h-5" />
+            {!isLayoutPreview && (
+              <div className="w-full md:w-56 flex flex-row md:flex-col gap-1 p-2 md:p-3 border-b md:border-b-0 md:border-r border-[var(--glass-border)] flex-shrink-0 bg-[linear-gradient(160deg,var(--glass-bg),transparent_70%)] animate-in fade-in slide-in-from-left-4 duration-300">
+                <div className="hidden md:flex items-center gap-3 px-3 py-4 mb-2">
+                  <div className="p-2 bg-blue-500/10 rounded-lg text-blue-400">
+                    <Settings className="w-5 h-5" />
+                  </div>
+                  <span className="font-bold text-lg tracking-wide">{t('system.title')}</span>
                 </div>
-                <span className="font-bold text-lg tracking-wide">{t('system.title')}</span>
-              </div>
 
-              {TABS.map(tab => {
-                const active = configTab === tab.key;
-                const TabIcon = tab.icon;
-                return (
-                  <button
-                    key={tab.key}
-                    onClick={() => setConfigTab(tab.key)}
-                    className={`flex-1 md:flex-none flex items-center justify-center md:justify-start gap-3 px-3 md:px-4 py-2.5 md:py-3 rounded-xl transition-all text-sm font-bold uppercase tracking-wide ${
-                      active
-                        ? 'bg-blue-500 text-white shadow-lg shadow-blue-500/20'
-                        : 'text-[var(--text-secondary)] hover:bg-[var(--glass-bg-hover)] hover:text-[var(--text-primary)]'
-                    }`}
-                  >
-                    <TabIcon className="w-4 h-4 flex-shrink-0" />
-                    <span className="hidden md:inline text-xs">{tab.label}</span>
+                {availableTabs.map(tab => {
+                  const active = configTab === tab.key;
+                  const TabIcon = tab.icon;
+                  return (
+                    <button
+                      key={tab.key}
+                      onClick={() => setConfigTab(tab.key)}
+                      className={`flex-1 md:flex-none flex items-center justify-center md:justify-start gap-3 px-3 md:px-4 py-2.5 md:py-3 rounded-xl transition-all text-sm font-bold uppercase tracking-wide ${
+                        active
+                          ? 'bg-blue-500 text-white shadow-lg shadow-blue-500/20'
+                          : 'text-[var(--text-secondary)] hover:bg-[var(--glass-bg-hover)] hover:text-[var(--text-primary)]'
+                      }`}
+                    >
+                      <TabIcon className="w-4 h-4 flex-shrink-0" />
+                      <span className="hidden md:inline text-xs">{tab.label}</span>
+                    </button>
+                  );
+                })}
+
+                <div className="mt-auto hidden md:flex flex-col gap-2 pt-4 border-t border-[var(--glass-border)]">
+                  <button onClick={onClose} className="w-full py-3 rounded-xl bg-green-500 hover:bg-green-600 text-white font-bold uppercase tracking-widest transition-all shadow-lg shadow-green-500/20 flex items-center justify-center gap-2 text-sm">
+                    <Check className="w-4 h-4" />
+                    {t('system.save')}
                   </button>
-                );
-              })}
-
-              <div className="mt-auto hidden md:flex flex-col gap-2 pt-4 border-t border-[var(--glass-border)]">
-                <button onClick={onClose} className="w-full py-3 rounded-xl bg-green-500 hover:bg-green-600 text-white font-bold uppercase tracking-widest transition-all shadow-lg shadow-green-500/20 flex items-center justify-center gap-2 text-sm">
-                  <Check className="w-4 h-4" />
-                  {t('system.save')}
-                </button>
-                <div className="text-center pt-2">
-                  <p className="text-[10px] font-bold text-[var(--text-muted)] uppercase tracking-widest opacity-50">
-                    Tunet Dashboard v1.6.1
-                  </p>
+                  <div className="text-center pt-2">
+                    <p className="text-[10px] font-bold text-[var(--text-muted)] uppercase tracking-widest opacity-50">
+                      Tunet Dashboard v1.6.1
+                    </p>
+                  </div>
                 </div>
               </div>
-            </div>
+            )}
 
             {/* Content Area */}
             <div className="flex-1 flex flex-col min-h-0">
-              <div className="flex items-center justify-between p-4 border-b border-[var(--glass-border)] md:hidden">
-                <h3 className="font-bold text-base uppercase tracking-wide">
-                  {TABS.find(tb => tb.key === configTab)?.label}
-                </h3>
-                <button onClick={onClose} className="modal-close"><X className="w-4 h-4" /></button>
+              <div className={`flex items-center justify-between p-4 border-b border-[var(--glass-border)] ${isLayoutPreview ? 'relative overflow-hidden bg-[var(--glass-bg)]' : 'md:hidden'}`}>
+                {isLayoutPreview && (
+                  <div className="absolute inset-0 bg-gradient-to-l from-[var(--accent-bg)]/50 via-transparent to-transparent pointer-events-none" />
+                )}
+                <div className="flex items-center gap-3 relative">
+                  <div className="p-2 rounded-lg bg-[var(--accent-bg)] text-[var(--accent-color)] shadow-inner">
+                    <LayoutGrid className="w-4 h-4" />
+                  </div>
+                  <h3 className="font-bold text-base uppercase tracking-wide">
+                    {availableTabs.find(tb => tb.key === configTab)?.label}
+                  </h3>
+                </div>
+                <button onClick={onClose} className="modal-close relative"><X className="w-4 h-4" /></button>
               </div>
 
-              <div className="flex-1 overflow-y-auto p-5 md:p-8 custom-scrollbar">
+              <div className={`flex-1 overflow-y-auto custom-scrollbar ${isLayoutPreview ? 'p-5 md:p-6' : 'p-5 md:p-8'}`}>
                 {/* Desktop Header */}
-                <div className="hidden md:flex items-center justify-between mb-8">
-                  <h2 className="text-2xl font-bold">
-                    {TABS.find(tab => tab.key === configTab)?.label}
-                  </h2>
-                  <button onClick={handleClose} className="p-2 rounded-full hover:bg-[var(--glass-bg-hover)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors">
-                    <X className="w-5 h-5" />
-                  </button>
-                </div>
+                {!isLayoutPreview && (
+                  <div className="hidden md:flex items-center justify-between mb-8">
+                    <h2 className="text-2xl font-bold">
+                      {availableTabs.find(tab => tab.key === configTab)?.label}
+                    </h2>
+                    <button onClick={handleClose} className="p-2 rounded-full hover:bg-[var(--glass-bg-hover)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors">
+                      <X className="w-5 h-5" />
+                    </button>
+                  </div>
+                )}
 
                 {configTab === 'connection' && renderConnectionTab()}
                 {configTab === 'appearance' && renderAppearanceTab()}
@@ -899,16 +1086,18 @@ export default function ConfigModal({
               </div>
 
               {/* Mobile Footer */}
-              <div className="p-3 border-t border-[var(--glass-border)] md:hidden">
-                <button onClick={onClose} className="w-full py-2.5 rounded-xl bg-green-500 hover:bg-green-600 text-white font-bold uppercase tracking-widest transition-all shadow-lg shadow-green-500/20 text-sm">
-                  {t('system.save')}
-                </button>
-                <div className="text-center pt-2">
-                  <p className="text-[10px] font-bold text-[var(--text-muted)] uppercase tracking-widest opacity-50">
-                    Tunet Dashboard v1.6.1
-                  </p>
+              {!isLayoutPreview && (
+                <div className="p-3 border-t border-[var(--glass-border)] md:hidden">
+                  <button onClick={onClose} className="w-full py-2.5 rounded-xl bg-green-500 hover:bg-green-600 text-white font-bold uppercase tracking-widest transition-all shadow-lg shadow-green-500/20 text-sm">
+                    {t('system.save')}
+                  </button>
+                  <div className="text-center pt-2">
+                    <p className="text-[10px] font-bold text-[var(--text-muted)] uppercase tracking-widest opacity-50">
+                      Tunet Dashboard v1.6.1
+                    </p>
+                  </div>
                 </div>
-              </div>
+              )}
             </div>
           </div>
         )}

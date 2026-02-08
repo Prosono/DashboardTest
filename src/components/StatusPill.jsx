@@ -156,7 +156,7 @@ export default function StatusPill({
           )}
         </div>
         {badge > 0 && (
-          <div className={`absolute -top-2 -right-2 ${isMobile ? 'min-w-[18px] h-[18px] text-[10px]' : 'min-w-[22px] h-[22px] text-xs'} px-1.5 bg-gray-600 text-white font-bold rounded-full flex items-center justify-center border border-[var(--bg-primary)] shadow-sm z-10`}>
+          <div className={`absolute -top-2 -right-2 ${isMobile ? 'min-w-[18px] h-[18px] text-[10px]' : 'min-w-[22px] h-[22px] text-xs'} px-1.5 bg-gray-600 text-white font-bold rounded-full flex items-center justify-center border border-transparent shadow-sm z-10`}>
             {badge}
           </div>
         )}

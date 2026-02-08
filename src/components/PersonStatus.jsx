@@ -67,8 +67,8 @@ const PersonStatus = ({
         </div>
 
         <div
-          className="absolute bottom-0 right-0 w-3 h-3 rounded-full border-2 border-[#050505] transition-colors duration-500"
-          style={{ backgroundColor: isHome ? '#22c55e' : '#52525b', borderColor: 'var(--bg-primary)' }}
+          className="absolute bottom-0 right-0 w-3 h-3 rounded-full border-2 border-[var(--card-bg)] transition-colors duration-500"
+          style={{ backgroundColor: isHome ? '#22c55e' : '#52525b' }}
         />
       </div>
 

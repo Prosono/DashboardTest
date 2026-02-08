@@ -104,8 +104,10 @@ export default function WeatherGraph({ history, currentTemp }) {
   const points = plotData.map(p => [getX(p.time), getY(p.temp)]);
   const smoothPath = getSvgPath(points);
 
-  // Generate fill area (optional, improves appearance)
-  const dArea = `${smoothPath} L ${points[points.length-1][0]},${height} L ${points[0][0]},${height} Z`;
+  // Generate fill area
+  // Extend way below height to cover rounded corners fully
+  const extendedHeight = height + 40; 
+  const dArea = `${smoothPath} L ${points[points.length-1][0]},${extendedHeight} L ${points[0][0]},${extendedHeight} Z`;
 
   // Define color scale (Gradient Units UserSpaceOnUse maps temp directly to Y)
   // Gradient defined so that 0 degrees is the boundary between blue and green

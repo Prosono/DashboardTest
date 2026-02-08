@@ -31,18 +31,17 @@ export default function M3Slider({
   const commonInputProps = {
     type: "range", min, max, step, value: internalValue, disabled,
     onMouseDown: () => { setIsInteracting(true); if (timeoutRef.current) clearTimeout(timeoutRef.current); },
-    onTouchStart: (e) => { e.preventDefault(); setIsInteracting(true); if (timeoutRef.current) clearTimeout(timeoutRef.current); },
+    onTouchStart: () => { setIsInteracting(true); if (timeoutRef.current) clearTimeout(timeoutRef.current); },
     onMouseUp: () => { timeoutRef.current = setTimeout(() => setIsInteracting(false), 1000); },
     onTouchEnd: () => { timeoutRef.current = setTimeout(() => setIsInteracting(false), 1000); },
-    onTouchMove: (e) => { e.preventDefault(); },
     onChange: handleInputChange,
     className: "absolute w-full h-full opacity-0 cursor-pointer z-20",
-    style: { touchAction: 'none' }
+    style: { touchAction: 'pan-x' }
   };
 
   if (variant === "thin") {
     return (
-      <div className={`relative w-full h-4 flex items-center group cursor-pointer ${disabled ? 'opacity-30 pointer-events-none' : ''}`} style={{ touchAction: 'none' }} onClick={(e) => e.stopPropagation()}>
+      <div className={`relative w-full h-4 flex items-center group cursor-pointer ${disabled ? 'opacity-30 pointer-events-none' : ''}`} style={{ touchAction: 'pan-x' }} onClick={(e) => e.stopPropagation()}>
         <div className="absolute w-full h-1 bg-white/10 rounded-full overflow-hidden group-hover:h-1.5 transition-all duration-300">
           <div className={`h-full ${colorClass} transition-all duration-150 ease-out`} style={{ width: `${percentage}%` }} />
         </div>
@@ -54,7 +53,7 @@ export default function M3Slider({
 
   if (variant === "thinLg") {
     return (
-      <div className={`relative w-full h-6 flex items-center group cursor-pointer ${disabled ? 'opacity-30 pointer-events-none' : ''}`} style={{ touchAction: 'none' }} onClick={(e) => e.stopPropagation()}>
+      <div className={`relative w-full h-6 flex items-center group cursor-pointer ${disabled ? 'opacity-30 pointer-events-none' : ''}`} style={{ touchAction: 'pan-x' }} onClick={(e) => e.stopPropagation()}>
         <div className="absolute w-full h-2 bg-white/10 rounded-full overflow-hidden group-hover:h-2.5 transition-all duration-300">
           <div className={`h-full ${colorClass} transition-all duration-150 ease-out`} style={{ width: `${percentage}%` }} />
         </div>
@@ -66,7 +65,7 @@ export default function M3Slider({
 
   if (variant === "volume") {
     return (
-      <div className={`relative w-full h-10 flex items-center group ${disabled ? 'opacity-30 pointer-events-none' : ''}`} style={{ touchAction: 'none' }} onClick={(e) => e.stopPropagation()}>
+      <div className={`relative w-full h-10 flex items-center group ${disabled ? 'opacity-30 pointer-events-none' : ''}`} style={{ touchAction: 'pan-x' }} onClick={(e) => e.stopPropagation()}>
         <div className="absolute w-full h-full bg-white/5 rounded-2xl overflow-hidden border border-white/5">
           <div className={`h-full transition-all duration-150 ease-out ${colorClass} opacity-90`} style={{ width: `${percentage}%` }} />
         </div>
@@ -79,7 +78,7 @@ export default function M3Slider({
   const containerH = height || "h-10";
   
   return (
-    <div className={`relative w-full ${containerH} flex items-center group ${disabled ? 'opacity-30 pointer-events-none' : ''}`} style={{ touchAction: 'none' }} onClick={(e) => e.stopPropagation()}>
+    <div className={`relative w-full ${containerH} flex items-center group ${disabled ? 'opacity-30 pointer-events-none' : ''}`} style={{ touchAction: 'pan-x' }} onClick={(e) => e.stopPropagation()}>
         {/* Track */}
         {trackClass ? (
             <div className={`absolute w-full ${trackClass} overflow-hidden rounded-full`}>

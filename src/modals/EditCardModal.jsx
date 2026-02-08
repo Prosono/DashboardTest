@@ -97,6 +97,7 @@ export default function EditCardModal({
   isEditAndroidTV,
   editSettingsKey,
   editSettings,
+  isEditWeatherTemp,
   customNames,
   saveCustomName,
   customIcons,
@@ -235,6 +236,21 @@ export default function EditCardModal({
                 t={t}
                 maxHeightClass="max-h-48"
               />
+            </div>
+          )}
+
+          {isEditWeatherTemp && editSettingsKey && (
+            <div className="space-y-2">
+              <label className="text-xs uppercase font-bold text-gray-500 ml-4 pb-1 block">Weather Effects</label>
+              <div className="popup-surface rounded-2xl p-4 flex items-center justify-between">
+                <span className="text-sm font-medium text-[var(--text-primary)]">Show effects animation</span>
+                <button
+                  onClick={() => saveCardSetting(editSettingsKey, 'showEffects', editSettings.showEffects === false ? true : false)}
+                  className={`w-12 h-6 rounded-full transition-colors relative ${editSettings.showEffects !== false ? 'bg-blue-500' : 'bg-gray-600'}`}
+                >
+                  <span className={`absolute top-1 left-1 bg-white w-4 h-4 rounded-full transition-transform ${editSettings.showEffects !== false ? 'translate-x-6' : 'translate-x-0'}`} />
+                </button>
+              </div>
             </div>
           )}
 

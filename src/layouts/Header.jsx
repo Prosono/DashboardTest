@@ -21,10 +21,35 @@ export default function Header({
   setShowHeaderEditModal,
   t,
   children,
-  isMobile
+  isMobile,
+  sectionSpacing
 }) {
+  const headerBottom = Number.isFinite(sectionSpacing?.statusToNav)
+    ? sectionSpacing.statusToNav
+    : (isMobile ? 8 : 40);
+
+  const fontWeight = headerSettings?.fontWeight || '300';
+  const letterSpacingMap = { tight: '0.05em', normal: '0.2em', wide: '0.5em', extraWide: '0.8em' };
+  const letterSpacingMobile = { tight: '0.05em', normal: '0.2em', wide: '0.3em', extraWide: '0.5em' };
+  const lsDesktop = letterSpacingMap[headerSettings?.letterSpacing || 'normal'] || '0.2em';
+  const lsMobile = letterSpacingMobile[headerSettings?.letterSpacing || 'normal'] || '0.2em';
+  const fontStyleVal = headerSettings?.fontStyle || 'normal';
+  const clockFormat = headerSettings?.clockFormat || '24h';
+  const is12h = clockFormat === '12h';
+  const clockScale = headerSettings?.clockScale ?? 1.0;
+  const dateScale = headerSettings?.dateScale ?? 1.0;
+
+  const timeOptions = is12h
+    ? { hour: 'numeric', minute: '2-digit', hour12: true }
+    : { hour: '2-digit', minute: '2-digit', hour12: false };
+
+  const timeStr = now.toLocaleTimeString(is12h ? 'en-US' : 'nn-NO', timeOptions);
+
   return (
-    <header className={`relative mb-2 md:mb-10 pt-4 md:pt-0 flex flex-col md:flex-row justify-between ${isMobile ? 'items-center text-center' : 'items-start'} md:items-end gap-10 leading-none`}>
+    <header
+      className={`relative pt-4 md:pt-0 flex flex-col md:flex-row justify-between ${isMobile ? 'items-center text-center' : 'items-start'} md:items-end gap-10 leading-none`}
+      style={{ marginBottom: `${headerBottom}px` }}
+    >
       {editMode && !headerSettings.showTitle && setShowHeaderEditModal && (
         <div className="absolute top-0 left-1/2 -translate-x-1/2 z-50 edit-controls-anim">
           <button
@@ -43,11 +68,11 @@ export default function Header({
             <h2 
               className="font-light tracking-[0.1em] leading-none select-none" 
               style={{ 
-                fontSize: `calc(3.75rem * ${headerScale})`, 
+                fontSize: `calc(3.75rem * ${headerScale} * ${clockScale})`, 
                 color: 'var(--text-muted)' 
               }}
             >
-              {now.toLocaleTimeString('nn-NO', { hour: '2-digit', minute: '2-digit' })}
+              {timeStr}
             </h2>
           </div>
           
@@ -55,11 +80,11 @@ export default function Header({
             <h2 
               className="font-light tracking-[0.1em] leading-none select-none" 
               style={{ 
-                fontSize: `calc(3rem * ${headerScale})`, 
+                fontSize: `calc(3rem * ${headerScale} * ${clockScale})`, 
                 color: 'var(--text-muted)' 
               }}
             >
-              {now.toLocaleTimeString('nn-NO', { hour: '2-digit', minute: '2-digit' })}
+              {timeStr}
             </h2>
           </div>
         </>
@@ -71,7 +96,7 @@ export default function Header({
             {headerSettings.showTitle && (
               <>
                 <h1 
-                  className={`font-light uppercase leading-none select-none tracking-[0.2em] md:tracking-[0.8em] ${
+                  className={`leading-none select-none ${
                     headerSettings?.headerFont === 'serif' ? 'font-serif' :
                     headerSettings?.headerFont === 'mono' ? 'font-mono' :
                     'font-sans'
@@ -79,6 +104,10 @@ export default function Header({
                   style={{
                     color: 'var(--text-muted)', 
                     fontSize: `calc(clamp(3rem, 5vw, 3.75rem) * ${headerScale})`,
+                    fontWeight: fontWeight,
+                    letterSpacing: isMobile ? lsMobile : lsDesktop,
+                    fontStyle: fontStyleVal === 'italic' ? 'italic' : 'normal',
+                    textTransform: fontStyleVal === 'uppercase' ? 'uppercase' : 'none',
                     fontFamily: 
                       headerSettings?.headerFont === 'georgia' ? 'Georgia, serif' :
                       headerSettings?.headerFont === 'courier' ? '"Courier New", monospace' :
@@ -106,7 +135,10 @@ export default function Header({
           </div>
           
           {headerSettings.showDate && !isMobile && (
-            <p className="text-gray-500 font-medium uppercase text-[10px] md:text-xs leading-none opacity-50 tracking-[0.2em] md:tracking-[0.6em]">
+            <p 
+              className="text-gray-500 font-medium uppercase leading-none opacity-50 tracking-[0.2em] md:tracking-[0.6em]"
+              style={{ fontSize: `calc(0.75rem * ${dateScale})` }}
+            >
               {now.toLocaleDateString('nn-NO', { weekday: 'long', day: 'numeric', month: 'long' })}
             </p>
           )}

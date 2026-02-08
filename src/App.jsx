@@ -93,6 +93,7 @@ import { callService as haCallService, handleAddSelected, prepareNordpoolData } 
 import { isCardRemovable as _isCardRemovable, isCardHiddenByLogic as _isCardHiddenByLogic, isMediaPage as _isMediaPage } from './cardUtils';
 import { getCardGridSpan as _getCardGridSpan, buildGridLayout as _buildGridLayout } from './gridLayout';
 import { createDragAndDropHandlers } from './dragAndDrop';
+import AuroraBackground from './components/AuroraBackground';
 
 function AppContent({ showOnboarding, setShowOnboarding }) {
   const {
@@ -111,6 +112,10 @@ function AppContent({ showOnboarding, setShowOnboarding }) {
     setBgGradient,
     bgImage,
     setBgImage,
+    cardTransparency,
+    setCardTransparency,
+    cardBorderOpacity,
+    setCardBorderOpacity,
     config,
     setConfig
   } = useConfig();
@@ -142,6 +147,8 @@ function AppContent({ showOnboarding, setShowOnboarding }) {
     updateHeaderTitle,
     headerSettings,
     updateHeaderSettings,
+    sectionSpacing,
+    updateSectionSpacing,
     persistCardSettings,
     statusPillsConfig,
     saveStatusPillsConfig
@@ -1263,7 +1270,15 @@ function AppContent({ showOnboarding, setShowOnboarding }) {
 
   return (
     <div className="min-h-screen font-sans selection:bg-blue-500/30 overflow-x-hidden transition-colors duration-500" style={{backgroundColor: 'var(--bg-primary)', color: 'var(--text-primary)'}}>
-      <div className="fixed inset-0 pointer-events-none z-0"><div className="absolute inset-0" style={{background: 'linear-gradient(to bottom right, var(--bg-gradient-from), var(--bg-primary), var(--bg-gradient-to))'}} /><div className="absolute top-[-15%] right-[-10%] w-[70%] h-[70%] rounded-full pointer-events-none" style={{background: 'rgba(59, 130, 246, 0.08)', filter: 'blur(150px)'}} /><div className="absolute bottom-[-15%] left-[-10%] w-[70%] h-[70%] rounded-full pointer-events-none" style={{background: 'rgba(30, 58, 138, 0.1)', filter: 'blur(150px)'}} /></div>
+      {bgMode === 'animated' ? (
+        <AuroraBackground />
+      ) : (
+        <div className="fixed inset-0 pointer-events-none z-0">
+          <div className="absolute inset-0" style={{background: 'linear-gradient(to bottom right, var(--bg-gradient-from), var(--bg-primary), var(--bg-gradient-to))'}} />
+          <div className="absolute top-[-15%] right-[-10%] w-[70%] h-[70%] rounded-full pointer-events-none" style={{background: 'rgba(59, 130, 246, 0.08)', filter: 'blur(150px)'}} />
+          <div className="absolute bottom-[-15%] left-[-10%] w-[70%] h-[70%] rounded-full pointer-events-none" style={{background: 'rgba(30, 58, 138, 0.1)', filter: 'blur(150px)'}} />
+        </div>
+      )}
       {editMode && draggingId && touchPath && (
         <svg className="fixed inset-0 pointer-events-none z-40">
           <line
@@ -1293,8 +1308,12 @@ function AppContent({ showOnboarding, setShowOnboarding }) {
           setShowHeaderEditModal={setShowHeaderEditModal}
           t={t}
           isMobile={isMobile}
+          sectionSpacing={sectionSpacing}
         >
-          <div className={`w-full mt-0 font-sans ${isMobile ? 'flex flex-col items-start gap-3' : 'flex items-center justify-between'}`}>
+          <div
+            className={`w-full mt-0 font-sans ${isMobile ? 'flex flex-col items-start gap-3' : 'flex items-center justify-between'}`}
+            style={{ marginTop: `${sectionSpacing?.headerToStatus ?? 0}px` }}
+          >
             <div className={`flex flex-wrap gap-2.5 items-center min-w-0 ${isMobile ? 'scale-90 origin-left w-full' : ''}`}>
               {(pagesConfig.header || []).map(id => personStatus(id))}
               {editMode && (
@@ -1340,7 +1359,10 @@ function AppContent({ showOnboarding, setShowOnboarding }) {
           </div>
         )}
 
-        <div className="flex flex-nowrap items-center justify-between gap-4 mb-6">
+        <div
+          className="flex flex-nowrap items-center justify-between gap-4"
+          style={{ marginBottom: `${sectionSpacing?.navToGrid ?? 24}px` }}
+        >
           <PageNavigation
             pages={pages}
             pageSettings={pageSettings}
@@ -1377,7 +1399,7 @@ function AppContent({ showOnboarding, setShowOnboarding }) {
             <div className="relative">
               <button onClick={() => setShowConfigModal(true)} className={`p-2 rounded-full hover:bg-[var(--glass-bg)] transition-colors group`}><Settings className={`w-5 h-5 text-[var(--text-secondary)] group-hover:text-[var(--text-primary)]`} /></button>
               {updateCount > 0 && (
-                <div className="absolute -top-1 -right-1 w-5 h-5 bg-gray-600 rounded-full flex items-center justify-center border-2 border-[var(--bg-primary)] pointer-events-none shadow-sm">
+                <div className="absolute -top-1 -right-1 w-5 h-5 bg-gray-600 rounded-full flex items-center justify-center border-2 border-[var(--card-bg)] pointer-events-none shadow-sm">
                   <span className="text-[11px] font-bold text-white leading-none pt-[1px]">{updateCount}</span>
                 </div>
               )}
@@ -1387,7 +1409,7 @@ function AppContent({ showOnboarding, setShowOnboarding }) {
         </div>
 
         {isMediaPage(activePage) ? (
-          <div key={activePage} className="fade-in-anim">
+          <div key={activePage} className="page-transition">
             <MediaPage
               pageId={activePage}
               entities={entities}
@@ -1430,7 +1452,7 @@ function AppContent({ showOnboarding, setShowOnboarding }) {
              </div>
           </div>
         ) : (
-          <div key={activePage} className="grid font-sans fade-in-anim items-start" style={{ gap: `${isMobile ? 12 : gridGap}px`, gridAutoRows: isMobile ? '82px' : '100px', gridTemplateColumns: `repeat(${gridColCount}, minmax(0, 1fr))` }}>
+          <div key={activePage} className="grid font-sans page-transition items-start" style={{ gap: `${isMobile ? 12 : gridGap}px`, gridAutoRows: isMobile ? '82px' : '100px', gridTemplateColumns: `repeat(${gridColCount}, minmax(0, 1fr))` }}>
             {(pagesConfig[activePage] || [])
               .map((id) => ({ id, placement: gridLayout[id] }))
               .filter(({ placement }) => placement)
@@ -1525,6 +1547,12 @@ function AppContent({ showOnboarding, setShowOnboarding }) {
           setBgGradient={setBgGradient}
           bgImage={bgImage}
           setBgImage={setBgImage}
+          cardTransparency={cardTransparency}
+          setCardTransparency={setCardTransparency}
+          cardBorderOpacity={cardBorderOpacity}
+          setCardBorderOpacity={setCardBorderOpacity}
+          sectionSpacing={sectionSpacing}
+          updateSectionSpacing={updateSectionSpacing}
           entities={entities}
           getEntityImageUrl={getEntityImageUrl}
           callService={callService}
@@ -1755,6 +1783,7 @@ function AppContent({ showOnboarding, setShowOnboarding }) {
           isEditAndroidTV={isEditAndroidTV}
           isEditCar={isEditCar}
           isEditSensor={isEditSensor}
+          isEditWeatherTemp={isEditWeatherTemp}
           editSettingsKey={editSettingsKey}
           editSettings={editSettings}
           customNames={customNames}

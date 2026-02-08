@@ -13,11 +13,11 @@
 3. **Usage**: Components consume config/entities via hooks. User changes persist immediately to localStorage.
 
 ## Key files & modules
-- [src/App.jsx](src/App.jsx): Main layout, grid rendering, modal managers.
-- [src/contexts](src/contexts): Global state managers.
-- [src/services/haClient.js](src/services/haClient.js): WebSocket wrapper.
-- [src/modals](src/modals): All dialogs (edit settings, device controls).
-- [src/components](src/components): Dashboard cards and widgets.
+- [src/App.jsx](../src/App.jsx): Main layout, grid rendering, modal managers.
+- [src/contexts](../src/contexts): Global state managers.
+- [src/services/haClient.js](../src/services/haClient.js): WebSocket wrapper.
+- [src/modals](../src/modals): All dialogs (edit settings, device controls).
+- [src/components](../src/components): Dashboard cards and widgets.
 
 ## Patterns & conventions
 - **Card Data**: Generic cards (e.g., `GenericClimateCard`) read entity IDs from `cardSettings[settingsKey]`.

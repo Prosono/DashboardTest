@@ -23,6 +23,11 @@ const readNumber = (key, fallback) => {
 };
 
 const deprecatedCardIds = ['power', 'rocky', 'climate', 'shield', 'weather', 'car', 'sonos'];
+const DEFAULT_SECTION_SPACING = {
+  headerToStatus: 16,
+  statusToNav: 24,
+  navToGrid: 24,
+};
 
 const PageContext = createContext(null);
 
@@ -45,6 +50,7 @@ export const PageProvider = ({ children }) => {
   const [gridGap, setGridGap] = useState(20);
   const [cardBorderRadius, setCardBorderRadius] = useState(16);
   const [headerScale, setHeaderScale] = useState(1);
+  const [sectionSpacing, setSectionSpacing] = useState(DEFAULT_SECTION_SPACING);
   const [headerTitle, setHeaderTitle] = useState(() => 
     localStorage.getItem('tunet_header_title') || ''
   );
@@ -138,6 +144,16 @@ export const PageProvider = ({ children }) => {
     const savedScale = readNumber('tunet_header_scale', null);
     if (savedScale !== null) setHeaderScale(savedScale);
 
+    const spacingSaved = readJSON('tunet_section_spacing', null);
+    if (spacingSaved) {
+      const nextSpacing = {
+        headerToStatus: Number.isFinite(spacingSaved.headerToStatus) ? spacingSaved.headerToStatus : DEFAULT_SECTION_SPACING.headerToStatus,
+        statusToNav: Number.isFinite(spacingSaved.statusToNav) ? spacingSaved.statusToNav : DEFAULT_SECTION_SPACING.statusToNav,
+        navToGrid: Number.isFinite(spacingSaved.navToGrid) ? spacingSaved.navToGrid : DEFAULT_SECTION_SPACING.navToGrid,
+      };
+      setSectionSpacing(nextSpacing);
+    }
+
     const pageSettingsSaved = readJSON('tunet_page_settings', null);
     if (pageSettingsSaved) {
       let modified = false;
@@ -219,6 +235,12 @@ export const PageProvider = ({ children }) => {
     }
   };
 
+  const updateSectionSpacing = (partial) => {
+    const nextSpacing = { ...sectionSpacing, ...partial };
+    setSectionSpacing(nextSpacing);
+    writeJSON('tunet_section_spacing', nextSpacing);
+  };
+
   const [headerSettings, setHeaderSettings] = useState(() => {
     const saved = readJSON('tunet_header_settings');
     return saved || { showTitle: true, showClock: true, showDate: true };
@@ -275,6 +297,8 @@ export const PageProvider = ({ children }) => {
     updateHeaderTitle,
     headerSettings,
     updateHeaderSettings,
+    sectionSpacing,
+    updateSectionSpacing,
     persistCardSettings: (newSettings) => {
       setCardSettings(newSettings);
       writeJSON('tunet_card_settings', newSettings);
