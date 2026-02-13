@@ -417,6 +417,42 @@ export const PageProvider = ({ children }) => {
     statusPillsConfig,
   ]);
 
+  useEffect(() => {
+    writeCachedDashboard({
+      pagesConfig,
+      cardSettings,
+      customNames,
+      customIcons,
+      hiddenCards,
+      pageSettings,
+      gridColumns,
+      gridGapH,
+      gridGapV,
+      cardBorderRadius,
+      headerScale,
+      sectionSpacing,
+      headerTitle,
+      headerSettings,
+      statusPillsConfig,
+    });
+  }, [
+    pagesConfig,
+    cardSettings,
+    customNames,
+    customIcons,
+    hiddenCards,
+    pageSettings,
+    gridColumns,
+    gridGapH,
+    gridGapV,
+    cardBorderRadius,
+    headerScale,
+    sectionSpacing,
+    headerTitle,
+    headerSettings,
+    statusPillsConfig,
+  ]);
+
   const saveCustomName = (id, name) => {
     const newNames = { ...customNames, [id]: name };
     setCustomNames(newNames);
@@ -475,6 +511,27 @@ export const PageProvider = ({ children }) => {
   const persistConfig = (newConfig) => {
     setPagesConfig(newConfig);
   };
+
+  // Defensive fallbacks: protect runtime if a partial/cherry-picked merge
+  // accidentally drops any of the global storage declarations.
+  const safeGlobalDashboardProfiles = typeof globalDashboardProfiles === 'undefined'
+    ? [{ id: 'default', name: 'default', updatedAt: null }]
+    : globalDashboardProfiles;
+  const safeGlobalStorageBusy = typeof globalStorageBusy === 'undefined'
+    ? false
+    : globalStorageBusy;
+  const safeGlobalStorageError = typeof globalStorageError === 'undefined'
+    ? ''
+    : globalStorageError;
+  const safeRefreshGlobalDashboards = typeof refreshGlobalDashboards === 'undefined'
+    ? (async () => [])
+    : refreshGlobalDashboards;
+  const safeSaveGlobalDashboard = typeof saveGlobalDashboard === 'undefined'
+    ? (async () => false)
+    : saveGlobalDashboard;
+  const safeLoadGlobalDashboard = typeof loadGlobalDashboard === 'undefined'
+    ? (async () => false)
+    : loadGlobalDashboard;
 
   const value = {
     pagesConfig,
