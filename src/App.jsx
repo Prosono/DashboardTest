@@ -103,7 +103,13 @@ function AppContent({ showOnboarding, setShowOnboarding }) {
     updateSectionSpacing,
     persistCardSettings,
     statusPillsConfig,
-    saveStatusPillsConfig
+    saveStatusPillsConfig,
+    globalDashboardProfiles,
+    globalStorageBusy,
+    globalStorageError,
+    refreshGlobalDashboards,
+    saveGlobalDashboard,
+    loadGlobalDashboard,
   } = usePages();
 
   const {
@@ -794,6 +800,12 @@ function AppContent({ showOnboarding, setShowOnboarding }) {
             hiddenCards, toggleCardVisibility,
             getCardSettingsKey,
             statusPillsConfig, saveStatusPillsConfig,
+            globalDashboardProfiles,
+            globalStorageBusy,
+            globalStorageError,
+            refreshGlobalDashboards,
+            saveGlobalDashboard,
+            loadGlobalDashboard,
           }}
           mediaTick={mediaTick}
         />
