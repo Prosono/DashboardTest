@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useEffect } from 'react';
+import { createContext, useContext, useState, useEffect, useRef } from 'react';
 import { DEFAULT_PAGES_CONFIG } from '../config/defaults';
 import {
   fetchSharedDashboard,
