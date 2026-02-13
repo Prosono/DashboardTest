@@ -1,5 +1,6 @@
 const STORAGE_CACHE_KEY = 'tunet_shared_dashboard_cache';
 const STORAGE_SCHEMA_VERSION = 1;
+const STORAGE_PROFILES_CACHE_KEY = 'tunet_shared_dashboard_profiles_cache';
 
 const getStorageUrl = () => import.meta.env.VITE_DASHBOARD_STORAGE_URL || '/api/dashboard-config';
 
@@ -14,6 +15,7 @@ const safeParse = (value, fallback = null) => {
 };
 
 const getProfilesUrl = () => `${getStorageUrl().replace(/\/$/, '')}/profiles`;
+const getProfileCacheKey = (id) => `tunet_shared_dashboard_profile_${id}`;
 
 const unwrapData = (payload) => payload?.data || null;
 
@@ -22,6 +24,48 @@ const buildPayload = (data) => ({
   updatedAt: new Date().toISOString(),
   data,
 });
+
+const readProfilesCache = () => {
+  try {
+    const raw = localStorage.getItem(STORAGE_PROFILES_CACHE_KEY);
+    const parsed = raw ? safeParse(raw, []) : [];
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+};
+
+const writeProfilesCache = (profiles) => {
+  try {
+    localStorage.setItem(STORAGE_PROFILES_CACHE_KEY, JSON.stringify(profiles));
+  } catch {
+    // best effort cache write
+  }
+};
+
+const upsertCachedProfile = (entry) => {
+  const current = readProfilesCache();
+  const next = [entry, ...current.filter((p) => p.id !== entry.id)];
+  writeProfilesCache(next);
+};
+
+const readCachedProfileData = (id) => {
+  try {
+    const raw = localStorage.getItem(getProfileCacheKey(id));
+    if (!raw) return null;
+    return safeParse(raw, null);
+  } catch {
+    return null;
+  }
+};
+
+const writeCachedProfileData = (id, payload) => {
+  try {
+    localStorage.setItem(getProfileCacheKey(id), JSON.stringify(payload));
+  } catch {
+    // best effort cache write
+  }
+};
 
 const fetchDefaultDashboardEnvelope = async () => {
   const res = await fetch(getStorageUrl(), {
@@ -82,11 +126,13 @@ export const listSharedDashboards = async () => {
 
   if (res.status === 404) {
     const defaultPayload = await fetchDefaultDashboardEnvelope();
-    return [{
+    const defaults = [{
       id: 'default',
       name: 'default',
       updatedAt: defaultPayload?.updatedAt || null,
     }];
+    const cachedProfiles = readProfilesCache();
+    return [...defaults, ...cachedProfiles.filter((p) => p.id !== 'default')];
   }
   if (!res.ok) throw new Error(`Failed to list shared dashboards: ${res.status}`);
 
@@ -94,18 +140,23 @@ export const listSharedDashboards = async () => {
   const rawProfiles = Array.isArray(payload?.profiles) ? payload.profiles : [];
   if (rawProfiles.length === 0) {
     const defaultPayload = await fetchDefaultDashboardEnvelope();
-    return [{
+    const defaults = [{
       id: 'default',
       name: 'default',
       updatedAt: defaultPayload?.updatedAt || null,
     }];
+    const cachedProfiles = readProfilesCache();
+    return [...defaults, ...cachedProfiles.filter((p) => p.id !== 'default')];
   }
 
-  return rawProfiles.map((entry) => ({
+  const normalized = rawProfiles.map((entry) => ({
     id: toProfileId(entry.id || entry.name || 'default'),
     name: entry.name || entry.id || 'default',
     updatedAt: entry.updatedAt || null,
   }));
+
+  writeProfilesCache(normalized);
+  return normalized;
 };
 
 export const fetchSharedDashboardProfile = async (profileId) => {
@@ -117,7 +168,10 @@ export const fetchSharedDashboardProfile = async (profileId) => {
     headers: { Accept: 'application/json' },
   });
 
-  if (res.status === 404) return null;
+  if (res.status === 404) {
+    const cached = readCachedProfileData(id);
+    return cached?.data || null;
+  }
   if (!res.ok) throw new Error(`Failed to load shared dashboard profile: ${res.status}`);
 
   const payload = await res.json();
@@ -138,7 +192,13 @@ export const saveSharedDashboardProfile = async (profileId, data) => {
     body: JSON.stringify({ ...payload, id }),
   });
 
-  if (!res.ok) throw new Error(`Failed to save shared dashboard profile: ${res.status}`);
+  if (!res.ok && res.status !== 404) throw new Error(`Failed to save shared dashboard profile: ${res.status}`);
+
+  // Always keep a local profile cache so refresh/load can still work even if
+  // backend does not implement profile listing endpoints.
+  writeCachedProfileData(id, payload);
+  upsertCachedProfile({ id, name: profileId || id, updatedAt: payload.updatedAt });
+
   return payload;
 };
 
