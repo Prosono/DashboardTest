@@ -417,6 +417,12 @@ function AppContent({ showOnboarding, setShowOnboarding }) {
             saveCardSetting(settingsKey, 'gridColSpan', Math.max(1, current.colSpan - 1));
             saveCardSetting(settingsKey, 'gridRowSpan', Math.max(1, current.rowSpan - 1));
           }}
+          onAdjustGridSize={(deltaCol, deltaRow) => {
+            if (!deltaCol && !deltaRow) return;
+            const current = getCardGridSize(cardId);
+            saveCardSetting(settingsKey, 'gridColSpan', Math.max(1, Math.min(gridColCount, current.colSpan + deltaCol)));
+            saveCardSetting(settingsKey, 'gridRowSpan', Math.max(1, Math.min(8, current.rowSpan + deltaRow)));
+          }}
           onRemove={() => removeCard(cardId)}
           dragHandleProps={{
             onContextMenu: (e) => e.preventDefault(),

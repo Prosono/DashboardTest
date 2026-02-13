@@ -4,7 +4,7 @@
  *
  * Extracted from the inline `getControls` function in App.jsx.
  */
-import { memo } from 'react';
+import { memo, useRef } from 'react';
 import {
   ChevronLeft,
   ChevronRight,
@@ -14,7 +14,7 @@ import {
   GripVertical,
   Maximize2,
   Minimize2,
-  Trash2,
+  Trash2
 } from '../../icons';
 
 /** Prefixes for cards that support size toggling. */
@@ -55,6 +55,7 @@ function EditOverlay({
   onSaveSize,
   onIncreaseGridSize,
   onDecreaseGridSize,
+  onAdjustGridSize,
   onRemove,
   dragHandleProps,
   t,
@@ -62,6 +63,46 @@ function EditOverlay({
   const showResize = canResize(editId, settings);
   const isSmall = currentSize === 'small';
   const isTriple = TRIPLE_SIZE_PREFIXES.some(p => editId.startsWith(p));
+  const resizeDragRef = useRef(null);
+
+  const startResizeDrag = (e) => {
+    e.stopPropagation();
+    e.preventDefault();
+    e.currentTarget.setPointerCapture?.(e.pointerId);
+    resizeDragRef.current = {
+      startX: e.clientX,
+      startY: e.clientY,
+      lastStepX: 0,
+      lastStepY: 0,
+    };
+  };
+
+  const moveResizeDrag = (e) => {
+    const drag = resizeDragRef.current;
+    if (!drag) return;
+    e.stopPropagation();
+    e.preventDefault();
+
+    const dx = e.clientX - drag.startX;
+    const dy = e.clientY - drag.startY;
+    const stepX = Math.round(dx / 70);
+    const stepY = Math.round(dy / 70);
+
+    const deltaX = stepX - drag.lastStepX;
+    const deltaY = stepY - drag.lastStepY;
+    if (deltaX || deltaY) {
+      onAdjustGridSize?.(deltaX, deltaY);
+      drag.lastStepX = stepX;
+      drag.lastStepY = stepY;
+    }
+  };
+
+  const endResizeDrag = (e) => {
+    if (!resizeDragRef.current) return;
+    e.stopPropagation();
+    e.preventDefault();
+    resizeDragRef.current = null;
+  };
 
   return (
     <>
@@ -145,6 +186,21 @@ function EditOverlay({
           </button>
         )}
       </div>
+
+      {showResize && (
+        <div className="absolute bottom-2 right-2 z-50">
+          <button
+            onPointerDown={startResizeDrag}
+            onPointerMove={moveResizeDrag}
+            onPointerUp={endResizeDrag}
+            onPointerCancel={endResizeDrag}
+            className="p-2 rounded-full text-white border border-white/20 shadow-lg bg-purple-500/80 cursor-nwse-resize touch-none"
+            title="Drag to resize"
+          >
+            <Maximize2 className="w-4 h-4" />
+          </button>
+        </div>
+      )}
 
       {/* Central drag handle */}
       <div className="absolute inset-0 z-40 flex items-center justify-center pointer-events-none">
