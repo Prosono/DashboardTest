@@ -149,6 +149,12 @@ export default function ModalOrchestrator({
     hiddenCards, toggleCardVisibility,
     getCardSettingsKey,
     statusPillsConfig, saveStatusPillsConfig,
+    globalDashboardProfiles,
+    globalStorageBusy,
+    globalStorageError,
+    refreshGlobalDashboards,
+    saveGlobalDashboard,
+    loadGlobalDashboard,
   } = cardConfig;
 
   // ── Edit modal props (computed here, not passed from App) ──────────────
@@ -252,6 +258,12 @@ export default function ModalOrchestrator({
             entities={entities}
             getEntityImageUrl={getEntityImageUrl}
             callService={callService}
+            globalDashboardProfiles={globalDashboardProfiles}
+            globalStorageBusy={globalStorageBusy}
+            globalStorageError={globalStorageError}
+            refreshGlobalDashboards={refreshGlobalDashboards}
+            saveGlobalDashboard={saveGlobalDashboard}
+            loadGlobalDashboard={loadGlobalDashboard}
             onClose={() => setShowConfigModal(false)}
             onFinishOnboarding={() => { setShowOnboarding(false); setShowConfigModal(false); }}
           />
