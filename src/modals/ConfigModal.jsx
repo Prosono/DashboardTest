@@ -720,12 +720,12 @@ export default function ConfigModal({
               <span className="text-[12px] font-medium text-[var(--text-primary)]">{t('settings.gridColumns')}</span>
               {gridColumns !== 4 && <ResetButton onClick={() => setGridColumns(4)} />}
             </div>
-            <div className="flex gap-1.5 p-0.5 rounded-xl">
-              {[2, 3, 4, 5].map(cols => (
+            <div className="grid grid-cols-5 gap-1.5 p-0.5 rounded-xl">
+              {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(cols => (
                 <button
                   key={cols}
                   onClick={() => setGridColumns(cols)}
-                  className={`flex-1 py-2 rounded-lg font-bold text-xs transition-all ${
+                  className={`py-2 rounded-lg font-bold text-xs transition-all ${
                     gridColumns === cols
                       ? 'bg-[var(--accent-color)] text-white shadow-lg shadow-[var(--accent-color)]/20'
                       : 'text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-white/5'

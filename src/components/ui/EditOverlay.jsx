@@ -28,7 +28,7 @@ const RESIZABLE_PREFIXES = [
 const TRIPLE_SIZE_PREFIXES = ['calendar_card_', 'todo_card_'];
 
 function canResize(editId, settings) {
-  if (editId === 'car') return true;
+  if (editId) return true;
   if (['entity', 'toggle', 'sensor'].includes(settings?.type)) return true;
   return RESIZABLE_PREFIXES.some(p => editId.startsWith(p));
 }
@@ -85,8 +85,8 @@ function EditOverlay({
 
     const dx = e.clientX - drag.startX;
     const dy = e.clientY - drag.startY;
-    const stepX = Math.round(dx / 70);
-    const stepY = Math.round(dy / 70);
+    const stepX = Math.round(dx / 32);
+    const stepY = Math.round(dy / 32);
 
     const deltaX = stepX - drag.lastStepX;
     const deltaY = stepY - drag.lastStepY;
