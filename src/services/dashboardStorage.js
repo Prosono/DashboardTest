@@ -27,6 +27,26 @@ const buildPayload = (data) => ({
 
 const EMBEDDED_PROFILES_KEY = '__saved_profiles__';
 
+const readSharedProfilesFromDefaultEnvelope = async () => {
+  const defaultPayload = await fetchDefaultDashboardEnvelope();
+  const embeddedProfiles = getEmbeddedProfiles(defaultPayload);
+  const embeddedList = Object.values(embeddedProfiles).map((entry) => ({
+    id: toProfileId(entry?.id || entry?.name || 'default'),
+    name: entry?.name || entry?.id || 'default',
+    updatedAt: entry?.updatedAt || null,
+  }));
+
+  const defaults = [{
+    id: 'default',
+    name: 'default',
+    updatedAt: defaultPayload?.updatedAt || null,
+  }];
+
+  const merged = [...defaults, ...embeddedList.filter((p) => p.id !== 'default')];
+  writeProfilesCache(merged);
+  return { profiles: merged, payload: defaultPayload };
+};
+
 const getEmbeddedProfiles = (payload) => {
   const profiles = payload?.data?.[EMBEDDED_PROFILES_KEY];
   return (profiles && typeof profiles === 'object' && !Array.isArray(profiles)) ? profiles : {};
@@ -133,70 +153,43 @@ export const saveSharedDashboard = async (data) => {
 };
 
 export const listSharedDashboards = async () => {
-  const res = await fetch(getProfilesUrl(), {
-    method: 'GET',
-    headers: { Accept: 'application/json' },
-  });
+  try {
+    const res = await fetch(getProfilesUrl(), {
+      method: 'GET',
+      headers: { Accept: 'application/json' },
+    });
 
-  if (res.status === 404) {
-    const defaultPayload = await fetchDefaultDashboardEnvelope();
-    const embeddedProfiles = getEmbeddedProfiles(defaultPayload);
-    const embeddedList = Object.values(embeddedProfiles).map((entry) => ({
-      id: toProfileId(entry?.id || entry?.name || 'default'),
-      name: entry?.name || entry?.id || 'default',
-      updatedAt: entry?.updatedAt || null,
+    if (!res.ok) {
+      const { profiles } = await readSharedProfilesFromDefaultEnvelope();
+      return profiles;
+    }
+
+    const payload = await res.json();
+    const rawProfiles = Array.isArray(payload?.profiles) ? payload.profiles : [];
+    if (rawProfiles.length === 0) {
+      const { profiles } = await readSharedProfilesFromDefaultEnvelope();
+      return profiles;
+    }
+
+    const normalized = rawProfiles.map((entry) => ({
+      id: toProfileId(entry.id || entry.name || 'default'),
+      name: entry.name || entry.id || 'default',
+      updatedAt: entry.updatedAt || null,
     }));
-    const defaults = [{
-      id: 'default',
-      name: 'default',
-      updatedAt: defaultPayload?.updatedAt || null,
-    }];
-    const merged = [...defaults, ...embeddedList.filter((p) => p.id !== 'default')];
-    writeProfilesCache(merged);
-    return merged;
+
+    writeProfilesCache(normalized);
+    return normalized;
+  } catch {
+    const { profiles } = await readSharedProfilesFromDefaultEnvelope();
+    return profiles;
   }
-  if (!res.ok) throw new Error(`Failed to list shared dashboards: ${res.status}`);
-
-  const payload = await res.json();
-  const rawProfiles = Array.isArray(payload?.profiles) ? payload.profiles : [];
-  if (rawProfiles.length === 0) {
-    const defaultPayload = await fetchDefaultDashboardEnvelope();
-    const embeddedProfiles = getEmbeddedProfiles(defaultPayload);
-    const embeddedList = Object.values(embeddedProfiles).map((entry) => ({
-      id: toProfileId(entry?.id || entry?.name || 'default'),
-      name: entry?.name || entry?.id || 'default',
-      updatedAt: entry?.updatedAt || null,
-    }));
-    const defaults = [{
-      id: 'default',
-      name: 'default',
-      updatedAt: defaultPayload?.updatedAt || null,
-    }];
-    const merged = [...defaults, ...embeddedList.filter((p) => p.id !== 'default')];
-    writeProfilesCache(merged);
-    return merged;
-  }
-
-  const normalized = rawProfiles.map((entry) => ({
-    id: toProfileId(entry.id || entry.name || 'default'),
-    name: entry.name || entry.id || 'default',
-    updatedAt: entry.updatedAt || null,
-  }));
-
-  writeProfilesCache(normalized);
-  return normalized;
 };
 
 export const fetchSharedDashboardProfile = async (profileId) => {
   const id = toProfileId(profileId);
   if (id === 'default') return fetchSharedDashboard();
 
-  const res = await fetch(`${getProfilesUrl()}/${encodeURIComponent(id)}`, {
-    method: 'GET',
-    headers: { Accept: 'application/json' },
-  });
-
-  if (res.status === 404) {
+  const fallbackData = async () => {
     const defaultPayload = await fetchDefaultDashboardEnvelope();
     const embeddedProfiles = getEmbeddedProfiles(defaultPayload);
     const embedded = embeddedProfiles[id];
@@ -204,11 +197,21 @@ export const fetchSharedDashboardProfile = async (profileId) => {
 
     const cached = readCachedProfileData(id);
     return cached?.data || null;
-  }
-  if (!res.ok) throw new Error(`Failed to load shared dashboard profile: ${res.status}`);
+  };
 
-  const payload = await res.json();
-  return unwrapData(payload);
+  try {
+    const res = await fetch(`${getProfilesUrl()}/${encodeURIComponent(id)}`, {
+      method: 'GET',
+      headers: { Accept: 'application/json' },
+    });
+
+    if (!res.ok) return fallbackData();
+
+    const payload = await res.json();
+    return unwrapData(payload);
+  } catch {
+    return fallbackData();
+  }
 };
 
 export const saveSharedDashboardProfile = async (profileId, data) => {
@@ -216,20 +219,25 @@ export const saveSharedDashboardProfile = async (profileId, data) => {
   if (id === 'default') return saveSharedDashboard(data);
 
   const payload = buildPayload(data);
-  const res = await fetch(`${getProfilesUrl()}/${encodeURIComponent(id)}`, {
-    method: 'PUT',
-    headers: {
-      'Content-Type': 'application/json',
-      Accept: 'application/json',
-    },
-    body: JSON.stringify({ ...payload, id }),
-  });
 
-  if (!res.ok && res.status !== 404) throw new Error(`Failed to save shared dashboard profile: ${res.status}`);
+  let useEmbeddedFallback = false;
+  try {
+    const res = await fetch(`${getProfilesUrl()}/${encodeURIComponent(id)}`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        Accept: 'application/json',
+      },
+      body: JSON.stringify({ ...payload, id }),
+    });
+    useEmbeddedFallback = !res.ok;
+  } catch {
+    useEmbeddedFallback = true;
+  }
 
-  // If dedicated profile endpoint is missing, persist named profiles into the
-  // default shared document so they are available across browsers/users.
-  if (res.status === 404) {
+  // If dedicated profile endpoint is missing/unavailable, persist named
+  // profiles into the default shared document so they are available globally.
+  if (useEmbeddedFallback) {
     const defaultPayload = await fetchDefaultDashboardEnvelope();
     const baseData = defaultPayload?.data || {};
     const embeddedProfiles = getEmbeddedProfiles(defaultPayload);
