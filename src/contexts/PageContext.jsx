@@ -390,6 +390,42 @@ export const PageProvider = ({ children }) => {
     statusPillsConfig,
   ]);
 
+  useEffect(() => {
+    writeCachedDashboard({
+      pagesConfig,
+      cardSettings,
+      customNames,
+      customIcons,
+      hiddenCards,
+      pageSettings,
+      gridColumns,
+      gridGapH,
+      gridGapV,
+      cardBorderRadius,
+      headerScale,
+      sectionSpacing,
+      headerTitle,
+      headerSettings,
+      statusPillsConfig,
+    });
+  }, [
+    pagesConfig,
+    cardSettings,
+    customNames,
+    customIcons,
+    hiddenCards,
+    pageSettings,
+    gridColumns,
+    gridGapH,
+    gridGapV,
+    cardBorderRadius,
+    headerScale,
+    sectionSpacing,
+    headerTitle,
+    headerSettings,
+    statusPillsConfig,
+  ]);
+
   const saveCustomName = (id, name) => {
     const newNames = { ...customNames, [id]: name };
     setCustomNames(newNames);
