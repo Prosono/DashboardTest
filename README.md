@@ -98,6 +98,48 @@ Alternatively, run with Docker:
 2. Add Home Assistant URL and token
 3. Customize layout in edit mode
 
+### Shared dashboard storage (all users see the same layout)
+
+By default, the dashboard keeps a local cache for offline resilience. To make the dashboard layout shared across users, configure a persistent backend endpoint:
+
+- Set `VITE_DASHBOARD_STORAGE_URL` (for example `/api/dashboard-config` or `https://your-api.example.com/dashboard-config`).
+- The app sends `GET /api/dashboard-config` on startup to load the default shared dashboard.
+- In **Settings → Global dashboards**, you can:
+  - press **Save globally** to store the current dashboard,
+  - press **Load dashboard** to load a selected saved dashboard.
+- For named dashboards, the app uses:
+  - `GET /api/dashboard-config/profiles` (list available dashboards)
+  - `GET /api/dashboard-config/profiles/:id` (load one)
+  - `PUT /api/dashboard-config/profiles/:id` (save one)
+- If profile endpoints are unavailable, named dashboards are stored inside the default shared dashboard payload and remain available across browsers/users that use the same backend storage.
+- The JSON payload shape is:
+
+```json
+{
+  "version": 1,
+  "updatedAt": "2026-01-01T12:00:00.000Z",
+  "data": {
+    "pagesConfig": {},
+    "cardSettings": {},
+    "customNames": {},
+    "customIcons": {},
+    "hiddenCards": [],
+    "pageSettings": {},
+    "gridColumns": 4,
+    "gridGapH": 20,
+    "gridGapV": 20,
+    "cardBorderRadius": 16,
+    "headerScale": 1,
+    "sectionSpacing": { "headerToStatus": 16, "statusToNav": 24, "navToGrid": 24 },
+    "headerTitle": "",
+    "headerSettings": { "showTitle": true, "showClock": true, "showDate": true },
+    "statusPillsConfig": []
+  }
+}
+```
+
+If the backend is unavailable, the app falls back to cached/local data until connectivity returns.
+
 ## Build & Deploy
 
 ```bash
