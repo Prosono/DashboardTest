@@ -71,10 +71,10 @@ const clampSpan = (value, fallback, max = 8) => {
 
 export const getCardGridSize = (cardId, getCardSettingsKey, cardSettings, activePage, columns = 4) => {
   const settings = cardSettings[getCardSettingsKey(cardId)] || cardSettings[cardId] || {};
-  const defaultRowSpan = getCardGridSpan(cardId, getCardSettingsKey, cardSettings, activePage);
+  const legacySpan = getCardGridSpan(cardId, getCardSettingsKey, cardSettings, activePage);
 
-  const colSpan = clampSpan(settings.gridColSpan, 1, Math.max(1, columns));
-  const rowSpan = clampSpan(settings.gridRowSpan, defaultRowSpan);
+  const colSpan = clampSpan(settings.gridColSpan, legacySpan, Math.max(1, columns));
+  const rowSpan = clampSpan(settings.gridRowSpan, legacySpan);
 
   return { colSpan, rowSpan };
 };

@@ -407,6 +407,16 @@ function AppContent({ showOnboarding, setShowOnboarding }) {
           onEdit={() => { setShowEditCardModal(editId); setEditCardSettingsKey(settingsKey); }}
           onToggleVisibility={() => toggleCardVisibility(cardId)}
           onSaveSize={(size) => saveCardSetting(settingsKey, 'size', size)}
+          onIncreaseGridSize={() => {
+            const current = getCardGridSize(cardId);
+            saveCardSetting(settingsKey, 'gridColSpan', Math.min(gridColCount, current.colSpan + 1));
+            saveCardSetting(settingsKey, 'gridRowSpan', Math.min(8, current.rowSpan + 1));
+          }}
+          onDecreaseGridSize={() => {
+            const current = getCardGridSize(cardId);
+            saveCardSetting(settingsKey, 'gridColSpan', Math.max(1, current.colSpan - 1));
+            saveCardSetting(settingsKey, 'gridRowSpan', Math.max(1, current.rowSpan - 1));
+          }}
           onRemove={() => removeCard(cardId)}
           dragHandleProps={{
             onContextMenu: (e) => e.preventDefault(),

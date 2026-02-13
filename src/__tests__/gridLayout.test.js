@@ -12,6 +12,15 @@ describe('grid layout sizing', () => {
     expect(size).toEqual({ colSpan: 4, rowSpan: 3 });
   });
 
+
+  it('keeps legacy size behavior when explicit grid spans are not set', () => {
+    const size = getCardGridSize('calendar_card_home', getKey, {
+      'calendar_card_home': { size: 'medium' },
+    }, 'home', 4);
+
+    expect(size).toEqual({ colSpan: 2, rowSpan: 2 });
+  });
+
   it('places mixed card sizes without overlap', () => {
     const sizeFn = (id) => {
       if (id === 'a') return { colSpan: 4, rowSpan: 4 };
