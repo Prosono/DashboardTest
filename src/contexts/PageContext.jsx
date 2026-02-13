@@ -70,7 +70,6 @@ function normalizePagesConfig(parsed) {
     }
   });
 
-  // Ensure pages array exists
   if (!Array.isArray(parsed.pages)) {
     const detectedPages = Object.keys(parsed)
       .filter(key => Array.isArray(parsed[key]) &&
@@ -78,11 +77,9 @@ function normalizePagesConfig(parsed) {
     parsed.pages = detectedPages.length > 0 ? detectedPages : ['home'];
   }
 
-  // Filter out settings, automations, and lights from pages
   parsed.pages = parsed.pages.filter(id => id !== 'settings' && id !== 'lights' && id !== 'automations');
   if (parsed.pages.length === 0) { parsed.pages = ['home']; }
 
-  // Ensure all pages have arrays
   parsed.pages.forEach((pageId) => {
     if (!Array.isArray(parsed[pageId])) { parsed[pageId] = []; }
   });
@@ -312,6 +309,42 @@ export const PageProvider = ({ children }) => {
     storageReady,
   ]);
 
+  useEffect(() => {
+    writeCachedDashboard({
+      pagesConfig,
+      cardSettings,
+      customNames,
+      customIcons,
+      hiddenCards,
+      pageSettings,
+      gridColumns,
+      gridGapH,
+      gridGapV,
+      cardBorderRadius,
+      headerScale,
+      sectionSpacing,
+      headerTitle,
+      headerSettings,
+      statusPillsConfig,
+    });
+  }, [
+    pagesConfig,
+    cardSettings,
+    customNames,
+    customIcons,
+    hiddenCards,
+    pageSettings,
+    gridColumns,
+    gridGapH,
+    gridGapV,
+    cardBorderRadius,
+    headerScale,
+    sectionSpacing,
+    headerTitle,
+    headerSettings,
+    statusPillsConfig,
+  ]);
+
   const saveCustomName = (id, name) => {
     const newNames = { ...customNames, [id]: name };
     setCustomNames(newNames);
@@ -328,9 +361,9 @@ export const PageProvider = ({ children }) => {
   };
 
   const savePageSetting = (id, setting, value) => {
-    const newSettings = { 
-      ...pageSettings, 
-      [id]: { ...(pageSettings[id] || {}), [setting]: value } 
+    const newSettings = {
+      ...pageSettings,
+      [id]: { ...(pageSettings[id] || {}), [setting]: value }
     };
     setPageSettings(newSettings);
   };
@@ -340,7 +373,7 @@ export const PageProvider = ({ children }) => {
   };
 
   const toggleCardVisibility = (cardId) => {
-    const newHidden = hiddenCards.includes(cardId) 
+    const newHidden = hiddenCards.includes(cardId)
       ? hiddenCards.filter(id => id !== cardId)
       : [...hiddenCards, cardId];
     setHiddenCards(newHidden);
@@ -418,6 +451,12 @@ export const PageProvider = ({ children }) => {
       setCardBorderRadius(val);
       document.documentElement.style.setProperty('--card-border-radius', `${val}px`);
     },
+    globalDashboardProfiles,
+    globalStorageBusy,
+    globalStorageError,
+    refreshGlobalDashboards,
+    saveGlobalDashboard,
+    loadGlobalDashboard,
   };
 
   return (
