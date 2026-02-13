@@ -111,7 +111,7 @@ By default, the dashboard keeps a local cache for offline resilience. To make th
   - `GET /api/dashboard-config/profiles` (list available dashboards)
   - `GET /api/dashboard-config/profiles/:id` (load one)
   - `PUT /api/dashboard-config/profiles/:id` (save one)
-- If profile endpoints are unavailable, named dashboards are still cached locally in the browser and remain loadable from the same browser profile.
+- If profile endpoints are unavailable, named dashboards are stored inside the default shared dashboard payload and remain available across browsers/users that use the same backend storage.
 - The JSON payload shape is:
 
 ```json

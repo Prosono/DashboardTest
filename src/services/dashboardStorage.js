@@ -25,6 +25,20 @@ const buildPayload = (data) => ({
   data,
 });
 
+const EMBEDDED_PROFILES_KEY = '__saved_profiles__';
+
+const getEmbeddedProfiles = (payload) => {
+  const profiles = payload?.data?.[EMBEDDED_PROFILES_KEY];
+  return (profiles && typeof profiles === 'object' && !Array.isArray(profiles)) ? profiles : {};
+};
+
+const buildEmbeddedProfileEntry = (id, name, data) => ({
+  id,
+  name,
+  updatedAt: new Date().toISOString(),
+  data,
+});
+
 const readProfilesCache = () => {
   try {
     const raw = localStorage.getItem(STORAGE_PROFILES_CACHE_KEY);
@@ -126,13 +140,20 @@ export const listSharedDashboards = async () => {
 
   if (res.status === 404) {
     const defaultPayload = await fetchDefaultDashboardEnvelope();
+    const embeddedProfiles = getEmbeddedProfiles(defaultPayload);
+    const embeddedList = Object.values(embeddedProfiles).map((entry) => ({
+      id: toProfileId(entry?.id || entry?.name || 'default'),
+      name: entry?.name || entry?.id || 'default',
+      updatedAt: entry?.updatedAt || null,
+    }));
     const defaults = [{
       id: 'default',
       name: 'default',
       updatedAt: defaultPayload?.updatedAt || null,
     }];
-    const cachedProfiles = readProfilesCache();
-    return [...defaults, ...cachedProfiles.filter((p) => p.id !== 'default')];
+    const merged = [...defaults, ...embeddedList.filter((p) => p.id !== 'default')];
+    writeProfilesCache(merged);
+    return merged;
   }
   if (!res.ok) throw new Error(`Failed to list shared dashboards: ${res.status}`);
 
@@ -140,13 +161,20 @@ export const listSharedDashboards = async () => {
   const rawProfiles = Array.isArray(payload?.profiles) ? payload.profiles : [];
   if (rawProfiles.length === 0) {
     const defaultPayload = await fetchDefaultDashboardEnvelope();
+    const embeddedProfiles = getEmbeddedProfiles(defaultPayload);
+    const embeddedList = Object.values(embeddedProfiles).map((entry) => ({
+      id: toProfileId(entry?.id || entry?.name || 'default'),
+      name: entry?.name || entry?.id || 'default',
+      updatedAt: entry?.updatedAt || null,
+    }));
     const defaults = [{
       id: 'default',
       name: 'default',
       updatedAt: defaultPayload?.updatedAt || null,
     }];
-    const cachedProfiles = readProfilesCache();
-    return [...defaults, ...cachedProfiles.filter((p) => p.id !== 'default')];
+    const merged = [...defaults, ...embeddedList.filter((p) => p.id !== 'default')];
+    writeProfilesCache(merged);
+    return merged;
   }
 
   const normalized = rawProfiles.map((entry) => ({
@@ -169,6 +197,11 @@ export const fetchSharedDashboardProfile = async (profileId) => {
   });
 
   if (res.status === 404) {
+    const defaultPayload = await fetchDefaultDashboardEnvelope();
+    const embeddedProfiles = getEmbeddedProfiles(defaultPayload);
+    const embedded = embeddedProfiles[id];
+    if (embedded?.data) return embedded.data;
+
     const cached = readCachedProfileData(id);
     return cached?.data || null;
   }
@@ -193,6 +226,23 @@ export const saveSharedDashboardProfile = async (profileId, data) => {
   });
 
   if (!res.ok && res.status !== 404) throw new Error(`Failed to save shared dashboard profile: ${res.status}`);
+
+  // If dedicated profile endpoint is missing, persist named profiles into the
+  // default shared document so they are available across browsers/users.
+  if (res.status === 404) {
+    const defaultPayload = await fetchDefaultDashboardEnvelope();
+    const baseData = defaultPayload?.data || {};
+    const embeddedProfiles = getEmbeddedProfiles(defaultPayload);
+    const nextProfiles = {
+      ...embeddedProfiles,
+      [id]: buildEmbeddedProfileEntry(id, profileId || id, data),
+    };
+
+    await saveSharedDashboard({
+      ...baseData,
+      [EMBEDDED_PROFILES_KEY]: nextProfiles,
+    });
+  }
 
   // Always keep a local profile cache so refresh/load can still work even if
   // backend does not implement profile listing endpoints.
