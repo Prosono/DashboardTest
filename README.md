@@ -100,10 +100,17 @@ Alternatively, run with Docker:
 
 ### Shared dashboard storage (all users see the same layout)
 
-By default, the dashboard still keeps a local cache for offline resilience. To make the dashboard layout shared across users, configure a persistent backend endpoint:
+By default, the dashboard keeps a local cache for offline resilience. To make the dashboard layout shared across users, configure a persistent backend endpoint:
 
 - Set `VITE_DASHBOARD_STORAGE_URL` (for example `/api/dashboard-config` or `https://your-api.example.com/dashboard-config`).
-- The app sends `GET` to load shared state and `PUT` with JSON to persist updates.
+- The app sends `GET /api/dashboard-config` on startup to load the default shared dashboard.
+- In **Settings → Global dashboards**, you can:
+  - press **Save globally** to store the current dashboard,
+  - press **Load dashboard** to load a selected saved dashboard.
+- For named dashboards, the app uses:
+  - `GET /api/dashboard-config/profiles` (list available dashboards)
+  - `GET /api/dashboard-config/profiles/:id` (load one)
+  - `PUT /api/dashboard-config/profiles/:id` (save one)
 - The JSON payload shape is:
 
 ```json

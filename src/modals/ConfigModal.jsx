@@ -101,6 +101,7 @@ export default function ConfigModal({
   const [installingIds, setInstallingIds] = useState({});
   const [expandedNotes, setExpandedNotes] = useState({});
   const [layoutPreview, setLayoutPreview] = useState(false);
+  const [layoutSections, setLayoutSections] = useState({ grid: true, spacing: false, cards: false });
   const [selectedGlobalDashboard, setSelectedGlobalDashboard] = useState('default');
   const [newGlobalDashboardName, setNewGlobalDashboardName] = useState('');
   const [globalActionMessage, setGlobalActionMessage] = useState('');
