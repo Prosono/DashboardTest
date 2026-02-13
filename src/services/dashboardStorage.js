@@ -1,9 +1,8 @@
 const STORAGE_CACHE_KEY = 'tunet_shared_dashboard_cache';
 const STORAGE_SCHEMA_VERSION = 1;
+const SAVE_DEBOUNCE_MS = 500;
 
 const getStorageUrl = () => import.meta.env.VITE_DASHBOARD_STORAGE_URL || '/api/dashboard-config';
-
-const toProfileId = (value) => String(value || 'default').trim().replace(/\s+/g, '_').toLowerCase();
 
 const safeParse = (value, fallback = null) => {
   try {
@@ -12,16 +11,6 @@ const safeParse = (value, fallback = null) => {
     return fallback;
   }
 };
-
-const getProfilesUrl = () => `${getStorageUrl().replace(/\/$/, '')}/profiles`;
-
-const unwrapData = (payload) => payload?.data || null;
-
-const buildPayload = (data) => ({
-  version: STORAGE_SCHEMA_VERSION,
-  updatedAt: new Date().toISOString(),
-  data,
-});
 
 export const readCachedDashboard = () => {
   try {
@@ -51,11 +40,15 @@ export const fetchSharedDashboard = async () => {
   if (!res.ok) throw new Error(`Failed to load shared dashboard: ${res.status}`);
 
   const payload = await res.json();
-  return unwrapData(payload);
+  return payload?.data || null;
 };
 
 export const saveSharedDashboard = async (data) => {
-  const payload = buildPayload(data);
+  const payload = {
+    version: STORAGE_SCHEMA_VERSION,
+    updatedAt: new Date().toISOString(),
+    data,
+  };
 
   const res = await fetch(getStorageUrl(), {
     method: 'PUT',
@@ -70,60 +63,4 @@ export const saveSharedDashboard = async (data) => {
   return payload;
 };
 
-export const listSharedDashboards = async () => {
-  const res = await fetch(getProfilesUrl(), {
-    method: 'GET',
-    headers: { Accept: 'application/json' },
-  });
-
-  if (res.status === 404) {
-    return [{ id: 'default', name: 'default', updatedAt: null }];
-  }
-  if (!res.ok) throw new Error(`Failed to list shared dashboards: ${res.status}`);
-
-  const payload = await res.json();
-  const rawProfiles = Array.isArray(payload?.profiles) ? payload.profiles : [];
-  if (rawProfiles.length === 0) return [{ id: 'default', name: 'default', updatedAt: null }];
-
-  return rawProfiles.map((entry) => ({
-    id: toProfileId(entry.id || entry.name || 'default'),
-    name: entry.name || entry.id || 'default',
-    updatedAt: entry.updatedAt || null,
-  }));
-};
-
-export const fetchSharedDashboardProfile = async (profileId) => {
-  const id = toProfileId(profileId);
-  if (id === 'default') return fetchSharedDashboard();
-
-  const res = await fetch(`${getProfilesUrl()}/${encodeURIComponent(id)}`, {
-    method: 'GET',
-    headers: { Accept: 'application/json' },
-  });
-
-  if (res.status === 404) return null;
-  if (!res.ok) throw new Error(`Failed to load shared dashboard profile: ${res.status}`);
-
-  const payload = await res.json();
-  return unwrapData(payload);
-};
-
-export const saveSharedDashboardProfile = async (profileId, data) => {
-  const id = toProfileId(profileId);
-  if (id === 'default') return saveSharedDashboard(data);
-
-  const payload = buildPayload(data);
-  const res = await fetch(`${getProfilesUrl()}/${encodeURIComponent(id)}`, {
-    method: 'PUT',
-    headers: {
-      'Content-Type': 'application/json',
-      Accept: 'application/json',
-    },
-    body: JSON.stringify({ ...payload, id }),
-  });
-
-  if (!res.ok) throw new Error(`Failed to save shared dashboard profile: ${res.status}`);
-  return payload;
-};
-
-export { toProfileId };
+export { SAVE_DEBOUNCE_MS };
