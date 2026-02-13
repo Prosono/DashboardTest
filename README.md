@@ -98,6 +98,40 @@ Alternatively, run with Docker:
 2. Add Home Assistant URL and token
 3. Customize layout in edit mode
 
+### Shared dashboard storage (all users see the same layout)
+
+By default, the dashboard still keeps a local cache for offline resilience. To make the dashboard layout shared across users, configure a persistent backend endpoint:
+
+- Set `VITE_DASHBOARD_STORAGE_URL` (for example `/api/dashboard-config` or `https://your-api.example.com/dashboard-config`).
+- The app sends `GET` to load shared state and `PUT` with JSON to persist updates.
+- The JSON payload shape is:
+
+```json
+{
+  "version": 1,
+  "updatedAt": "2026-01-01T12:00:00.000Z",
+  "data": {
+    "pagesConfig": {},
+    "cardSettings": {},
+    "customNames": {},
+    "customIcons": {},
+    "hiddenCards": [],
+    "pageSettings": {},
+    "gridColumns": 4,
+    "gridGapH": 20,
+    "gridGapV": 20,
+    "cardBorderRadius": 16,
+    "headerScale": 1,
+    "sectionSpacing": { "headerToStatus": 16, "statusToNav": 24, "navToGrid": 24 },
+    "headerTitle": "",
+    "headerSettings": { "showTitle": true, "showClock": true, "showDate": true },
+    "statusPillsConfig": []
+  }
+}
+```
+
+If the backend is unavailable, the app falls back to cached/local data until connectivity returns.
+
 ## Build & Deploy
 
 ```bash

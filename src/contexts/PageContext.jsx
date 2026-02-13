@@ -1,5 +1,12 @@
-import { createContext, useContext, useState, useEffect } from 'react';
+import { createContext, useContext, useState, useEffect, useRef } from 'react';
 import { DEFAULT_PAGES_CONFIG } from '../config/defaults';
+import {
+  SAVE_DEBOUNCE_MS,
+  fetchSharedDashboard,
+  readCachedDashboard,
+  saveSharedDashboard,
+  writeCachedDashboard,
+} from '../services/dashboardStorage';
 
 const readJSON = (key, fallback) => {
   try {
@@ -12,9 +19,6 @@ const readJSON = (key, fallback) => {
   }
 };
 
-const writeJSON = (key, value) => {
-  localStorage.setItem(key, JSON.stringify(value));
-};
 
 const readNumber = (key, fallback) => {
   const raw = localStorage.getItem(key);
@@ -29,16 +33,30 @@ const DEFAULT_SECTION_SPACING = {
   navToGrid: 24,
 };
 
-/** Synchronously load & migrate pagesConfig from localStorage. */
-function loadPagesConfig() {
-  const parsed = readJSON('tunet_pages_config', null);
+const getDefaultDashboardState = () => ({
+  pagesConfig: DEFAULT_PAGES_CONFIG,
+  cardSettings: {},
+  customNames: {},
+  customIcons: {},
+  hiddenCards: [],
+  pageSettings: {},
+  gridColumns: 4,
+  gridGapH: 20,
+  gridGapV: 20,
+  cardBorderRadius: 16,
+  headerScale: 1,
+  sectionSpacing: DEFAULT_SECTION_SPACING,
+  headerTitle: '',
+  headerSettings: { showTitle: true, showClock: true, showDate: true },
+  statusPillsConfig: [],
+});
+
+function normalizePagesConfig(parsed) {
   if (!parsed) return DEFAULT_PAGES_CONFIG;
 
-  let modified = false;
-
   // Remove legacy automations/lights page config entirely
-  if (parsed.automations) { delete parsed.automations; modified = true; }
-  if (parsed.lights) { delete parsed.lights; modified = true; }
+  if (parsed.automations) { delete parsed.automations; }
+  if (parsed.lights) { delete parsed.lights; }
 
   // Remove deprecated cards
   Object.keys(parsed).forEach(pageKey => {
@@ -48,7 +66,6 @@ function loadPagesConfig() {
       );
       if (filtered.length !== parsed[pageKey].length) {
         parsed[pageKey] = filtered;
-        modified = true;
       }
     }
   });
@@ -59,23 +76,113 @@ function loadPagesConfig() {
       .filter(key => Array.isArray(parsed[key]) &&
         !['header', 'settings', 'lights', 'automations'].includes(key));
     parsed.pages = detectedPages.length > 0 ? detectedPages : ['home'];
-    modified = true;
   }
 
   // Filter out settings, automations, and lights from pages
   parsed.pages = parsed.pages.filter(id => id !== 'settings' && id !== 'lights' && id !== 'automations');
-  if (parsed.pages.length === 0) { parsed.pages = ['home']; modified = true; }
+  if (parsed.pages.length === 0) { parsed.pages = ['home']; }
 
   // Ensure all pages have arrays
   parsed.pages.forEach((pageId) => {
-    if (!Array.isArray(parsed[pageId])) { parsed[pageId] = []; modified = true; }
+    if (!Array.isArray(parsed[pageId])) { parsed[pageId] = []; }
   });
 
   // Ensure header exists
-  if (!parsed.header) { parsed.header = []; modified = true; }
+  if (!parsed.header) { parsed.header = []; }
 
-  if (modified) writeJSON('tunet_pages_config', parsed);
   return parsed;
+}
+
+function normalizeDashboardState(raw) {
+  const defaults = getDefaultDashboardState();
+  const source = raw || {};
+
+  const spacingSaved = source.sectionSpacing;
+  const sectionSpacing = spacingSaved
+    ? {
+      headerToStatus: Number.isFinite(spacingSaved.headerToStatus) ? spacingSaved.headerToStatus : DEFAULT_SECTION_SPACING.headerToStatus,
+      statusToNav: Number.isFinite(spacingSaved.statusToNav) ? spacingSaved.statusToNav : DEFAULT_SECTION_SPACING.statusToNav,
+      navToGrid: Number.isFinite(spacingSaved.navToGrid) ? spacingSaved.navToGrid : DEFAULT_SECTION_SPACING.navToGrid,
+    }
+    : defaults.sectionSpacing;
+
+  const normalizedPageSettings = { ...(source.pageSettings || {}) };
+  Object.keys(normalizedPageSettings).forEach((pageId) => {
+    if (normalizedPageSettings[pageId]?.type === 'sonos') {
+      normalizedPageSettings[pageId] = { ...normalizedPageSettings[pageId], type: 'media' };
+    }
+  });
+
+  return {
+    pagesConfig: normalizePagesConfig(source.pagesConfig),
+    cardSettings: source.cardSettings || defaults.cardSettings,
+    customNames: source.customNames || defaults.customNames,
+    customIcons: source.customIcons || defaults.customIcons,
+    hiddenCards: (source.hiddenCards || defaults.hiddenCards).filter(id => !deprecatedCardIds.includes(id)),
+    pageSettings: normalizedPageSettings,
+    gridColumns: Number.isFinite(source.gridColumns) ? source.gridColumns : defaults.gridColumns,
+    gridGapH: Number.isFinite(source.gridGapH) ? source.gridGapH : defaults.gridGapH,
+    gridGapV: Number.isFinite(source.gridGapV) ? source.gridGapV : defaults.gridGapV,
+    cardBorderRadius: Number.isFinite(source.cardBorderRadius) ? source.cardBorderRadius : defaults.cardBorderRadius,
+    headerScale: Number.isFinite(source.headerScale) ? source.headerScale : defaults.headerScale,
+    sectionSpacing,
+    headerTitle: typeof source.headerTitle === 'string' ? source.headerTitle : defaults.headerTitle,
+    headerSettings: source.headerSettings || defaults.headerSettings,
+    statusPillsConfig: Array.isArray(source.statusPillsConfig) ? source.statusPillsConfig : defaults.statusPillsConfig,
+  };
+}
+
+function loadLegacyLocalStorageState() {
+  const state = getDefaultDashboardState();
+  state.pagesConfig = normalizePagesConfig(readJSON('tunet_pages_config', null));
+
+  const hidden = readJSON('tunet_hidden_cards', null);
+  if (hidden) state.hiddenCards = hidden.filter(id => !deprecatedCardIds.includes(id));
+
+  state.customNames = readJSON('tunet_custom_names', state.customNames) || {};
+  state.customIcons = readJSON('tunet_custom_icons', state.customIcons) || {};
+  state.cardSettings = readJSON('tunet_card_settings', state.cardSettings) || {};
+
+  const pageSettingsSaved = readJSON('tunet_page_settings', null);
+  if (pageSettingsSaved) {
+    const nextSettings = { ...pageSettingsSaved };
+    Object.keys(nextSettings).forEach((pageId) => {
+      if (nextSettings[pageId]?.type === 'sonos') {
+        nextSettings[pageId] = { ...nextSettings[pageId], type: 'media' };
+      }
+    });
+    state.pageSettings = nextSettings;
+  }
+
+  const savedCols = readNumber('tunet_grid_columns', null);
+  if (savedCols !== null) state.gridColumns = savedCols;
+  const savedGap = readNumber('tunet_grid_gap', null);
+  const savedGapH = readNumber('tunet_grid_gap_h', null);
+  const savedGapV = readNumber('tunet_grid_gap_v', null);
+  if (savedGapH !== null) state.gridGapH = savedGapH;
+  else if (savedGap !== null) state.gridGapH = savedGap;
+  if (savedGapV !== null) state.gridGapV = savedGapV;
+  else if (savedGap !== null) state.gridGapV = savedGap;
+
+  const savedRadius = readNumber('tunet_card_border_radius', null);
+  if (savedRadius !== null) state.cardBorderRadius = savedRadius;
+  const savedScale = readNumber('tunet_header_scale', null);
+  if (savedScale !== null) state.headerScale = savedScale;
+
+  const spacingSaved = readJSON('tunet_section_spacing', null);
+  if (spacingSaved) {
+    state.sectionSpacing = {
+      headerToStatus: Number.isFinite(spacingSaved.headerToStatus) ? spacingSaved.headerToStatus : DEFAULT_SECTION_SPACING.headerToStatus,
+      statusToNav: Number.isFinite(spacingSaved.statusToNav) ? spacingSaved.statusToNav : DEFAULT_SECTION_SPACING.statusToNav,
+      navToGrid: Number.isFinite(spacingSaved.navToGrid) ? spacingSaved.navToGrid : DEFAULT_SECTION_SPACING.navToGrid,
+    };
+  }
+
+  state.headerTitle = localStorage.getItem('tunet_header_title') || '';
+  state.headerSettings = readJSON('tunet_header_settings', state.headerSettings) || state.headerSettings;
+  state.statusPillsConfig = readJSON('tunet_status_pills_config', state.statusPillsConfig) || [];
+
+  return state;
 }
 
 const PageContext = createContext(null);
@@ -89,99 +196,135 @@ export const usePages = () => {
 };
 
 export const PageProvider = ({ children }) => {
-  const [pagesConfig, setPagesConfig] = useState(loadPagesConfig);
-  const [cardSettings, setCardSettings] = useState({});
-  const [customNames, setCustomNames] = useState({});
-  const [customIcons, setCustomIcons] = useState({});
-  const [hiddenCards, setHiddenCards] = useState([]);
-  const [pageSettings, setPageSettings] = useState({});
-  const [gridColumns, setGridColumns] = useState(4);
-  const [gridGapH, setGridGapH] = useState(20);
-  const [gridGapV, setGridGapV] = useState(20);
-  const [cardBorderRadius, setCardBorderRadius] = useState(16);
-  const [headerScale, setHeaderScale] = useState(1);
-  const [sectionSpacing, setSectionSpacing] = useState(DEFAULT_SECTION_SPACING);
-  const [headerTitle, setHeaderTitle] = useState(() => 
-    localStorage.getItem('tunet_header_title') || ''
-  );
+  const cachedState = normalizeDashboardState(readCachedDashboard() || loadLegacyLocalStorageState());
+  const [pagesConfig, setPagesConfig] = useState(cachedState.pagesConfig);
+  const [cardSettings, setCardSettings] = useState(cachedState.cardSettings);
+  const [customNames, setCustomNames] = useState(cachedState.customNames);
+  const [customIcons, setCustomIcons] = useState(cachedState.customIcons);
+  const [hiddenCards, setHiddenCards] = useState(cachedState.hiddenCards);
+  const [pageSettings, setPageSettings] = useState(cachedState.pageSettings);
+  const [gridColumns, setGridColumns] = useState(cachedState.gridColumns);
+  const [gridGapH, setGridGapH] = useState(cachedState.gridGapH);
+  const [gridGapV, setGridGapV] = useState(cachedState.gridGapV);
+  const [cardBorderRadius, setCardBorderRadius] = useState(cachedState.cardBorderRadius);
+  const [headerScale, setHeaderScale] = useState(cachedState.headerScale);
+  const [sectionSpacing, setSectionSpacing] = useState(cachedState.sectionSpacing);
+  const [headerTitle, setHeaderTitle] = useState(cachedState.headerTitle);
+  const [headerSettings, setHeaderSettings] = useState(cachedState.headerSettings);
+  const [statusPillsConfig, setStatusPillsConfig] = useState(cachedState.statusPillsConfig);
+  const hasLoadedRemote = useRef(false);
+  const [storageReady, setStorageReady] = useState(false);
+  const saveTimer = useRef(null);
 
-  // Load remaining configuration from localStorage
   useEffect(() => {
-    const hidden = readJSON('tunet_hidden_cards', null);
-    if (hidden) {
-      const filteredHidden = hidden.filter(id => !deprecatedCardIds.includes(id));
-      setHiddenCards(filteredHidden);
-    }
+    let cancelled = false;
 
-    const names = readJSON('tunet_custom_names', null);
-    if (names) setCustomNames(names);
-
-    const icons = readJSON('tunet_custom_icons', null);
-    if (icons) setCustomIcons(icons);
-
-    const savedCols = readNumber('tunet_grid_columns', null);
-    if (savedCols !== null) setGridColumns(savedCols);
-
-    const savedGap = readNumber('tunet_grid_gap', null);
-    const savedGapH = readNumber('tunet_grid_gap_h', null);
-    const savedGapV = readNumber('tunet_grid_gap_v', null);
-
-    if (savedGapH !== null) setGridGapH(savedGapH);
-    else if (savedGap !== null) setGridGapH(savedGap);
-
-    if (savedGapV !== null) setGridGapV(savedGapV);
-    else if (savedGap !== null) setGridGapV(savedGap);
-
-    const savedRadius = readNumber('tunet_card_border_radius', null);
-    if (savedRadius !== null) setCardBorderRadius(savedRadius);
-
-    const savedScale = readNumber('tunet_header_scale', null);
-    if (savedScale !== null) setHeaderScale(savedScale);
-
-    const spacingSaved = readJSON('tunet_section_spacing', null);
-    if (spacingSaved) {
-      const nextSpacing = {
-        headerToStatus: Number.isFinite(spacingSaved.headerToStatus) ? spacingSaved.headerToStatus : DEFAULT_SECTION_SPACING.headerToStatus,
-        statusToNav: Number.isFinite(spacingSaved.statusToNav) ? spacingSaved.statusToNav : DEFAULT_SECTION_SPACING.statusToNav,
-        navToGrid: Number.isFinite(spacingSaved.navToGrid) ? spacingSaved.navToGrid : DEFAULT_SECTION_SPACING.navToGrid,
-      };
-      setSectionSpacing(nextSpacing);
-    }
-
-    const pageSettingsSaved = readJSON('tunet_page_settings', null);
-    if (pageSettingsSaved) {
-      let modified = false;
-      const nextSettings = { ...pageSettingsSaved };
-      Object.keys(nextSettings).forEach((pageId) => {
-        if (nextSettings[pageId]?.type === 'sonos') {
-          nextSettings[pageId] = { ...nextSettings[pageId], type: 'media' };
-          modified = true;
+    const loadShared = async () => {
+      try {
+        const remoteData = await fetchSharedDashboard();
+        if (cancelled || !remoteData) {
+          hasLoadedRemote.current = true;
+          setStorageReady(true);
+          return;
         }
-      });
-      setPageSettings(nextSettings);
-      if (modified) writeJSON('tunet_page_settings', nextSettings);
-    }
+        const normalized = normalizeDashboardState(remoteData);
+        setPagesConfig(normalized.pagesConfig);
+        setCardSettings(normalized.cardSettings);
+        setCustomNames(normalized.customNames);
+        setCustomIcons(normalized.customIcons);
+        setHiddenCards(normalized.hiddenCards);
+        setPageSettings(normalized.pageSettings);
+        setGridColumns(normalized.gridColumns);
+        setGridGapH(normalized.gridGapH);
+        setGridGapV(normalized.gridGapV);
+        setCardBorderRadius(normalized.cardBorderRadius);
+        setHeaderScale(normalized.headerScale);
+        setSectionSpacing(normalized.sectionSpacing);
+        setHeaderTitle(normalized.headerTitle);
+        setHeaderSettings(normalized.headerSettings);
+        setStatusPillsConfig(normalized.statusPillsConfig);
+      } catch (error) {
+        console.warn('Failed to load shared dashboard config, using cached/local fallback.', error);
+      } finally {
+        if (!cancelled) {
+          hasLoadedRemote.current = true;
+          setStorageReady(true);
+        }
+      }
+    };
 
-    const cardSettingsSaved = readJSON('tunet_card_settings', null);
-    if (cardSettingsSaved) setCardSettings(cardSettingsSaved);
+    loadShared();
+
+    return () => {
+      cancelled = true;
+    };
   }, []);
+
+  useEffect(() => {
+    if (!hasLoadedRemote.current || !storageReady) return;
+
+    const payload = {
+      pagesConfig,
+      cardSettings,
+      customNames,
+      customIcons,
+      hiddenCards,
+      pageSettings,
+      gridColumns,
+      gridGapH,
+      gridGapV,
+      cardBorderRadius,
+      headerScale,
+      sectionSpacing,
+      headerTitle,
+      headerSettings,
+      statusPillsConfig,
+    };
+
+    writeCachedDashboard(payload);
+
+    if (saveTimer.current) clearTimeout(saveTimer.current);
+    saveTimer.current = setTimeout(() => {
+      saveSharedDashboard(payload).catch((error) => {
+        console.warn('Failed to persist shared dashboard config.', error);
+      });
+    }, SAVE_DEBOUNCE_MS);
+
+    return () => {
+      if (saveTimer.current) clearTimeout(saveTimer.current);
+    };
+  }, [
+    pagesConfig,
+    cardSettings,
+    customNames,
+    customIcons,
+    hiddenCards,
+    pageSettings,
+    gridColumns,
+    gridGapH,
+    gridGapV,
+    cardBorderRadius,
+    headerScale,
+    sectionSpacing,
+    headerTitle,
+    headerSettings,
+    statusPillsConfig,
+    storageReady,
+  ]);
 
   const saveCustomName = (id, name) => {
     const newNames = { ...customNames, [id]: name };
     setCustomNames(newNames);
-    writeJSON('tunet_custom_names', newNames);
   };
 
   const saveCustomIcon = (id, iconName) => {
     const newIcons = { ...customIcons, [id]: iconName };
     setCustomIcons(newIcons);
-    writeJSON('tunet_custom_icons', newIcons);
   };
 
   const saveCardSetting = (id, setting, value) => {
     const newSettings = { ...cardSettings, [id]: { ...cardSettings[id], [setting]: value } };
     setCardSettings(newSettings);
-    writeJSON('tunet_card_settings', newSettings);
   };
 
   const savePageSetting = (id, setting, value) => {
@@ -190,12 +333,10 @@ export const PageProvider = ({ children }) => {
       [id]: { ...(pageSettings[id] || {}), [setting]: value } 
     };
     setPageSettings(newSettings);
-    writeJSON('tunet_page_settings', newSettings);
   };
 
   const persistPageSettings = (newSettings) => {
     setPageSettings(newSettings);
-    writeJSON('tunet_page_settings', newSettings);
   };
 
   const toggleCardVisibility = (cardId) => {
@@ -203,55 +344,31 @@ export const PageProvider = ({ children }) => {
       ? hiddenCards.filter(id => id !== cardId)
       : [...hiddenCards, cardId];
     setHiddenCards(newHidden);
-    writeJSON('tunet_hidden_cards', newHidden);
   };
 
   const updateHeaderScale = (newScale) => {
     setHeaderScale(newScale);
-    try {
-      localStorage.setItem('tunet_header_scale', String(newScale));
-    } catch (error) {
-      console.error('Failed to save header scale:', error);
-    }
   };
 
   const updateHeaderTitle = (newTitle) => {
     setHeaderTitle(newTitle);
-    try {
-      localStorage.setItem('tunet_header_title', newTitle);
-    } catch (error) {
-      console.error('Failed to save header title:', error);
-    }
   };
 
   const updateSectionSpacing = (partial) => {
     const nextSpacing = { ...sectionSpacing, ...partial };
     setSectionSpacing(nextSpacing);
-    writeJSON('tunet_section_spacing', nextSpacing);
   };
-
-  const [headerSettings, setHeaderSettings] = useState(() => {
-    const saved = readJSON('tunet_header_settings');
-    return saved || { showTitle: true, showClock: true, showDate: true };
-  });
 
   const updateHeaderSettings = (newSettings) => {
     setHeaderSettings(newSettings);
-    writeJSON('tunet_header_settings', newSettings);
   };
-
-  const [statusPillsConfig, setStatusPillsConfig] = useState(() => 
-    readJSON('tunet_status_pills_config', [])
-  );
 
   const saveStatusPillsConfig = (newConfig) => {
     setStatusPillsConfig(newConfig);
-    writeJSON('tunet_status_pills_config', newConfig);
   };
 
   const persistConfig = (newConfig) => {
     setPagesConfig(newConfig);
-    writeJSON('tunet_pages_config', newConfig);
   };
 
   const value = {
@@ -274,11 +391,6 @@ export const PageProvider = ({ children }) => {
     gridColumns,
     setGridColumns: (val) => {
       setGridColumns(val);
-      try {
-        localStorage.setItem('tunet_grid_columns', String(val));
-      } catch (error) {
-        console.error('Failed to save grid columns:', error);
-      }
     },
     headerScale,
     updateHeaderScale,
@@ -290,25 +402,14 @@ export const PageProvider = ({ children }) => {
     updateSectionSpacing,
     persistCardSettings: (newSettings) => {
       setCardSettings(newSettings);
-      writeJSON('tunet_card_settings', newSettings);
     },
     gridGapH,
     setGridGapH: (val) => {
       setGridGapH(val);
-      try {
-        localStorage.setItem('tunet_grid_gap_h', String(val));
-      } catch (error) {
-        console.error('Failed to save grid gap h:', error);
-      }
     },
     gridGapV,
     setGridGapV: (val) => {
       setGridGapV(val);
-      try {
-        localStorage.setItem('tunet_grid_gap_v', String(val));
-      } catch (error) {
-        console.error('Failed to save grid gap v:', error);
-      }
     },
     statusPillsConfig,
     saveStatusPillsConfig,
@@ -316,11 +417,6 @@ export const PageProvider = ({ children }) => {
     setCardBorderRadius: (val) => {
       setCardBorderRadius(val);
       document.documentElement.style.setProperty('--card-border-radius', `${val}px`);
-      try {
-        localStorage.setItem('tunet_card_border_radius', String(val));
-      } catch (error) {
-        console.error('Failed to save card border radius:', error);
-      }
     },
   };
 
