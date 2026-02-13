@@ -23,6 +23,17 @@ const buildPayload = (data) => ({
   data,
 });
 
+const fetchDefaultDashboardEnvelope = async () => {
+  const res = await fetch(getStorageUrl(), {
+    method: 'GET',
+    headers: { Accept: 'application/json' },
+  });
+
+  if (res.status === 404) return null;
+  if (!res.ok) throw new Error(`Failed to load shared dashboard: ${res.status}`);
+  return res.json();
+};
+
 export const readCachedDashboard = () => {
   try {
     const cached = localStorage.getItem(STORAGE_CACHE_KEY);
@@ -42,15 +53,8 @@ export const writeCachedDashboard = (payload) => {
 };
 
 export const fetchSharedDashboard = async () => {
-  const res = await fetch(getStorageUrl(), {
-    method: 'GET',
-    headers: { Accept: 'application/json' },
-  });
-
-  if (res.status === 404) return null;
-  if (!res.ok) throw new Error(`Failed to load shared dashboard: ${res.status}`);
-
-  const payload = await res.json();
+  const payload = await fetchDefaultDashboardEnvelope();
+  if (!payload) return null;
   return unwrapData(payload);
 };
 
@@ -77,13 +81,25 @@ export const listSharedDashboards = async () => {
   });
 
   if (res.status === 404) {
-    return [{ id: 'default', name: 'default', updatedAt: null }];
+    const defaultPayload = await fetchDefaultDashboardEnvelope();
+    return [{
+      id: 'default',
+      name: 'default',
+      updatedAt: defaultPayload?.updatedAt || null,
+    }];
   }
   if (!res.ok) throw new Error(`Failed to list shared dashboards: ${res.status}`);
 
   const payload = await res.json();
   const rawProfiles = Array.isArray(payload?.profiles) ? payload.profiles : [];
-  if (rawProfiles.length === 0) return [{ id: 'default', name: 'default', updatedAt: null }];
+  if (rawProfiles.length === 0) {
+    const defaultPayload = await fetchDefaultDashboardEnvelope();
+    return [{
+      id: 'default',
+      name: 'default',
+      updatedAt: defaultPayload?.updatedAt || null,
+    }];
+  }
 
   return rawProfiles.map((entry) => ({
     id: toProfileId(entry.id || entry.name || 'default'),

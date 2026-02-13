@@ -256,7 +256,10 @@ export default function ConfigModal({
 
     const handleRefresh = async () => {
       if (!refreshGlobalDashboards) return;
-      await refreshGlobalDashboards();
+      const profiles = await refreshGlobalDashboards();
+      if (Array.isArray(profiles)) {
+        setGlobalActionMessage(`Refreshed ${profiles.length} dashboard${profiles.length === 1 ? '' : 's'}.`);
+      }
     };
 
     const handleSaveGlobal = async () => {
