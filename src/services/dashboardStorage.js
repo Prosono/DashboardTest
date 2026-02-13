@@ -27,6 +27,8 @@ const buildPayload = (data) => ({
 
 const EMBEDDED_PROFILES_KEY = '__saved_profiles__';
 
+let profilesEndpointAvailable = true;
+
 const readSharedProfilesFromDefaultEnvelope = async () => {
   const defaultPayload = await fetchDefaultDashboardEnvelope();
   const embeddedProfiles = getEmbeddedProfiles(defaultPayload);
@@ -154,12 +156,18 @@ export const saveSharedDashboard = async (data) => {
 
 export const listSharedDashboards = async () => {
   try {
+    if (!profilesEndpointAvailable) {
+      const { profiles } = await readSharedProfilesFromDefaultEnvelope();
+      return profiles;
+    }
+
     const res = await fetch(getProfilesUrl(), {
       method: 'GET',
       headers: { Accept: 'application/json' },
     });
 
     if (!res.ok) {
+      profilesEndpointAvailable = false;
       const { profiles } = await readSharedProfilesFromDefaultEnvelope();
       return profiles;
     }
@@ -180,6 +188,7 @@ export const listSharedDashboards = async () => {
     writeProfilesCache(normalized);
     return normalized;
   } catch {
+    profilesEndpointAvailable = false;
     const { profiles } = await readSharedProfilesFromDefaultEnvelope();
     return profiles;
   }
@@ -200,16 +209,22 @@ export const fetchSharedDashboardProfile = async (profileId) => {
   };
 
   try {
+    if (!profilesEndpointAvailable) return fallbackData();
+
     const res = await fetch(`${getProfilesUrl()}/${encodeURIComponent(id)}`, {
       method: 'GET',
       headers: { Accept: 'application/json' },
     });
 
-    if (!res.ok) return fallbackData();
+    if (!res.ok) {
+      profilesEndpointAvailable = false;
+      return fallbackData();
+    }
 
     const payload = await res.json();
     return unwrapData(payload);
   } catch {
+    profilesEndpointAvailable = false;
     return fallbackData();
   }
 };
@@ -220,18 +235,23 @@ export const saveSharedDashboardProfile = async (profileId, data) => {
 
   const payload = buildPayload(data);
 
-  let useEmbeddedFallback = false;
+  let useEmbeddedFallback = !profilesEndpointAvailable;
   try {
-    const res = await fetch(`${getProfilesUrl()}/${encodeURIComponent(id)}`, {
-      method: 'PUT',
-      headers: {
-        'Content-Type': 'application/json',
-        Accept: 'application/json',
-      },
-      body: JSON.stringify({ ...payload, id }),
-    });
-    useEmbeddedFallback = !res.ok;
+    if (profilesEndpointAvailable) {
+      const res = await fetch(`${getProfilesUrl()}/${encodeURIComponent(id)}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Accept: 'application/json',
+        },
+        body: JSON.stringify({ ...payload, id }),
+      });
+
+      useEmbeddedFallback = !res.ok;
+      if (!res.ok) profilesEndpointAvailable = false;
+    }
   } catch {
+    profilesEndpointAvailable = false;
     useEmbeddedFallback = true;
   }
 
@@ -258,6 +278,10 @@ export const saveSharedDashboardProfile = async (profileId, data) => {
   upsertCachedProfile({ id, name: profileId || id, updatedAt: payload.updatedAt });
 
   return payload;
+};
+
+export const __resetDashboardStorageRuntime = () => {
+  profilesEndpointAvailable = true;
 };
 
 export { toProfileId };

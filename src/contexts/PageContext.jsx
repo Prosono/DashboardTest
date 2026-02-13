@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useEffect, useRef } from 'react';
+import { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { DEFAULT_PAGES_CONFIG } from '../config/defaults';
 import {
   fetchSharedDashboard,
@@ -219,7 +219,7 @@ export const PageProvider = ({ children }) => {
   const setGlobalError = (error) => setGlobalDashboardState((prev) => ({ ...prev, error }));
   const setGlobalProfiles = (profiles) => setGlobalDashboardState((prev) => ({ ...prev, profiles }));
 
-  const getDashboardStateSnapshot = () => ({
+  const getDashboardStateSnapshot = useCallback(() => ({
     pagesConfig,
     cardSettings,
     customNames,
@@ -235,9 +235,25 @@ export const PageProvider = ({ children }) => {
     headerTitle,
     headerSettings,
     statusPillsConfig,
-  });
+  }), [
+    pagesConfig,
+    cardSettings,
+    customNames,
+    customIcons,
+    hiddenCards,
+    pageSettings,
+    gridColumns,
+    gridGapH,
+    gridGapV,
+    cardBorderRadius,
+    headerScale,
+    sectionSpacing,
+    headerTitle,
+    headerSettings,
+    statusPillsConfig,
+  ]);
 
-  const applyDashboardState = (rawState) => {
+  const applyDashboardState = useCallback((rawState) => {
     const normalized = normalizeDashboardState(rawState);
     setPagesConfig(normalized.pagesConfig);
     setCardSettings(normalized.cardSettings);
@@ -255,9 +271,9 @@ export const PageProvider = ({ children }) => {
     setHeaderSettings(normalized.headerSettings);
     setStatusPillsConfig(normalized.statusPillsConfig);
     writeCachedDashboard(normalized);
-  };
+  }, []);
 
-  const refreshGlobalDashboards = async () => {
+  const refreshGlobalDashboards = useCallback(async () => {
     setGlobalError('');
     try {
       const profiles = await listSharedDashboards();
@@ -268,9 +284,9 @@ export const PageProvider = ({ children }) => {
       setGlobalError('Unable to list global dashboards.');
       return [];
     }
-  };
+  }, []);
 
-  const saveGlobalDashboard = async (profileId = 'default') => {
+  const saveGlobalDashboard = useCallback(async (profileId = 'default') => {
     const profile = toProfileId(profileId);
     setGlobalBusy(true);
     setGlobalError('');
@@ -290,9 +306,9 @@ export const PageProvider = ({ children }) => {
     } finally {
       setGlobalBusy(false);
     }
-  };
+  }, [refreshGlobalDashboards, getDashboardStateSnapshot]);
 
-  const loadGlobalDashboard = async (profileId = 'default') => {
+  const loadGlobalDashboard = useCallback(async (profileId = 'default') => {
     const profile = toProfileId(profileId);
     setGlobalBusy(true);
     setGlobalError('');
@@ -313,7 +329,7 @@ export const PageProvider = ({ children }) => {
     } finally {
       setGlobalBusy(false);
     }
-  };
+  }, [applyDashboardState]);
 
   useEffect(() => {
     let cancelled = false;
@@ -336,7 +352,43 @@ export const PageProvider = ({ children }) => {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [applyDashboardState, refreshGlobalDashboards]);
+
+  useEffect(() => {
+    writeCachedDashboard({
+      pagesConfig,
+      cardSettings,
+      customNames,
+      customIcons,
+      hiddenCards,
+      pageSettings,
+      gridColumns,
+      gridGapH,
+      gridGapV,
+      cardBorderRadius,
+      headerScale,
+      sectionSpacing,
+      headerTitle,
+      headerSettings,
+      statusPillsConfig,
+    });
+  }, [
+    pagesConfig,
+    cardSettings,
+    customNames,
+    customIcons,
+    hiddenCards,
+    pageSettings,
+    gridColumns,
+    gridGapH,
+    gridGapV,
+    cardBorderRadius,
+    headerScale,
+    sectionSpacing,
+    headerTitle,
+    headerSettings,
+    statusPillsConfig,
+  ]);
 
   useEffect(() => {
     writeCachedDashboard({
