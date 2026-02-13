@@ -669,6 +669,7 @@ export default function ModalOrchestrator({
             customIcons={customIcons}
             saveCustomIcon={saveCustomIcon}
             saveCardSetting={saveCardSetting}
+            gridColumns={gridColumns}
             hiddenCards={hiddenCards}
             toggleCardVisibility={toggleCardVisibility}
             {...editModalProps}
