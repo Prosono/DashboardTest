@@ -89,12 +89,22 @@ export default function ConfigModal({
   entities,
   getEntityImageUrl,
   callService,
+  globalDashboardProfiles,
+  globalStorageBusy,
+  globalStorageError,
+  refreshGlobalDashboards,
+  saveGlobalDashboard,
+  loadGlobalDashboard,
   onClose,
   onFinishOnboarding
 }) {
   const [installingIds, setInstallingIds] = useState({});
   const [expandedNotes, setExpandedNotes] = useState({});
   const [layoutPreview, setLayoutPreview] = useState(false);
+  const [layoutSections, setLayoutSections] = useState({ grid: true, spacing: false, cards: false });
+  const [selectedGlobalDashboard, setSelectedGlobalDashboard] = useState('default');
+  const [newGlobalDashboardName, setNewGlobalDashboardName] = useState('');
+  const [globalActionMessage, setGlobalActionMessage] = useState('');
 
   const isLayoutPreview = configTab === 'layout' && layoutPreview;
 
@@ -110,6 +120,20 @@ export default function ConfigModal({
     }
   }, [layoutPreview, configTab, setConfigTab]);
 
+  useEffect(() => {
+    if (!Array.isArray(globalDashboardProfiles) || globalDashboardProfiles.length === 0) return;
+    const exists = globalDashboardProfiles.some((profile) => profile.id === selectedGlobalDashboard);
+    if (!exists) {
+      setSelectedGlobalDashboard(globalDashboardProfiles[0].id || 'default');
+    }
+  }, [globalDashboardProfiles, selectedGlobalDashboard]);
+
+  useEffect(() => {
+    if (configTab === 'storage' && refreshGlobalDashboards) {
+      refreshGlobalDashboards();
+    }
+  }, [configTab, refreshGlobalDashboards]);
+
   if (!open) return null;
 
   const handleClose = () => {
@@ -118,6 +142,7 @@ export default function ConfigModal({
 
   const TABS = [
     { key: 'connection', icon: Wifi, label: t('system.tabConnection') },
+    { key: 'storage', icon: Server, label: t('system.tabStorage') || 'Global dashboards' },
     // Appearance and Layout have been moved to Sidebars
     // { key: 'appearance', icon: Palette, label: t('system.tabAppearance') },
     // { key: 'layout', icon: LayoutGrid, label: t('system.tabLayout') },
@@ -220,6 +245,107 @@ export default function ConfigModal({
             <span className="font-bold text-sm">{connectionTestResult.message}</span>
           </div>
         )}
+      </div>
+    );
+  };
+
+  const renderStorageTab = () => {
+    const profiles = Array.isArray(globalDashboardProfiles) && globalDashboardProfiles.length > 0
+      ? globalDashboardProfiles
+      : [{ id: 'default', name: 'default', updatedAt: null }];
+
+    const handleRefresh = async () => {
+      if (!refreshGlobalDashboards) return;
+      await refreshGlobalDashboards();
+    };
+
+    const handleSaveGlobal = async () => {
+      const target = newGlobalDashboardName.trim() || selectedGlobalDashboard || 'default';
+      if (!saveGlobalDashboard) return;
+      const ok = await saveGlobalDashboard(target);
+      if (ok) {
+        setGlobalActionMessage(`Saved globally: ${target}`);
+        setSelectedGlobalDashboard(target);
+      }
+    };
+
+    const handleLoadGlobal = async () => {
+      const target = selectedGlobalDashboard || 'default';
+      if (!loadGlobalDashboard) return;
+      const ok = await loadGlobalDashboard(target);
+      if (ok) {
+        setGlobalActionMessage(`Loaded dashboard: ${target}`);
+      }
+    };
+
+    return (
+      <div className="space-y-5 font-sans animate-in fade-in slide-in-from-right-4 duration-300">
+        <div className="rounded-2xl p-5 bg-[var(--glass-bg)] border border-[var(--glass-border)] space-y-4">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <h3 className="text-sm font-bold uppercase tracking-wider text-[var(--text-primary)]">
+                {t('system.tabStorage') || 'Global dashboards'}
+              </h3>
+              <p className="text-xs text-[var(--text-secondary)] mt-1">
+                Save and load shared dashboards for all users.
+              </p>
+            </div>
+            <button
+              onClick={handleRefresh}
+              disabled={globalStorageBusy}
+              className="px-3 py-2 rounded-lg text-xs font-bold uppercase tracking-wider bg-[var(--glass-bg-hover)] hover:bg-[var(--glass-bg)] text-[var(--text-primary)] border border-[var(--glass-border)] disabled:opacity-50"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 inline mr-1 ${globalStorageBusy ? 'animate-spin' : ''}`} />
+              Refresh
+            </button>
+          </div>
+
+          <div className="space-y-2">
+            <label className="text-xs uppercase font-bold text-[var(--text-secondary)]">Load dashboard</label>
+            <select
+              value={selectedGlobalDashboard}
+              onChange={(e) => setSelectedGlobalDashboard(e.target.value)}
+              className="w-full px-3 py-2.5 rounded-xl bg-[var(--glass-bg)] border border-[var(--glass-border)] text-sm text-[var(--text-primary)]"
+            >
+              {profiles.map((profile) => (
+                <option key={profile.id} value={profile.id}>
+                  {profile.name || profile.id}{profile.updatedAt ? ` (${new Date(profile.updatedAt).toLocaleString()})` : ''}
+                </option>
+              ))}
+            </select>
+            <button
+              onClick={handleLoadGlobal}
+              disabled={globalStorageBusy}
+              className="w-full py-2.5 rounded-xl bg-blue-500 hover:bg-blue-600 text-white text-xs font-bold uppercase tracking-wider disabled:opacity-50"
+            >
+              {globalStorageBusy ? 'Loading…' : 'Load dashboard'}
+            </button>
+          </div>
+
+          <div className="space-y-2">
+            <label className="text-xs uppercase font-bold text-[var(--text-secondary)]">Save globally</label>
+            <input
+              type="text"
+              value={newGlobalDashboardName}
+              onChange={(e) => setNewGlobalDashboardName(e.target.value)}
+              placeholder="default"
+              className="w-full px-3 py-2.5 rounded-xl bg-[var(--glass-bg)] border border-[var(--glass-border)] text-sm text-[var(--text-primary)]"
+            />
+            <button
+              onClick={handleSaveGlobal}
+              disabled={globalStorageBusy}
+              className="w-full py-2.5 rounded-xl bg-green-500 hover:bg-green-600 text-white text-xs font-bold uppercase tracking-wider disabled:opacity-50"
+            >
+              {globalStorageBusy ? 'Saving…' : 'Save globally'}
+            </button>
+          </div>
+
+          {(globalStorageError || globalActionMessage) && (
+            <div className={`rounded-xl p-3 text-xs font-semibold ${globalStorageError ? 'bg-red-500/10 text-red-400 border border-red-500/20' : 'bg-green-500/10 text-green-400 border border-green-500/20'}`}>
+              {globalStorageError || globalActionMessage}
+            </div>
+          )}
+        </div>
       </div>
     );
   };
@@ -511,7 +637,6 @@ export default function ConfigModal({
   };
 
   // ─── Layout Tab ───
-  const [layoutSections, setLayoutSections] = useState({ grid: true, spacing: false, cards: false });
   const toggleSection = (key) => setLayoutSections(prev => ({ ...prev, [key]: !prev[key] }));
 
   const _renderLayoutTab = () => {
@@ -1209,6 +1334,7 @@ export default function ConfigModal({
                 )}
 
                 {configTab === 'connection' && renderConnectionTab()}
+                {configTab === 'storage' && renderStorageTab()}
                 {/* {configTab === 'appearance' && renderAppearanceTab()} */}
                 {/* {configTab === 'layout' && renderLayoutTab()} */}
                 {configTab === 'updates' && renderUpdatesTab()}
