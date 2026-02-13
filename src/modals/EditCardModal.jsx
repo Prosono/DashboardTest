@@ -104,6 +104,7 @@ export default function EditCardModal({
   customIcons,
   saveCustomIcon,
   saveCardSetting,
+  gridColumns = 4,
 }) {
   const [mediaSearch, setMediaSearch] = React.useState('');
 
@@ -205,6 +206,47 @@ export default function EditCardModal({
                     onBlur={(e) => saveCustomName(entityId, e.target.value)}
                     placeholder={t('form.defaultName')}
                   />
+                </div>
+              )}
+
+
+              {editSettingsKey && (
+                <div className="space-y-3">
+                  <label className="text-xs uppercase font-bold text-gray-500 ml-1">Grid size</label>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-1">
+                      <span className="text-[10px] uppercase tracking-wider text-[var(--text-secondary)]">Width (cols)</span>
+                      <input
+                        type="number"
+                        min={1}
+                        max={gridColumns}
+                        step={1}
+                        className="w-full px-3 py-2 text-[var(--text-primary)] rounded-xl popup-surface focus:border-blue-500/50 outline-none transition-colors"
+                        value={Number(editSettings.gridColSpan) || 1}
+                        onChange={(e) => {
+                          const value = Number(e.target.value);
+                          const next = Number.isFinite(value) ? Math.max(1, Math.min(gridColumns, Math.round(value))) : 1;
+                          saveCardSetting(editSettingsKey, 'gridColSpan', next);
+                        }}
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <span className="text-[10px] uppercase tracking-wider text-[var(--text-secondary)]">Height (rows)</span>
+                      <input
+                        type="number"
+                        min={1}
+                        max={8}
+                        step={1}
+                        className="w-full px-3 py-2 text-[var(--text-primary)] rounded-xl popup-surface focus:border-blue-500/50 outline-none transition-colors"
+                        value={Number(editSettings.gridRowSpan) || 1}
+                        onChange={(e) => {
+                          const value = Number(e.target.value);
+                          const next = Number.isFinite(value) ? Math.max(1, Math.min(8, Math.round(value))) : 1;
+                          saveCardSetting(editSettingsKey, 'gridRowSpan', next);
+                        }}
+                      />
+                    </div>
+                  </div>
                 </div>
               )}
 
