@@ -45,8 +45,7 @@ const readSharedProfilesFromDefaultEnvelope = async () => {
   }];
 
   const merged = [...defaults, ...embeddedList.filter((p) => p.id !== 'default')];
-  writeProfilesCache(merged);
-  return { profiles: merged, payload: defaultPayload };
+  return { profiles: mergeWithCachedProfiles(merged), payload: defaultPayload };
 };
 
 const getEmbeddedProfiles = (payload) => {
@@ -77,6 +76,25 @@ const writeProfilesCache = (profiles) => {
   } catch {
     // best effort cache write
   }
+};
+
+
+const mergeWithCachedProfiles = (profiles) => {
+  const fromCache = readProfilesCache();
+  const byId = new Map();
+  [...profiles, ...fromCache].forEach((entry) => {
+    const id = toProfileId(entry?.id || entry?.name || 'default');
+    if (!byId.has(id)) {
+      byId.set(id, {
+        id,
+        name: entry?.name || id,
+        updatedAt: entry?.updatedAt || null,
+      });
+    }
+  });
+  const merged = Array.from(byId.values());
+  writeProfilesCache(merged);
+  return merged;
 };
 
 const upsertCachedProfile = (entry) => {
@@ -141,17 +159,32 @@ export const fetchSharedDashboard = async () => {
 export const saveSharedDashboard = async (data) => {
   const payload = buildPayload(data);
 
-  const res = await fetch(getStorageUrl(), {
-    method: 'PUT',
-    headers: {
-      'Content-Type': 'application/json',
-      Accept: 'application/json',
-    },
-    body: JSON.stringify(payload),
-  });
+  try {
+    const res = await fetch(getStorageUrl(), {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        Accept: 'application/json',
+      },
+      body: JSON.stringify(payload),
+    });
 
-  if (!res.ok) throw new Error(`Failed to save shared dashboard: ${res.status}`);
-  return payload;
+    if (!res.ok) {
+      if (res.status === 404) {
+        writeCachedDashboard(payload.data);
+        mergeWithCachedProfiles([{ id: 'default', name: 'default', updatedAt: payload.updatedAt }]);
+        return payload;
+      }
+      throw new Error(`Failed to save shared dashboard: ${res.status}`);
+    }
+
+    return payload;
+  } catch (error) {
+    if (String(error?.message || '').includes('Failed to save shared dashboard')) throw error;
+    writeCachedDashboard(payload.data);
+    mergeWithCachedProfiles([{ id: 'default', name: 'default', updatedAt: payload.updatedAt }]);
+    return payload;
+  }
 };
 
 export const listSharedDashboards = async () => {

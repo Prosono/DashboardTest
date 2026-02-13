@@ -3,6 +3,7 @@ import {
   listSharedDashboards,
   saveSharedDashboardProfile,
   fetchSharedDashboardProfile,
+  saveSharedDashboard,
   __resetDashboardStorageRuntime,
 } from '../services/dashboardStorage';
 
@@ -75,6 +76,30 @@ describe('dashboardStorage fallbacks', () => {
     expect(payload.data.__saved_profiles__.team_night.name).toBe('Team Night');
   });
 
+
+
+  it('does not throw when shared default save endpoint returns 404 and still caches default profile', async () => {
+    vi.stubGlobal('fetch', vi.fn(async (url, options = {}) => {
+      if (String(url).endsWith('/api/dashboard-config') && options.method === 'PUT') {
+        return { ok: false, status: 404, json: async () => ({}) };
+      }
+      return { ok: false, status: 404, json: async () => ({}) };
+    }));
+
+    await expect(saveSharedDashboard({ pagesConfig: { pages: ['home'], home: [] } })).resolves.toBeTruthy();
+
+    const profiles = JSON.parse(localStorage.getItem('tunet_shared_dashboard_profiles_cache') || '[]');
+    expect(profiles.some((p) => p.id === 'default')).toBe(true);
+  });
+
+  it('saves named profile to local cache when both /profiles and default backend are 404', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => ({ ok: false, status: 404, json: async () => ({}) })));
+
+    await expect(saveSharedDashboardProfile('Night', { pagesConfig: { pages: ['home'], home: [] } })).resolves.toBeTruthy();
+
+    const cachedProfiles = JSON.parse(localStorage.getItem('tunet_shared_dashboard_profiles_cache') || '[]');
+    expect(cachedProfiles.some((p) => p.id === 'night')).toBe(true);
+  });
 
   it('stops probing /profiles after first unsupported response to prevent request spam', async () => {
     const fetchMock = vi.fn(async (url, options = {}) => {
