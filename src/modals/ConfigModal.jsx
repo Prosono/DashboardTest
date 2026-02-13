@@ -636,7 +636,6 @@ export default function ConfigModal({
   };
 
   // ─── Layout Tab ───
-  const [layoutSections, setLayoutSections] = useState({ grid: true, spacing: false, cards: false });
   const toggleSection = (key) => setLayoutSections(prev => ({ ...prev, [key]: !prev[key] }));
 
   const _renderLayoutTab = () => {
