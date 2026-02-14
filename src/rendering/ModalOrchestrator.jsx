@@ -35,6 +35,7 @@ const StatusPillsConfigModal = lazy(() => import('../modals/StatusPillsConfigMod
 const TodoModal = lazy(() => import('../modals/TodoModal'));
 const RoomModal = lazy(() => import('../modals/RoomModal'));
 const VacuumModal = lazy(() => import('../modals/VacuumModal'));
+const SaunaFieldModal = lazy(() => import('../modals/SaunaFieldModal'));
 
 const ThemeSidebar = lazy(() => import('../components/sidebars/ThemeSidebar'));
 const LayoutSidebar = lazy(() => import('../components/sidebars/LayoutSidebar'));
@@ -64,6 +65,7 @@ export default function ModalOrchestrator({
     showRoomModal, setShowRoomModal,
     showCoverModal, setShowCoverModal,
     showWeatherModal, setShowWeatherModal,
+    activeSaunaFieldModal, setActiveSaunaFieldModal,
     activeMediaModal, setActiveMediaModal,
     activeMediaGroupKey, setActiveMediaGroupKey,
     activeMediaGroupIds, setActiveMediaGroupIds,
@@ -149,6 +151,12 @@ export default function ModalOrchestrator({
     hiddenCards, toggleCardVisibility,
     getCardSettingsKey,
     statusPillsConfig, saveStatusPillsConfig,
+    globalDashboardProfiles,
+    globalStorageBusy,
+    globalStorageError,
+    refreshGlobalDashboards,
+    saveGlobalDashboard,
+    loadGlobalDashboard,
   } = cardConfig;
 
   // ── Edit modal props (computed here, not passed from App) ──────────────
@@ -172,18 +180,19 @@ export default function ModalOrchestrator({
     const isEditAutomation = !!editId && editId.startsWith('automation.');
     const isEditCar = !!editId && (editId === 'car' || editId.startsWith('car_card_'));
     const isEditRoom = !!editId && editId.startsWith('room_card_');
+    const isEditSauna = !!editId && editId.startsWith('sauna_card_');
     const isEditCover = !!editId && editId.startsWith('cover_card_');
     const editSettings = isEditCar ? resolveCarSettings(editId, rawEditSettings) : rawEditSettings;
-    const isEditGenericType = (!!editSettings?.type && (editSettings.type === 'entity' || editSettings.type === 'toggle' || editSettings.type === 'sensor')) || isEditVacuum || isEditAutomation || isEditCar || isEditAndroidTV || isEditRoom;
+    const isEditGenericType = (!!editSettings?.type && (editSettings.type === 'entity' || editSettings.type === 'toggle' || editSettings.type === 'sensor')) || isEditVacuum || isEditAutomation || isEditCar || isEditAndroidTV || isEditRoom || isEditSauna;
     const isEditSensor = !!editSettings?.type && editSettings.type === 'sensor';
     const isEditWeatherTemp = !!editId && editId.startsWith('weather_temp_');
     const canEditName = !!editId && !isEditWeatherTemp && editId !== 'media_player' && editId !== 'sonos';
-    const canEditIcon = !!editId && (isEditLight || isEditCalendar || isEditTodo || isEditRoom || isEditCover || editId.startsWith('automation.') || editId.startsWith('vacuum.') || editId.startsWith('climate_card_') || editId.startsWith('cost_card_') || !!editEntity || editId === 'car' || editId.startsWith('car_card_'));
+    const canEditIcon = !!editId && (isEditLight || isEditCalendar || isEditTodo || isEditRoom || isEditSauna || isEditCover || editId.startsWith('automation.') || editId.startsWith('vacuum.') || editId.startsWith('climate_card_') || editId.startsWith('cost_card_') || !!editEntity || editId === 'car' || editId.startsWith('car_card_'));
     const canEditStatus = !!editEntity && !!editSettingsKey && editSettingsKey.startsWith('settings::');
     return {
       canEditName, canEditIcon, canEditStatus,
       isEditLight, isEditCalendar, isEditTodo, isEditCost, isEditGenericType,
-      isEditAndroidTV, isEditCar, isEditRoom, isEditSensor, isEditWeatherTemp,
+      isEditAndroidTV, isEditCar, isEditRoom, isEditSauna, isEditSensor, isEditWeatherTemp,
       editSettingsKey, editSettings,
     };
   }, [showEditCardModal, editSettingsKey, cardSettings, entities]);
@@ -252,6 +261,12 @@ export default function ModalOrchestrator({
             entities={entities}
             getEntityImageUrl={getEntityImageUrl}
             callService={callService}
+            globalDashboardProfiles={globalDashboardProfiles}
+            globalStorageBusy={globalStorageBusy}
+            globalStorageError={globalStorageError}
+            refreshGlobalDashboards={refreshGlobalDashboards}
+            saveGlobalDashboard={saveGlobalDashboard}
+            loadGlobalDashboard={loadGlobalDashboard}
             onClose={() => setShowConfigModal(false)}
             onFinishOnboarding={() => { setShowOnboarding(false); setShowConfigModal(false); }}
           />
@@ -545,6 +560,20 @@ export default function ModalOrchestrator({
         );
       })()}
 
+      {activeSaunaFieldModal && (
+        <ModalSuspense>
+          <SaunaFieldModal
+            show={!!activeSaunaFieldModal}
+            title={activeSaunaFieldModal.title}
+            entityIds={activeSaunaFieldModal.entityIds}
+            entities={entities}
+            callService={callService}
+            onClose={() => setActiveSaunaFieldModal(null)}
+            t={t}
+          />
+        </ModalSuspense>
+      )}
+
       {/* ── Edit / Add modals ───────────────────────────────────────────── */}
       {showAddCardModal && (
         <ModalSuspense>
@@ -657,6 +686,7 @@ export default function ModalOrchestrator({
             customIcons={customIcons}
             saveCustomIcon={saveCustomIcon}
             saveCardSetting={saveCardSetting}
+            gridColumns={gridColumns}
             hiddenCards={hiddenCards}
             toggleCardVisibility={toggleCardVisibility}
             {...editModalProps}
