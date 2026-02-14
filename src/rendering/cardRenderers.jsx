@@ -459,7 +459,7 @@ export function renderRoomCard(cardId, dragProps, getControls, cardStyle, settin
 
 
 export function renderSaunaCard(cardId, dragProps, getControls, cardStyle, settingsKey, ctx) {
-  const { entities, editMode, cardSettings, customNames, customIcons, setActiveSaunaFieldModal, t } = ctx;
+  const { entities, editMode, cardSettings, customNames, customIcons, setShowLightModal, setActiveSaunaFieldModal, t } = ctx;
   const saunaSettings = cardSettings[settingsKey] || cardSettings[cardId] || {};
   return (
     <SaunaCard
@@ -472,7 +472,7 @@ export function renderSaunaCard(cardId, dragProps, getControls, cardStyle, setti
       editMode={editMode}
       customNames={customNames}
       customIcons={customIcons}
-      onOpenField={(field) => { if (!editMode) setActiveSaunaFieldModal(field); }}
+      modals={{ setShowLightModal, setActiveSaunaFieldModal }}
       t={t}
     />
   );

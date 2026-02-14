@@ -2,9 +2,7 @@ import React from 'react';
 import { X, Lightbulb, Lock, Fan, Shield, Hash, Thermometer, DoorOpen, ToggleRight } from '../icons';
 
 const domainFor = (entityId = '') => String(entityId).split('.')[0] || '';
-
 const getFriendlyName = (entityId, entities) => entities?.[entityId]?.attributes?.friendly_name || entityId;
-
 const getEntityState = (entityId, entities) => entities?.[entityId]?.state ?? 'unknown';
 
 const canToggleDomain = (domain) => ['light', 'switch', 'input_boolean', 'fan', 'lock', 'automation'].includes(domain);
@@ -20,15 +18,7 @@ const iconForDomain = (domain) => {
   return ToggleRight;
 };
 
-export default function SaunaFieldModal({
-  show,
-  title,
-  entityIds,
-  entities,
-  callService,
-  onClose,
-  t,
-}) {
+export default function SaunaFieldModal({ show, title, entityIds, entities, callService, onClose, t }) {
   if (!show) return null;
 
   const ids = Array.isArray(entityIds) ? entityIds.filter(Boolean) : [];
@@ -55,28 +45,46 @@ export default function SaunaFieldModal({
   };
 
   return (
-    <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
-      <div className="w-full max-w-2xl popup-surface rounded-3xl border border-[var(--glass-border)] overflow-hidden">
-        <div className="px-5 py-4 border-b border-[var(--glass-border)] flex items-center justify-between gap-3">
-          <div>
-            <div className="text-[10px] uppercase tracking-widest text-[var(--text-secondary)] font-bold">
-              {t('sauna.details') || 'Sauna details'}
-            </div>
-            <h3 className="text-lg font-bold text-[var(--text-primary)]">{title || (t('sauna.details') || 'Details')}</h3>
+    <div
+      className="fixed inset-0 z-50 flex items-start justify-center p-6 pt-12 md:pt-16"
+      style={{ backdropFilter: 'blur(20px)', backgroundColor: 'rgba(0,0,0,0.3)' }}
+      onClick={onClose}
+    >
+      <div
+        className="border w-full max-w-xl max-h-[85vh] rounded-3xl md:rounded-[2.5rem] p-5 md:p-8 shadow-2xl relative font-sans flex flex-col backdrop-blur-xl popup-anim"
+        style={{
+          background: 'linear-gradient(135deg, var(--card-bg) 0%, var(--modal-bg) 100%)',
+          borderColor: 'var(--glass-border)',
+          color: 'var(--text-primary)',
+        }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <button
+          type="button"
+          onClick={onClose}
+          className="absolute top-5 right-5 w-10 h-10 rounded-full flex items-center justify-center border hover:scale-105 transition-all"
+          style={{
+            borderColor: 'var(--glass-border)',
+            backgroundColor: 'var(--glass-bg)',
+            color: 'var(--text-secondary)',
+          }}
+          aria-label={t('common.close') || 'Close'}
+        >
+          <X className="w-5 h-5" />
+        </button>
+
+        <div className="pr-14">
+          <div className="text-xs uppercase tracking-[0.2em] font-bold text-[var(--text-secondary)] mb-2">
+            {t('sauna.details') || 'Sauna details'}
           </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="w-9 h-9 rounded-full border border-[var(--glass-border)] hover:bg-[var(--glass-bg-hover)] flex items-center justify-center text-[var(--text-secondary)]"
-            aria-label={t('common.close') || 'Close'}
-          >
-            <X className="w-4 h-4" />
-          </button>
+          <h2 className="text-2xl font-bold text-[var(--text-primary)]">{title || (t('sauna.details') || 'Details')}</h2>
         </div>
 
-        <div className="p-5 max-h-[70vh] overflow-y-auto custom-scrollbar space-y-3">
+        <div className="mt-6 overflow-y-auto custom-scrollbar space-y-3 pr-1">
           {ids.length === 0 && (
-            <div className="text-sm text-[var(--text-secondary)]">{t('common.noData') || 'No entities configured for this field.'}</div>
+            <div className="rounded-2xl border p-4 text-sm" style={{ borderColor: 'var(--glass-border)', backgroundColor: 'var(--glass-bg)' }}>
+              {t('common.noData') || 'No entities configured for this field.'}
+            </div>
           )}
 
           {ids.map((entityId) => {
@@ -89,10 +97,17 @@ export default function SaunaFieldModal({
             const isClimate = domain === 'climate';
 
             return (
-              <div key={entityId} className="rounded-2xl border border-[var(--glass-border)] bg-[var(--glass-bg-hover)] p-3">
+              <div
+                key={entityId}
+                className="rounded-2xl border p-3 md:p-4"
+                style={{ borderColor: 'var(--glass-border)', backgroundColor: 'var(--glass-bg)' }}
+              >
                 <div className="flex items-center justify-between gap-3">
                   <div className="min-w-0 flex items-center gap-3">
-                    <div className="w-9 h-9 rounded-full border border-[var(--glass-border)] bg-[var(--glass-bg)] flex items-center justify-center text-[var(--text-secondary)]">
+                    <div
+                      className="w-9 h-9 rounded-full border flex items-center justify-center"
+                      style={{ borderColor: 'var(--glass-border)', backgroundColor: 'var(--glass-bg-hover)', color: 'var(--text-secondary)' }}
+                    >
                       <Icon className="w-4 h-4" />
                     </div>
                     <div className="min-w-0">
@@ -108,7 +123,12 @@ export default function SaunaFieldModal({
                     <button
                       type="button"
                       onClick={() => handleToggle(entityId)}
-                      className="px-3 py-1.5 rounded-lg bg-blue-500/80 hover:bg-blue-500 text-white text-xs font-bold uppercase tracking-wider"
+                      className="h-9 px-4 rounded-full border transition-all flex items-center gap-2 backdrop-blur-md"
+                      style={{
+                        borderColor: 'var(--glass-border)',
+                        backgroundColor: 'var(--glass-bg-hover)',
+                        color: 'var(--text-primary)',
+                      }}
                     >
                       {t('common.toggle') || 'Toggle'}
                     </button>
@@ -119,14 +139,16 @@ export default function SaunaFieldModal({
                       <button
                         type="button"
                         onClick={() => handleAdjustNumber(entityId, 'down')}
-                        className="px-3 py-1.5 rounded-lg border border-[var(--glass-border)] text-xs font-bold"
+                        className="h-9 px-4 rounded-full border transition-all"
+                        style={{ borderColor: 'var(--glass-border)', backgroundColor: 'var(--glass-bg)', color: 'var(--text-primary)' }}
                       >
                         -
                       </button>
                       <button
                         type="button"
                         onClick={() => handleAdjustNumber(entityId, 'up')}
-                        className="px-3 py-1.5 rounded-lg border border-[var(--glass-border)] text-xs font-bold"
+                        className="h-9 px-4 rounded-full border transition-all"
+                        style={{ borderColor: 'var(--glass-border)', backgroundColor: 'var(--glass-bg)', color: 'var(--text-primary)' }}
                       >
                         +
                       </button>
@@ -138,14 +160,16 @@ export default function SaunaFieldModal({
                       <button
                         type="button"
                         onClick={() => handleClimate(entityId, 'heat')}
-                        className="px-3 py-1.5 rounded-lg border border-[var(--glass-border)] text-xs font-bold"
+                        className="h-9 px-4 rounded-full border transition-all"
+                        style={{ borderColor: 'var(--glass-border)', backgroundColor: 'var(--glass-bg)', color: 'var(--text-primary)' }}
                       >
                         {t('climate.heat') || 'Heat'}
                       </button>
                       <button
                         type="button"
                         onClick={() => handleClimate(entityId, 'off')}
-                        className="px-3 py-1.5 rounded-lg border border-[var(--glass-border)] text-xs font-bold"
+                        className="h-9 px-4 rounded-full border transition-all"
+                        style={{ borderColor: 'var(--glass-border)', backgroundColor: 'var(--glass-bg)', color: 'var(--text-primary)' }}
                       >
                         {t('common.off') || 'Off'}
                       </button>
