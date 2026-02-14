@@ -257,12 +257,12 @@ export default function SaunaCard({
     settings?.showActiveCodes !== false && {
       key: 'codes', icon: iconFor(settings?.codesIcon, Hash), title: tr('sauna.activeCodes', 'Aktive koder'),
       value: codeIds.length ? `${codeIds.length}` : '--', active: codeIds.length > 0,
-      onClick: () => openFieldModal(tr('sauna.activeCodes', 'Aktive koder'), codeIds), clickable: codeIds.length > 0, category: 'control',
+      onClick: () => openFieldModal(tr('sauna.activeCodes', 'Aktive koder'), codeIds), clickable: codeIds.length > 0, category: 'safety',
     },
     settings?.showAutoLock !== false && {
       key: 'autoLock', icon: iconFor(settings?.autoLockIcon, ToggleRight), title: tr('sauna.autoLock', 'Autolåsing'),
       value: autoLockOn ? tr('common.on', 'På') : tr('common.off', 'Av'), active: autoLockOn,
-      onClick: () => openFieldModal(tr('sauna.autoLock', 'Autolåsing'), [settings?.autoLockEntityId]), clickable: Boolean(settings?.autoLockEntityId), category: 'control',
+      onClick: () => openFieldModal(tr('sauna.autoLock', 'Autolåsing'), [settings?.autoLockEntityId]), clickable: Boolean(settings?.autoLockEntityId), category: 'safety',
     },
     settings?.showDoors !== false && {
       key: 'doors', icon: iconFor(settings?.doorsIcon, DoorOpen), title: tr('sauna.doors', 'Dør'),
@@ -290,6 +290,13 @@ export default function SaunaCard({
       .filter(({ ent }) => ent)
       .slice(0, 4)
     : [];
+
+  const tempValues = tempOverview
+    .map(({ ent }) => Number(ent?.state))
+    .filter((v) => Number.isFinite(v));
+  const tempMin = tempValues.length ? Math.min(...tempValues) : null;
+  const tempMax = tempValues.length ? Math.max(...tempValues) : null;
+  const tempAvg = tempValues.length ? (tempValues.reduce((a, b) => a + b, 0) / tempValues.length) : null;
 
   const renderStatSection = (title, items) => (
     items.length > 0 && (
@@ -379,12 +386,16 @@ export default function SaunaCard({
               </button>
             )}
 
-            <div className={cx('px-4 py-2 rounded-full text-[12px] uppercase tracking-widest font-extrabold border', tone.pill)}>
-              <span className={cx('inline-block w-2 h-2 rounded-full mr-2 align-middle', primaryState.tone === 'muted' ? 'bg-[var(--text-secondary)]/50' : 'bg-current')} />
-              <span className="align-middle">{primaryState.label}</span>
-            </div>
+            {!flameOn && (
+              <>
+                <div className={cx('px-4 py-2 rounded-full text-[12px] uppercase tracking-widest font-extrabold border', tone.pill)}>
+                  <span className={cx('inline-block w-2 h-2 rounded-full mr-2 align-middle', primaryState.tone === 'muted' ? 'bg-[var(--text-secondary)]/50' : 'bg-current')} />
+                  <span className="align-middle">{primaryState.label}</span>
+                </div>
 
-            <div className="text-[12px] text-[var(--text-secondary)] font-medium text-right">{primaryState.desc}</div>
+                <div className="text-[12px] text-[var(--text-secondary)] font-medium text-right">{primaryState.desc}</div>
+              </>
+            )}
           </div>
         </div>
 
@@ -418,14 +429,29 @@ export default function SaunaCard({
               onClick={() => openFieldModal(tr('sauna.tempOverview', 'Temperaturoversikt'), tempOverviewIds)}
               className="w-full rounded-2xl border border-[var(--glass-border)] bg-[var(--glass-bg-hover)] p-3 text-left"
             >
-              <div className="text-[10px] uppercase tracking-[0.24em] font-extrabold text-[var(--text-secondary)] px-1 mb-2">{tr('sauna.tempOverview', 'Temperaturoversikt')}</div>
+              <div className="flex items-center justify-between gap-2 mb-2 px-1">
+                <div className="text-[10px] uppercase tracking-[0.24em] font-extrabold text-[var(--text-secondary)]">{tr('sauna.tempOverview', 'Temperaturoversikt')}</div>
+                <div className="flex items-center gap-1.5 text-[10px]">
+                  <span className="px-2 py-0.5 rounded-full border border-cyan-400/20 bg-cyan-500/10 text-cyan-200">min {tempMin != null ? tempMin.toFixed(1) : '--'}°</span>
+                  <span className="px-2 py-0.5 rounded-full border border-violet-400/20 bg-violet-500/10 text-violet-200">snitt {tempAvg != null ? tempAvg.toFixed(1) : '--'}°</span>
+                  <span className="px-2 py-0.5 rounded-full border border-rose-400/20 bg-rose-500/10 text-rose-200">max {tempMax != null ? tempMax.toFixed(1) : '--'}°</span>
+                </div>
+              </div>
               <div className="grid grid-cols-2 gap-2">
-                {tempOverview.map(({ id, ent }) => (
-                  <div key={id} className="rounded-xl px-3 py-2 border border-[var(--glass-border)] bg-[var(--glass-bg)] text-left">
-                    <div className="text-[10px] uppercase tracking-widest font-bold text-[var(--text-secondary)] truncate">{ent.attributes?.friendly_name || id}</div>
-                    <div className="text-sm font-bold text-[var(--text-primary)] truncate">{ent.state}</div>
-                  </div>
-                ))}
+                {tempOverview.map(({ id, ent }) => {
+                  const val = Number(ent?.state);
+                  const hasVal = Number.isFinite(val);
+                  const heatTone = hasVal && tempMax != null && val >= tempMax ? 'border-rose-400/30 bg-rose-500/10' : hasVal && tempMin != null && val <= tempMin ? 'border-cyan-400/30 bg-cyan-500/10' : 'border-[var(--glass-border)] bg-[var(--glass-bg)]';
+                  return (
+                    <div key={id} className={`rounded-xl px-3 py-2 border text-left ${heatTone}`}>
+                      <div className="text-[10px] uppercase tracking-widest font-bold text-[var(--text-secondary)] truncate">{ent.attributes?.friendly_name || id}</div>
+                      <div className="mt-1 flex items-end gap-1">
+                        <span className="text-xl font-extrabold text-[var(--text-primary)] leading-none">{hasVal ? val.toFixed(1) : ent.state}</span>
+                        <span className="text-xs text-[var(--text-secondary)] mb-0.5">{hasVal ? '°C' : ''}</span>
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             </button>
           )}
