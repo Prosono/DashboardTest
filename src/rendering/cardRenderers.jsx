@@ -22,6 +22,7 @@ import {
   MediaGroupCard,
   MissingEntityCard,
   RoomCard,
+  SaunaCard,
   SensorCard,
   VacuumCard,
   WeatherTempCard,
@@ -456,6 +457,27 @@ export function renderRoomCard(cardId, dragProps, getControls, cardStyle, settin
   );
 }
 
+
+export function renderSaunaCard(cardId, dragProps, getControls, cardStyle, settingsKey, ctx) {
+  const { entities, editMode, cardSettings, customNames, customIcons, setActiveSaunaFieldModal, t } = ctx;
+  const saunaSettings = cardSettings[settingsKey] || cardSettings[cardId] || {};
+  return (
+    <SaunaCard
+      cardId={cardId}
+      settings={saunaSettings}
+      entities={entities}
+      dragProps={dragProps}
+      controls={getControls(cardId)}
+      cardStyle={cardStyle}
+      editMode={editMode}
+      customNames={customNames}
+      customIcons={customIcons}
+      onOpenField={(field) => { if (!editMode) setActiveSaunaFieldModal(field); }}
+      t={t}
+    />
+  );
+}
+
 // ─── Card Type Dispatch ──────────────────────────────────────────────────────
 
 /**
@@ -529,6 +551,10 @@ export function dispatchCardRender(cardId, dragProps, getControls, cardStyle, se
 
   if (cardId.startsWith('room_card_')) {
     return renderRoomCard(cardId, dragProps, getControls, cardStyle, settingsKey, ctx);
+  }
+
+  if (cardId.startsWith('sauna_card_')) {
+    return renderSaunaCard(cardId, dragProps, getControls, cardStyle, settingsKey, ctx);
   }
 
   // Generic entity/toggle/sensor type
