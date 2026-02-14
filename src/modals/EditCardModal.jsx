@@ -892,258 +892,193 @@ export default function EditCardModal({
           })()}
 
 
-        {isEditSauna && editSettingsKey && (() => {
-          const allEntityIds = Object.keys(entities || {});
-          const sortByName = (ids) =>
-            ids.slice().sort((a, b) => (entities[a]?.attributes?.friendly_name || a).localeCompare(entities[b]?.attributes?.friendly_name || b));
+          {isEditSauna && editSettingsKey && (() => {
+            const allEntityIds = Object.keys(entities || {});
+            const saunaToggleOptions = [
+              { key: 'showFlame', label: t('sauna.showFlame') || 'Show flame' },
+              { key: 'showManualMode', label: t('sauna.showManualMode') || 'Show manual/auto mode' },
+              { key: 'showThermostat', label: t('sauna.showThermostat') || 'Show thermostat' },
+              { key: 'showMotion', label: t('sauna.showMotion') || 'Show motion' },
+              { key: 'showLights', label: t('sauna.showLights') || 'Show lights' },
+              { key: 'showLocks', label: t('sauna.showLocks') || 'Show locks' },
+              { key: 'showDoors', label: t('sauna.showDoors') || 'Show doors' },
+              { key: 'showFans', label: t('sauna.showFans') || 'Show fans' },
+              { key: 'showThermostatOverview', label: t('sauna.showThermostatOverview') || 'Show thermostat overview' },
+              { key: 'showActiveCodes', label: t('sauna.showActiveCodes') || 'Show active codes' },
+              { key: 'showTempOverview', label: t('sauna.showTempOverview') || 'Show temperature overview' },
+              { key: 'showAutoLock', label: t('sauna.showAutoLock') || 'Show auto lock' },
+            ];
 
-          const saunaToggleOptions = [
-            { key: 'showFlame', label: t('sauna.showFlame') || 'Show flame' },
-            { key: 'showManualMode', label: t('sauna.showManualMode') || 'Show manual/auto mode' },
-            { key: 'showThermostat', label: t('sauna.showThermostat') || 'Show thermostat' },
-            { key: 'showMotion', label: t('sauna.showMotion') || 'Show motion' },
-            { key: 'showLights', label: t('sauna.showLights') || 'Show lights' },
-            { key: 'showLocks', label: t('sauna.showLocks') || 'Show locks' },
-            { key: 'showDoors', label: t('sauna.showDoors') || 'Show doors' },
-            { key: 'showBookingOverview', label: t('sauna.showBookingOverview') || 'Show booking overview' },
-          ];
-
-          const singleSelectors = [
-            {
-              key: 'tempEntityId',
-              label: t('sauna.tempSensor') || 'Temperature sensor',
-              filter: (id) => {
-                const e = entities[id];
-                return e && (e.attributes?.device_class === 'temperature' || id.toLowerCase().includes('temp'));
+            const singleSelectors = [
+              {
+                key: 'tempEntityId',
+                label: t('sauna.tempSensor') || 'Temperature sensor',
+                filter: (id) => {
+                  const e = entities[id];
+                  return e && (e.attributes?.device_class === 'temperature' || id.includes('temp'));
+                },
               },
-            },
+              {
+                key: 'targetTempEntityId',
+                label: t('sauna.targetTempSensor') || 'Target temperature sensor',
+                filter: (id) => id.startsWith('sensor.') || id.startsWith('input_number.'),
+              },
+              {
+                key: 'manualModeEntityId',
+                label: t('sauna.manualModeEntity') || 'Manual mode boolean',
+                filter: (id) => id.startsWith('input_boolean.') || id.startsWith('switch.'),
+              },
+              {
+                key: 'thermostatEntityId',
+                label: t('sauna.thermostatEntity') || 'Thermostat entity',
+                filter: (id) => id.startsWith('climate.') || id.startsWith('switch.') || id.startsWith('input_boolean.'),
+              },
+              {
+                key: 'motionEntityId',
+                label: t('sauna.motionEntity') || 'Motion entity',
+                filter: (id) => {
+                  const e = entities[id];
+                  return e && id.startsWith('binary_sensor.') && ['motion', 'occupancy', 'presence'].includes(String(e.attributes?.device_class || ''));
+                },
+              },
+              {
+                key: 'flameEntityId',
+                label: t('sauna.flameEntity') || 'Flame switch entity',
+                filter: (id) => id.startsWith('switch.') || id.startsWith('input_boolean.') || id.startsWith('binary_sensor.'),
+              },
+              {
+                key: 'autoLockEntityId',
+                label: t('sauna.autoLockEntity') || 'Auto lock boolean',
+                filter: (id) => id.startsWith('input_boolean.') || id.startsWith('switch.'),
+              },
+            ];
 
-            // ✅ Oppvarmingstid i minutter (input_number)
-            {
-              key: 'preheatMinutesEntityId',
-              label: t('sauna.preheatMinutesEntity') || 'Oppvarmingstid (minutter) – input_number',
-              filter: (id) => id.startsWith('input_number.'),
-            },
-
-            // ✅ Safety sjekkes kun når denne er ON i kortet
-            {
-              key: 'saunaActiveBooleanEntityId',
-              label: t('sauna.activeBooleanEntity') || 'Badstue aktiv boolean (for sikkerhet) – input_boolean/binary_sensor',
-              filter: (id) => id.startsWith('input_boolean.') || id.startsWith('binary_sensor.'),
-            },
-
-            // ✅ Auto/Manuell boolean (ON = auto modus, OFF = manuell)
-            {
-              key: 'manualModeEntityId',
-              label: t('sauna.manualModeEntity') || 'Auto/Manuell boolean (ON=Auto, OFF=Manuell)',
-              filter: (id) => id.startsWith('input_boolean.') || id.startsWith('switch.') || id.startsWith('binary_sensor.'),
-            },
-
-            {
-              key: 'thermostatEntityId',
-              label: t('sauna.thermostatEntity') || 'Thermostat entity',
-              filter: (id) => id.startsWith('climate.') || id.startsWith('switch.') || id.startsWith('input_boolean.'),
-            },
-
-            {
-              key: 'motionEntityId',
-              label: t('sauna.motionEntity') || 'Motion entity',
-              filter: (id) => {
+            const multiSelectors = [
+              { key: 'lightEntityIds', label: t('sauna.lightEntities') || 'Lights', filter: (id) => id.startsWith('light.') },
+              { key: 'lockEntityIds', label: t('sauna.lockEntities') || 'Locks', filter: (id) => id.startsWith('lock.') },
+              { key: 'doorEntityIds', label: t('sauna.doorEntities') || 'Doors', filter: (id) => {
                 const e = entities[id];
                 const dc = String(e?.attributes?.device_class || '');
-                return id.startsWith('binary_sensor.') && ['motion', 'occupancy', 'presence'].includes(dc);
-              },
-            },
+                return id.startsWith('binary_sensor.') && ['door', 'window', 'opening'].includes(dc);
+              }},
+              { key: 'fanEntityIds', label: t('sauna.fanEntities') || 'Fans', filter: (id) => id.startsWith('fan.') || id.startsWith('switch.') },
+              { key: 'thermostatEntityIds', label: t('sauna.thermostatEntities') || 'Thermostats', filter: (id) => id.startsWith('climate.') || id.startsWith('switch.') || id.startsWith('input_boolean.') },
+              { key: 'codeEntityIds', label: t('sauna.codeEntities') || 'Active code entities', filter: (id) => id.startsWith('input_number.') || id.startsWith('number.') || id.startsWith('sensor.') },
+              { key: 'tempOverviewEntityIds', label: t('sauna.tempOverviewEntities') || 'Temperature overview entities', filter: (id) => {
+                const e = entities[id];
+                const dc = String(e?.attributes?.device_class || '');
+                return (id.startsWith('sensor.') || id.startsWith('number.')) && (dc === 'temperature' || id.includes('temp'));
+              }},
+            ];
 
-            // Heat/flame signal (switch/bool)
-            {
-              key: 'flameEntityId',
-              label: t('sauna.flameEntity') || 'Heat / flame entity (switch/bool)',
-              filter: (id) => id.startsWith('switch.') || id.startsWith('input_boolean.') || id.startsWith('binary_sensor.'),
-            },
-
-            // (Valgfritt) hvis du vil hente bilde via entity_picture eller state-url
-            {
-              key: 'imageEntityId',
-              label: t('sauna.imageEntity') || 'Bilde-entity (valgfritt: camera/sensor med entity_picture/url)',
-              filter: (id) => id.startsWith('camera.') || id.startsWith('sensor.') || id.startsWith('image.') || id.startsWith('input_text.'),
-            },
-
-            // (Valgfritt) hvilken light vi skal åpne i global LightModal når man trykker på "Lys"
-            {
-              key: 'lightsModalEntityId',
-              label: t('sauna.lightsModalEntity') || 'LightModal entity (valgfritt – hvilken light som åpnes)',
-              filter: (id) => id.startsWith('light.'),
-            },
-
-            // Booking-ting (valgfritt)
-            {
-              key: 'serviceEntityId',
-              label: t('sauna.serviceEntity') || 'Service status sensor (valgfritt)',
-              filter: (id) => id.startsWith('sensor.') || id.startsWith('input_text.'),
-            },
-            {
-              key: 'nextBookingInMinutesEntityId',
-              label: t('sauna.nextBookingEntity') || 'Neste booking om X minutter (valgfritt)',
-              filter: (id) => id.startsWith('sensor.') || id.startsWith('input_number.'),
-            },
-            {
-              key: 'peopleNowEntityId',
-              label: t('sauna.peopleNowEntity') || 'Antall personer nå (valgfritt)',
-              filter: (id) => id.startsWith('sensor.') || id.startsWith('input_number.'),
-            },
-            {
-              key: 'preheatWindowEntityId',
-              label: t('sauna.preheatWindowEntity') || 'Preheat window boolean (valgfritt)',
-              filter: (id) => id.startsWith('input_boolean.') || id.startsWith('binary_sensor.'),
-            },
-          ];
-
-          const multiSelectors = [
-            { key: 'lightEntityIds', label: t('sauna.lightEntities') || 'Lights', filter: (id) => id.startsWith('light.') },
-            { key: 'lockEntityIds', label: t('sauna.lockEntities') || 'Locks', filter: (id) => id.startsWith('lock.') },
-            { key: 'doorEntityIds', label: t('sauna.doorEntities') || 'Doors', filter: (id) => {
-              const e = entities[id];
-              const dc = String(e?.attributes?.device_class || '');
-              return id.startsWith('binary_sensor.') && ['door', 'window', 'opening'].includes(dc);
-            }},
-          ];
-
-          return (
-            <div className="space-y-6">
-              {/* Toggles */}
-              <div className="popup-surface rounded-2xl p-4 space-y-3">
-                <div className="text-xs uppercase font-bold tracking-widest text-gray-500">
-                  {t('sauna.cardOptions') || 'Sauna card options'}
-                </div>
-                {saunaToggleOptions.map((opt) => {
-                  const enabled = editSettings[opt.key] !== false;
-                  return (
-                    <div key={opt.key} className="flex items-center justify-between">
-                      <span className="text-sm text-[var(--text-primary)]">{opt.label}</span>
-                      <button
-                        onClick={() => saveCardSetting(editSettingsKey, opt.key, !enabled)}
-                        className={`w-12 h-6 rounded-full transition-colors relative ${enabled ? 'bg-blue-500' : 'bg-[var(--glass-bg-hover)]'}`}
-                      >
-                        <div className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-all ${enabled ? 'left-7' : 'left-1'}`} />
-                      </button>
-                    </div>
-                  );
-                })}
-              </div>
-
-              {/* ✅ Image URL (dette er den blokka du spør etter) */}
-              <div className="popup-surface rounded-2xl p-4 space-y-2">
-                <div className="text-xs uppercase font-bold tracking-widest text-gray-500">
-                  {t('sauna.image') || 'Image'}
-                </div>
-                <label className="text-[10px] uppercase font-bold text-gray-500 ml-1">
-                  {t('sauna.imageUrl') || 'Bilde-URL (midt i kortet)'}
-                </label>
-                <input
-                  value={editSettings.imageUrl || ''}
-                  onChange={(e) => saveCardSetting(editSettingsKey, 'imageUrl', e.target.value)}
-                  placeholder="https://...  eller  /local/..."
-                  className="w-full px-4 py-3 rounded-2xl bg-[var(--glass-bg-hover)] border border-[var(--glass-border)] text-[var(--text-primary)] placeholder:text-[var(--text-muted)] outline-none"
-                />
-                <div className="text-[11px] text-[var(--text-secondary)]">
-                  {t('sauna.imageUrlHint') || 'Tips: bruk direkte bilde-URL, eller Home Assistant /local/...'}
-                </div>
-              </div>
-
-              {/* Single selectors */}
-              {singleSelectors.map((opt) => {
-                const matching = sortByName(allEntityIds.filter(opt.filter));
-                return (
-                  <div key={opt.key} className="space-y-2">
-                    <label className="text-xs uppercase font-bold text-gray-500 ml-1">{opt.label}</label>
-                    <div className="popup-surface rounded-2xl p-3 max-h-36 overflow-y-auto custom-scrollbar space-y-1">
-                      <button
-                        type="button"
-                        onClick={() => saveCardSetting(editSettingsKey, opt.key, null)}
-                        className={`w-full text-left px-3 py-2 rounded-xl transition-colors text-xs font-bold uppercase tracking-widest ${
-                          !editSettings[opt.key] ? 'text-blue-400' : 'text-[var(--text-secondary)] hover:bg-[var(--glass-bg-hover)]'
-                        }`}
-                      >
-                        Auto / none
-                      </button>
-                      {matching.map((id) => (
+            return (
+              <div className="space-y-6">
+                <div className="popup-surface rounded-2xl p-4 space-y-3">
+                  <div className="text-xs uppercase font-bold tracking-widest text-gray-500">{t('sauna.cardOptions') || 'Sauna card options'}</div>
+                  {saunaToggleOptions.map((opt) => {
+                    const enabled = editSettings[opt.key] !== false;
+                    return (
+                      <div key={opt.key} className="flex items-center justify-between">
+                        <span className="text-sm text-[var(--text-primary)]">{opt.label}</span>
                         <button
-                          key={id}
-                          type="button"
-                          onClick={() => saveCardSetting(editSettingsKey, opt.key, id)}
-                          className={`w-full text-left px-3 py-2 rounded-xl transition-colors ${
-                            editSettings[opt.key] === id ? 'text-blue-400' : 'text-[var(--text-secondary)] hover:bg-[var(--glass-bg-hover)]'
-                          }`}
+                          onClick={() => saveCardSetting(editSettingsKey, opt.key, !enabled)}
+                          className={`w-12 h-6 rounded-full transition-colors relative ${enabled ? 'bg-blue-500' : 'bg-[var(--glass-bg-hover)]'}`}
                         >
-                          <div className="text-xs font-bold truncate">{entities[id]?.attributes?.friendly_name || id}</div>
-                          <div className="text-[10px] text-[var(--text-muted)] truncate">{id}</div>
+                          <div className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-all ${enabled ? 'left-7' : 'left-1'}`} />
                         </button>
-                      ))}
-                    </div>
-                  </div>
-                );
-              })}
+                      </div>
+                    );
+                  })}
+                </div>
 
-              {/* Multi selectors */}
-              {multiSelectors.map((opt) => {
-                const selected = Array.isArray(editSettings[opt.key]) ? editSettings[opt.key] : [];
-                const matching = sortByName(allEntityIds.filter(opt.filter));
-                return (
-                  <div key={opt.key} className="space-y-2">
-                    <label className="text-xs uppercase font-bold text-gray-500 ml-1">{opt.label}</label>
-                    <div className="popup-surface rounded-2xl p-3 max-h-44 overflow-y-auto custom-scrollbar space-y-1">
-                      {matching.map((id) => {
-                        const isSelected = selected.includes(id);
-                        return (
+                {singleSelectors.map((opt) => {
+                  const matching = allEntityIds.filter(opt.filter).sort((a, b) => (entities[a]?.attributes?.friendly_name || a).localeCompare(entities[b]?.attributes?.friendly_name || b));
+                  return (
+                    <div key={opt.key} className="space-y-2">
+                      <label className="text-xs uppercase font-bold text-gray-500 ml-1">{opt.label}</label>
+                      <div className="popup-surface rounded-2xl p-3 max-h-36 overflow-y-auto custom-scrollbar space-y-1">
+                        <button
+                          type="button"
+                          onClick={() => saveCardSetting(editSettingsKey, opt.key, null)}
+                          className={`w-full text-left px-3 py-2 rounded-xl transition-colors text-xs font-bold uppercase tracking-widest ${!editSettings[opt.key] ? 'text-blue-400' : 'text-[var(--text-secondary)] hover:bg-[var(--glass-bg-hover)]'}`}
+                        >
+                          Auto / none
+                        </button>
+                        {matching.map((id) => (
                           <button
                             key={id}
                             type="button"
-                            onClick={() => {
-                              const next = isSelected ? selected.filter((x) => x !== id) : [...selected, id];
-                              saveCardSetting(editSettingsKey, opt.key, next);
-                            }}
-                            className={`w-full text-left px-3 py-2 rounded-xl transition-colors ${
-                              isSelected ? 'text-blue-400' : 'text-[var(--text-secondary)] hover:bg-[var(--glass-bg-hover)]'
-                            }`}
+                            onClick={() => saveCardSetting(editSettingsKey, opt.key, id)}
+                            className={`w-full text-left px-3 py-2 rounded-xl transition-colors ${editSettings[opt.key] === id ? 'text-blue-400' : 'text-[var(--text-secondary)] hover:bg-[var(--glass-bg-hover)]'}`}
                           >
                             <div className="text-xs font-bold truncate">{entities[id]?.attributes?.friendly_name || id}</div>
                             <div className="text-[10px] text-[var(--text-muted)] truncate">{id}</div>
                           </button>
-                        );
-                      })}
+                        ))}
+                      </div>
                     </div>
-                  </div>
-                );
-              })}
+                  );
+                })}
 
-              {/* Status icons */}
-              <div className="space-y-2">
-                <label className="text-xs uppercase font-bold text-gray-500 ml-1">{t('sauna.statIcons') || 'Status icons'}</label>
-                <div className="grid grid-cols-2 gap-3">
-                  {[
-                    { key: 'thermostatIcon', label: t('sauna.thermostat') || 'Thermostat' },
-                    { key: 'motionIcon', label: t('sauna.motion') || 'Motion' },
-                    { key: 'lightsIcon', label: t('sauna.lights') || 'Lights' },
-                    { key: 'locksIcon', label: t('sauna.unlocked') || 'Locks' },
-                    { key: 'doorsIcon', label: t('sauna.doorsOpen') || 'Doors' },
-                  ].map((opt) => (
-                    <div key={opt.key} className="space-y-1">
-                      <span className="text-[10px] uppercase tracking-wider text-[var(--text-secondary)]">{opt.label}</span>
-                      <IconPicker
-                        value={editSettings[opt.key] || null}
-                        onSelect={(iconName) => saveCardSetting(editSettingsKey, opt.key, iconName)}
-                        onClear={() => saveCardSetting(editSettingsKey, opt.key, null)}
-                        t={t}
-                        maxHeightClass="max-h-36"
-                      />
+                {multiSelectors.map((opt) => {
+                  const selected = Array.isArray(editSettings[opt.key]) ? editSettings[opt.key] : [];
+                  const matching = allEntityIds.filter(opt.filter).sort((a, b) => (entities[a]?.attributes?.friendly_name || a).localeCompare(entities[b]?.attributes?.friendly_name || b));
+                  return (
+                    <div key={opt.key} className="space-y-2">
+                      <label className="text-xs uppercase font-bold text-gray-500 ml-1">{opt.label}</label>
+                      <div className="popup-surface rounded-2xl p-3 max-h-44 overflow-y-auto custom-scrollbar space-y-1">
+                        {matching.map((id) => {
+                          const isSelected = selected.includes(id);
+                          return (
+                            <button
+                              key={id}
+                              type="button"
+                              onClick={() => {
+                                const next = isSelected ? selected.filter((x) => x !== id) : [...selected, id];
+                                saveCardSetting(editSettingsKey, opt.key, next);
+                              }}
+                              className={`w-full text-left px-3 py-2 rounded-xl transition-colors ${isSelected ? 'text-blue-400' : 'text-[var(--text-secondary)] hover:bg-[var(--glass-bg-hover)]'}`}
+                            >
+                              <div className="text-xs font-bold truncate">{entities[id]?.attributes?.friendly_name || id}</div>
+                              <div className="text-[10px] text-[var(--text-muted)] truncate">{id}</div>
+                            </button>
+                          );
+                        })}
+                      </div>
                     </div>
-                  ))}
+                  );
+                })}
+
+                <div className="space-y-2">
+                  <label className="text-xs uppercase font-bold text-gray-500 ml-1">{t('sauna.statIcons') || 'Status icons'}</label>
+                  <div className="grid grid-cols-2 gap-3">
+                    {[
+                      { key: 'thermostatIcon', label: t('sauna.thermostat') || 'Thermostat' },
+                      { key: 'motionIcon', label: t('sauna.motion') || 'Motion' },
+                      { key: 'lightsIcon', label: t('sauna.lights') || 'Lights' },
+                      { key: 'locksIcon', label: t('sauna.unlocked') || 'Locks' },
+                      { key: 'doorsIcon', label: t('sauna.doorsOpen') || 'Doors' },
+                      { key: 'fansIcon', label: t('sauna.fans') || 'Fans' },
+                      { key: 'thermostatsIcon', label: t('sauna.thermostats') || 'Thermostats' },
+                      { key: 'codesIcon', label: t('sauna.activeCodes') || 'Codes' },
+                      { key: 'autoLockIcon', label: t('sauna.autoLock') || 'Auto lock' },
+                    ].map((opt) => (
+                      <div key={opt.key} className="space-y-1">
+                        <span className="text-[10px] uppercase tracking-wider text-[var(--text-secondary)]">{opt.label}</span>
+                        <IconPicker
+                          value={editSettings[opt.key] || null}
+                          onSelect={(iconName) => saveCardSetting(editSettingsKey, opt.key, iconName)}
+                          onClear={() => saveCardSetting(editSettingsKey, opt.key, null)}
+                          t={t}
+                          maxHeightClass="max-h-36"
+                        />
+                      </div>
+                    ))}
+                  </div>
                 </div>
               </div>
-            </div>
-          );
-        })()}
+            );
+          })()}
 
           {isEditCost && (
             <div className="space-y-6">

@@ -179,6 +179,11 @@ export const handleAddSelected = (ctx) => {
         showLights: true,
         showLocks: true,
         showDoors: true,
+        showFans: true,
+        showThermostatOverview: true,
+        showActiveCodes: true,
+        showTempOverview: true,
+        showAutoLock: true,
       }, { openEdit: true });
       return;
     }

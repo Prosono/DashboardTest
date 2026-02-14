@@ -35,6 +35,7 @@ const StatusPillsConfigModal = lazy(() => import('../modals/StatusPillsConfigMod
 const TodoModal = lazy(() => import('../modals/TodoModal'));
 const RoomModal = lazy(() => import('../modals/RoomModal'));
 const VacuumModal = lazy(() => import('../modals/VacuumModal'));
+const SaunaFieldModal = lazy(() => import('../modals/SaunaFieldModal'));
 
 const ThemeSidebar = lazy(() => import('../components/sidebars/ThemeSidebar'));
 const LayoutSidebar = lazy(() => import('../components/sidebars/LayoutSidebar'));
@@ -64,6 +65,7 @@ export default function ModalOrchestrator({
     showRoomModal, setShowRoomModal,
     showCoverModal, setShowCoverModal,
     showWeatherModal, setShowWeatherModal,
+    activeSaunaFieldModal, setActiveSaunaFieldModal,
     activeMediaModal, setActiveMediaModal,
     activeMediaGroupKey, setActiveMediaGroupKey,
     activeMediaGroupIds, setActiveMediaGroupIds,
@@ -557,6 +559,20 @@ export default function ModalOrchestrator({
           </ModalSuspense>
         );
       })()}
+
+      {activeSaunaFieldModal && (
+        <ModalSuspense>
+          <SaunaFieldModal
+            show={!!activeSaunaFieldModal}
+            title={activeSaunaFieldModal.title}
+            entityIds={activeSaunaFieldModal.entityIds}
+            entities={entities}
+            callService={callService}
+            onClose={() => setActiveSaunaFieldModal(null)}
+            t={t}
+          />
+        </ModalSuspense>
+      )}
 
       {/* ── Edit / Add modals ───────────────────────────────────────────── */}
       {showAddCardModal && (

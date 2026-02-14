@@ -457,25 +457,26 @@ export function renderRoomCard(cardId, dragProps, getControls, cardStyle, settin
   );
 }
 
- export function renderSaunaCard(cardId, dragProps, getControls, cardStyle, settingsKey, ctx) {
-   const { entities, editMode, cardSettings, customNames, customIcons, setShowLightModal, t } = ctx;
-   const saunaSettings = cardSettings[settingsKey] || cardSettings[cardId] || {};
-   return (
-     <SaunaCard
-       cardId={cardId}
-       settings={saunaSettings}
-       entities={entities}
-       dragProps={dragProps}
-       controls={getControls(cardId)}
-       cardStyle={cardStyle}
-       editMode={editMode}
-       customNames={customNames}
-       customIcons={customIcons}
-       t={t}
-      modals={{ setShowLightModal }}
-     />
-   );
- }
+
+export function renderSaunaCard(cardId, dragProps, getControls, cardStyle, settingsKey, ctx) {
+  const { entities, editMode, cardSettings, customNames, customIcons, setActiveSaunaFieldModal, t } = ctx;
+  const saunaSettings = cardSettings[settingsKey] || cardSettings[cardId] || {};
+  return (
+    <SaunaCard
+      cardId={cardId}
+      settings={saunaSettings}
+      entities={entities}
+      dragProps={dragProps}
+      controls={getControls(cardId)}
+      cardStyle={cardStyle}
+      editMode={editMode}
+      customNames={customNames}
+      customIcons={customIcons}
+      onOpenField={(field) => { if (!editMode) setActiveSaunaFieldModal(field); }}
+      t={t}
+    />
+  );
+}
 
 // ─── Card Type Dispatch ──────────────────────────────────────────────────────
 
