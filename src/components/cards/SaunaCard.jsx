@@ -149,6 +149,11 @@ export default function SaunaCard({
 
   const openGlobalLightModal = () => {
     if (editMode) return;
+    if (lightIds.length > 1) {
+      openFieldModal(tr('sauna.lights', 'Lys'), lightIds);
+      return;
+    }
+
     const target = settings?.lightsModalEntityId || lightIds?.[0];
     if (!target) return;
     if (modals?.setShowLightModal) modals.setShowLightModal(target);
@@ -232,49 +237,52 @@ export default function SaunaCard({
       key: 'thermostat', icon: iconFor(settings?.thermostatIcon, Shield), title: tr('sauna.thermostat', 'Termostat'),
       value: thermostatOn ? tr('common.on', 'På') : tr('common.off', 'Av'), active: thermostatOn,
       onClick: () => openFieldModal(tr('sauna.thermostat', 'Termostat'), [settings?.thermostatEntityId]),
-      clickable: Boolean(settings?.thermostatEntityId),
+      clickable: Boolean(settings?.thermostatEntityId), category: 'control',
     },
     settings?.showLights !== false && {
       key: 'lights', icon: iconFor(settings?.lightsIcon, Lightbulb), title: tr('sauna.lights', 'Lys'),
       value: lightIds.length ? `${lightsOn}/${lightIds.length} ${tr('common.on', 'på')}` : '--', active: lightsOn > 0,
-      onClick: openGlobalLightModal, clickable: Boolean(settings?.lightsModalEntityId || lightIds?.length),
-    },
-    settings?.showDoors !== false && {
-      key: 'doors', icon: iconFor(settings?.doorsIcon, DoorOpen), title: tr('sauna.doors', 'Dør'),
-      value: `${openDoors} ${openDoors === 1 ? tr('sauna.openShort', 'åpen') : tr('sauna.openShortPlural', 'åpne')}`,
-      active: openDoors > 0, onClick: () => openFieldModal(tr('sauna.doors', 'Dører'), doorIds), clickable: doorIds.length > 0,
-    },
-    settings?.showLocks !== false && {
-      key: 'locks', icon: iconFor(settings?.locksIcon, Lock), title: tr('sauna.locks', 'Lås'),
-      value: `${unlockedDoors} ${unlockedDoors === 1 ? tr('sauna.unlockedShort', 'ulåst') : tr('sauna.unlockedShortPlural', 'ulåste')}`,
-      active: unlockedDoors > 0, onClick: () => openFieldModal(tr('sauna.locks', 'Låser'), lockIds), clickable: lockIds.length > 0,
-    },
-    settings?.showMotion !== false && {
-      key: 'motion', icon: iconFor(settings?.motionIcon, Activity), title: tr('sauna.motion', 'Bevegelse'),
-      value: motionOn ? tr('sauna.motionDetected', 'Registrert') : tr('sauna.noMotion', 'Ingen'), active: motionOn,
-      onClick: () => openFieldModal(tr('sauna.motion', 'Bevegelse'), [settings?.motionEntityId]), clickable: Boolean(settings?.motionEntityId),
+      onClick: openGlobalLightModal, clickable: Boolean(settings?.lightsModalEntityId || lightIds?.length), category: 'control',
     },
     settings?.showFans !== false && {
       key: 'fans', icon: iconFor(settings?.fansIcon, Fan), title: tr('sauna.fans', 'Vifter'),
       value: fanIds.length ? `${activeFans}/${fanIds.length} ${tr('common.on', 'på')}` : '--', active: activeFans > 0,
-      onClick: () => openFieldModal(tr('sauna.fans', 'Vifter'), fanIds), clickable: fanIds.length > 0,
+      onClick: () => openFieldModal(tr('sauna.fans', 'Vifter'), fanIds), clickable: fanIds.length > 0, category: 'control',
     },
     settings?.showThermostatOverview !== false && {
       key: 'thermostatGroup', icon: iconFor(settings?.thermostatsIcon, Shield), title: tr('sauna.thermostats', 'Termostater'),
       value: thermostatIds.length ? `${activeThermostats}/${thermostatIds.length} ${tr('common.on', 'på')}` : '--', active: activeThermostats > 0,
-      onClick: () => openFieldModal(tr('sauna.thermostats', 'Termostater'), thermostatIds), clickable: thermostatIds.length > 0,
+      onClick: () => openFieldModal(tr('sauna.thermostats', 'Termostater'), thermostatIds), clickable: thermostatIds.length > 0, category: 'control',
     },
     settings?.showActiveCodes !== false && {
       key: 'codes', icon: iconFor(settings?.codesIcon, Hash), title: tr('sauna.activeCodes', 'Aktive koder'),
       value: codeIds.length ? `${codeIds.length}` : '--', active: codeIds.length > 0,
-      onClick: () => openFieldModal(tr('sauna.activeCodes', 'Aktive koder'), codeIds), clickable: codeIds.length > 0,
+      onClick: () => openFieldModal(tr('sauna.activeCodes', 'Aktive koder'), codeIds), clickable: codeIds.length > 0, category: 'control',
     },
     settings?.showAutoLock !== false && {
       key: 'autoLock', icon: iconFor(settings?.autoLockIcon, ToggleRight), title: tr('sauna.autoLock', 'Autolåsing'),
       value: autoLockOn ? tr('common.on', 'På') : tr('common.off', 'Av'), active: autoLockOn,
-      onClick: () => openFieldModal(tr('sauna.autoLock', 'Autolåsing'), [settings?.autoLockEntityId]), clickable: Boolean(settings?.autoLockEntityId),
+      onClick: () => openFieldModal(tr('sauna.autoLock', 'Autolåsing'), [settings?.autoLockEntityId]), clickable: Boolean(settings?.autoLockEntityId), category: 'control',
+    },
+    settings?.showDoors !== false && {
+      key: 'doors', icon: iconFor(settings?.doorsIcon, DoorOpen), title: tr('sauna.doors', 'Dør'),
+      value: `${openDoors} ${openDoors === 1 ? tr('sauna.openShort', 'åpen') : tr('sauna.openShortPlural', 'åpne')}`,
+      active: openDoors > 0, onClick: () => openFieldModal(tr('sauna.doors', 'Dører'), doorIds), clickable: doorIds.length > 0, category: 'safety',
+    },
+    settings?.showLocks !== false && {
+      key: 'locks', icon: iconFor(settings?.locksIcon, Lock), title: tr('sauna.locks', 'Lås'),
+      value: `${unlockedDoors} ${unlockedDoors === 1 ? tr('sauna.unlockedShort', 'ulåst') : tr('sauna.unlockedShortPlural', 'ulåste')}`,
+      active: unlockedDoors > 0, onClick: () => openFieldModal(tr('sauna.locks', 'Låser'), lockIds), clickable: lockIds.length > 0, category: 'safety',
+    },
+    settings?.showMotion !== false && {
+      key: 'motion', icon: iconFor(settings?.motionIcon, Activity), title: tr('sauna.motion', 'Bevegelse'),
+      value: motionOn ? tr('sauna.motionDetected', 'Registrert') : tr('sauna.noMotion', 'Ingen'), active: motionOn,
+      onClick: () => openFieldModal(tr('sauna.motion', 'Bevegelse'), [settings?.motionEntityId]), clickable: Boolean(settings?.motionEntityId), category: 'safety',
     },
   ].filter(Boolean);
+
+  const controlStats = statItems.filter((item) => item.category === 'control');
+  const safetyStats = statItems.filter((item) => item.category === 'safety');
 
   const tempOverview = settings?.showTempOverview !== false
     ? tempOverviewIds
@@ -282,6 +290,38 @@ export default function SaunaCard({
       .filter(({ ent }) => ent)
       .slice(0, 4)
     : [];
+
+  const renderStatSection = (title, items) => (
+    items.length > 0 && (
+      <div className="space-y-2">
+        <div className="text-[10px] uppercase tracking-[0.24em] font-extrabold text-[var(--text-secondary)] px-1">{title}</div>
+        <div className="grid grid-cols-2 gap-2">
+          {items.map((item) => {
+            const Icon = item.icon;
+            const clickable = Boolean(item.onClick) && !editMode && (item.clickable ?? true);
+            return (
+              <button
+                type="button"
+                key={item.key}
+                onClick={clickable ? item.onClick : undefined}
+                className={cx(
+                  'rounded-2xl px-3 py-3 border flex items-center gap-2 text-left transition',
+                  clickable ? 'active:scale-[0.99] cursor-pointer' : 'cursor-default',
+                  item.active ? 'bg-emerald-500/10 border-emerald-500/20' : 'bg-[var(--glass-bg-hover)] border-[var(--glass-border)]'
+                )}
+              >
+                <Icon className={cx('w-4 h-4', item.active ? 'text-emerald-300' : 'text-[var(--text-secondary)]')} />
+                <div className="min-w-0">
+                  <div className="text-[10px] uppercase tracking-widest font-extrabold text-[var(--text-secondary)] truncate">{item.title}</div>
+                  <div className="text-sm font-extrabold text-[var(--text-primary)] truncate">{item.value}</div>
+                </div>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+    )
+  );
 
   return (
     <div
@@ -371,20 +411,28 @@ export default function SaunaCard({
           </button>
         </div>
 
-        {tempOverview.length > 0 && (
-          <button
-            type="button"
-            onClick={() => openFieldModal(tr('sauna.tempOverview', 'Temperaturoversikt'), tempOverviewIds)}
-            className="mt-3 grid grid-cols-2 gap-2"
-          >
-            {tempOverview.map(({ id, ent }) => (
-              <div key={id} className="rounded-xl px-3 py-2 border bg-[var(--glass-bg-hover)] border-[var(--glass-border)] text-left">
-                <div className="text-[10px] uppercase tracking-widest font-bold text-[var(--text-secondary)] truncate">{ent.attributes?.friendly_name || id}</div>
-                <div className="text-sm font-bold text-[var(--text-primary)] truncate">{ent.state}</div>
+        <div className="mt-4 space-y-4">
+          {tempOverview.length > 0 && (
+            <button
+              type="button"
+              onClick={() => openFieldModal(tr('sauna.tempOverview', 'Temperaturoversikt'), tempOverviewIds)}
+              className="w-full rounded-2xl border border-[var(--glass-border)] bg-[var(--glass-bg-hover)] p-3 text-left"
+            >
+              <div className="text-[10px] uppercase tracking-[0.24em] font-extrabold text-[var(--text-secondary)] px-1 mb-2">{tr('sauna.tempOverview', 'Temperaturoversikt')}</div>
+              <div className="grid grid-cols-2 gap-2">
+                {tempOverview.map(({ id, ent }) => (
+                  <div key={id} className="rounded-xl px-3 py-2 border border-[var(--glass-border)] bg-[var(--glass-bg)] text-left">
+                    <div className="text-[10px] uppercase tracking-widest font-bold text-[var(--text-secondary)] truncate">{ent.attributes?.friendly_name || id}</div>
+                    <div className="text-sm font-bold text-[var(--text-primary)] truncate">{ent.state}</div>
+                  </div>
+                ))}
               </div>
-            ))}
-          </button>
-        )}
+            </button>
+          )}
+
+          {renderStatSection(tr('sauna.controls', 'Styring'), controlStats)}
+          {renderStatSection(tr('sauna.safetyStatus', 'Sikkerhet og status'), safetyStats)}
+        </div>
 
         {hasSafetyAlert && (
           <div className="mt-4 rounded-2xl px-3 py-2 border bg-rose-500/10 border-rose-400/20">
@@ -396,31 +444,6 @@ export default function SaunaCard({
             </div>
           </div>
         )}
-
-        <div className="mt-5 grid grid-cols-2 gap-2">
-          {statItems.map((item) => {
-            const Icon = item.icon;
-            const clickable = Boolean(item.onClick) && !editMode && (item.clickable ?? true);
-            return (
-              <button
-                type="button"
-                key={item.key}
-                onClick={clickable ? item.onClick : undefined}
-                className={cx(
-                  'rounded-2xl px-3 py-3 border flex items-center gap-2 text-left transition',
-                  clickable ? 'active:scale-[0.99] cursor-pointer' : 'cursor-default',
-                  item.active ? 'bg-emerald-500/10 border-emerald-500/20' : 'bg-[var(--glass-bg-hover)] border-[var(--glass-border)]'
-                )}
-              >
-                <Icon className={cx('w-4 h-4', item.active ? 'text-emerald-300' : 'text-[var(--text-secondary)]')} />
-                <div className="min-w-0">
-                  <div className="text-[10px] uppercase tracking-widest font-extrabold text-[var(--text-secondary)] truncate">{item.title}</div>
-                  <div className="text-sm font-extrabold text-[var(--text-primary)] truncate">{item.value}</div>
-                </div>
-              </button>
-            );
-          })}
-        </div>
 
         {settings?.showThresholdHint && (
           <div className="mt-3 text-[11px] text-[var(--text-secondary)]">
