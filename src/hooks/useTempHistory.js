@@ -27,7 +27,7 @@ export default function useTempHistory(conn, cardSettings) {
       if (settings.targetTempEntityId) ids.push(settings.targetTempEntityId);
       if (settings.preheatMinutesEntityId) ids.push(settings.preheatMinutesEntityId);
       return ids;
-    }).filter(Boolean);
+    }).map((id) => String(id ?? '').trim()).filter(Boolean);
 
     const uniqueIds = Array.from(new Set(tempIds));
 
@@ -35,20 +35,29 @@ export default function useTempHistory(conn, cardSettings) {
       const end = new Date();
       const start = new Date();
       start.setHours(start.getHours() - 12);
+
+      let historyFromStats = null;
       try {
         const stats = await getStatistics(conn, { start, end, statisticId: tempId, period: '5minute' });
-        if (!cancelled && Array.isArray(stats) && stats.length > 0) {
-          const mapped = stats.map((s) => ({ state: s.mean !== null ? s.mean : s.state, last_updated: s.start }));
-          setTempHistoryById((prev) => ({ ...prev, [tempId]: mapped }));
-          return;
+        if (Array.isArray(stats) && stats.length > 0) {
+          historyFromStats = stats.map((s) => ({ state: s.mean !== null ? s.mean : s.state, last_updated: s.start }));
         }
+      } catch (e) {
+        if (!cancelled) console.warn(`Statistics unavailable for ${tempId}, falling back to history`, e);
+      }
 
+      if (!cancelled && Array.isArray(historyFromStats) && historyFromStats.length > 0) {
+        setTempHistoryById((prev) => ({ ...prev, [tempId]: historyFromStats }));
+        return;
+      }
+
+      try {
         const historyData = await getHistory(conn, { start, end, entityId: tempId, minimal_response: false, no_attributes: true });
-        if (!cancelled && historyData) {
+        if (!cancelled && Array.isArray(historyData)) {
           setTempHistoryById((prev) => ({ ...prev, [tempId]: historyData }));
         }
       } catch (e) {
-        if (!cancelled) console.error('Temp history fetch error', e);
+        if (!cancelled) console.error(`Temp history fetch error for ${tempId}`, e);
       }
     };
 
