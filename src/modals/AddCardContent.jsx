@@ -7,6 +7,7 @@ import {
   Check,
   CloudSun,
   Coins,
+  Flame,
   Gamepad2,
   Home,
   Lightbulb,
@@ -486,6 +487,7 @@ export default function AddCardContent({
                 <TypeButton type="todo" icon={ListChecks} label={getLabel('addCard.type.todo', 'Todo')} isActive={addCardType === 'todo'} onSelect={setAddCardType} />
                 <TypeButton type="nordpool" icon={Zap} label={t('addCard.type.nordpool')} isActive={addCardType === 'nordpool'} onSelect={setAddCardType} />
                 <TypeButton type="room" icon={Home} label={getLabel('addCard.type.room', 'Room')} isActive={addCardType === 'room'} onSelect={setAddCardType} />
+                <TypeButton type="sauna" icon={Flame} label={getLabel('addCard.type.sauna', 'Sauna')} isActive={addCardType === 'sauna'} onSelect={setAddCardType} />
               </div>
             </div>
           )}
@@ -497,6 +499,7 @@ export default function AddCardContent({
               : addCardType === 'todo' ? renderSimpleAddSection(ListChecks, t('addCard.todoDescription') || 'Add a to-do card. You can select which list to use after adding.', t('addCard.add'))
               : addCardType === 'car' ? renderSimpleAddSection(Car, t('addCard.carDescription'), t('addCard.carCard'))
               : addCardType === 'nordpool' ? renderNordpoolSection()
+              : addCardType === 'sauna' ? renderSimpleAddSection(Flame, t('addCard.saunaDescription') || 'Add a sauna operator card and then configure all linked entities.', t('addCard.add'))
               : addCardType === 'room' ? (
                 <RoomSection 
                   conn={conn} 
@@ -532,6 +535,11 @@ export default function AddCardContent({
           {addCardType === 'nordpool' && selectedNordpoolId && (
             <button onClick={onAddSelected} className="w-full py-4 rounded-2xl bg-blue-500 text-white font-bold uppercase tracking-widest hover:bg-blue-600 transition-colors shadow-lg shadow-blue-500/20 flex items-center justify-center gap-2">
               <Plus className="w-5 h-5" /> {t('addCard.nordpoolCard')}
+            </button>
+          )}
+          {addCardType === 'sauna' && (
+            <button onClick={onAddSelected} className="w-full py-4 rounded-2xl bg-blue-500 text-white font-bold uppercase tracking-widest hover:bg-blue-600 transition-colors shadow-lg shadow-blue-500/20 flex items-center justify-center gap-2">
+              <Plus className="w-5 h-5" /> {t('addCard.saunaCard') || 'Sauna card'}
             </button>
           )}
           {addCardType === 'room' && selectedRoomArea && (
