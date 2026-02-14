@@ -570,6 +570,9 @@ export default function ModalOrchestrator({
             callService={callService}
             onClose={() => setActiveSaunaFieldModal(null)}
             t={t}
+            setShowLightModal={setShowLightModal}
+            setActiveClimateEntityModal={setActiveClimateEntityModal}
+            setShowSensorInfoModal={setShowSensorInfoModal}
           />
         </ModalSuspense>
       )}

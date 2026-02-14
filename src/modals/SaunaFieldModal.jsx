@@ -18,18 +18,39 @@ const iconForDomain = (domain) => {
   return ToggleRight;
 };
 
-const domainLabel = (domain, t) => {
-  if (domain === 'light') return t('room.domain.light') || 'Lys';
-  if (domain === 'lock') return t('room.domain.lock') || 'Låser';
-  if (domain === 'fan') return t('room.domain.fan') || 'Vifter';
-  if (domain === 'climate') return t('room.domain.climate') || 'Klima';
-  if (domain === 'input_number' || domain === 'number') return t('room.domain.number') || 'Nummer';
-  if (domain === 'sensor') return t('room.domain.sensor') || 'Sensorer';
-  if (domain === 'binary_sensor') return t('room.domain.binarySensor') || 'Binærsensor';
-  return domain || (t('common.other') || 'Annet');
+function makeTr(t) {
+  return (key, fallback) => {
+    const out = typeof t === 'function' ? t(key) : undefined;
+    const s = String(out ?? '');
+    const looksLikeKey = !s || s === key || s.toLowerCase() === key.toLowerCase() || s === s.toUpperCase() || s.includes('.');
+    return looksLikeKey ? fallback : s;
+  };
+}
+
+const domainLabel = (domain, tr) => {
+  if (domain === 'light') return tr('room.domain.light', 'Lys');
+  if (domain === 'lock') return tr('room.domain.lock', 'Låser');
+  if (domain === 'fan') return tr('room.domain.fan', 'Vifter');
+  if (domain === 'climate') return tr('room.domain.climate', 'Klima');
+  if (domain === 'input_number' || domain === 'number') return tr('room.domain.number', 'Nummer');
+  if (domain === 'sensor') return tr('room.domain.sensor', 'Sensorer');
+  if (domain === 'binary_sensor') return tr('room.domain.binarySensor', 'Binærsensor');
+  return domain || tr('common.other', 'Annet');
 };
 
-export default function SaunaFieldModal({ show, title, entityIds, entities, callService, onClose, t }) {
+export default function SaunaFieldModal({
+  show,
+  title,
+  entityIds,
+  entities,
+  callService,
+  onClose,
+  t,
+  setShowLightModal,
+  setActiveClimateEntityModal,
+  setShowSensorInfoModal,
+}) {
+  const tr = makeTr(t);
   const ids = Array.isArray(entityIds) ? entityIds.filter(Boolean) : [];
 
   const grouped = {};
@@ -48,6 +69,24 @@ export default function SaunaFieldModal({ show, title, entityIds, entities, call
     return (ai === -1 ? 99 : ai) - (bi === -1 ? 99 : bi);
   });
 
+  const openEntityModal = (entityId) => {
+    const domain = domainFor(entityId);
+    if (domain === 'light' && setShowLightModal) {
+      setShowLightModal(entityId);
+      onClose?.();
+      return;
+    }
+    if (domain === 'climate' && setActiveClimateEntityModal) {
+      setActiveClimateEntityModal(entityId);
+      onClose?.();
+      return;
+    }
+    if (setShowSensorInfoModal) {
+      setShowSensorInfoModal(entityId);
+      onClose?.();
+    }
+  };
+
   const handleToggle = (entityId) => {
     const domain = domainFor(entityId);
     if (domain === 'lock') {
@@ -63,10 +102,6 @@ export default function SaunaFieldModal({ show, title, entityIds, entities, call
     const domain = domainFor(entityId);
     if (!['input_number', 'number'].includes(domain)) return;
     callService(domain, direction === 'up' ? 'increment' : 'decrement', { entity_id: entityId });
-  };
-
-  const handleClimate = (entityId, mode) => {
-    callService('climate', 'set_hvac_mode', { entity_id: entityId, hvac_mode: mode });
   };
 
   return (
@@ -89,25 +124,25 @@ export default function SaunaFieldModal({ show, title, entityIds, entities, call
           onClick={onClose}
           className="absolute top-5 right-5 w-10 h-10 rounded-full flex items-center justify-center border hover:scale-105 transition-all"
           style={{ borderColor: 'var(--glass-border)', backgroundColor: 'var(--glass-bg)', color: 'var(--text-secondary)' }}
-          aria-label={t('common.close') || 'Close'}
+          aria-label={tr('common.close', 'Lukk')}
         >
           <X className="w-5 h-5" />
         </button>
 
         <div className="pr-14">
           <div className="text-xs uppercase tracking-[0.2em] font-bold text-[var(--text-secondary)] mb-2">
-            {t('sauna.details') || 'Sauna details'}
+            {tr('sauna.details', 'Sauna detaljer')}
           </div>
-          <h2 className="text-2xl font-bold text-[var(--text-primary)]">{title || (t('sauna.details') || 'Details')}</h2>
+          <h2 className="text-2xl font-bold text-[var(--text-primary)]">{title || tr('sauna.details', 'Detaljer')}</h2>
           <p className="text-sm text-[var(--text-secondary)] mt-1">
-            {ids.length} {ids.length === 1 ? (t('common.entity') || 'entitet') : (t('common.entities') || 'entiteter')}
+            {ids.length} {ids.length === 1 ? tr('common.entity', 'entitet') : tr('common.entities', 'entiteter')}
           </p>
         </div>
 
         <div className="mt-6 overflow-y-auto custom-scrollbar space-y-4 pr-1">
           {ids.length === 0 && (
             <div className="rounded-2xl border p-4 text-sm" style={{ borderColor: 'var(--glass-border)', backgroundColor: 'var(--glass-bg)' }}>
-              {t('common.noData') || 'No entities configured for this field.'}
+              {tr('common.noData', 'Ingen entiteter konfigurert for dette feltet.')}
             </div>
           )}
 
@@ -125,7 +160,7 @@ export default function SaunaFieldModal({ show, title, entityIds, entities, call
                     <div className="w-8 h-8 rounded-full border flex items-center justify-center" style={{ borderColor: 'var(--glass-border)', backgroundColor: 'var(--glass-bg-hover)' }}>
                       <DomainIcon className="w-4 h-4 text-[var(--text-secondary)]" />
                     </div>
-                    <div className="text-sm font-bold text-[var(--text-primary)]">{domainLabel(domain, t)}</div>
+                    <div className="text-sm font-bold text-[var(--text-primary)]">{domainLabel(domain, tr)}</div>
                   </div>
                   <div className="text-xs text-[var(--text-secondary)] font-semibold">{list.length}</div>
                 </div>
@@ -136,7 +171,6 @@ export default function SaunaFieldModal({ show, title, entityIds, entities, call
                     const friendly = getFriendlyName(entityId, entities);
                     const canToggle = canToggleDomain(domain);
                     const isNumeric = domain === 'input_number' || domain === 'number';
-                    const isClimate = domain === 'climate';
 
                     return (
                       <div
@@ -153,6 +187,21 @@ export default function SaunaFieldModal({ show, title, entityIds, entities, call
                         </div>
 
                         <div className="mt-3 flex flex-wrap gap-2">
+                          <button
+                            type="button"
+                            onClick={() => openEntityModal(entityId)}
+                            className="h-9 px-4 rounded-full border transition-all"
+                            style={{ borderColor: 'var(--glass-border)', backgroundColor: 'var(--glass-bg)', color: 'var(--text-primary)' }}
+                          >
+                            {domain === 'light'
+                              ? tr('sauna.openLightCard', 'Åpne lyskort')
+                              : domain === 'climate'
+                                ? tr('sauna.openThermostatCard', 'Åpne termostatkort')
+                                : domain === 'fan'
+                                  ? tr('sauna.openFanCard', 'Åpne viftekort')
+                                  : tr('sauna.openEntityCard', 'Åpne kort')}
+                          </button>
+
                           {canToggle && (
                             <button
                               type="button"
@@ -160,7 +209,7 @@ export default function SaunaFieldModal({ show, title, entityIds, entities, call
                               className="h-9 px-4 rounded-full border transition-all flex items-center gap-2 backdrop-blur-md"
                               style={{ borderColor: 'var(--glass-border)', backgroundColor: 'var(--glass-bg)', color: 'var(--text-primary)' }}
                             >
-                              {t('common.toggle') || 'Toggle'}
+                              {tr('common.toggle', 'Slå av/på')}
                             </button>
                           )}
 
@@ -172,7 +221,7 @@ export default function SaunaFieldModal({ show, title, entityIds, entities, call
                                 className="h-9 px-4 rounded-full border transition-all"
                                 style={{ borderColor: 'var(--glass-border)', backgroundColor: 'var(--glass-bg)', color: 'var(--text-primary)' }}
                               >
-                                -
+                                {tr('common.decrease', 'Ned')}
                               </button>
                               <button
                                 type="button"
@@ -180,28 +229,7 @@ export default function SaunaFieldModal({ show, title, entityIds, entities, call
                                 className="h-9 px-4 rounded-full border transition-all"
                                 style={{ borderColor: 'var(--glass-border)', backgroundColor: 'var(--glass-bg)', color: 'var(--text-primary)' }}
                               >
-                                +
-                              </button>
-                            </>
-                          )}
-
-                          {isClimate && (
-                            <>
-                              <button
-                                type="button"
-                                onClick={() => handleClimate(entityId, 'heat')}
-                                className="h-9 px-4 rounded-full border transition-all"
-                                style={{ borderColor: 'var(--glass-border)', backgroundColor: 'var(--glass-bg)', color: 'var(--text-primary)' }}
-                              >
-                                {t('climate.heat') || 'Heat'}
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => handleClimate(entityId, 'off')}
-                                className="h-9 px-4 rounded-full border transition-all"
-                                style={{ borderColor: 'var(--glass-border)', backgroundColor: 'var(--glass-bg)', color: 'var(--text-primary)' }}
-                              >
-                                {t('common.off') || 'Off'}
+                                {tr('common.increase', 'Opp')}
                               </button>
                             </>
                           )}
