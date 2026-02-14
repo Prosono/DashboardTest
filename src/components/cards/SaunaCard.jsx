@@ -151,7 +151,6 @@ export default function SaunaCard({
 
   const serviceState = serviceEntity?.state ?? '';
   const serviceYes = serviceState === 'Ja';
-  const serviceNo = serviceState === 'Nei';
   const nextMinutes = toNum(nextBookingEntity?.state);
   const hasNext = nextMinutes != null && nextMinutes >= 0;
   const preheatOn = isOn(preheatWindowEntity?.state);
@@ -164,6 +163,13 @@ export default function SaunaCard({
     return extractHistorySeries(raw).slice(-40);
   }, [settings?.tempEntityId, tempHistoryById]);
   const tempPath = useMemo(() => buildPath(tempSeries, 100, 28), [tempSeries]);
+
+  const preheatSeries = useMemo(() => {
+    if (!settings?.preheatMinutesEntityId) return [];
+    const raw = tempHistoryById?.[settings.preheatMinutesEntityId];
+    return extractHistorySeries(raw).slice(-40);
+  }, [settings?.preheatMinutesEntityId, tempHistoryById]);
+  const preheatPath = useMemo(() => buildPath(preheatSeries, 100, 24), [preheatSeries]);
 
   const openFieldModal = (title, entityIds) => {
     if (editMode) return;
@@ -215,20 +221,6 @@ export default function SaunaCard({
     danger: { pill: 'bg-rose-500/14 border-rose-400/20 text-rose-200', icon: 'text-rose-300' },
     muted: { pill: 'bg-[var(--glass-bg-hover)] border-[var(--glass-border)] text-[var(--text-secondary)]', icon: 'text-[var(--text-secondary)]' },
   }[primaryState.tone] || { pill: 'bg-[var(--glass-bg-hover)] border-[var(--glass-border)] text-[var(--text-secondary)]', icon: 'text-[var(--text-secondary)]' });
-
-  const bookingLine = (() => {
-    if (settings?.showBookingOverview === false) return null;
-    const hasAny = settings?.nextBookingInMinutesEntityId || settings?.peopleNowEntityId || settings?.serviceEntityId || settings?.preheatWindowEntityId;
-    if (!hasAny) return null;
-    const serviceTxt = serviceYes ? ` • ${tr('sauna.serviceOngoing', 'Service')}` : serviceNo ? ` • ${tr('sauna.normalBooking', 'Vanlig')}` : '';
-    if (saunaIsActive) {
-      const tempTxt = tempIsValid ? `${Math.round(currentTemp)}°C` : '--°C';
-      return `${tr('sauna.session', 'Økt')}: ${tempTxt} • ${peopleNow} ${tr('sauna.people', 'pers')}${serviceTxt}`;
-    }
-    const nextTxt = hasNext ? `${tr('sauna.nextBookingIn', 'Neste om')} ${Math.round(nextMinutes)} min` : tr('sauna.noBookingsToday', 'Ingen bookinger i dag');
-    const preheatTxt = preheatOn ? `${tr('sauna.preheating', 'Forvarmer')} • ` : '';
-    return `${tr('sauna.booking', 'Booking')}: ${preheatTxt}${nextTxt}${serviceTxt}`;
-  })();
 
   const iconFor = (customIcon, fallback) => (customIcon ? (getIconComponent(customIcon) || fallback) : fallback);
   const statItems = [
@@ -285,7 +277,7 @@ export default function SaunaCard({
     <div
       {...dragProps}
       data-haptic={editMode ? undefined : 'card'}
-      className={cx('touch-feedback relative p-5 rounded-[2.5rem] transition-all duration-300 overflow-hidden font-sans h-full', 'border border-[var(--glass-border)] bg-[var(--glass-bg)]', !editMode ? 'cursor-pointer active:scale-[0.98]' : 'cursor-move')}
+      className={cx('touch-feedback relative p-5 rounded-[2.5rem] transition-all duration-300 overflow-visible font-sans h-full', 'border border-[var(--glass-border)] bg-[var(--glass-bg)]', !editMode ? 'cursor-pointer active:scale-[0.98]' : 'cursor-move')}
       style={cardStyle}
     >
       {controls}
@@ -303,23 +295,25 @@ export default function SaunaCard({
           </div>
 
           <div className="flex justify-center">
-            <div className="relative w-48 h-48 rounded-full overflow-hidden border border-[var(--glass-border)] bg-[var(--glass-bg-hover)] shadow-[0_16px_45px_rgba(0,0,0,0.45)]">
-              {imageUrl ? <img src={imageUrl} alt={saunaName} className="w-full h-full object-cover" draggable={false} /> : <div className="w-full h-full bg-gradient-to-br from-white/10 to-black/20" />}
-              <div className="absolute inset-0 rounded-full ring-1 ring-white/10" />
+            <div className="relative w-48 h-48">
               {settings?.peopleNowEntityId && (
-                <div className="absolute -top-2 left-1/2 -translate-x-1/2 min-w-[2.7rem] h-11 px-3 rounded-full border border-emerald-400/25 bg-emerald-500/20 text-emerald-100 flex items-center justify-center text-3xl font-extrabold">
+                <div className="absolute -top-6 left-1/2 -translate-x-1/2 min-w-[2.9rem] h-12 px-3 rounded-full border border-emerald-300/35 bg-emerald-500/30 text-emerald-100 flex items-center justify-center text-3xl font-extrabold z-30 shadow-xl shadow-emerald-900/40 pointer-events-none">
                   {peopleNow}
                 </div>
               )}
-              {flameOn && (
-                <button
-                  type="button"
-                  onClick={() => openFieldModal(tr('sauna.heating', 'Varmer'), [settings?.flameEntityId])}
-                  className="absolute bottom-2 left-1/2 -translate-x-1/2 px-2.5 py-1 rounded-full border bg-orange-500/18 border-orange-400/25 text-orange-200 text-[10px] uppercase tracking-widest font-extrabold"
-                >
-                  {tr('sauna.heating', 'Varmer')}
-                </button>
-              )}
+              <div className="relative w-48 h-48 rounded-full overflow-hidden border border-[var(--glass-border)] bg-[var(--glass-bg-hover)] shadow-[0_16px_45px_rgba(0,0,0,0.45)]">
+                {imageUrl ? <img src={imageUrl} alt={saunaName} className="w-full h-full object-cover" draggable={false} /> : <div className="w-full h-full bg-gradient-to-br from-white/10 to-black/20" />}
+                <div className="absolute inset-0 rounded-full ring-1 ring-white/10" />
+                {flameOn && (
+                  <button
+                    type="button"
+                    onClick={() => openFieldModal(tr('sauna.heating', 'Varmer'), [settings?.flameEntityId])}
+                    className="absolute bottom-2 left-1/2 -translate-x-1/2 px-2.5 py-1 rounded-full border bg-orange-500/18 border-orange-400/25 text-orange-200 text-[10px] uppercase tracking-widest font-extrabold"
+                  >
+                    {tr('sauna.heating', 'Varmer')}
+                  </button>
+                )}
+              </div>
             </div>
           </div>
 
@@ -346,31 +340,34 @@ export default function SaunaCard({
           </div>
         </div>
 
-        {bookingLine && (
-          <div className="mt-3 rounded-2xl px-3 py-2 border bg-[var(--glass-bg-hover)] border-[var(--glass-border)]">
-            <div className="text-xs font-bold text-[var(--text-primary)] truncate">{bookingLine}</div>
-          </div>
-        )}
 
-        <div className="mt-4 grid grid-cols-3 gap-4 items-end relative">
-          {tempPath && (
-            <svg className="absolute left-0 right-0 -top-1 w-full h-14 opacity-35 pointer-events-none" viewBox="0 0 100 28" preserveAspectRatio="none">
-              <path d={tempPath} fill="none" stroke="rgba(148,163,184,0.7)" strokeWidth="1.8" strokeLinecap="round" />
-            </svg>
-          )}
-          <div className="col-span-2 flex items-end gap-2 relative">
-            <Thermometer className="w-4 h-4 text-[var(--text-secondary)] mb-1" />
-            <span className="text-5xl font-semibold leading-none tabular-nums text-[var(--text-primary)]">{tempIsValid ? currentTemp.toFixed(1) : '--'}</span>
-            <span className="text-2xl text-[var(--text-secondary)] mb-1">°C</span>
+        <div className="mt-4 grid grid-cols-3 gap-4 items-end">
+          <div className="col-span-2 rounded-2xl px-3 py-3 border bg-[var(--glass-bg-hover)] border-[var(--glass-border)] relative overflow-hidden">
+            {tempPath && (
+              <svg className="absolute left-3 right-3 top-2 w-[calc(100%-1.5rem)] h-10 opacity-90 pointer-events-none" viewBox="0 0 100 28" preserveAspectRatio="none">
+                <path d={tempPath} fill="none" stroke="rgba(239,68,68,0.95)" strokeWidth="2.3" strokeLinecap="round" />
+              </svg>
+            )}
+            <div className="mt-7 flex items-end gap-2 relative">
+              <Thermometer className="w-4 h-4 text-[var(--text-secondary)] mb-1" />
+              <span className="text-5xl font-semibold leading-none tabular-nums text-[var(--text-primary)]">{tempIsValid ? currentTemp.toFixed(1) : '--'}</span>
+              <span className="text-2xl text-[var(--text-secondary)] mb-1">°C</span>
+            </div>
           </div>
 
           <button
             type="button"
             onClick={() => openFieldModal(tr('sauna.preheatTime', 'Oppvarmingstid'), [settings?.preheatMinutesEntityId])}
-            className="col-span-1 text-right relative"
+            className="col-span-1 text-right rounded-2xl px-3 py-3 border bg-[var(--glass-bg-hover)] border-[var(--glass-border)] relative overflow-hidden"
           >
-            <div className="text-[10px] uppercase tracking-widest font-bold text-[var(--text-secondary)]">{tr('sauna.preheatTime', 'Oppvarmingstid')}</div>
-            <div className="text-base font-bold text-[var(--text-primary)]">{preheatMinutes != null ? `${Math.round(preheatMinutes)} min` : '--'}</div>
+            {preheatPath && (
+              <svg className="absolute left-3 right-3 top-2 w-[calc(100%-1.5rem)] h-9 opacity-90 pointer-events-none" viewBox="0 0 100 24" preserveAspectRatio="none">
+                <path d={preheatPath} fill="none" stroke="rgba(239,68,68,0.95)" strokeWidth="2.2" strokeLinecap="round" />
+              </svg>
+            )}
+            <div className="mt-8 text-[10px] uppercase tracking-widest font-bold text-[var(--text-secondary)]">{tr('sauna.preheatTime', 'Oppvarmingstid')}</div>
+            <div className="text-3xl font-bold text-[var(--text-primary)] leading-tight">{preheatMinutes != null ? `${Math.round(preheatMinutes)}` : '--'}</div>
+            <div className="text-base font-bold text-[var(--text-secondary)]">min</div>
           </button>
         </div>
 
