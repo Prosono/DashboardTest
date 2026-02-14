@@ -457,25 +457,25 @@ export function renderRoomCard(cardId, dragProps, getControls, cardStyle, settin
   );
 }
 
-
-export function renderSaunaCard(cardId, dragProps, getControls, cardStyle, settingsKey, ctx) {
-  const { entities, editMode, cardSettings, customNames, customIcons, t } = ctx;
-  const saunaSettings = cardSettings[settingsKey] || cardSettings[cardId] || {};
-  return (
-    <SaunaCard
-      cardId={cardId}
-      settings={saunaSettings}
-      entities={entities}
-      dragProps={dragProps}
-      controls={getControls(cardId)}
-      cardStyle={cardStyle}
-      editMode={editMode}
-      customNames={customNames}
-      customIcons={customIcons}
-      t={t}
-    />
-  );
-}
+ export function renderSaunaCard(cardId, dragProps, getControls, cardStyle, settingsKey, ctx) {
+   const { entities, editMode, cardSettings, customNames, customIcons, setShowLightModal, t } = ctx;
+   const saunaSettings = cardSettings[settingsKey] || cardSettings[cardId] || {};
+   return (
+     <SaunaCard
+       cardId={cardId}
+       settings={saunaSettings}
+       entities={entities}
+       dragProps={dragProps}
+       controls={getControls(cardId)}
+       cardStyle={cardStyle}
+       editMode={editMode}
+       customNames={customNames}
+       customIcons={customIcons}
+       t={t}
+      modals={{ setShowLightModal }}
+     />
+   );
+ }
 
 // ─── Card Type Dispatch ──────────────────────────────────────────────────────
 
