@@ -217,17 +217,29 @@ export default function SaunaCard({
   }[primaryState.tone] || { pill: 'bg-[var(--glass-bg-hover)] border-[var(--glass-border)] text-[var(--text-secondary)]', icon: 'text-[var(--text-secondary)]' });
 
   const bookingLine = (() => {
-    if (settings?.showBookingOverview === false) return null;
-    const hasAny = settings?.nextBookingInMinutesEntityId || settings?.peopleNowEntityId || settings?.serviceEntityId || settings?.preheatWindowEntityId;
-    if (!hasAny) return null;
-    const serviceTxt = serviceYes ? ` • ${tr('sauna.serviceOngoing', 'Service')}` : serviceNo ? ` • ${tr('sauna.normalBooking', 'Vanlig')}` : '';
+    const hasAny =
+      settings?.saunaActiveBooleanEntityId ||
+      settings?.nextBookingInMinutesEntityId ||
+      settings?.serviceEntityId;
+
+    if (!hasAny || settings?.showBookingOverview === false) return null;
+
+    const next = Number.isFinite(nextMinutes) ? Math.round(nextMinutes) : -1;
+    const tempTxt = tempIsValid ? `${Math.round(currentTemp)} °C` : '-- °C';
+
+    let baseLine = '';
     if (saunaIsActive) {
-      const tempTxt = tempIsValid ? `${Math.round(currentTemp)}°C` : '--°C';
-      return `${tr('sauna.session', 'Økt')}: ${tempTxt} • ${peopleNow} ${tr('sauna.people', 'pers')}${serviceTxt}`;
+      baseLine = `${tr('sauna.activeNow', 'Aktiv nå')} • ${tempTxt} • ${peopleNow} ${tr('sauna.people', 'personer')}`;
+    } else {
+      const nextTxt = next === -1
+        ? tr('sauna.noUpcomingBookingsToday', 'Ingen kommende bookinger i dag')
+        : `${tr('sauna.nextBookingIn', 'Neste booking om')} ${next} min`;
+      baseLine = `${tr('sauna.notActive', 'Ikke aktiv')} • ${nextTxt}`;
     }
-    const nextTxt = hasNext ? `${tr('sauna.nextBookingIn', 'Neste om')} ${Math.round(nextMinutes)} min` : tr('sauna.noBookingsToday', 'Ingen bookinger i dag');
-    const preheatTxt = preheatOn ? `${tr('sauna.preheating', 'Forvarmer')} • ` : '';
-    return `${tr('sauna.booking', 'Booking')}: ${preheatTxt}${nextTxt}${serviceTxt}`;
+
+    if (serviceYes) return `${baseLine} • ${tr('sauna.serviceOngoing', 'Service pågår')}`;
+    if (serviceNo) return `${baseLine} • ${tr('sauna.normalBooking', 'Vanlig booking')}`;
+    return baseLine;
   })();
 
   const iconFor = (customIcon, fallback) => (customIcon ? (getIconComponent(customIcon) || fallback) : fallback);
@@ -303,23 +315,25 @@ export default function SaunaCard({
           </div>
 
           <div className="flex justify-center">
-            <div className="relative w-48 h-48 rounded-full overflow-hidden border border-[var(--glass-border)] bg-[var(--glass-bg-hover)] shadow-[0_16px_45px_rgba(0,0,0,0.45)]">
-              {imageUrl ? <img src={imageUrl} alt={saunaName} className="w-full h-full object-cover" draggable={false} /> : <div className="w-full h-full bg-gradient-to-br from-white/10 to-black/20" />}
-              <div className="absolute inset-0 rounded-full ring-1 ring-white/10" />
+            <div className="relative w-48 h-48">
               {settings?.peopleNowEntityId && (
-                <div className="absolute -top-2 left-1/2 -translate-x-1/2 min-w-[2.7rem] h-11 px-3 rounded-full border border-emerald-400/25 bg-emerald-500/20 text-emerald-100 flex items-center justify-center text-3xl font-extrabold">
+                <div className="absolute -top-5 left-1/2 -translate-x-1/2 min-w-[2.7rem] h-11 px-3 rounded-full border border-emerald-400/25 bg-emerald-500/20 text-emerald-100 flex items-center justify-center text-3xl font-extrabold z-20 shadow-lg shadow-emerald-900/30 pointer-events-none">
                   {peopleNow}
                 </div>
               )}
-              {flameOn && (
-                <button
-                  type="button"
-                  onClick={() => openFieldModal(tr('sauna.heating', 'Varmer'), [settings?.flameEntityId])}
-                  className="absolute bottom-2 left-1/2 -translate-x-1/2 px-2.5 py-1 rounded-full border bg-orange-500/18 border-orange-400/25 text-orange-200 text-[10px] uppercase tracking-widest font-extrabold"
-                >
-                  {tr('sauna.heating', 'Varmer')}
-                </button>
-              )}
+              <div className="relative w-48 h-48 rounded-full overflow-hidden border border-[var(--glass-border)] bg-[var(--glass-bg-hover)] shadow-[0_16px_45px_rgba(0,0,0,0.45)]">
+                {imageUrl ? <img src={imageUrl} alt={saunaName} className="w-full h-full object-cover" draggable={false} /> : <div className="w-full h-full bg-gradient-to-br from-white/10 to-black/20" />}
+                <div className="absolute inset-0 rounded-full ring-1 ring-white/10" />
+                {flameOn && (
+                  <button
+                    type="button"
+                    onClick={() => openFieldModal(tr('sauna.heating', 'Varmer'), [settings?.flameEntityId])}
+                    className="absolute bottom-2 left-1/2 -translate-x-1/2 px-2.5 py-1 rounded-full border bg-orange-500/18 border-orange-400/25 text-orange-200 text-[10px] uppercase tracking-widest font-extrabold"
+                  >
+                    {tr('sauna.heating', 'Varmer')}
+                  </button>
+                )}
+              </div>
             </div>
           </div>
 
