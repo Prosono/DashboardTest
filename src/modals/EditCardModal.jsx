@@ -924,6 +924,21 @@ export default function EditCardModal({
                 filter: (id) => id.startsWith('sensor.') || id.startsWith('input_number.'),
               },
               {
+                key: 'imageEntityId',
+                label: t('sauna.imageEntity') || 'Image entity',
+                filter: (id) => id.startsWith('camera.') || id.startsWith('image.') || id.startsWith('sensor.'),
+              },
+              {
+                key: 'peopleNowEntityId',
+                label: t('sauna.peopleNowEntity') || 'People now entity',
+                filter: (id) => id.startsWith('input_number.') || id.startsWith('number.') || id.startsWith('sensor.'),
+              },
+              {
+                key: 'preheatMinutesEntityId',
+                label: t('sauna.preheatMinutesEntity') || 'Preheat minutes entity',
+                filter: (id) => id.startsWith('input_number.') || id.startsWith('number.') || id.startsWith('sensor.'),
+              },
+              {
                 key: 'manualModeEntityId',
                 label: t('sauna.manualModeEntity') || 'Manual mode boolean',
                 filter: (id) => id.startsWith('input_boolean.') || id.startsWith('switch.'),
@@ -975,6 +990,16 @@ export default function EditCardModal({
               <div className="space-y-6">
                 <div className="popup-surface rounded-2xl p-4 space-y-3">
                   <div className="text-xs uppercase font-bold tracking-widest text-gray-500">{t('sauna.cardOptions') || 'Sauna card options'}</div>
+                  <div className="space-y-1">
+                    <label className="text-xs uppercase font-bold text-gray-500 ml-1">{t('sauna.imageUrl') || 'Image URL'}</label>
+                    <input
+                      type="text"
+                      value={editSettings.imageUrl || ''}
+                      onChange={(e) => saveCardSetting(editSettingsKey, 'imageUrl', e.target.value)}
+                      placeholder="https://..."
+                      className="w-full px-3 py-2 rounded-xl bg-[var(--glass-bg)] border border-[var(--glass-border)] text-[var(--text-primary)]"
+                    />
+                  </div>
                   {saunaToggleOptions.map((opt) => {
                     const enabled = editSettings[opt.key] !== false;
                     return (
