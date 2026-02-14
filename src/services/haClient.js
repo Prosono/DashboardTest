@@ -84,7 +84,15 @@ export async function getStatistics(conn, { start, end, statisticId, period = '5
     statistic_ids: [statisticId],
     period,
   });
-  const stats = res && res[statisticId];
+
+  let payload = res;
+  if (payload && typeof payload === 'object' && !Array.isArray(payload)) {
+    if (payload.result && typeof payload.result === 'object') payload = payload.result;
+    else if (payload.response && typeof payload.response === 'object') payload = payload.response;
+    else if (payload.data && typeof payload.data === 'object') payload = payload.data;
+  }
+
+  const stats = payload && payload[statisticId];
   return Array.isArray(stats) ? stats : [];
 }
 

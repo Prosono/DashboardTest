@@ -52,7 +52,12 @@ export default function useTempHistory(conn, cardSettings) {
       }
 
       try {
-        const historyData = await getHistory(conn, { start, end, entityId: tempId, minimal_response: false, no_attributes: true });
+        let historyData = await getHistory(conn, { start, end, entityId: tempId, minimal_response: false, no_attributes: true });
+
+        if ((!Array.isArray(historyData) || historyData.length === 0) && tempId.startsWith('sensor.')) {
+          historyData = await getHistory(conn, { start, end, entityId: tempId, minimal_response: false, no_attributes: false });
+        }
+
         if (!cancelled && Array.isArray(historyData)) {
           setTempHistoryById((prev) => ({ ...prev, [tempId]: historyData }));
         }
