@@ -159,7 +159,7 @@ export default function LayoutSidebar({
             </div>
             <M3Slider 
               min={1} 
-              max={5} 
+              max={10} 
               step={1} 
               value={gridColumns} 
               onChange={(e) => setGridColumns(parseInt(e.target.value, 10))} 

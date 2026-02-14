@@ -168,6 +168,21 @@ export const handleAddSelected = (ctx) => {
       return;
     }
 
+
+    case 'sauna': {
+      const cardId = `sauna_card_${Date.now()}`;
+      commitSingleCard(cardId, {
+        type: 'sauna',
+        showFlame: true,
+        showThermostat: true,
+        showMotion: true,
+        showLights: true,
+        showLocks: true,
+        showDoors: true,
+      }, { openEdit: true });
+      return;
+    }
+
     case 'car': {
       const cardId = `car_card_${Date.now()}`;
       commitSingleCard(cardId, { type: 'car', size: 'large' }, { openEdit: true });

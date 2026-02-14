@@ -38,7 +38,7 @@ import { formatDuration } from './utils';
 import './styles/dashboard.css';
 import { hasOAuthTokens } from './services/oauthStorage';
 import { isCardRemovable as _isCardRemovable, isCardHiddenByLogic as _isCardHiddenByLogic, isMediaPage as _isMediaPage } from './utils/cardUtils';
-import { getCardGridSpan as _getCardGridSpan, buildGridLayout as _buildGridLayout } from './utils/gridLayout';
+import { getCardGridSize as _getCardGridSize, buildGridLayout as _buildGridLayout } from './utils/gridLayout';
 import { createDragAndDropHandlers } from './utils/dragAndDrop';
 import { dispatchCardRender } from './rendering/cardRenderers';
 import ModalOrchestrator from './rendering/ModalOrchestrator';
@@ -103,7 +103,13 @@ function AppContent({ showOnboarding, setShowOnboarding }) {
     updateSectionSpacing,
     persistCardSettings,
     statusPillsConfig,
-    saveStatusPillsConfig
+    saveStatusPillsConfig,
+    globalDashboardProfiles,
+    globalStorageBusy,
+    globalStorageError,
+    refreshGlobalDashboards,
+    saveGlobalDashboard,
+    loadGlobalDashboard,
   } = usePages();
 
   const {
@@ -286,7 +292,7 @@ function AppContent({ showOnboarding, setShowOnboarding }) {
     icon: pageDefaults[id]?.icon || LayoutGrid
   }));
 
-  const getCardSettingsKey = (cardId, pageId = activePage) => `${pageId}::${cardId}`;
+  const getCardSettingsKey = useCallback((cardId, pageId = activePage) => `${pageId}::${cardId}`, [activePage]);
 
   const cardUtilCtx = { getCardSettingsKey, cardSettings, entities, activePage };
   const isCardRemovable = (cardId, pageId = activePage) => _isCardRemovable(cardId, pageId, cardUtilCtx);
@@ -318,7 +324,7 @@ function AppContent({ showOnboarding, setShowOnboarding }) {
     setShowAddCardModal, setShowEditCardModal, setEditCardSettingsKey, t,
   });
 
-  const getCardGridSpan = (cardId) => _getCardGridSpan(cardId, getCardSettingsKey, cardSettings, activePage);
+  const getCardGridSize = useCallback((cardId) => _getCardGridSize(cardId, getCardSettingsKey, cardSettings, activePage, gridColCount), [getCardSettingsKey, cardSettings, activePage, gridColCount]);
 
   const moveCardInArray = useCallback((cardId, direction) => {
     const newConfig = { ...pagesConfig };
@@ -337,9 +343,10 @@ function AppContent({ showOnboarding, setShowOnboarding }) {
 
   const gridLayout = useMemo(() => {
     const ids = pagesConfig[activePage] || [];
-    const visibleIds = editMode ? ids : ids.filter(id => !(hiddenCards.includes(id) || isCardHiddenByLogic(id)));
-    return _buildGridLayout(visibleIds, gridColCount, getCardGridSpan);
-  }, [pagesConfig, activePage, gridColCount, cardSettings, hiddenCards, editMode, entities]);
+    const hiddenCtx = { getCardSettingsKey, cardSettings, entities, activePage };
+    const visibleIds = editMode ? ids : ids.filter(id => !(hiddenCards.includes(id) || _isCardHiddenByLogic(id, hiddenCtx)));
+    return _buildGridLayout(visibleIds, gridColCount, getCardGridSize);
+  }, [pagesConfig, activePage, gridColCount, hiddenCards, editMode, getCardGridSize, getCardSettingsKey, cardSettings, entities]);
 
   const dragAndDrop = createDragAndDropHandlers({
     editMode,
@@ -400,6 +407,22 @@ function AppContent({ showOnboarding, setShowOnboarding }) {
           onEdit={() => { setShowEditCardModal(editId); setEditCardSettingsKey(settingsKey); }}
           onToggleVisibility={() => toggleCardVisibility(cardId)}
           onSaveSize={(size) => saveCardSetting(settingsKey, 'size', size)}
+          onIncreaseGridSize={() => {
+            const current = getCardGridSize(cardId);
+            saveCardSetting(settingsKey, 'gridColSpan', Math.min(gridColCount, current.colSpan + 1));
+            saveCardSetting(settingsKey, 'gridRowSpan', Math.min(8, current.rowSpan + 1));
+          }}
+          onDecreaseGridSize={() => {
+            const current = getCardGridSize(cardId);
+            saveCardSetting(settingsKey, 'gridColSpan', Math.max(1, current.colSpan - 1));
+            saveCardSetting(settingsKey, 'gridRowSpan', Math.max(1, current.rowSpan - 1));
+          }}
+          onAdjustGridSize={(deltaCol, deltaRow) => {
+            if (!deltaCol && !deltaRow) return;
+            const current = getCardGridSize(cardId);
+            saveCardSetting(settingsKey, 'gridColSpan', Math.max(1, Math.min(gridColCount, current.colSpan + deltaCol)));
+            saveCardSetting(settingsKey, 'gridRowSpan', Math.max(1, Math.min(8, current.rowSpan + deltaRow)));
+          }}
           onRemove={() => removeCard(cardId)}
           dragHandleProps={{
             onContextMenu: (e) => e.preventDefault(),
@@ -678,14 +701,16 @@ function AppContent({ showOnboarding, setShowOnboarding }) {
               .map(({ id }, _sortedIndex) => {
               const index = (pagesConfig[activePage] || []).indexOf(id);
               const placement = gridLayout[id];
-              const isCalendarCard = id.startsWith('calendar_card_');
-              const isTodoCard = id.startsWith('todo_card_');
-              const isLargeCard = isCalendarCard || isTodoCard;
-              const sizeSetting = isLargeCard ? (cardSettings[getCardSettingsKey(id)]?.size || cardSettings[id]?.size) : null;
-              const forcedSpan = isLargeCard
-                ? (sizeSetting === 'small' ? 1 : (sizeSetting === 'medium' ? 2 : 4))
-                : placement?.span;
               const settingsKey = getCardSettingsKey(id);
+              const settings = cardSettings[settingsKey] || cardSettings[id] || {};
+              const defaultLegacyRowSpan = placement?.rowSpan || 1;
+              const defaultLegacyColSpan = placement?.colSpan || 1;
+              const rowSpan = Number.isFinite(Number(settings.gridRowSpan))
+                ? Math.max(1, Math.round(Number(settings.gridRowSpan)))
+                : defaultLegacyRowSpan;
+              const colSpan = Number.isFinite(Number(settings.gridColSpan))
+                ? Math.max(1, Math.min(gridColCount, Math.round(Number(settings.gridColSpan))))
+                : defaultLegacyColSpan;
               const heading = cardSettings[settingsKey]?.heading;
 
               if (!editMode && (hiddenCards.includes(id) || isCardHiddenByLogic(id))) return null;
@@ -700,8 +725,8 @@ function AppContent({ showOnboarding, setShowOnboarding }) {
                   style={{
                     gridRowStart: placement.row,
                     gridColumnStart: placement.col,
-                    gridRowEnd: `span ${forcedSpan}`,
-                    minHeight: isLargeCard && sizeSetting !== 'small' && sizeSetting !== 'medium' ? `${(4 * 100) + (3 * (isMobile ? 12 : gridGapV))}px` : undefined
+                    gridColumnEnd: `span ${colSpan}`,
+                    gridRowEnd: `span ${rowSpan}`
                   }}
                 >
                   {heading && (
@@ -794,6 +819,12 @@ function AppContent({ showOnboarding, setShowOnboarding }) {
             hiddenCards, toggleCardVisibility,
             getCardSettingsKey,
             statusPillsConfig, saveStatusPillsConfig,
+            globalDashboardProfiles,
+            globalStorageBusy,
+            globalStorageError,
+            refreshGlobalDashboards,
+            saveGlobalDashboard,
+            loadGlobalDashboard,
           }}
           mediaTick={mediaTick}
         />
