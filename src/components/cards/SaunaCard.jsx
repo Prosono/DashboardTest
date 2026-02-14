@@ -28,6 +28,7 @@ export default function SaunaCard({
   const thermostatEntity = settings?.thermostatEntityId ? entities?.[settings.thermostatEntityId] : null;
   const motionEntity = settings?.motionEntityId ? entities?.[settings.motionEntityId] : null;
   const flameEntity = settings?.flameEntityId ? entities?.[settings.flameEntityId] : null;
+  const manualModeEntity = settings?.manualModeEntityId ? entities?.[settings.manualModeEntityId] : null;
 
   const lightIds = useMemo(() => asArray(settings?.lightEntityIds), [settings?.lightEntityIds]);
   const lockIds = useMemo(() => asArray(settings?.lockEntityIds), [settings?.lockEntityIds]);
@@ -37,43 +38,46 @@ export default function SaunaCard({
   const thermostatOn = isOnish(thermostatEntity?.state);
   const motionOn = isOnish(motionEntity?.state);
   const flameOn = isOnish(flameEntity?.state);
+  const manualModeOn = isOnish(manualModeEntity?.state);
 
   const lightsOn = countOn(lightIds, entities);
   const unlockedDoors = lockIds.filter((id) => String(entities?.[id]?.state || '').toLowerCase() === 'unlocked').length;
   const openDoors = countOn(doorIds, entities);
 
+  const iconFor = (customIcon, fallback) => customIcon ? (getIconComponent(customIcon) || fallback) : fallback;
+
   const statItems = [
     settings?.showThermostat !== false && {
       key: 'thermostat',
-      icon: Shield,
+      icon: iconFor(settings?.thermostatIcon, Shield),
       label: thermostatOn ? (t('common.on') || 'On') : (t('common.off') || 'Off'),
       value: t('sauna.thermostat') || 'Thermostat',
       active: thermostatOn,
     },
     settings?.showMotion !== false && {
       key: 'motion',
-      icon: Activity,
+      icon: iconFor(settings?.motionIcon, Activity),
       label: motionOn ? (t('binary.occupancy.occupied') || 'Motion') : (t('common.off') || 'No motion'),
       value: t('sauna.motion') || 'Motion',
       active: motionOn,
     },
     settings?.showLights !== false && {
       key: 'lights',
-      icon: Lightbulb,
+      icon: iconFor(settings?.lightsIcon, Lightbulb),
       label: `${lightsOn}/${lightIds.length || 0}`,
       value: t('sauna.lights') || 'Lights',
       active: lightsOn > 0,
     },
     settings?.showLocks !== false && {
       key: 'locks',
-      icon: Lock,
+      icon: iconFor(settings?.locksIcon, Lock),
       label: `${unlockedDoors}`,
       value: t('sauna.unlocked') || 'Unlocked',
       active: unlockedDoors > 0,
     },
     settings?.showDoors !== false && {
       key: 'doors',
-      icon: DoorOpen,
+      icon: iconFor(settings?.doorsIcon, DoorOpen),
       label: `${openDoors}`,
       value: t('sauna.doorsOpen') || 'Doors open',
       active: openDoors > 0,
@@ -100,11 +104,18 @@ export default function SaunaCard({
               <h3 className="text-lg font-bold text-[var(--text-primary)] truncate">{saunaName}</h3>
             </div>
           </div>
-          {settings?.showFlame !== false && settings?.flameEntityId && (
-            <div className={`px-2.5 py-1 rounded-full text-[10px] uppercase tracking-widest font-bold border ${flameOn ? 'bg-orange-500/20 text-orange-300 border-orange-400/30' : 'bg-[var(--glass-bg-hover)] text-[var(--text-secondary)] border-[var(--glass-border)]'}`}>
-              {flameOn ? (t('sauna.heating') || 'Heating') : (t('sauna.idle') || 'Idle')}
-            </div>
-          )}
+          <div className="flex flex-col items-end gap-1.5">
+            {settings?.showManualMode !== false && settings?.manualModeEntityId && (
+              <div className={`px-2.5 py-1 rounded-full text-[10px] uppercase tracking-widest font-bold border ${manualModeOn ? 'bg-blue-500/20 text-blue-300 border-blue-400/30' : 'bg-emerald-500/15 text-emerald-300 border-emerald-400/20'}`}>
+                {manualModeOn ? (t('sauna.manual') || 'Manual mode') : (t('sauna.auto') || 'Auto mode')}
+              </div>
+            )}
+            {settings?.showFlame !== false && settings?.flameEntityId && (
+              <div className={`px-2.5 py-1 rounded-full text-[10px] uppercase tracking-widest font-bold border ${flameOn ? 'bg-orange-500/20 text-orange-300 border-orange-400/30' : 'bg-[var(--glass-bg-hover)] text-[var(--text-secondary)] border-[var(--glass-border)]'}`}>
+                {flameOn ? (t('sauna.heating') || 'Heating') : (t('sauna.idle') || 'Idle')}
+              </div>
+            )}
+          </div>
         </div>
 
         <div className="mt-3 flex items-end justify-between gap-4">

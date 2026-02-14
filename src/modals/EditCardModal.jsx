@@ -896,6 +896,7 @@ export default function EditCardModal({
             const allEntityIds = Object.keys(entities || {});
             const saunaToggleOptions = [
               { key: 'showFlame', label: t('sauna.showFlame') || 'Show flame' },
+              { key: 'showManualMode', label: t('sauna.showManualMode') || 'Show manual/auto mode' },
               { key: 'showThermostat', label: t('sauna.showThermostat') || 'Show thermostat' },
               { key: 'showMotion', label: t('sauna.showMotion') || 'Show motion' },
               { key: 'showLights', label: t('sauna.showLights') || 'Show lights' },
@@ -916,6 +917,11 @@ export default function EditCardModal({
                 key: 'targetTempEntityId',
                 label: t('sauna.targetTempSensor') || 'Target temperature sensor',
                 filter: (id) => id.startsWith('sensor.') || id.startsWith('input_number.'),
+              },
+              {
+                key: 'manualModeEntityId',
+                label: t('sauna.manualModeEntity') || 'Manual mode boolean',
+                filter: (id) => id.startsWith('input_boolean.') || id.startsWith('switch.'),
               },
               {
                 key: 'thermostatEntityId',
@@ -1024,6 +1030,30 @@ export default function EditCardModal({
                     </div>
                   );
                 })}
+
+                <div className="space-y-2">
+                  <label className="text-xs uppercase font-bold text-gray-500 ml-1">{t('sauna.statIcons') || 'Status icons'}</label>
+                  <div className="grid grid-cols-2 gap-3">
+                    {[
+                      { key: 'thermostatIcon', label: t('sauna.thermostat') || 'Thermostat' },
+                      { key: 'motionIcon', label: t('sauna.motion') || 'Motion' },
+                      { key: 'lightsIcon', label: t('sauna.lights') || 'Lights' },
+                      { key: 'locksIcon', label: t('sauna.unlocked') || 'Locks' },
+                      { key: 'doorsIcon', label: t('sauna.doorsOpen') || 'Doors' },
+                    ].map((opt) => (
+                      <div key={opt.key} className="space-y-1">
+                        <span className="text-[10px] uppercase tracking-wider text-[var(--text-secondary)]">{opt.label}</span>
+                        <IconPicker
+                          value={editSettings[opt.key] || null}
+                          onSelect={(iconName) => saveCardSetting(editSettingsKey, opt.key, iconName)}
+                          onClear={() => saveCardSetting(editSettingsKey, opt.key, null)}
+                          t={t}
+                          maxHeightClass="max-h-36"
+                        />
+                      </div>
+                    ))}
+                  </div>
+                </div>
               </div>
             );
           })()}
