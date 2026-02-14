@@ -16,6 +16,7 @@ const MODAL_DEFAULTS = {
   showRoomModal: null,
   showCoverModal: null,
   showWeatherModal: null,
+  activeSaunaFieldModal: null,
   activeMediaModal: null,
   activeMediaGroupKey: null,
   activeMediaGroupIds: null,
@@ -36,7 +37,7 @@ const OPEN_CHECK_KEYS = [
   'showAddCardModal', 'showConfigModal', 'showEditCardModal',
   'showSensorInfoModal', 'activeMediaModal', 'showStatusPillsConfig',
   'showPersonModal', 'showCalendarModal', 'showTodoModal',
-  'showRoomModal', 'showWeatherModal', 'showCoverModal',
+  'showRoomModal', 'showWeatherModal', 'showCoverModal', 'activeSaunaFieldModal',
 ];
 
 function modalReducer(state, action) {
