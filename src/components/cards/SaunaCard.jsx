@@ -58,10 +58,23 @@ function extractHistorySeries(raw) {
   const arr = Array.isArray(raw?.[0]) ? raw[0] : raw;
   if (!Array.isArray(arr)) return [];
   return arr
-    .map((entry) => ({
-      t: Date.parse(entry?.last_updated || entry?.start || entry?.last_changed || ''),
-      v: Number(entry?.state ?? entry?.mean),
-    }))
+    .map((entry) => {
+      const tRaw = entry?.last_updated
+        || entry?.last_changed
+        || entry?.last_reported
+        || entry?.start
+        || entry?.end
+        || entry?.timestamp
+        || entry?.lu
+        || entry?.lc
+        || entry?.lr
+        || '';
+      const vRaw = entry?.state ?? entry?.s ?? entry?.mean ?? entry?.value;
+      return {
+        t: Date.parse(String(tRaw)),
+        v: Number(vRaw),
+      };
+    })
     .filter((p) => Number.isFinite(p.t) && Number.isFinite(p.v));
 }
 
