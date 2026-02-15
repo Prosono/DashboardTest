@@ -286,7 +286,8 @@ export default function SaunaCard({
   const bookingLine = (() => {
     const hasAny =
       settings?.nextBookingInMinutesEntityId ||
-      settings?.serviceEntityId;
+      settings?.serviceEntityId ||
+      settings?.preheatWindowEntityId;
 
     if (!hasAny || settings?.showBookingOverview === false) return null;
 
