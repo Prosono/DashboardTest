@@ -1,5 +1,5 @@
 import React, { useMemo } from 'react';
-import { Flame, Thermometer, Lock, DoorOpen, Activity, Lightbulb, Shield, Fan, Hash, ToggleRight } from '../../icons';
+import { Flame, Thermometer, Lock, DoorOpen, Activity, Lightbulb, Shield, Fan, Hash, ToggleRight, Wrench, Power } from '../../icons';
 import { getIconComponent } from '../../icons';
 
 const asArray = (v) => (Array.isArray(v) ? v.filter(Boolean) : []);
@@ -58,19 +58,35 @@ function extractHistorySeries(raw) {
   const arr = Array.isArray(raw?.[0]) ? raw[0] : raw;
   if (!Array.isArray(arr)) return [];
   return arr
-    .map((entry) => ({
-      t: Date.parse(entry?.last_updated || entry?.start || entry?.last_changed || ''),
-      v: Number(entry?.state ?? entry?.mean),
-    }))
+    .map((entry) => {
+      const tRaw = entry?.last_updated
+        || entry?.last_changed
+        || entry?.last_reported
+        || entry?.start
+        || entry?.end
+        || entry?.timestamp
+        || entry?.lu
+        || entry?.lc
+        || entry?.lr
+        || '';
+      const vRaw = entry?.state ?? entry?.s ?? entry?.mean ?? entry?.value;
+      return {
+        t: Date.parse(String(tRaw)),
+        v: Number(vRaw),
+      };
+    })
     .filter((p) => Number.isFinite(p.t) && Number.isFinite(p.v));
 }
 
 function buildPath(series, width, height) {
   if (!series.length) return '';
-  const min = Math.min(...series.map((s) => s.v));
-  const max = Math.max(...series.map((s) => s.v));
+  const normalized = series.length === 1
+    ? [series[0], { ...series[0], t: series[0].t + 1 }]
+    : series;
+  const min = Math.min(...normalized.map((s) => s.v));
+  const max = Math.max(...normalized.map((s) => s.v));
   const range = max - min || 1;
-  return series
+  return normalized
     .map((p, i) => {
       const x = (i / Math.max(1, series.length - 1)) * width;
       const y = height - ((p.v - min) / range) * height;
@@ -142,8 +158,6 @@ export default function SaunaCard({
   const activeThermostats = countOn(thermostatIds, entities);
   const autoLockOn = isOn(autoLockEntity?.state);
 
-  const hasSafetyAlert = saunaIsActive && (openDoors > 0 || unlockedDoors > 0);
-
   const inUseTempC = Number.isFinite(Number(settings?.inUseTempC)) ? Number(settings.inUseTempC) : 45;
   const warmTempC = Number.isFinite(Number(settings?.warmTempC)) ? Number(settings.warmTempC) : 35;
   const isInUseByTemp = tempIsValid && currentTemp >= inUseTempC;
@@ -151,6 +165,7 @@ export default function SaunaCard({
 
   const serviceState = serviceEntity?.state ?? '';
   const serviceYes = serviceState === 'Ja';
+  const serviceNo = serviceState === 'Nei';
   const nextMinutes = toNum(nextBookingEntity?.state);
   const hasNext = nextMinutes != null && nextMinutes >= 0;
   const preheatOn = isOn(preheatWindowEntity?.state);
@@ -163,6 +178,7 @@ export default function SaunaCard({
     return extractHistorySeries(raw).slice(-40);
   }, [settings?.tempEntityId, tempHistoryById]);
   const tempPath = useMemo(() => buildPath(tempSeries, 100, 28), [tempSeries]);
+  const statusGraphId = useMemo(() => `saunaStatusGraph-${String(cardId || 'card').replace(/[^a-zA-Z0-9_-]/g, '')}`, [cardId]);
 
   const preheatSeries = useMemo(() => {
     if (!settings?.preheatMinutesEntityId) return [];
@@ -191,18 +207,11 @@ export default function SaunaCard({
   };
 
   const modePill = {
-    label: autoModeOn ? tr('sauna.autoMode', 'Auto modus') : tr('sauna.manualMode', 'Manuell modus'),
+    label: autoModeOn ? tr('sauna.autoMode', 'Auto') : tr('sauna.manualMode', 'Manuell'),
     cls: autoModeOn ? 'bg-emerald-500/16 border-emerald-400/22 text-emerald-200' : 'bg-orange-500/18 border-orange-400/25 text-orange-200',
   };
 
   const primaryState = (() => {
-    if (hasSafetyAlert) {
-      const desc = unlockedDoors > 0
-        ? `${unlockedDoors} ${unlockedDoors === 1 ? tr('sauna.unlockedShort', 'ulåst') : tr('sauna.unlockedShortPlural', 'ulåste')}`
-        : `${openDoors} ${openDoors === 1 ? tr('sauna.openShort', 'åpen') : tr('sauna.openShortPlural', 'åpne')}`;
-      return { label: tr('sauna.attention', 'OBS'), desc: `${tr('sauna.safety', 'Sikkerhet')}: ${desc}`, tone: 'danger' };
-    }
-    if (flameOn) return { label: tr('sauna.heating', 'Varmer'), desc: tr('sauna.heatingUp', 'Varmer opp'), tone: 'hot' };
     if (saunaIsActive && serviceYes) return { label: tr('sauna.service', 'Service'), desc: tr('sauna.serviceOngoing', 'Pågår nå'), tone: 'warn' };
     if (saunaIsActive) return { label: tr('sauna.active', 'Aktiv'), desc: tr('sauna.bookingNow', 'Pågående økt'), tone: 'ok' };
     if (preheatOn) return { label: tr('sauna.preheat', 'Forvarmer'), desc: hasNext ? `${tr('sauna.next', 'Neste')}: ${Math.round(nextMinutes)}m` : tr('sauna.beforeBooking', 'Før booking'), tone: 'warm' };
@@ -215,7 +224,7 @@ export default function SaunaCard({
   const tone = ({
     hot: { pill: 'bg-orange-500/18 border-orange-400/25 text-orange-200', icon: 'text-orange-300' },
     warm: { pill: 'bg-amber-500/14 border-amber-400/20 text-amber-200', icon: 'text-amber-300' },
-    ok: { pill: 'bg-emerald-500/14 border-emerald-400/20 text-emerald-200', icon: 'text-emerald-300' },
+    ok: { pill: 'bg-emerald-500/20 border-emerald-500/40 text-emerald-700 dark:text-emerald-200', icon: 'text-emerald-600 dark:text-emerald-300' },
     info: { pill: 'bg-blue-500/14 border-blue-400/20 text-blue-200', icon: 'text-blue-300' },
     warn: { pill: 'bg-orange-500/14 border-orange-400/20 text-orange-200', icon: 'text-orange-300' },
     danger: { pill: 'bg-rose-500/14 border-rose-400/20 text-rose-200', icon: 'text-rose-300' },
@@ -224,28 +233,25 @@ export default function SaunaCard({
 
   const bookingLine = (() => {
     const hasAny =
-      settings?.saunaActiveBooleanEntityId ||
       settings?.nextBookingInMinutesEntityId ||
       settings?.serviceEntityId;
 
     if (!hasAny || settings?.showBookingOverview === false) return null;
 
     const next = Number.isFinite(nextMinutes) ? Math.round(nextMinutes) : -1;
-    const tempTxt = tempIsValid ? `${Math.round(currentTemp)} °C` : '-- °C';
 
-    let baseLine = '';
-    if (saunaIsActive) {
-      baseLine = `${tr('sauna.activeNow', 'Aktiv nå')} • ${tempTxt} • ${peopleNow} ${tr('sauna.people', 'personer')}`;
-    } else {
-      const nextTxt = next === -1
-        ? tr('sauna.noUpcomingBookingsToday', 'Ingen kommende bookinger i dag')
-        : `${tr('sauna.nextBookingIn', 'Neste booking om')} ${next} min`;
-      baseLine = `${tr('sauna.notActive', 'Ikke aktiv')} • ${nextTxt}`;
-    }
+    if (serviceYes) return tr('sauna.service', 'Service');
+    if (serviceNo) return tr('sauna.normalBooking', 'Vanlig booking');
+    if (next >= 0) return `${tr('sauna.nextBookingIn', 'Neste booking om')} ${next} min`;
+    return tr('sauna.noUpcomingBookingsToday', 'Ingen kommende bookinger i dag');
+  })();
 
-    if (serviceYes) return `${baseLine} • ${tr('sauna.serviceOngoing', 'Service pågår')}`;
-    if (serviceNo) return `${baseLine} • ${tr('sauna.normalBooking', 'Vanlig booking')}`;
-    return baseLine;
+  const statusVisual = (() => {
+    const next = Number.isFinite(nextMinutes) ? Math.round(nextMinutes) : -1;
+    if (saunaIsActive && serviceYes) return { icon: Wrench, color: preheatOn ? 'text-orange-300' : 'text-emerald-300' };
+    if (saunaIsActive) return { icon: SaunaIcon, color: 'text-emerald-300' };
+    if (preheatOn) return { icon: Flame, color: 'text-orange-300' };
+    return { icon: Power, color: next === -1 ? 'text-[var(--text-muted)]' : 'text-violet-300' };
   })();
 
   const iconFor = (customIcon, fallback) => (customIcon ? (getIconComponent(customIcon) || fallback) : fallback);
@@ -285,9 +291,9 @@ export default function SaunaCard({
               type="button"
               key={item.key}
               onClick={clickable ? item.onClick : undefined}
-              className={cx('rounded-2xl px-3 py-3 border flex items-center gap-2 text-left transition', clickable ? 'active:scale-[0.99] cursor-pointer' : 'cursor-default', item.active ? 'bg-emerald-500/10 border-emerald-500/20' : 'bg-[var(--glass-bg-hover)] border-[var(--glass-border)]')}
+              className={cx('rounded-2xl px-3 py-3 border flex items-center gap-2 text-left transition', clickable ? 'active:scale-[0.99] cursor-pointer' : 'cursor-default', item.active ? 'bg-emerald-500/18 border-emerald-500/35' : 'bg-[var(--glass-bg-hover)] border-[var(--glass-border)]')}
             >
-              <Icon className={cx('w-4 h-4', item.active ? 'text-emerald-300' : 'text-[var(--text-secondary)]')} />
+              <Icon className={cx('w-4 h-4', item.active ? 'text-emerald-600 dark:text-emerald-300' : 'text-[var(--text-secondary)]')} />
               <div className="min-w-0">
                 <div className="text-[10px] uppercase tracking-widest font-extrabold text-[var(--text-secondary)] truncate">{item.title}</div>
                 <div className="text-sm font-extrabold text-[var(--text-primary)] truncate">{item.value}</div>
@@ -303,31 +309,35 @@ export default function SaunaCard({
     <div
       {...dragProps}
       data-haptic={editMode ? undefined : 'card'}
-      className={cx('touch-feedback relative p-5 rounded-[2.5rem] transition-all duration-300 overflow-visible font-sans h-full', 'border border-[var(--glass-border)] bg-[var(--glass-bg)]', !editMode ? 'cursor-pointer active:scale-[0.98]' : 'cursor-move')}
+      className={cx('touch-feedback relative p-5 rounded-[2.5rem] transition-all duration-300 overflow-hidden font-sans h-full', 'border border-[var(--glass-border)] bg-[var(--glass-bg)]', !editMode ? 'cursor-pointer active:scale-[0.98]' : 'cursor-move')}
       style={cardStyle}
     >
       {controls}
 
-      <div className="relative z-10 h-full flex flex-col">
+      <div className="relative z-10 h-full min-h-0 flex flex-col overflow-y-auto custom-scrollbar pr-1">
         <div className="grid grid-cols-3 items-start gap-4">
           <div className="flex items-center gap-3 min-w-0">
             <div className="w-12 h-12 rounded-full flex items-center justify-center border bg-[var(--glass-bg-hover)] border-[var(--glass-border)]">
               {flameOn ? <FlameAnimated className="w-6 h-6" /> : <SaunaIcon className={cx('w-6 h-6', tone.icon)} />}
             </div>
             <div className="min-w-0">
-              <p className="text-xs uppercase tracking-widest text-[var(--text-secondary)] font-bold">{tr('sauna.operator', 'Badstue')}</p>
               <h3 className="text-lg font-bold text-[var(--text-primary)] truncate">{saunaName}</h3>
+
             </div>
           </div>
 
           <div className="flex justify-center">
-            <div className="relative w-48 h-48">
+            <div className="relative w-40 h-40">
               {settings?.peopleNowEntityId && (
-                <div className="absolute -top-5 left-1/2 -translate-x-1/2 min-w-[2.7rem] h-11 px-3 rounded-full border border-emerald-400/25 bg-emerald-500/20 text-emerald-100 flex items-center justify-center text-3xl font-extrabold z-20 shadow-lg shadow-emerald-900/30 pointer-events-none">
+                <button
+                  type="button"
+                  onClick={() => openFieldModal(tr('sauna.peopleNow', 'Antall folk nå'), [settings?.peopleNowEntityId])}
+                  className="absolute top-0 left-1/2 -translate-x-1/2 min-w-[2.7rem] h-10 px-3 rounded-full border border-emerald-400/25 bg-emerald-500/20 text-emerald-100 flex items-center justify-center text-2xl font-extrabold z-20 shadow-lg shadow-emerald-900/30"
+                >
                   {peopleNow}
-                </div>
+                </button>
               )}
-              <div className="relative w-48 h-48 rounded-full overflow-hidden border border-[var(--glass-border)] bg-[var(--glass-bg-hover)] shadow-[0_16px_45px_rgba(0,0,0,0.45)]">
+              <div className="relative w-40 h-40 rounded-full overflow-hidden border border-[var(--glass-border)] bg-[var(--glass-bg-hover)] shadow-[0_16px_45px_rgba(0,0,0,0.45)]">
                 {imageUrl ? <img src={imageUrl} alt={saunaName} className="w-full h-full object-cover" draggable={false} /> : <div className="w-full h-full bg-gradient-to-br from-white/10 to-black/20" />}
                 <div className="absolute inset-0 rounded-full ring-1 ring-white/10" />
                 {flameOn && (
@@ -354,27 +364,55 @@ export default function SaunaCard({
               </button>
             )}
 
-            {!flameOn && (
-              <>
-                <div className={cx('px-4 py-2 rounded-full text-[12px] uppercase tracking-widest font-extrabold border', tone.pill)}>
-                  <span className={cx('inline-block w-2 h-2 rounded-full mr-2 align-middle', primaryState.tone === 'muted' ? 'bg-[var(--text-secondary)]/50' : 'bg-current')} />
-                  <span className="align-middle">{primaryState.label}</span>
-                </div>
-                <div className="text-[12px] text-[var(--text-secondary)] font-medium text-right">{primaryState.desc}</div>
-              </>
-            )}
+            <>
+              <div className={cx('px-4 py-2 rounded-full text-[12px] uppercase tracking-widest font-extrabold border', tone.pill)}>
+                <span className={cx('inline-block w-2 h-2 rounded-full mr-2 align-middle', primaryState.tone === 'muted' ? 'bg-[var(--text-secondary)]/50' : 'bg-current')} />
+                <span className="align-middle">{primaryState.label}</span>
+              </div>
+              <div className="text-[12px] text-[var(--text-secondary)] font-normal text-right">{primaryState.desc}</div>
+            </>
           </div>
         </div>
 
+        {(bookingLine || preheatOn) && (() => {
+          const BookingIcon = statusVisual.icon;
+          return (
+            <div className="mt-8 relative min-h-[5.5rem] flex items-center justify-center">
+              {tempPath && (
+                <svg className="absolute inset-x-0 top-0 w-full h-[5.5rem] opacity-100 pointer-events-none" viewBox="0 0 100 28" preserveAspectRatio="none">
+                  <defs>
+                    <linearGradient id={`${statusGraphId}-stroke`} x1="0" y1="0" x2="1" y2="0">
+                      <stop offset="0%" stopColor="rgba(250,204,21,0.95)" />
+                      <stop offset="55%" stopColor="rgba(251,146,60,0.92)" />
+                      <stop offset="100%" stopColor="rgba(239,68,68,0.95)" />
+                    </linearGradient>
+                    <linearGradient id={`${statusGraphId}-area`} x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stopColor="rgba(249,115,22,0.28)" />
+                      <stop offset="100%" stopColor="rgba(249,115,22,0.00)" />
+                    </linearGradient>
+                  </defs>
+                  <path d={`${tempPath} L100,28 L0,28 Z`} fill={`url(#${statusGraphId}-area)`} />
+                  <path d={tempPath} fill="none" stroke={`url(#${statusGraphId}-stroke)`} strokeWidth="2.8" strokeLinecap="round" />
+                </svg>
+              )}
+              <div className="relative z-10 flex items-center justify-center gap-2 min-w-0 text-center">
+                <BookingIcon className={cx('w-4 h-4 shrink-0', statusVisual.color)} />
+                <p className="text-sm font-normal text-[var(--text-primary)] truncate">{bookingLine || tr('sauna.preheat', 'Forvarmer')}</p>
+              </div>
+            </div>
+          );
+        })()}
+
 
         <div className="mt-4 grid grid-cols-3 gap-4 items-end">
-          <div className="col-span-2 rounded-2xl px-3 py-3 border bg-[var(--glass-bg-hover)] border-[var(--glass-border)] relative overflow-hidden">
+          <div className="col-span-2 px-3 py-3 relative overflow-hidden">
             {tempPath && (
               <svg className="absolute left-3 right-3 top-2 w-[calc(100%-1.5rem)] h-10 opacity-90 pointer-events-none" viewBox="0 0 100 28" preserveAspectRatio="none">
                 <path d={tempPath} fill="none" stroke="rgba(239,68,68,0.95)" strokeWidth="2.3" strokeLinecap="round" />
               </svg>
             )}
-            <div className="mt-7 flex items-end gap-2 relative">
+            <div className="mt-2 text-[10px] uppercase tracking-widest font-bold text-[var(--text-secondary)]">{tr('sauna.currentTempNow', 'Temp i badstuen nå')}</div>
+            <div className="mt-4 flex items-end gap-2 relative">
               <Thermometer className="w-4 h-4 text-[var(--text-secondary)] mb-1" />
               <span className="text-5xl font-semibold leading-none tabular-nums text-[var(--text-primary)]">{tempIsValid ? currentTemp.toFixed(1) : '--'}</span>
               <span className="text-2xl text-[var(--text-secondary)] mb-1">°C</span>
@@ -384,7 +422,7 @@ export default function SaunaCard({
           <button
             type="button"
             onClick={() => openFieldModal(tr('sauna.preheatTime', 'Oppvarmingstid'), [settings?.preheatMinutesEntityId])}
-            className="col-span-1 text-right rounded-2xl px-3 py-3 border bg-[var(--glass-bg-hover)] border-[var(--glass-border)] relative overflow-hidden"
+            className="col-span-1 text-right px-3 py-3 relative overflow-hidden"
           >
             {preheatPath && (
               <svg className="absolute left-3 right-3 top-2 w-[calc(100%-1.5rem)] h-9 opacity-90 pointer-events-none" viewBox="0 0 100 24" preserveAspectRatio="none">
@@ -434,17 +472,6 @@ export default function SaunaCard({
           {renderStatSection(tr('sauna.controls', 'Styring'), controlStats)}
           {renderStatSection(tr('sauna.safetyStatus', 'Sikkerhet og status'), safetyStats)}
         </div>
-
-        {hasSafetyAlert && (
-          <div className="mt-4 rounded-2xl px-3 py-2 border bg-rose-500/10 border-rose-400/20">
-            <div className="text-[10px] uppercase tracking-widest font-extrabold text-[var(--text-secondary)]">{tr('sauna.safety', 'Sikkerhet')}</div>
-            <div className="text-sm font-extrabold text-[var(--text-primary)] truncate">
-              {unlockedDoors > 0
-                ? `${unlockedDoors} ${unlockedDoors === 1 ? tr('sauna.unlockedShort', 'ulåst') : tr('sauna.unlockedShortPlural', 'ulåste')}`
-                : `${openDoors} ${openDoors === 1 ? tr('sauna.openShort', 'åpen') : tr('sauna.openShortPlural', 'åpne')}`}
-            </div>
-          </div>
-        )}
 
         {settings?.showThresholdHint && (
           <div className="mt-3 text-[11px] text-[var(--text-secondary)]">
