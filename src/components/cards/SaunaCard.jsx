@@ -162,6 +162,7 @@ export default function SaunaCard({
     return extractHistorySeries(raw).slice(-40);
   }, [settings?.tempEntityId, tempHistoryById]);
   const tempPath = useMemo(() => buildPath(tempSeries, 100, 28), [tempSeries]);
+  const statusGraphId = useMemo(() => `saunaStatusGraph-${String(cardId || 'card').replace(/[^a-zA-Z0-9_-]/g, '')}`, [cardId]);
 
   const preheatSeries = useMemo(() => {
     if (!settings?.preheatMinutesEntityId) return [];
@@ -361,9 +362,28 @@ export default function SaunaCard({
         {(bookingLine || preheatOn) && (() => {
           const BookingIcon = statusVisual.icon;
           return (
-            <div className="mt-8 flex items-center justify-center gap-2 min-w-0 text-center">
-              <BookingIcon className={cx('w-4 h-4 shrink-0', statusVisual.color)} />
-              <p className="text-sm text-[var(--text-primary)] truncate">{bookingLine || tr('sauna.preheat', 'Forvarmer')}</p>
+            <div className="mt-8 relative min-h-[4.5rem] flex items-center justify-center">
+              {tempPath && (
+                <svg className="absolute inset-x-0 top-0 w-full h-[4.5rem] opacity-95 pointer-events-none" viewBox="0 0 100 28" preserveAspectRatio="none">
+                  <defs>
+                    <linearGradient id={`${statusGraphId}-stroke`} x1="0" y1="0" x2="1" y2="0">
+                      <stop offset="0%" stopColor="rgba(250,204,21,0.95)" />
+                      <stop offset="55%" stopColor="rgba(251,146,60,0.92)" />
+                      <stop offset="100%" stopColor="rgba(239,68,68,0.95)" />
+                    </linearGradient>
+                    <linearGradient id={`${statusGraphId}-area`} x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stopColor="rgba(249,115,22,0.20)" />
+                      <stop offset="100%" stopColor="rgba(249,115,22,0.02)" />
+                    </linearGradient>
+                  </defs>
+                  <path d={`${tempPath} L100,28 L0,28 Z`} fill={`url(#${statusGraphId}-area)`} />
+                  <path d={tempPath} fill="none" stroke={`url(#${statusGraphId}-stroke)`} strokeWidth="2.4" strokeLinecap="round" />
+                </svg>
+              )}
+              <div className="relative z-10 flex items-center justify-center gap-2 min-w-0 text-center">
+                <BookingIcon className={cx('w-4 h-4 shrink-0', statusVisual.color)} />
+                <p className="text-sm text-[var(--text-primary)] truncate">{bookingLine || tr('sauna.preheat', 'Forvarmer')}</p>
+              </div>
             </div>
           );
         })()}
