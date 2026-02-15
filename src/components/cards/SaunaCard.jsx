@@ -142,8 +142,6 @@ export default function SaunaCard({
   const activeThermostats = countOn(thermostatIds, entities);
   const autoLockOn = isOn(autoLockEntity?.state);
 
-  const hasSafetyAlert = saunaIsActive && (openDoors > 0 || unlockedDoors > 0);
-
   const inUseTempC = Number.isFinite(Number(settings?.inUseTempC)) ? Number(settings.inUseTempC) : 45;
   const warmTempC = Number.isFinite(Number(settings?.warmTempC)) ? Number(settings.warmTempC) : 35;
   const isInUseByTemp = tempIsValid && currentTemp >= inUseTempC;
@@ -192,17 +190,11 @@ export default function SaunaCard({
   };
 
   const modePill = {
-    label: autoModeOn ? 'A' : 'M',
+    label: autoModeOn ? tr('sauna.autoMode', 'Auto') : tr('sauna.manualMode', 'Manuell'),
     cls: autoModeOn ? 'bg-emerald-500/16 border-emerald-400/22 text-emerald-200' : 'bg-orange-500/18 border-orange-400/25 text-orange-200',
   };
 
   const primaryState = (() => {
-    if (hasSafetyAlert) {
-      const desc = unlockedDoors > 0
-        ? `${unlockedDoors} ${unlockedDoors === 1 ? tr('sauna.unlockedShort', 'ulåst') : tr('sauna.unlockedShortPlural', 'ulåste')}`
-        : `${openDoors} ${openDoors === 1 ? tr('sauna.openShort', 'åpen') : tr('sauna.openShortPlural', 'åpne')}`;
-      return { label: tr('sauna.attention', 'OBS'), desc: `${tr('sauna.safety', 'Sikkerhet')}: ${desc}`, tone: 'danger' };
-    }
     if (flameOn) return { label: tr('sauna.heating', 'Varmer'), desc: tr('sauna.heatingUp', 'Varmer opp'), tone: 'hot' };
     if (saunaIsActive && serviceYes) return { label: tr('sauna.service', 'Service'), desc: tr('sauna.serviceOngoing', 'Pågår nå'), tone: 'warn' };
     if (saunaIsActive) return { label: tr('sauna.active', 'Aktiv'), desc: tr('sauna.bookingNow', 'Pågående økt'), tone: 'ok' };
@@ -384,9 +376,14 @@ export default function SaunaCard({
         {(bookingLine || preheatOn) && (() => {
           const BookingIcon = bookingVisual.icon;
           return (
-            <div className="mt-3 rounded-xl px-3 py-2 bg-[var(--glass-bg-hover)]/80 flex items-center gap-2 min-w-0">
-              <BookingIcon className={cx('w-4 h-4 shrink-0', bookingVisual.color)} />
-              <p className="text-xs text-[var(--text-secondary)] truncate">{bookingLine || tr('sauna.preheat', 'Forvarmer')}</p>
+            <div className="mt-3 rounded-2xl px-4 py-3 border border-[var(--glass-border)]/70 bg-[linear-gradient(135deg,rgba(255,255,255,0.06),rgba(255,255,255,0.02))] backdrop-blur-sm flex items-center gap-3 min-w-0">
+              <div className="w-7 h-7 rounded-full bg-[var(--glass-bg-hover)] flex items-center justify-center shrink-0">
+                <BookingIcon className={cx('w-4 h-4', bookingVisual.color)} />
+              </div>
+              <div className="min-w-0">
+                <p className="text-[10px] uppercase tracking-[0.18em] text-[var(--text-secondary)] font-bold">{tr('sauna.status', 'Status')}</p>
+                <p className="text-sm text-[var(--text-primary)] truncate">{bookingLine || tr('sauna.preheat', 'Forvarmer')}</p>
+              </div>
             </div>
           );
         })()}
@@ -459,17 +456,6 @@ export default function SaunaCard({
           {renderStatSection(tr('sauna.controls', 'Styring'), controlStats)}
           {renderStatSection(tr('sauna.safetyStatus', 'Sikkerhet og status'), safetyStats)}
         </div>
-
-        {hasSafetyAlert && (
-          <div className="mt-4 rounded-2xl px-3 py-2 border bg-rose-500/10 border-rose-400/20">
-            <div className="text-[10px] uppercase tracking-widest font-extrabold text-[var(--text-secondary)]">{tr('sauna.safety', 'Sikkerhet')}</div>
-            <div className="text-sm font-extrabold text-[var(--text-primary)] truncate">
-              {unlockedDoors > 0
-                ? `${unlockedDoors} ${unlockedDoors === 1 ? tr('sauna.unlockedShort', 'ulåst') : tr('sauna.unlockedShortPlural', 'ulåste')}`
-                : `${openDoors} ${openDoors === 1 ? tr('sauna.openShort', 'åpen') : tr('sauna.openShortPlural', 'åpne')}`}
-            </div>
-          </div>
-        )}
 
         {settings?.showThresholdHint && (
           <div className="mt-3 text-[11px] text-[var(--text-secondary)]">
