@@ -56,6 +56,24 @@ function resolveImageUrl(settings, entities) {
 function extractHistorySeries(raw) {
   if (!raw) return [];
 
+  const parseTimestamp = (value) => {
+    if (typeof value === 'number' && Number.isFinite(value)) {
+      return value > 1e12 ? value : value * 1000;
+    }
+
+    if (typeof value === 'string') {
+      const trimmed = value.trim();
+      if (!trimmed) return NaN;
+      const numeric = Number(trimmed);
+      if (Number.isFinite(numeric)) {
+        return numeric > 1e12 ? numeric : numeric * 1000;
+      }
+      return Date.parse(trimmed);
+    }
+
+    return Date.parse(String(value ?? ''));
+  };
+
   const unwrapArray = (value) => {
     if (Array.isArray(value)) return value;
     if (!value || typeof value !== 'object') return [];
@@ -91,7 +109,7 @@ function extractHistorySeries(raw) {
       const vRaw = entry?.state ?? entry?.s ?? entry?.mean ?? entry?.value ?? entry?.v;
       const numericValue = typeof vRaw === 'string' ? Number(vRaw.replace(',', '.')) : Number(vRaw);
       return {
-        t: Date.parse(String(tRaw)),
+        t: parseTimestamp(tRaw),
         v: numericValue,
       };
     })
@@ -430,11 +448,6 @@ export default function SaunaCard({
 
         <div className="mt-4 grid grid-cols-3 gap-4 items-end">
           <div className="col-span-2 px-3 py-3 relative overflow-hidden">
-            {tempPath && (
-              <svg className="absolute left-3 right-3 top-2 w-[calc(100%-1.5rem)] h-10 opacity-90 pointer-events-none" viewBox="0 0 100 28" preserveAspectRatio="none">
-                <path d={tempPath} fill="none" stroke="rgba(239,68,68,0.95)" strokeWidth="2.3" strokeLinecap="round" />
-              </svg>
-            )}
             <div className="mt-2 text-[10px] uppercase tracking-widest font-bold text-[var(--text-secondary)]">{tr('sauna.currentTempNow', 'Temp i badstuen nå')}</div>
             <div className="mt-4 flex items-end gap-2 relative">
               <Thermometer className="w-4 h-4 text-[var(--text-secondary)] mb-1" />
@@ -448,11 +461,6 @@ export default function SaunaCard({
             onClick={() => openFieldModal(tr('sauna.preheatTime', 'Oppvarmingstid'), [settings?.preheatMinutesEntityId])}
             className="col-span-1 text-right px-3 py-3 relative overflow-hidden"
           >
-            {preheatPath && (
-              <svg className="absolute left-3 right-3 top-2 w-[calc(100%-1.5rem)] h-9 opacity-90 pointer-events-none" viewBox="0 0 100 24" preserveAspectRatio="none">
-                <path d={preheatPath} fill="none" stroke="rgba(239,68,68,0.95)" strokeWidth="2.2" strokeLinecap="round" />
-              </svg>
-            )}
             <div className="mt-8 text-[10px] uppercase tracking-widest font-bold text-[var(--text-secondary)]">{tr('sauna.preheatTime', 'Oppvarmingstid')}</div>
             <div className="text-3xl font-bold text-[var(--text-primary)] leading-tight">{preheatMinutes != null ? `${Math.round(preheatMinutes)}` : '--'}</div>
             <div className="text-base font-bold text-[var(--text-secondary)]">min</div>
