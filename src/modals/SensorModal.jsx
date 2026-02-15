@@ -71,24 +71,31 @@ export default function SensorModal({ isOpen, onClose, entityId, entity, customN
           // Determine if we need history data for activity/events display
           const needsActivityData = getShouldShowActivity();
           
-          // Try fetching history via REST first (recommended for full data)
-          try {
-            // Always fetch history for numeric or activity-requiring entities
-            const shouldFetch = needsActivityData || isNumeric;
-            
-            if (shouldFetch) {
-              const data = await getHistoryRest(haUrl, haToken, {
+          // Fetch via WebSocket first to avoid browser CORS limitations on direct REST calls
+          const shouldFetch = needsActivityData || isNumeric;
+          const canTryRestFallback = (() => {
+            if (!haUrl || typeof window === 'undefined') return false;
+            try {
+              const targetOrigin = new URL(haUrl, window.location.origin).origin;
+              return targetOrigin === window.location.origin;
+            } catch {
+              return false;
+            }
+          })();
+
+          if (shouldFetch) {
+            try {
+              const wsData = await getHistory(conn, {
                 entityId: entity.entity_id,
                 start,
                 end,
                 minimal_response: false,
-                no_attributes: false,
-                significant_changes_only: false
+                no_attributes: false
               });
 
-              if (data && Array.isArray(data)) {
-                const raw = Array.isArray(data[0]) ? data[0] : data;
-                setHistoryMeta({ source: 'rest', rawCount: raw.length });
+              if (wsData && Array.isArray(wsData)) {
+                const raw = Array.isArray(wsData[0]) ? wsData[0] : wsData;
+                setHistoryMeta({ source: 'ws', rawCount: raw.length });
                 points = raw
                   .filter(d => !isNaN(parseFloat(d?.state)))
                   .map(d => ({
@@ -111,51 +118,54 @@ export default function SensorModal({ isOpen, onClose, entityId, entity, customN
                   })
                   .filter(Boolean);
               }
-            }
-          } catch (err) {
-            const restMessage = err?.message || 'History REST failed';
-            // Continue to WS fallback
-            try {
-              const shouldFetch = needsActivityData || isNumeric;
-              if (shouldFetch) {
-                const wsData = await getHistory(conn, {
-                  entityId: entity.entity_id,
-                  start,
-                  end,
-                  minimal_response: false,
-                  no_attributes: false
-                });
-                if (wsData && Array.isArray(wsData)) {
-                  const raw = Array.isArray(wsData[0]) ? wsData[0] : wsData;
-                  setHistoryMeta({ source: 'ws', rawCount: raw.length });
-                  points = raw
-                    .filter(d => !isNaN(parseFloat(d?.state)))
-                    .map(d => ({
-                      value: parseFloat(d.state),
-                      time: toDateSafe(d.last_changed || d.last_updated || d.last_reported || d.timestamp || d.lu || d.lc)
-                    }))
-                    .filter(d => d.time);
-                  events = raw
-                    .map(d => {
-                      if (!d) return null;
-                      const stateValue = d.state ?? d.s;
-                      const changed = d.last_changed || d.last_updated || d.last_reported || d.timestamp || d.l || d.lc || d.lu;
-                      const time = toDateSafe(changed);
-                      if (stateValue === undefined || !time) return null;
-                      return {
-                        state: stateValue,
-                        time,
-                        lastChanged: changed
-                      };
-                    })
-                    .filter(Boolean);
-                  setHistoryError(null);
-                } else {
-                  setHistoryError(restMessage);
+            } catch (wsErr) {
+              const wsMessage = wsErr?.message || 'History WS failed';
+
+              if (canTryRestFallback) {
+                try {
+                  const data = await getHistoryRest(haUrl, haToken, {
+                    entityId: entity.entity_id,
+                    start,
+                    end,
+                    minimal_response: false,
+                    no_attributes: false,
+                    significant_changes_only: false
+                  });
+
+                  if (data && Array.isArray(data)) {
+                    const raw = Array.isArray(data[0]) ? data[0] : data;
+                    setHistoryMeta({ source: 'rest', rawCount: raw.length });
+                    points = raw
+                      .filter(d => !isNaN(parseFloat(d?.state)))
+                      .map(d => ({
+                        value: parseFloat(d.state),
+                        time: toDateSafe(d.last_changed || d.last_updated || d.last_reported || d.timestamp || d.lu || d.lc)
+                      }))
+                      .filter(d => d.time);
+                    events = raw
+                      .map(d => {
+                        if (!d) return null;
+                        const stateValue = d.state ?? d.s;
+                        const changed = d.last_changed || d.last_updated || d.last_reported || d.timestamp || d.l || d.lc || d.lu;
+                        const time = toDateSafe(changed);
+                        if (stateValue === undefined || !time) return null;
+                        return {
+                          state: stateValue,
+                          time,
+                          lastChanged: changed
+                        };
+                      })
+                      .filter(Boolean);
+                    setHistoryError(null);
+                  } else {
+                    setHistoryError(wsMessage);
+                  }
+                } catch {
+                  setHistoryError(wsMessage);
                 }
+              } else {
+                setHistoryError(wsMessage);
               }
-            } catch (_wsErr) {
-              setHistoryError(restMessage);
             }
           }
 
