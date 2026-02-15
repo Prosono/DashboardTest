@@ -55,9 +55,25 @@ function resolveImageUrl(settings, entities) {
 
 function extractHistorySeries(raw) {
   if (!raw) return [];
-  const arr = Array.isArray(raw?.[0]) ? raw[0] : raw;
-  if (!Array.isArray(arr)) return [];
-  return arr
+
+  const unwrapArray = (value) => {
+    if (Array.isArray(value)) return value;
+    if (!value || typeof value !== 'object') return [];
+
+    if (Array.isArray(value.result)) return unwrapArray(value.result);
+    if (value.result && typeof value.result === 'object') return unwrapArray(value.result);
+    if (Array.isArray(value.history)) return unwrapArray(value.history);
+    if (Array.isArray(value.states)) return unwrapArray(value.states);
+
+    const nestedArray = Object.values(value).find((v) => Array.isArray(v));
+    return nestedArray ? unwrapArray(nestedArray) : [];
+  };
+
+  const arr = unwrapArray(raw);
+  const flat = Array.isArray(arr?.[0]) ? arr[0] : arr;
+  if (!Array.isArray(flat)) return [];
+
+  return flat
     .map((entry) => {
       const tRaw = entry?.last_updated
         || entry?.last_changed
@@ -65,14 +81,18 @@ function extractHistorySeries(raw) {
         || entry?.start
         || entry?.end
         || entry?.timestamp
+        || entry?.time
+        || entry?.t
+        || entry?.l
         || entry?.lu
         || entry?.lc
         || entry?.lr
         || '';
-      const vRaw = entry?.state ?? entry?.s ?? entry?.mean ?? entry?.value;
+      const vRaw = entry?.state ?? entry?.s ?? entry?.mean ?? entry?.value ?? entry?.v;
+      const numericValue = typeof vRaw === 'string' ? Number(vRaw.replace(',', '.')) : Number(vRaw);
       return {
         t: Date.parse(String(tRaw)),
-        v: Number(vRaw),
+        v: numericValue,
       };
     })
     .filter((p) => Number.isFinite(p.t) && Number.isFinite(p.v));
@@ -85,11 +105,12 @@ function buildPath(series, width, height) {
     : series;
   const min = Math.min(...normalized.map((s) => s.v));
   const max = Math.max(...normalized.map((s) => s.v));
-  const range = max - min || 1;
+  const range = max - min;
+  const isFlat = range === 0;
   return normalized
     .map((p, i) => {
-      const x = (i / Math.max(1, series.length - 1)) * width;
-      const y = height - ((p.v - min) / range) * height;
+      const x = (i / Math.max(1, normalized.length - 1)) * width;
+      const y = isFlat ? height * 0.52 : height - (((p.v - min) / range) * height);
       return `${i === 0 ? 'M' : 'L'}${x.toFixed(1)},${y.toFixed(1)}`;
     })
     .join(' ');
@@ -191,7 +212,7 @@ export default function SaunaCard({
     return [];
   }, [statusGraphEntityId, tempHistoryById, tempIsValid, currentTemp]);
   const tempPath = useMemo(() => buildPath(tempSeries, 100, 28), [tempSeries]);
-  const statusGraphId = useMemo(() => `saunaStatusGraph-${String(cardId || 'card').replace(/[^a-zA-Z0-9_-]/g, '')}`, [cardId]);
+  const statusPath = useMemo(() => buildPath(tempSeries, 100, 56), [tempSeries]);
 
   const preheatSeries = useMemo(() => {
     if (!settings?.preheatMinutesEntityId) return [];
@@ -392,21 +413,10 @@ export default function SaunaCard({
           const BookingIcon = statusVisual.icon;
           return (
             <div className="mt-8 relative min-h-[5.5rem] flex items-center justify-center">
-              {tempPath && (
-                <svg className="absolute inset-x-0 top-0 w-full h-[5.5rem] opacity-100 pointer-events-none" viewBox="0 0 100 28" preserveAspectRatio="none">
-                  <defs>
-                    <linearGradient id={`${statusGraphId}-stroke`} x1="0" y1="0" x2="1" y2="0">
-                      <stop offset="0%" stopColor="rgba(250,204,21,0.95)" />
-                      <stop offset="55%" stopColor="rgba(251,146,60,0.92)" />
-                      <stop offset="100%" stopColor="rgba(239,68,68,0.95)" />
-                    </linearGradient>
-                    <linearGradient id={`${statusGraphId}-area`} x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%" stopColor="rgba(249,115,22,0.28)" />
-                      <stop offset="100%" stopColor="rgba(249,115,22,0.00)" />
-                    </linearGradient>
-                  </defs>
-                  <path d={`${tempPath} L100,28 L0,28 Z`} fill={`url(#${statusGraphId}-area)`} />
-                  <path d={tempPath} fill="none" stroke={`url(#${statusGraphId}-stroke)`} strokeWidth="2.8" strokeLinecap="round" />
+              {statusPath && (
+                <svg className="absolute inset-x-0 top-0 w-full h-[5.5rem] opacity-100 pointer-events-none" viewBox="0 0 100 56" preserveAspectRatio="none" aria-hidden="true">
+                  <path d={`${statusPath} L100,56 L0,56 Z`} fill="rgba(249,115,22,0.12)" />
+                  <path d={statusPath} fill="none" stroke="rgba(251,146,60,0.95)" strokeWidth="3.2" strokeLinecap="round" />
                 </svg>
               )}
               <div className="relative z-10 flex items-center justify-center gap-2 min-w-0 text-center">
