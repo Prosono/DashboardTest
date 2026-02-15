@@ -172,11 +172,24 @@ export default function SaunaCard({
 
   const imageUrl = useMemo(() => resolveImageUrl(settings, entities), [settings, entities]);
 
+  const statusGraphEntityId = settings?.statusGraphEntityId || settings?.tempEntityId;
+
   const tempSeries = useMemo(() => {
-    if (!settings?.tempEntityId) return [];
-    const raw = tempHistoryById?.[settings.tempEntityId];
-    return extractHistorySeries(raw).slice(-40);
-  }, [settings?.tempEntityId, tempHistoryById]);
+    if (!statusGraphEntityId) return [];
+    const raw = tempHistoryById?.[statusGraphEntityId];
+    const extracted = extractHistorySeries(raw).slice(-40);
+    if (extracted.length > 0) return extracted;
+
+    if (tempIsValid) {
+      const now = Date.now();
+      return [
+        { t: now - (12 * 60 * 60 * 1000), v: currentTemp },
+        { t: now, v: currentTemp },
+      ];
+    }
+
+    return [];
+  }, [statusGraphEntityId, tempHistoryById, tempIsValid, currentTemp]);
   const tempPath = useMemo(() => buildPath(tempSeries, 100, 28), [tempSeries]);
   const statusGraphId = useMemo(() => `saunaStatusGraph-${String(cardId || 'card').replace(/[^a-zA-Z0-9_-]/g, '')}`, [cardId]);
 

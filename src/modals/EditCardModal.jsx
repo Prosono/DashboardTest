@@ -966,6 +966,15 @@ export default function EditCardModal({
                 filter: (id) => id.startsWith('binary_sensor.') || id.startsWith('input_boolean.'),
               },
               {
+                key: 'statusGraphEntityId',
+                label: tr('sauna.statusGraphEntity', 'Statusgraf (12t) - temperatursensor'),
+                filter: (id) => {
+                  const e = entities[id];
+                  const dc = String(e?.attributes?.device_class || '');
+                  return (id.startsWith('sensor.') || id.startsWith('number.') || id.startsWith('input_number.')) && (dc === 'temperature' || id.includes('temp'));
+                },
+              },
+              {
                 key: 'manualModeEntityId',
                 label: tr('sauna.manualModeEntity', 'Manuell modus - bryter'),
                 filter: (id) => id.startsWith('input_boolean.') || id.startsWith('switch.'),
