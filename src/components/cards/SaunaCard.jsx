@@ -195,7 +195,6 @@ export default function SaunaCard({
   };
 
   const primaryState = (() => {
-    if (flameOn) return { label: tr('sauna.heating', 'Varmer'), desc: tr('sauna.heatingUp', 'Varmer opp'), tone: 'hot' };
     if (saunaIsActive && serviceYes) return { label: tr('sauna.service', 'Service'), desc: tr('sauna.serviceOngoing', 'Pågår nå'), tone: 'warn' };
     if (saunaIsActive) return { label: tr('sauna.active', 'Aktiv'), desc: tr('sauna.bookingNow', 'Pågående økt'), tone: 'ok' };
     if (preheatOn) return { label: tr('sauna.preheat', 'Forvarmer'), desc: hasNext ? `${tr('sauna.next', 'Neste')}: ${Math.round(nextMinutes)}m` : tr('sauna.beforeBooking', 'Før booking'), tone: 'warm' };
@@ -362,10 +361,8 @@ export default function SaunaCard({
         {(bookingLine || preheatOn) && (() => {
           const BookingIcon = statusVisual.icon;
           return (
-            <div className="mt-8 rounded-2xl px-4 py-3 border border-[var(--glass-border)]/70 bg-[linear-gradient(135deg,rgba(255,255,255,0.06),rgba(255,255,255,0.02))] backdrop-blur-sm flex items-center gap-3 min-w-0">
-              <div className="w-7 h-7 rounded-full bg-[var(--glass-bg-hover)] flex items-center justify-center shrink-0">
-                <BookingIcon className={cx('w-4 h-4', statusVisual.color)} />
-              </div>
+            <div className="mt-8 flex items-center justify-center gap-2 min-w-0 text-center">
+              <BookingIcon className={cx('w-4 h-4 shrink-0', statusVisual.color)} />
               <p className="text-sm text-[var(--text-primary)] truncate">{bookingLine || tr('sauna.preheat', 'Forvarmer')}</p>
             </div>
           );
@@ -379,7 +376,8 @@ export default function SaunaCard({
                 <path d={tempPath} fill="none" stroke="rgba(239,68,68,0.95)" strokeWidth="2.3" strokeLinecap="round" />
               </svg>
             )}
-            <div className="mt-7 flex items-end gap-2 relative">
+            <div className="mt-2 text-[10px] uppercase tracking-widest font-bold text-[var(--text-secondary)]">{tr('sauna.currentTempNow', 'Temp i badstuen nå')}</div>
+            <div className="mt-4 flex items-end gap-2 relative">
               <Thermometer className="w-4 h-4 text-[var(--text-secondary)] mb-1" />
               <span className="text-5xl font-semibold leading-none tabular-nums text-[var(--text-primary)]">{tempIsValid ? currentTemp.toFixed(1) : '--'}</span>
               <span className="text-2xl text-[var(--text-secondary)] mb-1">°C</span>
