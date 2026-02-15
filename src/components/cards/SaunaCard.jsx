@@ -1,5 +1,5 @@
 import React, { useMemo } from 'react';
-import { Flame, Thermometer, Lock, DoorOpen, Activity, Lightbulb, Shield, Fan, Hash, ToggleRight } from '../../icons';
+import { Flame, Thermometer, Lock, DoorOpen, Activity, Lightbulb, Shield, Fan, Hash, ToggleRight, Wrench, Power } from '../../icons';
 import { getIconComponent } from '../../icons';
 
 const asArray = (v) => (Array.isArray(v) ? v.filter(Boolean) : []);
@@ -151,6 +151,7 @@ export default function SaunaCard({
 
   const serviceState = serviceEntity?.state ?? '';
   const serviceYes = serviceState === 'Ja';
+  const serviceNo = serviceState === 'Nei';
   const nextMinutes = toNum(nextBookingEntity?.state);
   const hasNext = nextMinutes != null && nextMinutes >= 0;
   const preheatOn = isOn(preheatWindowEntity?.state);
@@ -248,6 +249,14 @@ export default function SaunaCard({
     return baseLine;
   })();
 
+  const bookingVisual = (() => {
+    const next = Number.isFinite(nextMinutes) ? Math.round(nextMinutes) : -1;
+    if (saunaIsActive && serviceYes) return { icon: Wrench, color: preheatOn ? 'text-orange-300' : 'text-emerald-300' };
+    if (saunaIsActive) return { icon: SaunaIcon, color: 'text-emerald-300' };
+    if (preheatOn) return { icon: Flame, color: 'text-orange-300' };
+    return { icon: Power, color: next === -1 ? 'text-[var(--text-muted)]' : 'text-violet-300' };
+  })();
+
   const iconFor = (customIcon, fallback) => (customIcon ? (getIconComponent(customIcon) || fallback) : fallback);
   const statItems = [
     settings?.showThermostat !== false && { key: 'thermostat', icon: iconFor(settings?.thermostatIcon, Shield), title: tr('sauna.thermostat', 'Termostat'), value: thermostatOn ? tr('common.on', 'På') : tr('common.off', 'Av'), active: thermostatOn, onClick: () => openFieldModal(tr('sauna.thermostat', 'Termostat'), [settings?.thermostatEntityId]), clickable: Boolean(settings?.thermostatEntityId), category: 'control' },
@@ -303,12 +312,12 @@ export default function SaunaCard({
     <div
       {...dragProps}
       data-haptic={editMode ? undefined : 'card'}
-      className={cx('touch-feedback relative p-5 rounded-[2.5rem] transition-all duration-300 overflow-visible font-sans h-full', 'border border-[var(--glass-border)] bg-[var(--glass-bg)]', !editMode ? 'cursor-pointer active:scale-[0.98]' : 'cursor-move')}
+      className={cx('touch-feedback relative p-5 rounded-[2.5rem] transition-all duration-300 overflow-hidden font-sans h-full', 'border border-[var(--glass-border)] bg-[var(--glass-bg)]', !editMode ? 'cursor-pointer active:scale-[0.98]' : 'cursor-move')}
       style={cardStyle}
     >
       {controls}
 
-      <div className="relative z-10 h-full flex flex-col">
+      <div className="relative z-10 h-full min-h-0 flex flex-col overflow-y-auto custom-scrollbar pr-1">
         <div className="grid grid-cols-3 items-start gap-4">
           <div className="flex items-center gap-3 min-w-0">
             <div className="w-12 h-12 rounded-full flex items-center justify-center border bg-[var(--glass-bg-hover)] border-[var(--glass-border)]">
@@ -317,6 +326,7 @@ export default function SaunaCard({
             <div className="min-w-0">
               <p className="text-xs uppercase tracking-widest text-[var(--text-secondary)] font-bold">{tr('sauna.operator', 'Badstue')}</p>
               <h3 className="text-lg font-bold text-[var(--text-primary)] truncate">{saunaName}</h3>
+
             </div>
           </div>
 
@@ -366,9 +376,19 @@ export default function SaunaCard({
           </div>
         </div>
 
+        {bookingLine && (() => {
+          const BookingIcon = bookingVisual.icon;
+          return (
+            <div className="mt-3 rounded-xl px-3 py-2 bg-[var(--glass-bg-hover)]/80 flex items-center gap-2 min-w-0">
+              <BookingIcon className={cx('w-4 h-4 shrink-0', bookingVisual.color)} />
+              <p className="text-xs text-[var(--text-secondary)] truncate">{bookingLine}</p>
+            </div>
+          );
+        })()}
+
 
         <div className="mt-4 grid grid-cols-3 gap-4 items-end">
-          <div className="col-span-2 rounded-2xl px-3 py-3 border bg-[var(--glass-bg-hover)] border-[var(--glass-border)] relative overflow-hidden">
+          <div className="col-span-2 px-3 py-3 relative overflow-hidden">
             {tempPath && (
               <svg className="absolute left-3 right-3 top-2 w-[calc(100%-1.5rem)] h-10 opacity-90 pointer-events-none" viewBox="0 0 100 28" preserveAspectRatio="none">
                 <path d={tempPath} fill="none" stroke="rgba(239,68,68,0.95)" strokeWidth="2.3" strokeLinecap="round" />
@@ -384,7 +404,7 @@ export default function SaunaCard({
           <button
             type="button"
             onClick={() => openFieldModal(tr('sauna.preheatTime', 'Oppvarmingstid'), [settings?.preheatMinutesEntityId])}
-            className="col-span-1 text-right rounded-2xl px-3 py-3 border bg-[var(--glass-bg-hover)] border-[var(--glass-border)] relative overflow-hidden"
+            className="col-span-1 text-right px-3 py-3 relative overflow-hidden"
           >
             {preheatPath && (
               <svg className="absolute left-3 right-3 top-2 w-[calc(100%-1.5rem)] h-9 opacity-90 pointer-events-none" viewBox="0 0 100 24" preserveAspectRatio="none">
