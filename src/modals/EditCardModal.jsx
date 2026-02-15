@@ -912,7 +912,7 @@ export default function EditCardModal({
             const singleSelectors = [
               {
                 key: 'tempEntityId',
-                label: t('sauna.tempSensor') || 'Temperature sensor',
+                label: t('sauna.tempSensor') || 'Temperatur - sensor',
                 filter: (id) => {
                   const e = entities[id];
                   return e && (e.attributes?.device_class === 'temperature' || id.includes('temp'));
@@ -920,37 +920,37 @@ export default function EditCardModal({
               },
               {
                 key: 'targetTempEntityId',
-                label: t('sauna.targetTempSensor') || 'Target temperature sensor',
+                label: t('sauna.targetTempSensor') || 'Måltemperatur - sensor',
                 filter: (id) => id.startsWith('sensor.') || id.startsWith('input_number.'),
               },
               {
                 key: 'imageEntityId',
-                label: t('sauna.imageEntity') || 'Image entity',
+                label: t('sauna.imageEntity') || 'Bilde - entitet',
                 filter: (id) => id.startsWith('camera.') || id.startsWith('image.') || id.startsWith('sensor.'),
               },
               {
                 key: 'peopleNowEntityId',
-                label: t('sauna.peopleNowEntity') || 'People now entity',
+                label: t('sauna.peopleNowEntity') || 'Antall folk nå - sensor',
                 filter: (id) => id.startsWith('input_number.') || id.startsWith('number.') || id.startsWith('sensor.'),
               },
               {
                 key: 'preheatMinutesEntityId',
-                label: t('sauna.preheatMinutesEntity') || 'Preheat minutes entity',
+                label: t('sauna.preheatMinutesEntity') || 'Forvarmingstid - minutter (sensor)',
                 filter: (id) => id.startsWith('input_number.') || id.startsWith('number.') || id.startsWith('sensor.'),
               },
               {
                 key: 'manualModeEntityId',
-                label: t('sauna.manualModeEntity') || 'Manual mode boolean',
+                label: t('sauna.manualModeEntity') || 'Manuell modus - bryter',
                 filter: (id) => id.startsWith('input_boolean.') || id.startsWith('switch.'),
               },
               {
                 key: 'thermostatEntityId',
-                label: t('sauna.thermostatEntity') || 'Thermostat entity',
+                label: t('sauna.thermostatEntity') || 'Termostat - entitet',
                 filter: (id) => id.startsWith('climate.') || id.startsWith('switch.') || id.startsWith('input_boolean.'),
               },
               {
                 key: 'motionEntityId',
-                label: t('sauna.motionEntity') || 'Motion entity',
+                label: t('sauna.motionEntity') || 'Bevegelse - sensor',
                 filter: (id) => {
                   const e = entities[id];
                   return e && id.startsWith('binary_sensor.') && ['motion', 'occupancy', 'presence'].includes(String(e.attributes?.device_class || ''));
@@ -958,28 +958,28 @@ export default function EditCardModal({
               },
               {
                 key: 'flameEntityId',
-                label: t('sauna.flameEntity') || 'Flame switch entity',
+                label: t('sauna.flameEntity') || 'Varme/Flamme - bryter',
                 filter: (id) => id.startsWith('switch.') || id.startsWith('input_boolean.') || id.startsWith('binary_sensor.'),
               },
               {
                 key: 'autoLockEntityId',
-                label: t('sauna.autoLockEntity') || 'Auto lock boolean',
+                label: t('sauna.autoLockEntity') || 'Autolås - bryter',
                 filter: (id) => id.startsWith('input_boolean.') || id.startsWith('switch.'),
               },
             ];
 
             const multiSelectors = [
-              { key: 'lightEntityIds', label: t('sauna.lightEntities') || 'Lights', filter: (id) => id.startsWith('light.') },
-              { key: 'lockEntityIds', label: t('sauna.lockEntities') || 'Locks', filter: (id) => id.startsWith('lock.') },
-              { key: 'doorEntityIds', label: t('sauna.doorEntities') || 'Doors', filter: (id) => {
+              { key: 'lightEntityIds', label: t('sauna.lightEntities') || 'Lys - entiteter', filter: (id) => id.startsWith('light.') },
+              { key: 'lockEntityIds', label: t('sauna.lockEntities') || 'Låser - entiteter', filter: (id) => id.startsWith('lock.') },
+              { key: 'doorEntityIds', label: t('sauna.doorEntities') || 'Dører - sensorer', filter: (id) => {
                 const e = entities[id];
                 const dc = String(e?.attributes?.device_class || '');
                 return id.startsWith('binary_sensor.') && ['door', 'window', 'opening'].includes(dc);
               }},
-              { key: 'fanEntityIds', label: t('sauna.fanEntities') || 'Fans', filter: (id) => id.startsWith('fan.') || id.startsWith('switch.') },
-              { key: 'thermostatEntityIds', label: t('sauna.thermostatEntities') || 'Thermostats', filter: (id) => id.startsWith('climate.') || id.startsWith('switch.') || id.startsWith('input_boolean.') },
-              { key: 'codeEntityIds', label: t('sauna.codeEntities') || 'Active code entities', filter: (id) => id.startsWith('input_number.') || id.startsWith('number.') || id.startsWith('sensor.') },
-              { key: 'tempOverviewEntityIds', label: t('sauna.tempOverviewEntities') || 'Temperature overview entities', filter: (id) => {
+              { key: 'fanEntityIds', label: t('sauna.fanEntities') || 'Vifter - entiteter', filter: (id) => id.startsWith('fan.') || id.startsWith('switch.') },
+              { key: 'thermostatEntityIds', label: t('sauna.thermostatEntities') || 'Termostater - entiteter', filter: (id) => id.startsWith('climate.') || id.startsWith('switch.') || id.startsWith('input_boolean.') },
+              { key: 'codeEntityIds', label: t('sauna.codeEntities') || 'Aktive koder - entiteter', filter: (id) => id.startsWith('input_number.') || id.startsWith('number.') || id.startsWith('sensor.') },
+              { key: 'tempOverviewEntityIds', label: t('sauna.tempOverviewEntities') || 'Temperaturoversikt - sensorer', filter: (id) => {
                 const e = entities[id];
                 const dc = String(e?.attributes?.device_class || '');
                 return (id.startsWith('sensor.') || id.startsWith('number.')) && (dc === 'temperature' || id.includes('temp'));
