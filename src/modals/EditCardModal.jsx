@@ -946,6 +946,26 @@ export default function EditCardModal({
                 filter: (id) => id.startsWith('input_number.') || id.startsWith('number.') || id.startsWith('sensor.'),
               },
               {
+                key: 'saunaActiveBooleanEntityId',
+                label: tr('sauna.activeNowEntity', 'Aktiv nå - binærsensor'),
+                filter: (id) => id.startsWith('binary_sensor.') || id.startsWith('input_boolean.'),
+              },
+              {
+                key: 'serviceEntityId',
+                label: tr('sauna.serviceEntity', 'Service status - sensor (Ja/Nei)'),
+                filter: (id) => id.startsWith('sensor.') || id.startsWith('input_select.') || id.startsWith('select.'),
+              },
+              {
+                key: 'nextBookingInMinutesEntityId',
+                label: tr('sauna.nextBookingEntity', 'Neste booking i minutter - sensor'),
+                filter: (id) => id.startsWith('sensor.') || id.startsWith('input_number.') || id.startsWith('number.'),
+              },
+              {
+                key: 'preheatWindowEntityId',
+                label: tr('sauna.preheatWindowEntity', 'Forvarmingsvindu - binærsensor'),
+                filter: (id) => id.startsWith('binary_sensor.') || id.startsWith('input_boolean.'),
+              },
+              {
                 key: 'manualModeEntityId',
                 label: tr('sauna.manualModeEntity', 'Manuell modus - bryter'),
                 filter: (id) => id.startsWith('input_boolean.') || id.startsWith('switch.'),
@@ -1006,6 +1026,16 @@ export default function EditCardModal({
                       placeholder="https://..."
                       className="w-full px-3 py-2 rounded-xl bg-[var(--glass-bg)] border border-[var(--glass-border)] text-[var(--text-primary)]"
                     />
+                  </div>
+                  <div className="rounded-xl border border-blue-400/20 bg-blue-500/10 p-3 text-xs text-blue-100">
+                    <div className="font-bold uppercase tracking-widest text-[10px] mb-1">Statuslinje på badstukort</div>
+                    <div>For å vise status-tekst/ikon trenger du disse sensorene:</div>
+                    <ul className="list-disc ml-4 mt-1 space-y-0.5">
+                      <li>Aktiv nå - binærsensor</li>
+                      <li>Service status - sensor (Ja/Nei)</li>
+                      <li>Neste booking i minutter - sensor</li>
+                      <li>Forvarmingsvindu - binærsensor</li>
+                    </ul>
                   </div>
                   {saunaToggleOptions.map((opt) => {
                     const enabled = editSettings[opt.key] !== false;

@@ -192,7 +192,7 @@ export default function SaunaCard({
   };
 
   const modePill = {
-    label: autoModeOn ? tr('sauna.autoMode', 'Auto modus') : tr('sauna.manualMode', 'Manuell modus'),
+    label: autoModeOn ? 'A' : 'M',
     cls: autoModeOn ? 'bg-emerald-500/16 border-emerald-400/22 text-emerald-200' : 'bg-orange-500/18 border-orange-400/25 text-orange-200',
   };
 
@@ -227,7 +227,8 @@ export default function SaunaCard({
     const hasAny =
       settings?.saunaActiveBooleanEntityId ||
       settings?.nextBookingInMinutesEntityId ||
-      settings?.serviceEntityId;
+      settings?.serviceEntityId ||
+      settings?.preheatWindowEntityId;
 
     if (!hasAny || settings?.showBookingOverview === false) return null;
 
@@ -331,13 +332,17 @@ export default function SaunaCard({
           </div>
 
           <div className="flex justify-center">
-            <div className="relative w-48 h-48">
+            <div className="relative w-40 h-40">
               {settings?.peopleNowEntityId && (
-                <div className="absolute -top-5 left-1/2 -translate-x-1/2 min-w-[2.7rem] h-11 px-3 rounded-full border border-emerald-400/25 bg-emerald-500/20 text-emerald-100 flex items-center justify-center text-3xl font-extrabold z-20 shadow-lg shadow-emerald-900/30 pointer-events-none">
+                <button
+                  type="button"
+                  onClick={() => openFieldModal(tr('sauna.peopleNow', 'Antall folk nå'), [settings?.peopleNowEntityId])}
+                  className="absolute top-0 left-1/2 -translate-x-1/2 min-w-[2.7rem] h-10 px-3 rounded-full border border-emerald-400/25 bg-emerald-500/20 text-emerald-100 flex items-center justify-center text-2xl font-extrabold z-20 shadow-lg shadow-emerald-900/30"
+                >
                   {peopleNow}
-                </div>
+                </button>
               )}
-              <div className="relative w-48 h-48 rounded-full overflow-hidden border border-[var(--glass-border)] bg-[var(--glass-bg-hover)] shadow-[0_16px_45px_rgba(0,0,0,0.45)]">
+              <div className="relative w-40 h-40 rounded-full overflow-hidden border border-[var(--glass-border)] bg-[var(--glass-bg-hover)] shadow-[0_16px_45px_rgba(0,0,0,0.45)]">
                 {imageUrl ? <img src={imageUrl} alt={saunaName} className="w-full h-full object-cover" draggable={false} /> : <div className="w-full h-full bg-gradient-to-br from-white/10 to-black/20" />}
                 <div className="absolute inset-0 rounded-full ring-1 ring-white/10" />
                 {flameOn && (
@@ -376,12 +381,12 @@ export default function SaunaCard({
           </div>
         </div>
 
-        {bookingLine && (() => {
+        {(bookingLine || preheatOn) && (() => {
           const BookingIcon = bookingVisual.icon;
           return (
             <div className="mt-3 rounded-xl px-3 py-2 bg-[var(--glass-bg-hover)]/80 flex items-center gap-2 min-w-0">
               <BookingIcon className={cx('w-4 h-4 shrink-0', bookingVisual.color)} />
-              <p className="text-xs text-[var(--text-secondary)] truncate">{bookingLine}</p>
+              <p className="text-xs text-[var(--text-secondary)] truncate">{bookingLine || tr('sauna.preheat', 'Forvarmer')}</p>
             </div>
           );
         })()}
