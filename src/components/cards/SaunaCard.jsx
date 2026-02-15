@@ -231,15 +231,7 @@ export default function SaunaCard({
     return tr('sauna.noUpcomingBookingsToday', 'Ingen kommende bookinger i dag');
   })();
 
-  const bookingVisual = (() => {
-    const next = Number.isFinite(nextMinutes) ? Math.round(nextMinutes) : -1;
-    if (saunaIsActive && serviceYes) return { icon: Wrench, color: preheatOn ? 'text-orange-300' : 'text-emerald-300' };
-    if (saunaIsActive) return { icon: SaunaIcon, color: 'text-emerald-300' };
-    if (preheatOn) return { icon: Flame, color: 'text-orange-300' };
-    return { icon: Power, color: next === -1 ? 'text-[var(--text-muted)]' : 'text-violet-300' };
-  })();
-
-  const bookingVisual = (() => {
+  const statusVisual = (() => {
     const next = Number.isFinite(nextMinutes) ? Math.round(nextMinutes) : -1;
     if (saunaIsActive && serviceYes) return { icon: Wrench, color: preheatOn ? 'text-orange-300' : 'text-emerald-300' };
     if (saunaIsActive) return { icon: SaunaIcon, color: 'text-emerald-300' };
@@ -368,11 +360,11 @@ export default function SaunaCard({
         </div>
 
         {(bookingLine || preheatOn) && (() => {
-          const BookingIcon = bookingVisual.icon;
+          const BookingIcon = statusVisual.icon;
           return (
             <div className="mt-8 rounded-2xl px-4 py-3 border border-[var(--glass-border)]/70 bg-[linear-gradient(135deg,rgba(255,255,255,0.06),rgba(255,255,255,0.02))] backdrop-blur-sm flex items-center gap-3 min-w-0">
               <div className="w-7 h-7 rounded-full bg-[var(--glass-bg-hover)] flex items-center justify-center shrink-0">
-                <BookingIcon className={cx('w-4 h-4', bookingVisual.color)} />
+                <BookingIcon className={cx('w-4 h-4', statusVisual.color)} />
               </div>
               <p className="text-sm text-[var(--text-primary)] truncate">{bookingLine || tr('sauna.preheat', 'Forvarmer')}</p>
             </div>
