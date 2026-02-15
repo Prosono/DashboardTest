@@ -63,6 +63,7 @@ export default function SensorModal({ isOpen, onClose, entityId, entity, customN
         try {
           const end = new Date();
           const start = new Date(end.getTime() - historyHours * 60 * 60 * 1000);
+          const resolvedEntityId = entity?.entity_id || entityId;
           setTimeWindow({ start, end });
           
           let points = [];
@@ -70,6 +71,12 @@ export default function SensorModal({ isOpen, onClose, entityId, entity, customN
           
           // Determine if we need history data for activity/events display
           const needsActivityData = getShouldShowActivity();
+          if (!resolvedEntityId) {
+            setHistoryError('Missing entity id for history');
+            setHistory([]);
+            setHistoryEvents([]);
+            return;
+          }
           
           // Fetch via WebSocket first to avoid browser CORS limitations on direct REST calls
           const shouldFetch = needsActivityData || isNumeric;
@@ -86,7 +93,7 @@ export default function SensorModal({ isOpen, onClose, entityId, entity, customN
           if (shouldFetch) {
             try {
               const wsData = await getHistory(conn, {
-                entityId: entity.entity_id,
+                entityId: resolvedEntityId,
                 start,
                 end,
                 minimal_response: false,
@@ -124,7 +131,7 @@ export default function SensorModal({ isOpen, onClose, entityId, entity, customN
               if (canTryRestFallback) {
                 try {
                   const data = await getHistoryRest(haUrl, haToken, {
-                    entityId: entity.entity_id,
+                    entityId: resolvedEntityId,
                     start,
                     end,
                     minimal_response: false,
@@ -173,7 +180,7 @@ export default function SensorModal({ isOpen, onClose, entityId, entity, customN
           if (points.length < 2) {
              try {
                 const stats = await getStatistics(conn, {
-                  statisticId: entity.entity_id,
+                  statisticId: resolvedEntityId,
                   start,
                   end,
                   period: 'hour'
