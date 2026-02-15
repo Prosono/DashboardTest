@@ -39,6 +39,25 @@ export default function SensorModal({ isOpen, onClose, entityId, entity, customN
     return null;
   };
 
+  const parseHistoryNumber = (entry) => {
+    const raw = entry?.state ?? entry?.s ?? entry?.mean ?? entry?.value;
+    const num = Number.parseFloat(raw);
+    return Number.isFinite(num) ? num : null;
+  };
+
+  const parseHistoryEntryTime = (entry) => toDateSafe(
+    entry?.last_changed
+    || entry?.last_updated
+    || entry?.last_reported
+    || entry?.timestamp
+    || entry?.start
+    || entry?.end
+    || entry?.l
+    || entry?.lc
+    || entry?.lu
+    || entry?.lr
+  );
+
   // Helper to determine if entity should show activity (called early before useEffect)
   const getShouldShowActivity = () => {
     const domain = entityId?.split('.')?.[0];
@@ -104,18 +123,19 @@ export default function SensorModal({ isOpen, onClose, entityId, entity, customN
                 const raw = Array.isArray(wsData[0]) ? wsData[0] : wsData;
                 setHistoryMeta({ source: 'ws', rawCount: raw.length });
                 points = raw
-                  .filter(d => !isNaN(parseFloat(d?.state)))
-                  .map(d => ({
-                    value: parseFloat(d.state),
-                    time: toDateSafe(d.last_changed || d.last_updated || d.last_reported || d.timestamp || d.lu || d.lc)
-                  }))
-                  .filter(d => d.time);
+                  .map((d) => {
+                    const value = parseHistoryNumber(d);
+                    const time = parseHistoryEntryTime(d);
+                    if (!Number.isFinite(value) || !time) return null;
+                    return { value, time };
+                  })
+                  .filter(Boolean);
                 events = raw
                   .map(d => {
                     if (!d) return null;
                     const stateValue = d.state ?? d.s;
-                    const changed = d.last_changed || d.last_updated || d.last_reported || d.timestamp || d.l || d.lc || d.lu;
-                    const time = toDateSafe(changed);
+                    const changed = d.last_changed || d.last_updated || d.last_reported || d.timestamp || d.l || d.lc || d.lu || d.lr;
+                    const time = parseHistoryEntryTime(d);
                     if (stateValue === undefined || !time) return null;
                     return {
                       state: stateValue,
@@ -143,18 +163,19 @@ export default function SensorModal({ isOpen, onClose, entityId, entity, customN
                     const raw = Array.isArray(data[0]) ? data[0] : data;
                     setHistoryMeta({ source: 'rest', rawCount: raw.length });
                     points = raw
-                      .filter(d => !isNaN(parseFloat(d?.state)))
-                      .map(d => ({
-                        value: parseFloat(d.state),
-                        time: toDateSafe(d.last_changed || d.last_updated || d.last_reported || d.timestamp || d.lu || d.lc)
-                      }))
-                      .filter(d => d.time);
+                      .map((d) => {
+                        const value = parseHistoryNumber(d);
+                        const time = parseHistoryEntryTime(d);
+                        if (!Number.isFinite(value) || !time) return null;
+                        return { value, time };
+                      })
+                      .filter(Boolean);
                     events = raw
                       .map(d => {
                         if (!d) return null;
                         const stateValue = d.state ?? d.s;
-                        const changed = d.last_changed || d.last_updated || d.last_reported || d.timestamp || d.l || d.lc || d.lu;
-                        const time = toDateSafe(changed);
+                        const changed = d.last_changed || d.last_updated || d.last_reported || d.timestamp || d.l || d.lc || d.lu || d.lr;
+                        const time = parseHistoryEntryTime(d);
                         if (stateValue === undefined || !time) return null;
                         return {
                           state: stateValue,
@@ -188,11 +209,14 @@ export default function SensorModal({ isOpen, onClose, entityId, entity, customN
                 
                 if (stats && Array.isArray(stats)) {
                   points = stats
-                    .map(d => ({
-                      value: typeof d.mean === 'number' ? d.mean : (typeof d.state === 'number' ? d.state : d.sum),
-                      time: new Date(d.start)
-                    }))
-                    .filter(d => !isNaN(parseFloat(d.value)));
+                    .map((d) => {
+                      const valueRaw = (typeof d.mean === 'number' ? d.mean : (typeof d.state === 'number' ? d.state : d.sum));
+                      const value = Number.parseFloat(valueRaw);
+                      const time = parseHistoryEntryTime(d);
+                      if (!Number.isFinite(value) || !time) return null;
+                      return { value, time };
+                    })
+                    .filter(Boolean);
                 }
              } catch (statErr) {
               logger.warn('Stats fetch failed', statErr);
