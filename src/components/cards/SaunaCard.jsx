@@ -1,5 +1,5 @@
 import React, { useMemo } from 'react';
-import { Flame, Thermometer, Lock, DoorOpen, Activity, Lightbulb, Shield, Fan, Hash, ToggleRight, Wrench } from '../../icons';
+import { Flame, Thermometer, Lock, DoorOpen, Activity, Lightbulb, Shield, Fan, Hash, ToggleRight, Wrench, Power } from '../../icons';
 import { getIconComponent } from '../../icons';
 
 const asArray = (v) => (Array.isArray(v) ? v.filter(Boolean) : []);
@@ -254,7 +254,7 @@ export default function SaunaCard({
     if (saunaIsActive && serviceYes) return { icon: Wrench, color: preheatOn ? 'text-orange-300' : 'text-emerald-300' };
     if (saunaIsActive) return { icon: SaunaIcon, color: 'text-emerald-300' };
     if (preheatOn) return { icon: Flame, color: 'text-orange-300' };
-    return { icon: SaunaIcon, color: next === -1 ? 'text-[var(--text-secondary)]' : 'text-violet-300' };
+    return { icon: Power, color: next === -1 ? 'text-[var(--text-muted)]' : 'text-violet-300' };
   })();
 
   const iconFor = (customIcon, fallback) => (customIcon ? (getIconComponent(customIcon) || fallback) : fallback);
@@ -326,15 +326,7 @@ export default function SaunaCard({
             <div className="min-w-0">
               <p className="text-xs uppercase tracking-widest text-[var(--text-secondary)] font-bold">{tr('sauna.operator', 'Badstue')}</p>
               <h3 className="text-lg font-bold text-[var(--text-primary)] truncate">{saunaName}</h3>
-              {bookingLine && (() => {
-                const BookingIcon = bookingVisual.icon;
-                return (
-                  <div className="mt-1 flex items-center gap-1.5 min-w-0">
-                    <BookingIcon className={cx('w-3.5 h-3.5 shrink-0', bookingVisual.color)} />
-                    <p className="text-[11px] text-[var(--text-secondary)] truncate">{bookingLine}</p>
-                  </div>
-                );
-              })()}
+
             </div>
           </div>
 
@@ -383,6 +375,16 @@ export default function SaunaCard({
             )}
           </div>
         </div>
+
+        {bookingLine && (() => {
+          const BookingIcon = bookingVisual.icon;
+          return (
+            <div className="mt-3 rounded-xl px-3 py-2 bg-[var(--glass-bg-hover)]/80 flex items-center gap-2 min-w-0">
+              <BookingIcon className={cx('w-4 h-4 shrink-0', bookingVisual.color)} />
+              <p className="text-xs text-[var(--text-secondary)] truncate">{bookingLine}</p>
+            </div>
+          );
+        })()}
 
 
         <div className="mt-4 grid grid-cols-3 gap-4 items-end">
