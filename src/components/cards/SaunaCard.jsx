@@ -67,10 +67,13 @@ function extractHistorySeries(raw) {
 
 function buildPath(series, width, height) {
   if (!series.length) return '';
-  const min = Math.min(...series.map((s) => s.v));
-  const max = Math.max(...series.map((s) => s.v));
+  const normalized = series.length === 1
+    ? [series[0], { ...series[0], t: series[0].t + 1 }]
+    : series;
+  const min = Math.min(...normalized.map((s) => s.v));
+  const max = Math.max(...normalized.map((s) => s.v));
   const range = max - min || 1;
-  return series
+  return normalized
     .map((p, i) => {
       const x = (i / Math.max(1, series.length - 1)) * width;
       const y = height - ((p.v - min) / range) * height;
@@ -208,7 +211,7 @@ export default function SaunaCard({
   const tone = ({
     hot: { pill: 'bg-orange-500/18 border-orange-400/25 text-orange-200', icon: 'text-orange-300' },
     warm: { pill: 'bg-amber-500/14 border-amber-400/20 text-amber-200', icon: 'text-amber-300' },
-    ok: { pill: 'bg-emerald-500/14 border-emerald-400/20 text-emerald-200', icon: 'text-emerald-300' },
+    ok: { pill: 'bg-emerald-500/20 border-emerald-500/40 text-emerald-700 dark:text-emerald-200', icon: 'text-emerald-600 dark:text-emerald-300' },
     info: { pill: 'bg-blue-500/14 border-blue-400/20 text-blue-200', icon: 'text-blue-300' },
     warn: { pill: 'bg-orange-500/14 border-orange-400/20 text-orange-200', icon: 'text-orange-300' },
     danger: { pill: 'bg-rose-500/14 border-rose-400/20 text-rose-200', icon: 'text-rose-300' },
@@ -276,9 +279,9 @@ export default function SaunaCard({
               type="button"
               key={item.key}
               onClick={clickable ? item.onClick : undefined}
-              className={cx('rounded-2xl px-3 py-3 border flex items-center gap-2 text-left transition', clickable ? 'active:scale-[0.99] cursor-pointer' : 'cursor-default', item.active ? 'bg-emerald-500/10 border-emerald-500/20' : 'bg-[var(--glass-bg-hover)] border-[var(--glass-border)]')}
+              className={cx('rounded-2xl px-3 py-3 border flex items-center gap-2 text-left transition', clickable ? 'active:scale-[0.99] cursor-pointer' : 'cursor-default', item.active ? 'bg-emerald-500/18 border-emerald-500/35' : 'bg-[var(--glass-bg-hover)] border-[var(--glass-border)]')}
             >
-              <Icon className={cx('w-4 h-4', item.active ? 'text-emerald-300' : 'text-[var(--text-secondary)]')} />
+              <Icon className={cx('w-4 h-4', item.active ? 'text-emerald-600 dark:text-emerald-300' : 'text-[var(--text-secondary)]')} />
               <div className="min-w-0">
                 <div className="text-[10px] uppercase tracking-widest font-extrabold text-[var(--text-secondary)] truncate">{item.title}</div>
                 <div className="text-sm font-extrabold text-[var(--text-primary)] truncate">{item.value}</div>
@@ -354,7 +357,7 @@ export default function SaunaCard({
                 <span className={cx('inline-block w-2 h-2 rounded-full mr-2 align-middle', primaryState.tone === 'muted' ? 'bg-[var(--text-secondary)]/50' : 'bg-current')} />
                 <span className="align-middle">{primaryState.label}</span>
               </div>
-              <div className="text-[12px] text-[var(--text-secondary)] font-medium text-right">{primaryState.desc}</div>
+              <div className="text-[12px] text-[var(--text-secondary)] font-normal text-right">{primaryState.desc}</div>
             </>
           </div>
         </div>
@@ -362,9 +365,9 @@ export default function SaunaCard({
         {(bookingLine || preheatOn) && (() => {
           const BookingIcon = statusVisual.icon;
           return (
-            <div className="mt-8 relative min-h-[4.5rem] flex items-center justify-center">
+            <div className="mt-8 relative min-h-[5.5rem] flex items-center justify-center">
               {tempPath && (
-                <svg className="absolute inset-x-0 top-0 w-full h-[4.5rem] opacity-95 pointer-events-none" viewBox="0 0 100 28" preserveAspectRatio="none">
+                <svg className="absolute inset-x-0 top-0 w-full h-[5.5rem] opacity-100 pointer-events-none" viewBox="0 0 100 28" preserveAspectRatio="none">
                   <defs>
                     <linearGradient id={`${statusGraphId}-stroke`} x1="0" y1="0" x2="1" y2="0">
                       <stop offset="0%" stopColor="rgba(250,204,21,0.95)" />
@@ -372,17 +375,17 @@ export default function SaunaCard({
                       <stop offset="100%" stopColor="rgba(239,68,68,0.95)" />
                     </linearGradient>
                     <linearGradient id={`${statusGraphId}-area`} x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%" stopColor="rgba(249,115,22,0.20)" />
-                      <stop offset="100%" stopColor="rgba(249,115,22,0.02)" />
+                      <stop offset="0%" stopColor="rgba(249,115,22,0.28)" />
+                      <stop offset="100%" stopColor="rgba(249,115,22,0.00)" />
                     </linearGradient>
                   </defs>
                   <path d={`${tempPath} L100,28 L0,28 Z`} fill={`url(#${statusGraphId}-area)`} />
-                  <path d={tempPath} fill="none" stroke={`url(#${statusGraphId}-stroke)`} strokeWidth="2.4" strokeLinecap="round" />
+                  <path d={tempPath} fill="none" stroke={`url(#${statusGraphId}-stroke)`} strokeWidth="2.8" strokeLinecap="round" />
                 </svg>
               )}
               <div className="relative z-10 flex items-center justify-center gap-2 min-w-0 text-center">
                 <BookingIcon className={cx('w-4 h-4 shrink-0', statusVisual.color)} />
-                <p className="text-sm text-[var(--text-primary)] truncate">{bookingLine || tr('sauna.preheat', 'Forvarmer')}</p>
+                <p className="text-sm font-normal text-[var(--text-primary)] truncate">{bookingLine || tr('sauna.preheat', 'Forvarmer')}</p>
               </div>
             </div>
           );
