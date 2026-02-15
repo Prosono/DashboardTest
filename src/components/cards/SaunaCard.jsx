@@ -222,6 +222,32 @@ export default function SaunaCard({
     muted: { pill: 'bg-[var(--glass-bg-hover)] border-[var(--glass-border)] text-[var(--text-secondary)]', icon: 'text-[var(--text-secondary)]' },
   }[primaryState.tone] || { pill: 'bg-[var(--glass-bg-hover)] border-[var(--glass-border)] text-[var(--text-secondary)]', icon: 'text-[var(--text-secondary)]' });
 
+  const bookingLine = (() => {
+    const hasAny =
+      settings?.saunaActiveBooleanEntityId ||
+      settings?.nextBookingInMinutesEntityId ||
+      settings?.serviceEntityId;
+
+    if (!hasAny || settings?.showBookingOverview === false) return null;
+
+    const next = Number.isFinite(nextMinutes) ? Math.round(nextMinutes) : -1;
+    const tempTxt = tempIsValid ? `${Math.round(currentTemp)} °C` : '-- °C';
+
+    let baseLine = '';
+    if (saunaIsActive) {
+      baseLine = `${tr('sauna.activeNow', 'Aktiv nå')} • ${tempTxt} • ${peopleNow} ${tr('sauna.people', 'personer')}`;
+    } else {
+      const nextTxt = next === -1
+        ? tr('sauna.noUpcomingBookingsToday', 'Ingen kommende bookinger i dag')
+        : `${tr('sauna.nextBookingIn', 'Neste booking om')} ${next} min`;
+      baseLine = `${tr('sauna.notActive', 'Ikke aktiv')} • ${nextTxt}`;
+    }
+
+    if (serviceYes) return `${baseLine} • ${tr('sauna.serviceOngoing', 'Service pågår')}`;
+    if (serviceNo) return `${baseLine} • ${tr('sauna.normalBooking', 'Vanlig booking')}`;
+    return baseLine;
+  })();
+
   const iconFor = (customIcon, fallback) => (customIcon ? (getIconComponent(customIcon) || fallback) : fallback);
   const statItems = [
     settings?.showThermostat !== false && { key: 'thermostat', icon: iconFor(settings?.thermostatIcon, Shield), title: tr('sauna.thermostat', 'Termostat'), value: thermostatOn ? tr('common.on', 'På') : tr('common.off', 'Av'), active: thermostatOn, onClick: () => openFieldModal(tr('sauna.thermostat', 'Termostat'), [settings?.thermostatEntityId]), clickable: Boolean(settings?.thermostatEntityId), category: 'control' },
@@ -297,7 +323,7 @@ export default function SaunaCard({
           <div className="flex justify-center">
             <div className="relative w-48 h-48">
               {settings?.peopleNowEntityId && (
-                <div className="absolute -top-6 left-1/2 -translate-x-1/2 min-w-[2.9rem] h-12 px-3 rounded-full border border-emerald-300/35 bg-emerald-500/30 text-emerald-100 flex items-center justify-center text-3xl font-extrabold z-30 shadow-xl shadow-emerald-900/40 pointer-events-none">
+                <div className="absolute -top-5 left-1/2 -translate-x-1/2 min-w-[2.7rem] h-11 px-3 rounded-full border border-emerald-400/25 bg-emerald-500/20 text-emerald-100 flex items-center justify-center text-3xl font-extrabold z-20 shadow-lg shadow-emerald-900/30 pointer-events-none">
                   {peopleNow}
                 </div>
               )}
