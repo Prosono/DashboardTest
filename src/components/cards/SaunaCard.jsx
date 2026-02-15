@@ -151,7 +151,6 @@ export default function SaunaCard({
 
   const serviceState = serviceEntity?.state ?? '';
   const serviceYes = serviceState === 'Ja';
-  const serviceNo = serviceState === 'Nei';
   const nextMinutes = toNum(nextBookingEntity?.state);
   const hasNext = nextMinutes != null && nextMinutes >= 0;
   const preheatOn = isOn(preheatWindowEntity?.state);
@@ -164,6 +163,13 @@ export default function SaunaCard({
     return extractHistorySeries(raw).slice(-40);
   }, [settings?.tempEntityId, tempHistoryById]);
   const tempPath = useMemo(() => buildPath(tempSeries, 100, 28), [tempSeries]);
+
+  const preheatSeries = useMemo(() => {
+    if (!settings?.preheatMinutesEntityId) return [];
+    const raw = tempHistoryById?.[settings.preheatMinutesEntityId];
+    return extractHistorySeries(raw).slice(-40);
+  }, [settings?.preheatMinutesEntityId, tempHistoryById]);
+  const preheatPath = useMemo(() => buildPath(preheatSeries, 100, 24), [preheatSeries]);
 
   const openFieldModal = (title, entityIds) => {
     if (editMode) return;
@@ -297,7 +303,7 @@ export default function SaunaCard({
     <div
       {...dragProps}
       data-haptic={editMode ? undefined : 'card'}
-      className={cx('touch-feedback relative p-5 rounded-[2.5rem] transition-all duration-300 overflow-hidden font-sans h-full', 'border border-[var(--glass-border)] bg-[var(--glass-bg)]', !editMode ? 'cursor-pointer active:scale-[0.98]' : 'cursor-move')}
+      className={cx('touch-feedback relative p-5 rounded-[2.5rem] transition-all duration-300 overflow-visible font-sans h-full', 'border border-[var(--glass-border)] bg-[var(--glass-bg)]', !editMode ? 'cursor-pointer active:scale-[0.98]' : 'cursor-move')}
       style={cardStyle}
     >
       {controls}
@@ -360,31 +366,34 @@ export default function SaunaCard({
           </div>
         </div>
 
-        {bookingLine && (
-          <div className="mt-3 rounded-2xl px-3 py-2 border bg-[var(--glass-bg-hover)] border-[var(--glass-border)]">
-            <div className="text-xs font-bold text-[var(--text-primary)] truncate">{bookingLine}</div>
-          </div>
-        )}
 
-        <div className="mt-4 grid grid-cols-3 gap-4 items-end relative">
-          {tempPath && (
-            <svg className="absolute left-0 right-0 -top-1 w-full h-14 opacity-35 pointer-events-none" viewBox="0 0 100 28" preserveAspectRatio="none">
-              <path d={tempPath} fill="none" stroke="rgba(148,163,184,0.7)" strokeWidth="1.8" strokeLinecap="round" />
-            </svg>
-          )}
-          <div className="col-span-2 flex items-end gap-2 relative">
-            <Thermometer className="w-4 h-4 text-[var(--text-secondary)] mb-1" />
-            <span className="text-5xl font-semibold leading-none tabular-nums text-[var(--text-primary)]">{tempIsValid ? currentTemp.toFixed(1) : '--'}</span>
-            <span className="text-2xl text-[var(--text-secondary)] mb-1">°C</span>
+        <div className="mt-4 grid grid-cols-3 gap-4 items-end">
+          <div className="col-span-2 rounded-2xl px-3 py-3 border bg-[var(--glass-bg-hover)] border-[var(--glass-border)] relative overflow-hidden">
+            {tempPath && (
+              <svg className="absolute left-3 right-3 top-2 w-[calc(100%-1.5rem)] h-10 opacity-90 pointer-events-none" viewBox="0 0 100 28" preserveAspectRatio="none">
+                <path d={tempPath} fill="none" stroke="rgba(239,68,68,0.95)" strokeWidth="2.3" strokeLinecap="round" />
+              </svg>
+            )}
+            <div className="mt-7 flex items-end gap-2 relative">
+              <Thermometer className="w-4 h-4 text-[var(--text-secondary)] mb-1" />
+              <span className="text-5xl font-semibold leading-none tabular-nums text-[var(--text-primary)]">{tempIsValid ? currentTemp.toFixed(1) : '--'}</span>
+              <span className="text-2xl text-[var(--text-secondary)] mb-1">°C</span>
+            </div>
           </div>
 
           <button
             type="button"
             onClick={() => openFieldModal(tr('sauna.preheatTime', 'Oppvarmingstid'), [settings?.preheatMinutesEntityId])}
-            className="col-span-1 text-right relative"
+            className="col-span-1 text-right rounded-2xl px-3 py-3 border bg-[var(--glass-bg-hover)] border-[var(--glass-border)] relative overflow-hidden"
           >
-            <div className="text-[10px] uppercase tracking-widest font-bold text-[var(--text-secondary)]">{tr('sauna.preheatTime', 'Oppvarmingstid')}</div>
-            <div className="text-base font-bold text-[var(--text-primary)]">{preheatMinutes != null ? `${Math.round(preheatMinutes)} min` : '--'}</div>
+            {preheatPath && (
+              <svg className="absolute left-3 right-3 top-2 w-[calc(100%-1.5rem)] h-9 opacity-90 pointer-events-none" viewBox="0 0 100 24" preserveAspectRatio="none">
+                <path d={preheatPath} fill="none" stroke="rgba(239,68,68,0.95)" strokeWidth="2.2" strokeLinecap="round" />
+              </svg>
+            )}
+            <div className="mt-8 text-[10px] uppercase tracking-widest font-bold text-[var(--text-secondary)]">{tr('sauna.preheatTime', 'Oppvarmingstid')}</div>
+            <div className="text-3xl font-bold text-[var(--text-primary)] leading-tight">{preheatMinutes != null ? `${Math.round(preheatMinutes)}` : '--'}</div>
+            <div className="text-base font-bold text-[var(--text-secondary)]">min</div>
           </button>
         </div>
 
