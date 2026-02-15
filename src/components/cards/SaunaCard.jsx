@@ -113,24 +113,43 @@ function extractHistorySeries(raw) {
         v: numericValue,
       };
     })
-    .filter((p) => Number.isFinite(p.t) && Number.isFinite(p.v));
+    .filter((p) => Number.isFinite(p.t) && Number.isFinite(p.v))
+    .sort((a, b) => a.t - b.t);
 }
 
 function buildPath(series, width, height) {
   if (!series.length) return '';
+
   const normalized = series.length === 1
     ? [series[0], { ...series[0], t: series[0].t + 1 }]
     : series;
-  const min = Math.min(...normalized.map((s) => s.v));
-  const max = Math.max(...normalized.map((s) => s.v));
+
+  const smoothed = normalized.map((point, idx, arr) => {
+    if (arr.length < 3 || idx === 0 || idx === arr.length - 1) return point;
+    const avg = (arr[idx - 1].v + point.v + arr[idx + 1].v) / 3;
+    return { ...point, v: avg };
+  });
+
+  const min = Math.min(...smoothed.map((s) => s.v));
+  const max = Math.max(...smoothed.map((s) => s.v));
   const range = max - min;
-  const isFlat = range === 0;
-  return normalized
-    .map((p, i) => {
-      const x = (i / Math.max(1, normalized.length - 1)) * width;
-      const y = isFlat ? height * 0.52 : height - (((p.v - min) / range) * height);
-      return `${i === 0 ? 'M' : 'L'}${x.toFixed(1)},${y.toFixed(1)}`;
-    })
+  const isFlat = range < 0.001;
+  const yPadding = 6;
+  const usableHeight = Math.max(4, height - (yPadding * 2));
+  const minT = smoothed[0].t;
+  const maxT = smoothed[smoothed.length - 1].t;
+  const tRange = Math.max(1, maxT - minT);
+
+  const points = smoothed.map((p) => {
+    const x = ((p.t - minT) / tRange) * width;
+    const y = isFlat
+      ? height * 0.5
+      : yPadding + (usableHeight - (((p.v - min) / range) * usableHeight));
+    return { x, y };
+  });
+
+  return points
+    .map((pt, i) => `${i === 0 ? 'M' : 'L'}${pt.x.toFixed(1)},${pt.y.toFixed(1)}`)
     .join(' ');
 }
 
@@ -430,11 +449,11 @@ export default function SaunaCard({
         {(bookingLine || preheatOn) && (() => {
           const BookingIcon = statusVisual.icon;
           return (
-            <div className="mt-8 relative min-h-[5.5rem] flex items-center justify-center">
+            <div className="mt-7 relative min-h-[4.5rem] flex items-center justify-center">
               {statusPath && (
-                <svg className="absolute inset-x-0 top-0 w-full h-[5.5rem] opacity-100 pointer-events-none" viewBox="0 0 100 56" preserveAspectRatio="none" aria-hidden="true">
-                  <path d={`${statusPath} L100,56 L0,56 Z`} fill="rgba(249,115,22,0.12)" />
-                  <path d={statusPath} fill="none" stroke="rgba(251,146,60,0.95)" strokeWidth="3.2" strokeLinecap="round" />
+                <svg className="absolute inset-x-1 top-1 w-[calc(100%-0.5rem)] h-[4rem] opacity-90 pointer-events-none" viewBox="0 0 100 56" preserveAspectRatio="none" aria-hidden="true">
+                  <path d={`${statusPath} L100,56 L0,56 Z`} fill="rgba(249,115,22,0.08)" />
+                  <path d={statusPath} fill="none" stroke="rgba(251,146,60,0.95)" strokeWidth="2.2" strokeLinecap="round" />
                 </svg>
               )}
               <div className="relative z-10 flex items-center justify-center gap-2 min-w-0 text-center">
