@@ -1,5 +1,5 @@
 import React, { useMemo } from 'react';
-import { Flame, Thermometer, Lock, DoorOpen, Activity, Lightbulb, Shield, Fan, Hash, ToggleRight } from '../../icons';
+import { Flame, Thermometer, Lock, DoorOpen, Activity, Lightbulb, Shield, Fan, Hash, ToggleRight, Wrench, Power } from '../../icons';
 import { getIconComponent } from '../../icons';
 
 const asArray = (v) => (Array.isArray(v) ? v.filter(Boolean) : []);
@@ -142,8 +142,6 @@ export default function SaunaCard({
   const activeThermostats = countOn(thermostatIds, entities);
   const autoLockOn = isOn(autoLockEntity?.state);
 
-  const hasSafetyAlert = saunaIsActive && (openDoors > 0 || unlockedDoors > 0);
-
   const inUseTempC = Number.isFinite(Number(settings?.inUseTempC)) ? Number(settings.inUseTempC) : 45;
   const warmTempC = Number.isFinite(Number(settings?.warmTempC)) ? Number(settings.warmTempC) : 35;
   const isInUseByTemp = tempIsValid && currentTemp >= inUseTempC;
@@ -151,6 +149,7 @@ export default function SaunaCard({
 
   const serviceState = serviceEntity?.state ?? '';
   const serviceYes = serviceState === 'Ja';
+  const serviceNo = serviceState === 'Nei';
   const nextMinutes = toNum(nextBookingEntity?.state);
   const hasNext = nextMinutes != null && nextMinutes >= 0;
   const preheatOn = isOn(preheatWindowEntity?.state);
@@ -191,17 +190,11 @@ export default function SaunaCard({
   };
 
   const modePill = {
-    label: autoModeOn ? tr('sauna.autoMode', 'Auto modus') : tr('sauna.manualMode', 'Manuell modus'),
+    label: autoModeOn ? tr('sauna.autoMode', 'Auto') : tr('sauna.manualMode', 'Manuell'),
     cls: autoModeOn ? 'bg-emerald-500/16 border-emerald-400/22 text-emerald-200' : 'bg-orange-500/18 border-orange-400/25 text-orange-200',
   };
 
   const primaryState = (() => {
-    if (hasSafetyAlert) {
-      const desc = unlockedDoors > 0
-        ? `${unlockedDoors} ${unlockedDoors === 1 ? tr('sauna.unlockedShort', 'ulåst') : tr('sauna.unlockedShortPlural', 'ulåste')}`
-        : `${openDoors} ${openDoors === 1 ? tr('sauna.openShort', 'åpen') : tr('sauna.openShortPlural', 'åpne')}`;
-      return { label: tr('sauna.attention', 'OBS'), desc: `${tr('sauna.safety', 'Sikkerhet')}: ${desc}`, tone: 'danger' };
-    }
     if (flameOn) return { label: tr('sauna.heating', 'Varmer'), desc: tr('sauna.heatingUp', 'Varmer opp'), tone: 'hot' };
     if (saunaIsActive && serviceYes) return { label: tr('sauna.service', 'Service'), desc: tr('sauna.serviceOngoing', 'Pågår nå'), tone: 'warn' };
     if (saunaIsActive) return { label: tr('sauna.active', 'Aktiv'), desc: tr('sauna.bookingNow', 'Pågående økt'), tone: 'ok' };
@@ -226,7 +219,8 @@ export default function SaunaCard({
     const hasAny =
       settings?.saunaActiveBooleanEntityId ||
       settings?.nextBookingInMinutesEntityId ||
-      settings?.serviceEntityId;
+      settings?.serviceEntityId ||
+      settings?.preheatWindowEntityId;
 
     if (!hasAny || settings?.showBookingOverview === false) return null;
 
@@ -246,6 +240,14 @@ export default function SaunaCard({
     if (serviceYes) return `${baseLine} • ${tr('sauna.serviceOngoing', 'Service pågår')}`;
     if (serviceNo) return `${baseLine} • ${tr('sauna.normalBooking', 'Vanlig booking')}`;
     return baseLine;
+  })();
+
+  const bookingVisual = (() => {
+    const next = Number.isFinite(nextMinutes) ? Math.round(nextMinutes) : -1;
+    if (saunaIsActive && serviceYes) return { icon: Wrench, color: preheatOn ? 'text-orange-300' : 'text-emerald-300' };
+    if (saunaIsActive) return { icon: SaunaIcon, color: 'text-emerald-300' };
+    if (preheatOn) return { icon: Flame, color: 'text-orange-300' };
+    return { icon: Power, color: next === -1 ? 'text-[var(--text-muted)]' : 'text-violet-300' };
   })();
 
   const iconFor = (customIcon, fallback) => (customIcon ? (getIconComponent(customIcon) || fallback) : fallback);
@@ -303,31 +305,35 @@ export default function SaunaCard({
     <div
       {...dragProps}
       data-haptic={editMode ? undefined : 'card'}
-      className={cx('touch-feedback relative p-5 rounded-[2.5rem] transition-all duration-300 overflow-visible font-sans h-full', 'border border-[var(--glass-border)] bg-[var(--glass-bg)]', !editMode ? 'cursor-pointer active:scale-[0.98]' : 'cursor-move')}
+      className={cx('touch-feedback relative p-5 rounded-[2.5rem] transition-all duration-300 overflow-hidden font-sans h-full', 'border border-[var(--glass-border)] bg-[var(--glass-bg)]', !editMode ? 'cursor-pointer active:scale-[0.98]' : 'cursor-move')}
       style={cardStyle}
     >
       {controls}
 
-      <div className="relative z-10 h-full flex flex-col">
+      <div className="relative z-10 h-full min-h-0 flex flex-col overflow-y-auto custom-scrollbar pr-1">
         <div className="grid grid-cols-3 items-start gap-4">
           <div className="flex items-center gap-3 min-w-0">
             <div className="w-12 h-12 rounded-full flex items-center justify-center border bg-[var(--glass-bg-hover)] border-[var(--glass-border)]">
               {flameOn ? <FlameAnimated className="w-6 h-6" /> : <SaunaIcon className={cx('w-6 h-6', tone.icon)} />}
             </div>
             <div className="min-w-0">
-              <p className="text-xs uppercase tracking-widest text-[var(--text-secondary)] font-bold">{tr('sauna.operator', 'Badstue')}</p>
               <h3 className="text-lg font-bold text-[var(--text-primary)] truncate">{saunaName}</h3>
+
             </div>
           </div>
 
           <div className="flex justify-center">
-            <div className="relative w-48 h-48">
+            <div className="relative w-40 h-40">
               {settings?.peopleNowEntityId && (
-                <div className="absolute -top-5 left-1/2 -translate-x-1/2 min-w-[2.7rem] h-11 px-3 rounded-full border border-emerald-400/25 bg-emerald-500/20 text-emerald-100 flex items-center justify-center text-3xl font-extrabold z-20 shadow-lg shadow-emerald-900/30 pointer-events-none">
+                <button
+                  type="button"
+                  onClick={() => openFieldModal(tr('sauna.peopleNow', 'Antall folk nå'), [settings?.peopleNowEntityId])}
+                  className="absolute top-0 left-1/2 -translate-x-1/2 min-w-[2.7rem] h-10 px-3 rounded-full border border-emerald-400/25 bg-emerald-500/20 text-emerald-100 flex items-center justify-center text-2xl font-extrabold z-20 shadow-lg shadow-emerald-900/30"
+                >
                   {peopleNow}
-                </div>
+                </button>
               )}
-              <div className="relative w-48 h-48 rounded-full overflow-hidden border border-[var(--glass-border)] bg-[var(--glass-bg-hover)] shadow-[0_16px_45px_rgba(0,0,0,0.45)]">
+              <div className="relative w-40 h-40 rounded-full overflow-hidden border border-[var(--glass-border)] bg-[var(--glass-bg-hover)] shadow-[0_16px_45px_rgba(0,0,0,0.45)]">
                 {imageUrl ? <img src={imageUrl} alt={saunaName} className="w-full h-full object-cover" draggable={false} /> : <div className="w-full h-full bg-gradient-to-br from-white/10 to-black/20" />}
                 <div className="absolute inset-0 rounded-full ring-1 ring-white/10" />
                 {flameOn && (
@@ -366,9 +372,21 @@ export default function SaunaCard({
           </div>
         </div>
 
+        {(bookingLine || preheatOn) && (() => {
+          const BookingIcon = bookingVisual.icon;
+          return (
+            <div className="mt-8 rounded-2xl px-4 py-3 border border-[var(--glass-border)]/70 bg-[linear-gradient(135deg,rgba(255,255,255,0.06),rgba(255,255,255,0.02))] backdrop-blur-sm flex items-center gap-3 min-w-0">
+              <div className="w-7 h-7 rounded-full bg-[var(--glass-bg-hover)] flex items-center justify-center shrink-0">
+                <BookingIcon className={cx('w-4 h-4', bookingVisual.color)} />
+              </div>
+              <p className="text-sm text-[var(--text-primary)] truncate">{bookingLine || tr('sauna.preheat', 'Forvarmer')}</p>
+            </div>
+          );
+        })()}
+
 
         <div className="mt-4 grid grid-cols-3 gap-4 items-end">
-          <div className="col-span-2 rounded-2xl px-3 py-3 border bg-[var(--glass-bg-hover)] border-[var(--glass-border)] relative overflow-hidden">
+          <div className="col-span-2 px-3 py-3 relative overflow-hidden">
             {tempPath && (
               <svg className="absolute left-3 right-3 top-2 w-[calc(100%-1.5rem)] h-10 opacity-90 pointer-events-none" viewBox="0 0 100 28" preserveAspectRatio="none">
                 <path d={tempPath} fill="none" stroke="rgba(239,68,68,0.95)" strokeWidth="2.3" strokeLinecap="round" />
@@ -384,7 +402,7 @@ export default function SaunaCard({
           <button
             type="button"
             onClick={() => openFieldModal(tr('sauna.preheatTime', 'Oppvarmingstid'), [settings?.preheatMinutesEntityId])}
-            className="col-span-1 text-right rounded-2xl px-3 py-3 border bg-[var(--glass-bg-hover)] border-[var(--glass-border)] relative overflow-hidden"
+            className="col-span-1 text-right px-3 py-3 relative overflow-hidden"
           >
             {preheatPath && (
               <svg className="absolute left-3 right-3 top-2 w-[calc(100%-1.5rem)] h-9 opacity-90 pointer-events-none" viewBox="0 0 100 24" preserveAspectRatio="none">
@@ -434,17 +452,6 @@ export default function SaunaCard({
           {renderStatSection(tr('sauna.controls', 'Styring'), controlStats)}
           {renderStatSection(tr('sauna.safetyStatus', 'Sikkerhet og status'), safetyStats)}
         </div>
-
-        {hasSafetyAlert && (
-          <div className="mt-4 rounded-2xl px-3 py-2 border bg-rose-500/10 border-rose-400/20">
-            <div className="text-[10px] uppercase tracking-widest font-extrabold text-[var(--text-secondary)]">{tr('sauna.safety', 'Sikkerhet')}</div>
-            <div className="text-sm font-extrabold text-[var(--text-primary)] truncate">
-              {unlockedDoors > 0
-                ? `${unlockedDoors} ${unlockedDoors === 1 ? tr('sauna.unlockedShort', 'ulåst') : tr('sauna.unlockedShortPlural', 'ulåste')}`
-                : `${openDoors} ${openDoors === 1 ? tr('sauna.openShort', 'åpen') : tr('sauna.openShortPlural', 'åpne')}`}
-            </div>
-          </div>
-        )}
 
         {settings?.showThresholdHint && (
           <div className="mt-3 text-[11px] text-[var(--text-secondary)]">
