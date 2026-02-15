@@ -109,6 +109,13 @@ export default function EditCardModal({
 }) {
   const [mediaSearch, setMediaSearch] = React.useState('');
 
+  const tr = React.useCallback((key, fallback) => {
+    const out = typeof t === 'function' ? t(key) : undefined;
+    const str = String(out ?? '').trim();
+    if (!str || str === key || str.toLowerCase() === key.toLowerCase()) return fallback;
+    return str;
+  }, [t]);
+
   if (!isOpen) return null;
 
   const isPerson = entityId?.startsWith('person.');
@@ -895,24 +902,24 @@ export default function EditCardModal({
           {isEditSauna && editSettingsKey && (() => {
             const allEntityIds = Object.keys(entities || {});
             const saunaToggleOptions = [
-              { key: 'showFlame', label: t('sauna.showFlame') || 'Show flame' },
-              { key: 'showManualMode', label: t('sauna.showManualMode') || 'Show manual/auto mode' },
-              { key: 'showThermostat', label: t('sauna.showThermostat') || 'Show thermostat' },
-              { key: 'showMotion', label: t('sauna.showMotion') || 'Show motion' },
-              { key: 'showLights', label: t('sauna.showLights') || 'Show lights' },
-              { key: 'showLocks', label: t('sauna.showLocks') || 'Show locks' },
-              { key: 'showDoors', label: t('sauna.showDoors') || 'Show doors' },
-              { key: 'showFans', label: t('sauna.showFans') || 'Show fans' },
-              { key: 'showThermostatOverview', label: t('sauna.showThermostatOverview') || 'Show thermostat overview' },
-              { key: 'showActiveCodes', label: t('sauna.showActiveCodes') || 'Show active codes' },
-              { key: 'showTempOverview', label: t('sauna.showTempOverview') || 'Show temperature overview' },
-              { key: 'showAutoLock', label: t('sauna.showAutoLock') || 'Show auto lock' },
+              { key: 'showFlame', label: tr('sauna.showFlame', 'Show flame') },
+              { key: 'showManualMode', label: tr('sauna.showManualMode', 'Show manual/auto mode') },
+              { key: 'showThermostat', label: tr('sauna.showThermostat', 'Show thermostat') },
+              { key: 'showMotion', label: tr('sauna.showMotion', 'Show motion') },
+              { key: 'showLights', label: tr('sauna.showLights', 'Show lights') },
+              { key: 'showLocks', label: tr('sauna.showLocks', 'Show locks') },
+              { key: 'showDoors', label: tr('sauna.showDoors', 'Show doors') },
+              { key: 'showFans', label: tr('sauna.showFans', 'Show fans') },
+              { key: 'showThermostatOverview', label: tr('sauna.showThermostatOverview', 'Show thermostat overview') },
+              { key: 'showActiveCodes', label: tr('sauna.showActiveCodes', 'Show active codes') },
+              { key: 'showTempOverview', label: tr('sauna.showTempOverview', 'Show temperature overview') },
+              { key: 'showAutoLock', label: tr('sauna.showAutoLock', 'Show auto lock') },
             ];
 
             const singleSelectors = [
               {
                 key: 'tempEntityId',
-                label: t('sauna.tempSensor') || 'Temperature sensor',
+                label: tr('sauna.tempSensor', 'Temperatur - sensor'),
                 filter: (id) => {
                   const e = entities[id];
                   return e && (e.attributes?.device_class === 'temperature' || id.includes('temp'));
@@ -920,37 +927,66 @@ export default function EditCardModal({
               },
               {
                 key: 'targetTempEntityId',
-                label: t('sauna.targetTempSensor') || 'Target temperature sensor',
+                label: tr('sauna.targetTempSensor', 'Måltemperatur - sensor'),
                 filter: (id) => id.startsWith('sensor.') || id.startsWith('input_number.'),
               },
               {
                 key: 'imageEntityId',
-                label: t('sauna.imageEntity') || 'Image entity',
+                label: tr('sauna.imageEntity', 'Bilde - entitet'),
                 filter: (id) => id.startsWith('camera.') || id.startsWith('image.') || id.startsWith('sensor.'),
               },
               {
                 key: 'peopleNowEntityId',
-                label: t('sauna.peopleNowEntity') || 'People now entity',
+                label: tr('sauna.peopleNowEntity', 'Antall folk nå - sensor'),
                 filter: (id) => id.startsWith('input_number.') || id.startsWith('number.') || id.startsWith('sensor.'),
               },
               {
                 key: 'preheatMinutesEntityId',
-                label: t('sauna.preheatMinutesEntity') || 'Preheat minutes entity',
+                label: tr('sauna.preheatMinutesEntity', 'Forvarmingstid - minutter (sensor)'),
                 filter: (id) => id.startsWith('input_number.') || id.startsWith('number.') || id.startsWith('sensor.'),
               },
               {
+                key: 'saunaActiveBooleanEntityId',
+                label: tr('sauna.activeNowEntity', 'Aktiv nå - binærsensor'),
+                filter: (id) => id.startsWith('binary_sensor.') || id.startsWith('input_boolean.'),
+              },
+              {
+                key: 'serviceEntityId',
+                label: tr('sauna.serviceEntity', 'Service status - sensor (Ja/Nei)'),
+                filter: (id) => id.startsWith('sensor.') || id.startsWith('input_select.') || id.startsWith('select.'),
+              },
+              {
+                key: 'nextBookingInMinutesEntityId',
+                label: tr('sauna.nextBookingEntity', 'Neste booking i minutter - sensor'),
+                filter: (id) => id.startsWith('sensor.') || id.startsWith('input_number.') || id.startsWith('number.'),
+              },
+              {
+                key: 'preheatWindowEntityId',
+                label: tr('sauna.preheatWindowEntity', 'Forvarmingsvindu - binærsensor'),
+                filter: (id) => id.startsWith('binary_sensor.') || id.startsWith('input_boolean.'),
+              },
+              {
+                key: 'statusGraphEntityId',
+                label: tr('sauna.statusGraphEntity', 'Statusgraf (12t) - temperatursensor'),
+                filter: (id) => {
+                  const e = entities[id];
+                  const dc = String(e?.attributes?.device_class || '');
+                  return (id.startsWith('sensor.') || id.startsWith('number.') || id.startsWith('input_number.')) && (dc === 'temperature' || id.includes('temp'));
+                },
+              },
+              {
                 key: 'manualModeEntityId',
-                label: t('sauna.manualModeEntity') || 'Manual mode boolean',
+                label: tr('sauna.manualModeEntity', 'Manuell modus - bryter'),
                 filter: (id) => id.startsWith('input_boolean.') || id.startsWith('switch.'),
               },
               {
                 key: 'thermostatEntityId',
-                label: t('sauna.thermostatEntity') || 'Thermostat entity',
+                label: tr('sauna.thermostatEntity', 'Termostat - entitet'),
                 filter: (id) => id.startsWith('climate.') || id.startsWith('switch.') || id.startsWith('input_boolean.'),
               },
               {
                 key: 'motionEntityId',
-                label: t('sauna.motionEntity') || 'Motion entity',
+                label: tr('sauna.motionEntity', 'Bevegelse - sensor'),
                 filter: (id) => {
                   const e = entities[id];
                   return e && id.startsWith('binary_sensor.') && ['motion', 'occupancy', 'presence'].includes(String(e.attributes?.device_class || ''));
@@ -958,28 +994,28 @@ export default function EditCardModal({
               },
               {
                 key: 'flameEntityId',
-                label: t('sauna.flameEntity') || 'Flame switch entity',
+                label: tr('sauna.flameEntity', 'Varme/Flamme - bryter'),
                 filter: (id) => id.startsWith('switch.') || id.startsWith('input_boolean.') || id.startsWith('binary_sensor.'),
               },
               {
                 key: 'autoLockEntityId',
-                label: t('sauna.autoLockEntity') || 'Auto lock boolean',
+                label: tr('sauna.autoLockEntity', 'Autolås - bryter'),
                 filter: (id) => id.startsWith('input_boolean.') || id.startsWith('switch.'),
               },
             ];
 
             const multiSelectors = [
-              { key: 'lightEntityIds', label: t('sauna.lightEntities') || 'Lights', filter: (id) => id.startsWith('light.') },
-              { key: 'lockEntityIds', label: t('sauna.lockEntities') || 'Locks', filter: (id) => id.startsWith('lock.') },
-              { key: 'doorEntityIds', label: t('sauna.doorEntities') || 'Doors', filter: (id) => {
+              { key: 'lightEntityIds', label: tr('sauna.lightEntities', 'Lys - entiteter'), filter: (id) => id.startsWith('light.') },
+              { key: 'lockEntityIds', label: tr('sauna.lockEntities', 'Låser - entiteter'), filter: (id) => id.startsWith('lock.') },
+              { key: 'doorEntityIds', label: tr('sauna.doorEntities', 'Dører - sensorer'), filter: (id) => {
                 const e = entities[id];
                 const dc = String(e?.attributes?.device_class || '');
                 return id.startsWith('binary_sensor.') && ['door', 'window', 'opening'].includes(dc);
               }},
-              { key: 'fanEntityIds', label: t('sauna.fanEntities') || 'Fans', filter: (id) => id.startsWith('fan.') || id.startsWith('switch.') },
-              { key: 'thermostatEntityIds', label: t('sauna.thermostatEntities') || 'Thermostats', filter: (id) => id.startsWith('climate.') || id.startsWith('switch.') || id.startsWith('input_boolean.') },
-              { key: 'codeEntityIds', label: t('sauna.codeEntities') || 'Active code entities', filter: (id) => id.startsWith('input_number.') || id.startsWith('number.') || id.startsWith('sensor.') },
-              { key: 'tempOverviewEntityIds', label: t('sauna.tempOverviewEntities') || 'Temperature overview entities', filter: (id) => {
+              { key: 'fanEntityIds', label: tr('sauna.fanEntities', 'Vifter - entiteter'), filter: (id) => id.startsWith('fan.') || id.startsWith('switch.') },
+              { key: 'thermostatEntityIds', label: tr('sauna.thermostatEntities', 'Termostater - entiteter'), filter: (id) => id.startsWith('climate.') || id.startsWith('switch.') || id.startsWith('input_boolean.') },
+              { key: 'codeEntityIds', label: tr('sauna.codeEntities', 'Aktive koder - entiteter'), filter: (id) => id.startsWith('input_number.') || id.startsWith('number.') || id.startsWith('sensor.') },
+              { key: 'tempOverviewEntityIds', label: tr('sauna.tempOverviewEntities', 'Temperaturoversikt - sensorer'), filter: (id) => {
                 const e = entities[id];
                 const dc = String(e?.attributes?.device_class || '');
                 return (id.startsWith('sensor.') || id.startsWith('number.')) && (dc === 'temperature' || id.includes('temp'));
@@ -989,9 +1025,9 @@ export default function EditCardModal({
             return (
               <div className="space-y-6">
                 <div className="popup-surface rounded-2xl p-4 space-y-3">
-                  <div className="text-xs uppercase font-bold tracking-widest text-gray-500">{t('sauna.cardOptions') || 'Sauna card options'}</div>
+                  <div className="text-xs uppercase font-bold tracking-widest text-gray-500">{tr('sauna.cardOptions', 'Innstillinger for badstukort')}</div>
                   <div className="space-y-1">
-                    <label className="text-xs uppercase font-bold text-gray-500 ml-1">{t('sauna.imageUrl') || 'Image URL'}</label>
+                    <label className="text-xs uppercase font-bold text-gray-500 ml-1">{tr('sauna.imageUrl', 'Bilde-URL')}</label>
                     <input
                       type="text"
                       value={editSettings.imageUrl || ''}
@@ -999,6 +1035,16 @@ export default function EditCardModal({
                       placeholder="https://..."
                       className="w-full px-3 py-2 rounded-xl bg-[var(--glass-bg)] border border-[var(--glass-border)] text-[var(--text-primary)]"
                     />
+                  </div>
+                  <div className="rounded-xl border border-blue-400/20 bg-blue-500/10 p-3 text-xs text-blue-100">
+                    <div className="font-bold uppercase tracking-widest text-[10px] mb-1">Statuslinje på badstukort</div>
+                    <div>For å vise status-tekst/ikon trenger du disse sensorene:</div>
+                    <ul className="list-disc ml-4 mt-1 space-y-0.5">
+                      <li>Aktiv nå - binærsensor</li>
+                      <li>Service status - sensor (Ja/Nei)</li>
+                      <li>Neste booking i minutter - sensor</li>
+                      <li>Forvarmingsvindu - binærsensor</li>
+                    </ul>
                   </div>
                   {saunaToggleOptions.map((opt) => {
                     const enabled = editSettings[opt.key] !== false;
@@ -1075,7 +1121,7 @@ export default function EditCardModal({
                 })}
 
                 <div className="space-y-2">
-                  <label className="text-xs uppercase font-bold text-gray-500 ml-1">{t('sauna.statIcons') || 'Status icons'}</label>
+                  <label className="text-xs uppercase font-bold text-gray-500 ml-1">{tr('sauna.statIcons', 'Statusikoner')}</label>
                   <div className="grid grid-cols-2 gap-3">
                     {[
                       { key: 'thermostatIcon', label: t('sauna.thermostat') || 'Thermostat' },
