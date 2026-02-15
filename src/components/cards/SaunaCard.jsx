@@ -217,7 +217,6 @@ export default function SaunaCard({
 
   const bookingLine = (() => {
     const hasAny =
-      settings?.saunaActiveBooleanEntityId ||
       settings?.nextBookingInMinutesEntityId ||
       settings?.serviceEntityId ||
       settings?.preheatWindowEntityId;
@@ -225,21 +224,19 @@ export default function SaunaCard({
     if (!hasAny || settings?.showBookingOverview === false) return null;
 
     const next = Number.isFinite(nextMinutes) ? Math.round(nextMinutes) : -1;
-    const tempTxt = tempIsValid ? `${Math.round(currentTemp)} °C` : '-- °C';
 
-    let baseLine = '';
-    if (saunaIsActive) {
-      baseLine = `${tr('sauna.activeNow', 'Aktiv nå')} • ${tempTxt} • ${peopleNow} ${tr('sauna.people', 'personer')}`;
-    } else {
-      const nextTxt = next === -1
-        ? tr('sauna.noUpcomingBookingsToday', 'Ingen kommende bookinger i dag')
-        : `${tr('sauna.nextBookingIn', 'Neste booking om')} ${next} min`;
-      baseLine = `${tr('sauna.notActive', 'Ikke aktiv')} • ${nextTxt}`;
-    }
+    if (serviceYes) return tr('sauna.service', 'Service');
+    if (serviceNo) return tr('sauna.normalBooking', 'Vanlig booking');
+    if (next >= 0) return `${tr('sauna.nextBookingIn', 'Neste booking om')} ${next} min`;
+    return tr('sauna.noUpcomingBookingsToday', 'Ingen kommende bookinger i dag');
+  })();
 
-    if (serviceYes) return `${baseLine} • ${tr('sauna.serviceOngoing', 'Service pågår')}`;
-    if (serviceNo) return `${baseLine} • ${tr('sauna.normalBooking', 'Vanlig booking')}`;
-    return baseLine;
+  const bookingVisual = (() => {
+    const next = Number.isFinite(nextMinutes) ? Math.round(nextMinutes) : -1;
+    if (saunaIsActive && serviceYes) return { icon: Wrench, color: preheatOn ? 'text-orange-300' : 'text-emerald-300' };
+    if (saunaIsActive) return { icon: SaunaIcon, color: 'text-emerald-300' };
+    if (preheatOn) return { icon: Flame, color: 'text-orange-300' };
+    return { icon: Power, color: next === -1 ? 'text-[var(--text-muted)]' : 'text-violet-300' };
   })();
 
   const bookingVisual = (() => {
@@ -360,15 +357,13 @@ export default function SaunaCard({
               </button>
             )}
 
-            {!flameOn && (
-              <>
-                <div className={cx('px-4 py-2 rounded-full text-[12px] uppercase tracking-widest font-extrabold border', tone.pill)}>
-                  <span className={cx('inline-block w-2 h-2 rounded-full mr-2 align-middle', primaryState.tone === 'muted' ? 'bg-[var(--text-secondary)]/50' : 'bg-current')} />
-                  <span className="align-middle">{primaryState.label}</span>
-                </div>
-                <div className="text-[12px] text-[var(--text-secondary)] font-medium text-right">{primaryState.desc}</div>
-              </>
-            )}
+            <>
+              <div className={cx('px-4 py-2 rounded-full text-[12px] uppercase tracking-widest font-extrabold border', tone.pill)}>
+                <span className={cx('inline-block w-2 h-2 rounded-full mr-2 align-middle', primaryState.tone === 'muted' ? 'bg-[var(--text-secondary)]/50' : 'bg-current')} />
+                <span className="align-middle">{primaryState.label}</span>
+              </div>
+              <div className="text-[12px] text-[var(--text-secondary)] font-medium text-right">{primaryState.desc}</div>
+            </>
           </div>
         </div>
 
