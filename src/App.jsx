@@ -973,7 +973,12 @@ export default function App() {
   // Detect if we're returning from an OAuth2 redirect
   const isOAuthCallback = typeof window !== 'undefined' && new URLSearchParams(window.location.search).has('auth_callback');
   const hasAuth = config.token || (config.authMethod === 'oauth' && (hasOAuthTokens() || isOAuthCallback));
-  const [showOnboarding, setShowOnboarding] = useState(() => !hasAuth);
+  const [showOnboarding, setShowOnboarding] = useState(false);
+
+  useEffect(() => {
+    if (!authReady || !haConfigHydrated || !currentUser) return;
+    setShowOnboarding(!hasAuth);
+  }, [authReady, haConfigHydrated, currentUser, hasAuth]);
 
   // During onboarding, block token connections but ALLOW OAuth (including callbacks)
   const haConfig = showOnboarding
