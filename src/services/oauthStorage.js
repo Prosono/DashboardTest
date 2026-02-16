@@ -1,20 +1,61 @@
 // OAuth2 token persistence for Home Assistant
 // Used as saveTokens / loadTokens callbacks for HAWS getAuth()
 
+import { saveSharedHaConfig } from './appAuth';
+
 const OAUTH_TOKENS_KEY = 'ha_oauth_tokens';
+
+const getSessionStorage = () => {
+  try {
+    return window.sessionStorage;
+  } catch {
+    return null;
+  }
+};
+
+const getLocalStorage = () => {
+  try {
+    return window.localStorage;
+  } catch {
+    return null;
+  }
+};
+
+const pushTokensToServer = (tokenInfo) => {
+  saveSharedHaConfig({ authMethod: 'oauth', oauthTokens: tokenInfo || null })
+    .catch(() => {
+      // best effort sync only
+    });
+};
 
 export function saveTokens(tokenInfo) {
   try {
-    localStorage.setItem(OAUTH_TOKENS_KEY, JSON.stringify(tokenInfo));
+    const sessionStore = getSessionStorage();
+    const localStore = getLocalStorage();
+    const payload = JSON.stringify(tokenInfo);
+    localStore?.setItem(OAUTH_TOKENS_KEY, payload);
+    sessionStore?.removeItem(OAUTH_TOKENS_KEY);
   } catch (error) {
     console.error('Failed to save OAuth tokens to localStorage:', error);
   }
+
+  pushTokensToServer(tokenInfo);
 }
 
 export function loadTokens() {
   try {
-    const raw = localStorage.getItem(OAUTH_TOKENS_KEY);
-    if (raw) return JSON.parse(raw);
+    const sessionStore = getSessionStorage();
+    const localStore = getLocalStorage();
+    const localRaw = localStore?.getItem(OAUTH_TOKENS_KEY);
+    if (localRaw) return JSON.parse(localRaw);
+
+    const sessionRaw = sessionStore?.getItem(OAUTH_TOKENS_KEY);
+    if (sessionRaw) {
+      const parsed = JSON.parse(sessionRaw);
+      localStore?.setItem(OAUTH_TOKENS_KEY, sessionRaw);
+      sessionStore?.removeItem(OAUTH_TOKENS_KEY);
+      return parsed;
+    }
   } catch (error) {
     console.error('Failed to load OAuth tokens from localStorage:', error);
   }
@@ -23,15 +64,18 @@ export function loadTokens() {
 
 export function clearOAuthTokens() {
   try {
-    localStorage.removeItem(OAUTH_TOKENS_KEY);
+    getSessionStorage()?.removeItem(OAUTH_TOKENS_KEY);
+    getLocalStorage()?.removeItem(OAUTH_TOKENS_KEY);
   } catch (error) {
     console.error('Failed to clear OAuth tokens from localStorage:', error);
   }
+
+  pushTokensToServer(null);
 }
 
 export function hasOAuthTokens() {
   try {
-    return !!localStorage.getItem(OAUTH_TOKENS_KEY);
+    return !!(getSessionStorage()?.getItem(OAUTH_TOKENS_KEY) || getLocalStorage()?.getItem(OAUTH_TOKENS_KEY));
   } catch {
     return false;
   }
