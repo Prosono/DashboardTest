@@ -6,6 +6,8 @@ import {
   Edit2,
   LayoutGrid,
   Plus,
+  Lock,
+  User,
 } from './icons';
 
 
@@ -37,6 +39,13 @@ import {
 import { formatDuration } from './utils';
 import './styles/dashboard.css';
 import { hasOAuthTokens } from './services/oauthStorage';
+import {
+  fetchCurrentUser,
+  loginWithPassword,
+  logoutUser,
+  listUsers as listServerUsers,
+  createUser as createServerUser,
+} from './services/appAuth';
 import { isCardRemovable as _isCardRemovable, isCardHiddenByLogic as _isCardHiddenByLogic, isMediaPage as _isMediaPage } from './utils/cardUtils';
 import { getCardGridSize as _getCardGridSize, buildGridLayout as _buildGridLayout } from './utils/gridLayout';
 import { createDragAndDropHandlers } from './utils/dragAndDrop';
@@ -46,7 +55,7 @@ import CardErrorBoundary from './components/ui/CardErrorBoundary';
 import EditOverlay from './components/ui/EditOverlay';
 import AuroraBackground from './components/effects/AuroraBackground';
 
-function AppContent({ showOnboarding, setShowOnboarding }) {
+function AppContent({ showOnboarding, setShowOnboarding, currentUser, onLogout, userAdminApi }) {
   const {
     currentTheme,
     setCurrentTheme,
@@ -176,6 +185,11 @@ function AppContent({ showOnboarding, setShowOnboarding }) {
   const [showLayoutSidebar, setShowLayoutSidebar] = useState(false);
   const [editCardSettingsKey, setEditCardSettingsKey] = useState(null);
   const [editMode, setEditMode] = useState(false);
+  const canEditDashboard = currentUser?.role === 'admin';
+
+  useEffect(() => {
+    if (!canEditDashboard && editMode) setEditMode(false);
+  }, [canEditDashboard, editMode]);
   const [draggingId, setDraggingId] = useState(null);
   const [activePage, _setActivePage] = useState(() => {
     try { return localStorage.getItem('tunet_active_page') || 'home'; } catch { return 'home'; }
@@ -540,7 +554,7 @@ function AppContent({ showOnboarding, setShowOnboarding }) {
           >
             <div className={`flex flex-wrap gap-2.5 items-center min-w-0 ${isMobile ? 'scale-90 origin-left w-full' : ''}`}>
               {(pagesConfig.header || []).map(id => personStatus(id))}
-              {editMode && (
+              {editMode && canEditDashboard && (
                 <button 
                   onClick={() => { setAddCardTargetPage('header'); setShowAddCardModal(true); }} 
                   className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-blue-500/20 border border-blue-500/30 text-blue-400 hover:bg-blue-500/30 transition-all text-[10px] font-bold uppercase tracking-[0.2em]"
@@ -608,8 +622,8 @@ function AppContent({ showOnboarding, setShowOnboarding }) {
             t={t}
           />
           <div className="relative flex items-center gap-6 flex-shrink-0 overflow-visible pb-2 justify-end">
-            {editMode && <button onClick={() => setShowAddCardModal(true)} className="group flex items-center gap-2 text-xs font-bold uppercase text-blue-400 hover:text-white transition-all whitespace-nowrap"><Plus className="w-4 h-4" /> {t('nav.addCard')}</button>}
-            {editMode && (
+            {editMode && canEditDashboard && <button onClick={() => setShowAddCardModal(true)} className="group flex items-center gap-2 text-xs font-bold uppercase text-blue-400 hover:text-white transition-all whitespace-nowrap"><Plus className="w-4 h-4" /> {t('nav.addCard')}</button>}
+            {editMode && canEditDashboard && (
               <button onClick={() => {
                 const currentSettings = pageSettings[activePage];
                 if (currentSettings?.hidden) setActivePage('home');
@@ -621,15 +635,26 @@ function AppContent({ showOnboarding, setShowOnboarding }) {
             
             <button 
               onClick={() => {
+                if (!canEditDashboard) return;
                 const currentSettings = pageSettings[activePage];
                 if (currentSettings?.hidden) setActivePage('home');
                 setEditMode(!editMode);
               }} 
               className={`p-2 rounded-full group ${editMode ? 'bg-blue-500/20 text-blue-400' : 'text-[var(--text-secondary)]'}`}
-              title={editMode ? t('nav.done') : t('menu.edit')}
+              title={canEditDashboard ? (editMode ? t('nav.done') : t('menu.edit')) : 'Admin only'}
             >
               <Edit2 className="w-5 h-5" />
             </button>
+            {currentUser && (
+              <button
+                onClick={onLogout}
+                className="px-2 py-1 rounded-full border border-[var(--glass-border)] text-[10px] uppercase tracking-wider text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
+                title="Log out"
+              >
+                <User className="w-3 h-3 inline mr-1" />
+                {currentUser.username} ({currentUser.role})
+              </button>
+            )}
             <div className="relative">
               <SettingsDropdown 
                 onOpenSettings={() => { setShowConfigModal(true); setConfigTab('connection'); }}
@@ -827,6 +852,10 @@ function AppContent({ showOnboarding, setShowOnboarding }) {
             refreshGlobalDashboards,
             saveGlobalDashboard,
             loadGlobalDashboard,
+            currentUser,
+            canEditDashboard,
+            onLogout,
+            userAdminApi,
           }}
           mediaTick={mediaTick}
         />
@@ -836,6 +865,48 @@ function AppContent({ showOnboarding, setShowOnboarding }) {
 }
 
 export default function App() {
+  const [authReady, setAuthReady] = useState(false);
+  const [currentUser, setCurrentUser] = useState(null);
+  const [authError, setAuthError] = useState('');
+  const [loggingIn, setLoggingIn] = useState(false);
+  const [username, setUsername] = useState('admin');
+  const [password, setPassword] = useState('admin');
+
+  useEffect(() => {
+    let mounted = true;
+    const init = async () => {
+      try {
+        const user = await fetchCurrentUser();
+        if (mounted) setCurrentUser(user);
+      } catch {
+        if (mounted) setCurrentUser(null);
+      } finally {
+        if (mounted) setAuthReady(true);
+      }
+    };
+    init();
+    return () => { mounted = false; };
+  }, []);
+
+  const doLogin = async (e) => {
+    e.preventDefault();
+    setLoggingIn(true);
+    setAuthError('');
+    try {
+      const result = await loginWithPassword(username, password);
+      setCurrentUser(result?.user || null);
+    } catch (error) {
+      setAuthError(error?.message || 'Login failed');
+    } finally {
+      setLoggingIn(false);
+    }
+  };
+
+  const doLogout = async () => {
+    await logoutUser();
+    setCurrentUser(null);
+  };
+
   const { config } = useConfig();
   // Detect if we're returning from an OAuth2 redirect
   const isOAuthCallback = typeof window !== 'undefined' && new URLSearchParams(window.location.search).has('auth_callback');
@@ -849,11 +920,44 @@ export default function App() {
       : { ...config, token: '' }   // Token: block until onboarding finishes
     : config;
 
+  if (!authReady) {
+    return <div className="min-h-screen flex items-center justify-center text-[var(--text-secondary)]">Loading…</div>;
+  }
+
+  if (!currentUser) {
+    return (
+      <div className="min-h-screen flex items-center justify-center px-4" style={{ backgroundColor: 'var(--bg-primary)', color: 'var(--text-primary)' }}>
+        <form onSubmit={doLogin} className="w-full max-w-md rounded-3xl border border-[var(--glass-border)] bg-[var(--card-bg)] p-6 space-y-4 shadow-xl">
+          <h1 className="text-xl font-bold uppercase tracking-wider">Dashboard login</h1>
+          <p className="text-sm text-[var(--text-secondary)]">Logg inn for å laste dashboard og tilgangsnivå.</p>
+          <label className="block text-xs uppercase tracking-wider">Username</label>
+          <input className="w-full px-3 py-2 rounded-xl bg-[var(--glass-bg)] border border-[var(--glass-border)]" value={username} onChange={(e) => setUsername(e.target.value)} />
+          <label className="block text-xs uppercase tracking-wider">Password</label>
+          <input type="password" className="w-full px-3 py-2 rounded-xl bg-[var(--glass-bg)] border border-[var(--glass-border)]" value={password} onChange={(e) => setPassword(e.target.value)} />
+          {authError && <div className="text-sm text-red-400">{authError}</div>}
+          <button disabled={loggingIn} className="w-full py-2.5 rounded-xl bg-blue-500 hover:bg-blue-600 text-white font-bold uppercase tracking-wider disabled:opacity-60">
+            <Lock className="w-4 h-4 inline mr-2" />
+            {loggingIn ? 'Logger inn…' : 'Logg inn'}
+          </button>
+          <p className="text-xs text-[var(--text-secondary)]">Standard testbruker: <strong>admin / admin</strong>.</p>
+        </form>
+      </div>
+    );
+  }
+
+  const userAdminApi = {
+    listUsers: listServerUsers,
+    createUser: createServerUser,
+  };
+
   return (
     <HomeAssistantProvider config={haConfig}>
       <AppContent
         showOnboarding={showOnboarding}
         setShowOnboarding={setShowOnboarding}
+        currentUser={currentUser}
+        onLogout={doLogout}
+        userAdminApi={userAdminApi}
       />
     </HomeAssistantProvider>
   );
