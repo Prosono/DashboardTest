@@ -46,7 +46,7 @@ export const readCachedDashboard = () => {
   try {
     const raw = localStorage.getItem(STORAGE_CACHE_KEY);
     if (!raw) return null;
-    return safeParse(raw, null)?.data || null;
+    return safeParse(raw, null);
   } catch {
     return null;
   }
