@@ -66,6 +66,26 @@ export default function SensorCard({
   const isSmall = settings?.size === 'small';
   const showGraph = !isSmall && isNumeric && domain !== 'input_number' && settings?.showGraph !== false;
 
+
+  const parseHistoryState = (entry) => {
+    const raw = entry?.state ?? entry?.s;
+    const n = Number.parseFloat(raw);
+    return Number.isFinite(n) ? n : null;
+  };
+
+  const parseHistoryTime = (entry) => {
+    const raw = entry?.last_changed
+      || entry?.last_updated
+      || entry?.last_reported
+      || entry?.timestamp
+      || entry?.lc
+      || entry?.lu
+      || entry?.lr;
+    if (!raw) return null;
+    const d = new Date(raw);
+    return Number.isNaN(d.getTime()) ? null : d;
+  };
+
   const [history, setHistory] = useState([]);
   const [isVisible, setIsVisible] = useState(false);
   const [activeUntil, setActiveUntil] = useState(0);
@@ -120,9 +140,15 @@ export default function SensorCard({
           minimal_response: true
         });
 
-        const processed = (data && Array.isArray(data) ? data : [])
-          .filter(d => !isNaN(parseFloat(d.state)))
-          .map(d => ({ value: parseFloat(d.state), time: new Date(d.last_changed) }));
+        const rawData = (data && Array.isArray(data) ? data : []);
+        const processed = rawData
+          .map((d) => {
+            const value = parseHistoryState(d);
+            const time = parseHistoryTime(d);
+            if (!Number.isFinite(value) || !time) return null;
+            return { value, time };
+          })
+          .filter(Boolean);
 
         if (processed.length === 1) {
           const onlyPoint = processed[0];
