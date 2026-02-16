@@ -60,7 +60,11 @@ export const writeCachedDashboard = (payload) => {
   }
 };
 
-export const listSharedDashboards = async () => {
+/**
+ * Hent liste over tilgjengelige dashboards/profiler
+ * GET /api/dashboards
+ */
+export const fetchSharedDashboardProfiles = async () => {
   try {
     const payload = await apiRequest('/api/dashboards', { method: 'GET' });
     return normalizeList(payload?.dashboards || []);
@@ -70,6 +74,10 @@ export const listSharedDashboards = async () => {
   }
 };
 
+/**
+ * Hent én dashboard-profil
+ * GET /api/dashboards/:id
+ */
 export const fetchSharedDashboardProfile = async (profileId) => {
   const id = toProfileId(profileId);
   try {
