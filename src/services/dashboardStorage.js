@@ -1,9 +1,10 @@
-import { apiRequest } from './appAuth';
+import { apiRequest } from "/src/services/appAuth.js";
 
-const STORAGE_CACHE_KEY = 'tunet_shared_dashboard_cache';
-const STORAGE_PROFILES_CACHE_KEY = 'tunet_shared_dashboard_profiles_cache';
+const STORAGE_CACHE_KEY = "tunet_shared_dashboard_cache";
+const STORAGE_PROFILES_CACHE_KEY = "tunet_shared_dashboard_profiles_cache";
 
-export const toProfileId = (value) => String(value || 'default').trim().replace(/\s+/g, '_').toLowerCase();
+export const toProfileId = (value) =>
+  String(value || "default").trim().replace(/\s+/g, "_").toLowerCase();
 
 const safeParse = (value, fallback = null) => {
   try {
@@ -33,11 +34,15 @@ const writeProfilesCache = (profiles) => {
 
 const normalizeList = (dashboards) => {
   const list = (Array.isArray(dashboards) ? dashboards : []).map((entry) => ({
-    id: toProfileId(entry.id || entry.name || 'default'),
-    name: entry.name || entry.id || 'default',
+    id: toProfileId(entry.id || entry.name || "default"),
+    name: entry.name || entry.id || "default",
     updatedAt: entry.updatedAt || entry.updated_at || null,
   }));
-  if (list.length === 0) list.push({ id: 'default', name: 'default', updatedAt: null });
+
+  if (list.length === 0) {
+    list.push({ id: "default", name: "default", updatedAt: null });
+  }
+
   writeProfilesCache(list);
   return list;
 };
@@ -60,45 +65,60 @@ export const writeCachedDashboard = (payload) => {
   }
 };
 
-export const fetchSharedDashboardProfile = async (profileId) => {
-  const id = toProfileId(profileId);
+/**
+ * Hent liste over tilgjengelige dashboards/profiler
+ * GET /api/dashboards
+ */
+export const fetchSharedDashboardProfiles = async () => {
   try {
-    const payload = await apiRequest('/api/dashboards', { method: 'GET' });
+    const payload = await apiRequest("/api/dashboards", { method: "GET" });
     return normalizeList(payload?.dashboards || []);
   } catch {
     const cached = readProfilesCache();
-    return cached.length ? cached : [{ id: 'default', name: 'default', updatedAt: null }];
+    return cached.length ? cached : [{ id: "default", name: "default", updatedAt: null }];
   }
-  return readCachedProfileData(id);
 };
 
+/**
+ * Hent én dashboard-profil
+ * GET /api/dashboards/:id
+ */
 export const fetchSharedDashboardProfile = async (profileId) => {
   const id = toProfileId(profileId);
+
   try {
-    const payload = await apiRequest(`/api/dashboards/${encodeURIComponent(id)}`, { method: 'GET' });
-    const data = payload?.data || null;
-    if (data && id === 'default') writeCachedDashboard(data);
+    const payload = await apiRequest(
+      `/api/dashboards/${encodeURIComponent(id)}`,
+      { method: "GET" }
+    );
+
+    const data = payload?.data ?? null;
+
+    // cache kun default lokalt
+    if (data && id === "default") writeCachedDashboard(data);
+
     return data;
   } catch {
-    return id === 'default' ? readCachedDashboard() : null;
+    return id === "default" ? readCachedDashboard() : null;
   }
 };
 
-export const fetchSharedDashboard = async () => fetchSharedDashboardProfile('default');
+export const fetchSharedDashboard = async () =>
+  fetchSharedDashboardProfile("default");
 
 export const saveSharedDashboardProfile = async (profileId, data) => {
   const id = toProfileId(profileId);
-  const name = String(profileId || 'default').trim() || 'default';
+  const name = String(profileId || "default").trim() || "default";
 
   try {
     await apiRequest(`/api/dashboards/${encodeURIComponent(id)}`, {
-      method: 'PUT',
+      method: "PUT",
       body: JSON.stringify({ name, data }),
     });
   } catch (error) {
     if (error?.status === 404) {
-      await apiRequest('/api/dashboards', {
-        method: 'POST',
+      await apiRequest("/api/dashboards", {
+        method: "POST",
         body: JSON.stringify({ id, name, data }),
       });
     } else {
@@ -106,10 +126,13 @@ export const saveSharedDashboardProfile = async (profileId, data) => {
     }
   }
 
-  if (id === 'default') writeCachedDashboard(data);
+  if (id === "default") writeCachedDashboard(data);
   return { data };
 };
 
-export const saveSharedDashboard = async (data) => saveSharedDashboardProfile('default', data);
+export const saveSharedDashboard = async (data) =>
+  saveSharedDashboardProfile("default", data);
 
 export const __resetDashboardStorageRuntime = () => {};
+
+export const listSharedDashboards = fetchSharedDashboardProfiles;
