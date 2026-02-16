@@ -119,3 +119,5 @@ export const saveSharedDashboardProfile = async (profileId, data) => {
 export const saveSharedDashboard = async (data) => saveSharedDashboardProfile('default', data);
 
 export const __resetDashboardStorageRuntime = () => {};
+
+export const listSharedDashboards = fetchSharedDashboardProfiles;
