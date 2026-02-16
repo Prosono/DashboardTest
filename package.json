@@ -15,7 +15,10 @@
     "preview": "vite preview",
     "lint": "eslint src",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "dev:server": "node server/index.js",
+    "dev:all": "concurrently \"vite\" \"node server/index.js\"",
+    "server": "node server/index.js"
   },
   "dependencies": {
     "@fortawesome/fontawesome-free": "^7.1.0",
@@ -27,7 +30,10 @@
     "lucide-react": "^0.263.1",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
-    "react-icons": "^5.5.0"
+    "react-icons": "^5.5.0",
+    "better-sqlite3": "^11.0.0",
+    "express": "^4.21.0",
+    "home-assistant-js-websocket": "^9.6.0"
   },
   "devDependencies": {
     "@eslint/js": "^9.0.0",
@@ -45,6 +51,7 @@
     "postcss": "^8.5.6",
     "tailwindcss": "^4.1.18",
     "vite": "^7.3.1",
-    "vitest": "^4.0.18"
+    "vitest": "^4.0.18",
+    "concurrently": "^9.0.0"
   }
 }

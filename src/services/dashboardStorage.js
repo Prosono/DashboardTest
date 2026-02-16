@@ -1,10 +1,11 @@
 const STORAGE_CACHE_KEY = 'tunet_shared_dashboard_cache';
-const STORAGE_SCHEMA_VERSION = 1;
 const STORAGE_PROFILES_CACHE_KEY = 'tunet_shared_dashboard_profiles_cache';
 
-const getStorageUrl = () => import.meta.env.VITE_DASHBOARD_STORAGE_URL || '/api/dashboard-config';
+const API_BASE = import.meta.env.VITE_DASHBOARD_STORAGE_API_BASE || '/api';
+const SHARED_USER_ID = import.meta.env.VITE_DASHBOARD_STORAGE_USER_ID || 'shared';
 
 const toProfileId = (value) => String(value || 'default').trim().replace(/\s+/g, '_').toLowerCase();
+const getProfileCacheKey = (id) => `tunet_shared_dashboard_profile_${id}`;
 
 const safeParse = (value, fallback = null) => {
   try {
@@ -14,51 +15,25 @@ const safeParse = (value, fallback = null) => {
   }
 };
 
-const getProfilesUrl = () => `${getStorageUrl().replace(/\/$/, '')}/profiles`;
-const getProfileCacheKey = (id) => `tunet_shared_dashboard_profile_${id}`;
+const request = async (path, options = {}) => {
+  const headers = {
+    'Content-Type': 'application/json',
+    'x-ha-user-id': SHARED_USER_ID,
+    ...(options.headers || {}),
+  };
 
-const unwrapData = (payload) => payload?.data || null;
+  const res = await fetch(`${API_BASE}${path}`, {
+    ...options,
+    headers,
+  });
 
-const buildPayload = (data) => ({
-  version: STORAGE_SCHEMA_VERSION,
-  updatedAt: new Date().toISOString(),
-  data,
-});
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body.error || `API error ${res.status}`);
+  }
 
-const EMBEDDED_PROFILES_KEY = '__saved_profiles__';
-
-let profilesEndpointAvailable = true;
-
-const readSharedProfilesFromDefaultEnvelope = async () => {
-  const defaultPayload = await fetchDefaultDashboardEnvelope();
-  const embeddedProfiles = getEmbeddedProfiles(defaultPayload);
-  const embeddedList = Object.values(embeddedProfiles).map((entry) => ({
-    id: toProfileId(entry?.id || entry?.name || 'default'),
-    name: entry?.name || entry?.id || 'default',
-    updatedAt: entry?.updatedAt || null,
-  }));
-
-  const defaults = [{
-    id: 'default',
-    name: 'default',
-    updatedAt: defaultPayload?.updatedAt || null,
-  }];
-
-  const merged = [...defaults, ...embeddedList.filter((p) => p.id !== 'default')];
-  return { profiles: mergeWithCachedProfiles(merged), payload: defaultPayload };
+  return res.json();
 };
-
-const getEmbeddedProfiles = (payload) => {
-  const profiles = payload?.data?.[EMBEDDED_PROFILES_KEY];
-  return (profiles && typeof profiles === 'object' && !Array.isArray(profiles)) ? profiles : {};
-};
-
-const buildEmbeddedProfileEntry = (id, name, data) => ({
-  id,
-  name,
-  updatedAt: new Date().toISOString(),
-  data,
-});
 
 const readProfilesCache = () => {
   try {
@@ -78,65 +53,84 @@ const writeProfilesCache = (profiles) => {
   }
 };
 
-
-const mergeWithCachedProfiles = (profiles) => {
-  const fromCache = readProfilesCache();
-  const byId = new Map();
-  [...profiles, ...fromCache].forEach((entry) => {
-    const id = toProfileId(entry?.id || entry?.name || 'default');
-    if (!byId.has(id)) {
-      byId.set(id, {
-        id,
-        name: entry?.name || id,
-        updatedAt: entry?.updatedAt || null,
-      });
-    }
-  });
-  const merged = Array.from(byId.values());
-  writeProfilesCache(merged);
-  return merged;
+const upsertCachedProfileMeta = (entry) => {
+  const current = readProfilesCache();
+  const id = toProfileId(entry?.id || entry?.name || 'default');
+  const normalized = {
+    id,
+    name: entry?.name || id,
+    updatedAt: entry?.updatedAt || null,
+    serverId: entry?.serverId || null,
+  };
+  const next = [normalized, ...current.filter((p) => p.id !== id)];
+  writeProfilesCache(next);
 };
 
-const upsertCachedProfile = (entry) => {
-  const current = readProfilesCache();
-  const next = [entry, ...current.filter((p) => p.id !== entry.id)];
-  writeProfilesCache(next);
+const upsertCachedProfileData = (id, data) => {
+  try {
+    localStorage.setItem(getProfileCacheKey(id), JSON.stringify({ data, updatedAt: new Date().toISOString() }));
+  } catch {
+    // best effort cache write
+  }
 };
 
 const readCachedProfileData = (id) => {
   try {
     const raw = localStorage.getItem(getProfileCacheKey(id));
     if (!raw) return null;
-    return safeParse(raw, null);
+    return safeParse(raw, null)?.data || null;
   } catch {
     return null;
   }
 };
 
-const writeCachedProfileData = (id, payload) => {
-  try {
-    localStorage.setItem(getProfileCacheKey(id), JSON.stringify(payload));
-  } catch {
-    // best effort cache write
+const normalizeProfileList = (profiles) => {
+  const byId = new Map();
+  (Array.isArray(profiles) ? profiles : []).forEach((entry) => {
+    const id = toProfileId(entry?.name || entry?.id || 'default');
+    if (byId.has(id)) return;
+    byId.set(id, {
+      id,
+      name: entry?.name || id,
+      updatedAt: entry?.updated_at || entry?.updatedAt || null,
+      serverId: entry?.id || entry?.serverId || null,
+    });
+  });
+  if (!byId.has('default')) {
+    byId.set('default', { id: 'default', name: 'default', updatedAt: null, serverId: null });
   }
+  const normalized = Array.from(byId.values());
+  writeProfilesCache(normalized);
+  return normalized;
 };
 
-const fetchDefaultDashboardEnvelope = async () => {
-  const res = await fetch(getStorageUrl(), {
+const fetchProfilesRemote = async () => {
+  const profiles = await request(`/profiles?ha_user_id=${encodeURIComponent(SHARED_USER_ID)}`, {
     method: 'GET',
-    headers: { Accept: 'application/json' },
   });
+  return normalizeProfileList(profiles);
+};
 
-  if (res.status === 404) return null;
-  if (!res.ok) throw new Error(`Failed to load shared dashboard: ${res.status}`);
-  return res.json();
+const resolveProfileMeta = async (profileId) => {
+  const id = toProfileId(profileId);
+  const cached = readProfilesCache().find((p) => p.id === id);
+  if (cached?.serverId || id === 'default') return cached || null;
+
+  const remote = await fetchProfilesRemote();
+  return remote.find((p) => p.id === id) || null;
+};
+
+const fetchProfileDataByServerId = async (serverId, fallbackId) => {
+  if (!serverId) return readCachedProfileData(fallbackId);
+  const profile = await request(`/profiles/${encodeURIComponent(serverId)}`, { method: 'GET' });
+  return profile?.data || null;
 };
 
 export const readCachedDashboard = () => {
   try {
-    const cached = localStorage.getItem(STORAGE_CACHE_KEY);
-    if (!cached) return null;
-    return safeParse(cached, null);
+    const raw = localStorage.getItem(STORAGE_CACHE_KEY);
+    if (!raw) return null;
+    return safeParse(raw, null);
   } catch {
     return null;
   }
@@ -146,175 +140,106 @@ export const writeCachedDashboard = (payload) => {
   try {
     localStorage.setItem(STORAGE_CACHE_KEY, JSON.stringify(payload));
   } catch {
-    // best-effort cache write
-  }
-};
-
-export const fetchSharedDashboard = async () => {
-  const payload = await fetchDefaultDashboardEnvelope();
-  if (!payload) return null;
-  return unwrapData(payload);
-};
-
-export const saveSharedDashboard = async (data) => {
-  const payload = buildPayload(data);
-
-  try {
-    const res = await fetch(getStorageUrl(), {
-      method: 'PUT',
-      headers: {
-        'Content-Type': 'application/json',
-        Accept: 'application/json',
-      },
-      body: JSON.stringify(payload),
-    });
-
-    if (!res.ok) {
-      if (res.status === 404) {
-        writeCachedDashboard(payload.data);
-        mergeWithCachedProfiles([{ id: 'default', name: 'default', updatedAt: payload.updatedAt }]);
-        return payload;
-      }
-      throw new Error(`Failed to save shared dashboard: ${res.status}`);
-    }
-
-    return payload;
-  } catch (error) {
-    if (String(error?.message || '').includes('Failed to save shared dashboard')) throw error;
-    writeCachedDashboard(payload.data);
-    mergeWithCachedProfiles([{ id: 'default', name: 'default', updatedAt: payload.updatedAt }]);
-    return payload;
+    // best effort cache write
   }
 };
 
 export const listSharedDashboards = async () => {
   try {
-    if (!profilesEndpointAvailable) {
-      const { profiles } = await readSharedProfilesFromDefaultEnvelope();
-      return profiles;
-    }
-
-    const res = await fetch(getProfilesUrl(), {
-      method: 'GET',
-      headers: { Accept: 'application/json' },
-    });
-
-    if (!res.ok) {
-      profilesEndpointAvailable = false;
-      const { profiles } = await readSharedProfilesFromDefaultEnvelope();
-      return profiles;
-    }
-
-    const payload = await res.json();
-    const rawProfiles = Array.isArray(payload?.profiles) ? payload.profiles : [];
-    if (rawProfiles.length === 0) {
-      const { profiles } = await readSharedProfilesFromDefaultEnvelope();
-      return profiles;
-    }
-
-    const normalized = rawProfiles.map((entry) => ({
-      id: toProfileId(entry.id || entry.name || 'default'),
-      name: entry.name || entry.id || 'default',
-      updatedAt: entry.updatedAt || null,
-    }));
-
-    writeProfilesCache(normalized);
-    return normalized;
+    return await fetchProfilesRemote();
   } catch {
-    profilesEndpointAvailable = false;
-    const { profiles } = await readSharedProfilesFromDefaultEnvelope();
-    return profiles;
+    const cached = readProfilesCache();
+    return cached.length > 0 ? cached : [{ id: 'default', name: 'default', updatedAt: null, serverId: null }];
   }
 };
 
 export const fetchSharedDashboardProfile = async (profileId) => {
   const id = toProfileId(profileId);
-  if (id === 'default') return fetchSharedDashboard();
-
-  const fallbackData = async () => {
-    const defaultPayload = await fetchDefaultDashboardEnvelope();
-    const embeddedProfiles = getEmbeddedProfiles(defaultPayload);
-    const embedded = embeddedProfiles[id];
-    if (embedded?.data) return embedded.data;
-
-    const cached = readCachedProfileData(id);
-    return cached?.data || null;
-  };
-
   try {
-    if (!profilesEndpointAvailable) return fallbackData();
-
-    const res = await fetch(`${getProfilesUrl()}/${encodeURIComponent(id)}`, {
-      method: 'GET',
-      headers: { Accept: 'application/json' },
-    });
-
-    if (!res.ok) {
-      profilesEndpointAvailable = false;
-      return fallbackData();
+    const meta = await resolveProfileMeta(id);
+    const data = await fetchProfileDataByServerId(meta?.serverId, id);
+    if (data) {
+      upsertCachedProfileData(id, data);
+      return data;
     }
-
-    const payload = await res.json();
-    return unwrapData(payload);
   } catch {
-    profilesEndpointAvailable = false;
-    return fallbackData();
+    // fallback below
   }
+  return readCachedProfileData(id);
+};
+
+export const fetchSharedDashboard = async () => {
+  const data = await fetchSharedDashboardProfile('default');
+  return data || null;
+};
+
+const createProfile = async (id, name, data) => {
+  const created = await request('/profiles', {
+    method: 'POST',
+    body: JSON.stringify({
+      ha_user_id: SHARED_USER_ID,
+      name,
+      device_label: null,
+      data,
+    }),
+  });
+
+  const meta = {
+    id,
+    name,
+    updatedAt: created?.updated_at || created?.updatedAt || new Date().toISOString(),
+    serverId: created?.id || null,
+  };
+  upsertCachedProfileMeta(meta);
+  return meta;
+};
+
+const updateProfile = async (meta, data) => {
+  const updated = await request(`/profiles/${encodeURIComponent(meta.serverId)}`, {
+    method: 'PUT',
+    body: JSON.stringify({
+      ha_user_id: SHARED_USER_ID,
+      name: meta.name,
+      device_label: null,
+      data,
+    }),
+  });
+
+  const nextMeta = {
+    ...meta,
+    updatedAt: updated?.updated_at || updated?.updatedAt || new Date().toISOString(),
+  };
+  upsertCachedProfileMeta(nextMeta);
+  return nextMeta;
 };
 
 export const saveSharedDashboardProfile = async (profileId, data) => {
   const id = toProfileId(profileId);
-  if (id === 'default') return saveSharedDashboard(data);
+  const name = String(profileId || 'default').trim() || 'default';
 
-  const payload = buildPayload(data);
-
-  let useEmbeddedFallback = !profilesEndpointAvailable;
   try {
-    if (profilesEndpointAvailable) {
-      const res = await fetch(`${getProfilesUrl()}/${encodeURIComponent(id)}`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          Accept: 'application/json',
-        },
-        body: JSON.stringify({ ...payload, id }),
-      });
-
-      useEmbeddedFallback = !res.ok;
-      if (!res.ok) profilesEndpointAvailable = false;
+    const meta = await resolveProfileMeta(id);
+    if (meta?.serverId) {
+      await updateProfile(meta, data);
+    } else {
+      await createProfile(id, name, data);
     }
   } catch {
-    profilesEndpointAvailable = false;
-    useEmbeddedFallback = true;
+    // Keep local cache as fallback when backend unavailable.
   }
 
-  // If dedicated profile endpoint is missing/unavailable, persist named
-  // profiles into the default shared document so they are available globally.
-  if (useEmbeddedFallback) {
-    const defaultPayload = await fetchDefaultDashboardEnvelope();
-    const baseData = defaultPayload?.data || {};
-    const embeddedProfiles = getEmbeddedProfiles(defaultPayload);
-    const nextProfiles = {
-      ...embeddedProfiles,
-      [id]: buildEmbeddedProfileEntry(id, profileId || id, data),
-    };
+  upsertCachedProfileData(id, data);
+  if (id === 'default') writeCachedDashboard(data);
+  upsertCachedProfileMeta({ id, name, updatedAt: new Date().toISOString() });
+  return { data };
+};
 
-    await saveSharedDashboard({
-      ...baseData,
-      [EMBEDDED_PROFILES_KEY]: nextProfiles,
-    });
-  }
-
-  // Always keep a local profile cache so refresh/load can still work even if
-  // backend does not implement profile listing endpoints.
-  writeCachedProfileData(id, payload);
-  upsertCachedProfile({ id, name: profileId || id, updatedAt: payload.updatedAt });
-
-  return payload;
+export const saveSharedDashboard = async (data) => {
+  return saveSharedDashboardProfile('default', data);
 };
 
 export const __resetDashboardStorageRuntime = () => {
-  profilesEndpointAvailable = true;
+  // no runtime flags in the profile-api implementation
 };
 
 export { toProfileId };
