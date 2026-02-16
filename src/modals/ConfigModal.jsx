@@ -95,6 +95,10 @@ export default function ConfigModal({
   refreshGlobalDashboards,
   saveGlobalDashboard,
   loadGlobalDashboard,
+  currentUser,
+  canEditDashboard,
+  onLogout,
+  userAdminApi,
   onClose,
   onFinishOnboarding
 }) {
@@ -105,6 +109,11 @@ export default function ConfigModal({
   const [selectedGlobalDashboard, setSelectedGlobalDashboard] = useState('default');
   const [newGlobalDashboardName, setNewGlobalDashboardName] = useState('');
   const [globalActionMessage, setGlobalActionMessage] = useState('');
+  const [users, setUsers] = useState([]);
+  const [newUsername, setNewUsername] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [newRole, setNewRole] = useState('user');
+  const [newUserDashboard, setNewUserDashboard] = useState('default');
 
   const isLayoutPreview = configTab === 'layout' && layoutPreview;
 
@@ -133,6 +142,17 @@ export default function ConfigModal({
       refreshGlobalDashboards();
     }
   }, [configTab, refreshGlobalDashboards]);
+
+  useEffect(() => {
+    if (configTab !== 'storage' || !canEditDashboard || !userAdminApi?.listUsers) return;
+    let cancelled = false;
+    userAdminApi.listUsers().then((list) => {
+      if (!cancelled) setUsers(Array.isArray(list) ? list : []);
+    }).catch(() => {
+      if (!cancelled) setUsers([]);
+    });
+    return () => { cancelled = true; };
+  }, [configTab, canEditDashboard, userAdminApi]);
 
   if (!open) return null;
 
@@ -256,13 +276,21 @@ export default function ConfigModal({
 
     const handleRefresh = async () => {
       if (!refreshGlobalDashboards) return;
-      const profiles = await refreshGlobalDashboards();
-      if (Array.isArray(profiles)) {
-        setGlobalActionMessage(`Refreshed ${profiles.length} dashboard${profiles.length === 1 ? '' : 's'}.`);
+      const nextProfiles = await refreshGlobalDashboards();
+      if (Array.isArray(nextProfiles)) {
+        setGlobalActionMessage(`Refreshed ${nextProfiles.length} dashboard${nextProfiles.length === 1 ? '' : 's'}.`);
+      }
+      if (canEditDashboard && userAdminApi?.listUsers) {
+        const list = await userAdminApi.listUsers().catch(() => []);
+        setUsers(Array.isArray(list) ? list : []);
       }
     };
 
     const handleSaveGlobal = async () => {
+      if (!canEditDashboard) {
+        setGlobalActionMessage('Only admin can save dashboard changes.');
+        return;
+      }
       const target = newGlobalDashboardName.trim() || selectedGlobalDashboard || 'default';
       if (!saveGlobalDashboard) return;
       const ok = await saveGlobalDashboard(target);
@@ -281,6 +309,31 @@ export default function ConfigModal({
       }
     };
 
+    const handleCreateUser = async () => {
+      if (!canEditDashboard || !userAdminApi?.createUser) return;
+      const username = newUsername.trim();
+      const password = newPassword.trim();
+      if (!username || !password) {
+        setGlobalActionMessage('Username and password are required.');
+        return;
+      }
+      try {
+        await userAdminApi.createUser({
+          username,
+          password,
+          role: newRole,
+          assignedDashboardId: newUserDashboard || 'default',
+        });
+        setNewUsername('');
+        setNewPassword('');
+        const list = await userAdminApi.listUsers();
+        setUsers(Array.isArray(list) ? list : []);
+        setGlobalActionMessage(`Created user: ${username}`);
+      } catch (error) {
+        setGlobalActionMessage(error?.message || 'Failed to create user');
+      }
+    };
+
     return (
       <div className="space-y-5 font-sans animate-in fade-in slide-in-from-right-4 duration-300">
         <div className="rounded-2xl p-5 bg-[var(--glass-bg)] border border-[var(--glass-border)] space-y-4">
@@ -290,17 +343,25 @@ export default function ConfigModal({
                 {t('system.tabStorage') || 'Global dashboards'}
               </h3>
               <p className="text-xs text-[var(--text-secondary)] mt-1">
-                Save and load shared dashboards for all users.
+                Dashboard user: {currentUser?.username || '-'} ({currentUser?.role || 'unknown'})
               </p>
             </div>
-            <button
-              onClick={handleRefresh}
-              disabled={globalStorageBusy}
-              className="px-3 py-2 rounded-lg text-xs font-bold uppercase tracking-wider bg-[var(--glass-bg-hover)] hover:bg-[var(--glass-bg)] text-[var(--text-primary)] border border-[var(--glass-border)] disabled:opacity-50"
-            >
-              <RefreshCw className={`w-3.5 h-3.5 inline mr-1 ${globalStorageBusy ? 'animate-spin' : ''}`} />
-              Refresh
-            </button>
+            <div className="flex gap-2">
+              <button
+                onClick={handleRefresh}
+                disabled={globalStorageBusy}
+                className="px-3 py-2 rounded-lg text-xs font-bold uppercase tracking-wider bg-[var(--glass-bg-hover)] hover:bg-[var(--glass-bg)] text-[var(--text-primary)] border border-[var(--glass-border)] disabled:opacity-50"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 inline mr-1 ${globalStorageBusy ? 'animate-spin' : ''}`} />
+                Refresh
+              </button>
+              <button
+                onClick={onLogout}
+                className="px-3 py-2 rounded-lg text-xs font-bold uppercase tracking-wider bg-red-500/10 text-red-400 border border-red-500/20 hover:bg-red-500/20"
+              >
+                Logout
+              </button>
+            </div>
           </div>
 
           <div className="space-y-2">
@@ -325,23 +386,50 @@ export default function ConfigModal({
             </button>
           </div>
 
-          <div className="space-y-2">
-            <label className="text-xs uppercase font-bold text-[var(--text-secondary)]">Save globally</label>
-            <input
-              type="text"
-              value={newGlobalDashboardName}
-              onChange={(e) => setNewGlobalDashboardName(e.target.value)}
-              placeholder="default"
-              className="w-full px-3 py-2.5 rounded-xl bg-[var(--glass-bg)] border border-[var(--glass-border)] text-sm text-[var(--text-primary)]"
-            />
-            <button
-              onClick={handleSaveGlobal}
-              disabled={globalStorageBusy}
-              className="w-full py-2.5 rounded-xl bg-green-500 hover:bg-green-600 text-white text-xs font-bold uppercase tracking-wider disabled:opacity-50"
-            >
-              {globalStorageBusy ? 'Saving…' : 'Save globally'}
-            </button>
-          </div>
+          {canEditDashboard && (
+            <div className="space-y-2">
+              <label className="text-xs uppercase font-bold text-[var(--text-secondary)]">Save globally</label>
+              <input
+                type="text"
+                value={newGlobalDashboardName}
+                onChange={(e) => setNewGlobalDashboardName(e.target.value)}
+                placeholder="default"
+                className="w-full px-3 py-2.5 rounded-xl bg-[var(--glass-bg)] border border-[var(--glass-border)] text-sm text-[var(--text-primary)]"
+              />
+              <button
+                onClick={handleSaveGlobal}
+                disabled={globalStorageBusy}
+                className="w-full py-2.5 rounded-xl bg-green-500 hover:bg-green-600 text-white text-xs font-bold uppercase tracking-wider disabled:opacity-50"
+              >
+                {globalStorageBusy ? 'Saving…' : 'Save globally'}
+              </button>
+            </div>
+          )}
+
+          {canEditDashboard && (
+            <div className="space-y-3 pt-2 border-t border-[var(--glass-border)]">
+              <h4 className="text-xs uppercase font-bold tracking-wider text-[var(--text-secondary)]">Users</h4>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                <input value={newUsername} onChange={(e) => setNewUsername(e.target.value)} placeholder="username" className="px-3 py-2 rounded-xl bg-[var(--glass-bg)] border border-[var(--glass-border)] text-sm" />
+                <input value={newPassword} onChange={(e) => setNewPassword(e.target.value)} type="password" placeholder="password" className="px-3 py-2 rounded-xl bg-[var(--glass-bg)] border border-[var(--glass-border)] text-sm" />
+                <select value={newRole} onChange={(e) => setNewRole(e.target.value)} className="px-3 py-2 rounded-xl bg-[var(--glass-bg)] border border-[var(--glass-border)] text-sm">
+                  <option value="user">user</option>
+                  <option value="admin">admin</option>
+                </select>
+                <select value={newUserDashboard} onChange={(e) => setNewUserDashboard(e.target.value)} className="px-3 py-2 rounded-xl bg-[var(--glass-bg)] border border-[var(--glass-border)] text-sm">
+                  {profiles.map((profile) => <option key={profile.id} value={profile.id}>{profile.name || profile.id}</option>)}
+                </select>
+              </div>
+              <button onClick={handleCreateUser} className="w-full py-2.5 rounded-xl bg-indigo-500 hover:bg-indigo-600 text-white text-xs font-bold uppercase tracking-wider">Create user</button>
+              <div className="space-y-1 max-h-44 overflow-auto">
+                {users.map((u) => (
+                  <div key={u.id} className="text-xs rounded-lg border border-[var(--glass-border)] px-3 py-2 bg-[var(--glass-bg)]">
+                    <span className="font-semibold">{u.username}</span> · {u.role} · dashboard: {u.assignedDashboardId || 'default'}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
           {(globalStorageError || globalActionMessage) && (
             <div className={`rounded-xl p-3 text-xs font-semibold ${globalStorageError ? 'bg-red-500/10 text-red-400 border border-red-500/20' : 'bg-green-500/10 text-green-400 border border-green-500/20'}`}>
