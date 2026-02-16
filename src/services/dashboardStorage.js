@@ -60,11 +60,7 @@ export const writeCachedDashboard = (payload) => {
   }
 };
 
-/**
- * Hent liste over tilgjengelige dashboards/profiler
- * GET /api/dashboards
- */
-export const fetchSharedDashboardProfiles = async () => {
+export const listSharedDashboards = async () => {
   try {
     const payload = await apiRequest('/api/dashboards', { method: 'GET' });
     return normalizeList(payload?.dashboards || []);

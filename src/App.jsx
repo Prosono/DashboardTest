@@ -932,10 +932,9 @@ export default function App() {
     try {
       const result = await loginWithPassword(username, password);
       const user = result?.user || null;
-      setCurrentUser(user);
-
       const shared = await fetchSharedHaConfig().catch(() => null);
       applySharedHaConfig(shared);
+      setCurrentUser(user);
       setHaConfigHydrated(true);
     } catch (error) {
       setAuthError(error?.message || 'Login failed');
@@ -1010,6 +1009,10 @@ export default function App() {
         </form>
       </div>
     );
+  }
+
+  if (!haConfigHydrated) {
+    return <div className="min-h-screen flex items-center justify-center text-[var(--text-secondary)]">Loading shared connection…</div>;
   }
 
   const userAdminApi = {
