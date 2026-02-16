@@ -18,7 +18,10 @@
     "test:watch": "vitest",
     "dev:server": "node scripts/run-server.mjs",
     "dev:all": "sh -c 'npm run dev:server & npm run dev'",
-    "server": "node server/index.js"
+    "server": "node server/index.js",
+    "verify:dashboard-storage-source": "node scripts/verify-dashboard-storage-source.mjs",
+    "predev": "npm run verify:dashboard-storage-source",
+    "prebuild": "npm run verify:dashboard-storage-source"
   },
   "dependencies": {
     "@fortawesome/fontawesome-free": "^7.1.0",
