@@ -9,7 +9,7 @@
   "license": "GPL-3.0",
   "type": "module",
   "scripts": {
-    "dev": "vite",
+    "dev": "vite --force",
     "build": "vite build",
     "postbuild": "node scripts/postbuild.js",
     "preview": "vite preview",
