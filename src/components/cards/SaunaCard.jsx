@@ -122,9 +122,21 @@ function buildPath(series, width, height) {
 
   const normalized = series.length === 1
     ? [series[0], { ...series[0], t: series[0].t + 1 }]
-    : series;
+    : [...series];
 
-  const smoothed = normalized.map((point, idx, arr) => {
+  const maxPoints = 28;
+  const reduced = normalized.length > maxPoints
+    ? Array.from({ length: maxPoints }, (_, i) => {
+      const from = Math.floor((i * normalized.length) / maxPoints);
+      const to = Math.max(from + 1, Math.floor(((i + 1) * normalized.length) / maxPoints));
+      const bucket = normalized.slice(from, to);
+      const avgT = bucket.reduce((acc, p) => acc + p.t, 0) / bucket.length;
+      const avgV = bucket.reduce((acc, p) => acc + p.v, 0) / bucket.length;
+      return { t: avgT, v: avgV };
+    })
+    : normalized;
+
+  const smoothed = reduced.map((point, idx, arr) => {
     if (arr.length < 3 || idx === 0 || idx === arr.length - 1) return point;
     const avg = (arr[idx - 1].v + point.v + arr[idx + 1].v) / 3;
     return { ...point, v: avg };
@@ -134,7 +146,7 @@ function buildPath(series, width, height) {
   const max = Math.max(...smoothed.map((s) => s.v));
   const range = max - min;
   const isFlat = range < 0.001;
-  const yPadding = 6;
+  const yPadding = 8;
   const usableHeight = Math.max(4, height - (yPadding * 2));
   const minT = smoothed[0].t;
   const maxT = smoothed[smoothed.length - 1].t;
@@ -148,10 +160,34 @@ function buildPath(series, width, height) {
     return { x, y };
   });
 
-  return points
-    .map((pt, i) => `${i === 0 ? 'M' : 'L'}${pt.x.toFixed(1)},${pt.y.toFixed(1)}`)
-    .join(' ');
+  if (points.length <= 2) {
+    return points
+      .map((pt, i) => `${i === 0 ? 'M' : 'L'}${pt.x.toFixed(1)},${pt.y.toFixed(1)}`)
+      .join(' ');
+  }
+
+  const first = points[0];
+  const startPath = `M${first.x.toFixed(1)},${first.y.toFixed(1)}`;
+  const curves = [];
+
+  for (let i = 0; i < points.length - 1; i += 1) {
+    const p0 = points[Math.max(0, i - 1)];
+    const p1 = points[i];
+    const p2 = points[i + 1];
+    const p3 = points[Math.min(points.length - 1, i + 2)];
+
+    const smooth = 0.2;
+    const cp1x = p1.x + ((p2.x - p0.x) * smooth);
+    const cp1y = p1.y + ((p2.y - p0.y) * smooth);
+    const cp2x = p2.x - ((p3.x - p1.x) * smooth);
+    const cp2y = p2.y - ((p3.y - p1.y) * smooth);
+
+    curves.push(`C${cp1x.toFixed(1)},${cp1y.toFixed(1)} ${cp2x.toFixed(1)},${cp2y.toFixed(1)} ${p2.x.toFixed(1)},${p2.y.toFixed(1)}`);
+  }
+
+  return `${startPath} ${curves.join(' ')}`;
 }
+
 
 export default function SaunaCard({
   cardId,
@@ -449,11 +485,11 @@ export default function SaunaCard({
         {(bookingLine || preheatOn) && (() => {
           const BookingIcon = statusVisual.icon;
           return (
-            <div className="mt-7 relative min-h-[4.5rem] flex items-center justify-center">
+            <div className="mt-7 relative min-h-[4.25rem] flex items-center justify-center">
               {statusPath && (
-                <svg className="absolute inset-x-1 top-1 w-[calc(100%-0.5rem)] h-[4rem] opacity-90 pointer-events-none" viewBox="0 0 100 56" preserveAspectRatio="none" aria-hidden="true">
-                  <path d={`${statusPath} L100,56 L0,56 Z`} fill="rgba(249,115,22,0.08)" />
-                  <path d={statusPath} fill="none" stroke="rgba(251,146,60,0.95)" strokeWidth="2.2" strokeLinecap="round" />
+                <svg className="absolute inset-x-2 top-1.5 w-[calc(100%-1rem)] h-[3.6rem] opacity-85 pointer-events-none" viewBox="0 0 100 56" preserveAspectRatio="none" aria-hidden="true">
+                  <path d={`${statusPath} L100,56 L0,56 Z`} fill="rgba(249,115,22,0.05)" />
+                  <path d={statusPath} fill="none" stroke="rgba(251,146,60,0.95)" strokeWidth="1.6" strokeLinecap="round" />
                 </svg>
               )}
               <div className="relative z-10 flex items-center justify-center gap-2 min-w-0 text-center">

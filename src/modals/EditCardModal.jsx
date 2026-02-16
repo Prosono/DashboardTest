@@ -108,6 +108,15 @@ export default function EditCardModal({
   gridColumns = 4,
 }) {
   const [mediaSearch, setMediaSearch] = React.useState('');
+  const [saunaSingleSearch, setSaunaSingleSearch] = React.useState({});
+  const [saunaMultiSearch, setSaunaMultiSearch] = React.useState({});
+
+  const tr = React.useCallback((key, fallback) => {
+    const out = typeof t === 'function' ? t(key) : undefined;
+    const str = String(out ?? '').trim();
+    if (!str || str === key || str.toLowerCase() === key.toLowerCase()) return fallback;
+    return str;
+  }, [t]);
 
   const tr = React.useCallback((key, fallback) => {
     const out = typeof t === 'function' ? t(key) : undefined;
@@ -1064,9 +1073,23 @@ export default function EditCardModal({
 
                 {singleSelectors.map((opt) => {
                   const matching = allEntityIds.filter(opt.filter).sort((a, b) => (entities[a]?.attributes?.friendly_name || a).localeCompare(entities[b]?.attributes?.friendly_name || b));
+                  const query = String(saunaSingleSearch?.[opt.key] || '').toLowerCase().trim();
+                  const filtered = query
+                    ? matching.filter((id) => {
+                      const friendly = String(entities[id]?.attributes?.friendly_name || '').toLowerCase();
+                      return id.toLowerCase().includes(query) || friendly.includes(query);
+                    })
+                    : matching;
                   return (
                     <div key={opt.key} className="space-y-2">
                       <label className="text-xs uppercase font-bold text-gray-500 ml-1">{opt.label}</label>
+                      <input
+                        type="text"
+                        value={saunaSingleSearch?.[opt.key] || ''}
+                        onChange={(e) => setSaunaSingleSearch((prev) => ({ ...prev, [opt.key]: e.target.value }))}
+                        placeholder={tr('form.search', 'Søk')} 
+                        className="w-full px-3 py-2 rounded-xl bg-[var(--glass-bg)] border border-[var(--glass-border)] text-[var(--text-primary)] text-xs outline-none"
+                      />
                       <div className="popup-surface rounded-2xl p-3 max-h-36 overflow-y-auto custom-scrollbar space-y-1">
                         <button
                           type="button"
@@ -1075,7 +1098,10 @@ export default function EditCardModal({
                         >
                           Auto / none
                         </button>
-                        {matching.map((id) => (
+                        {filtered.length === 0 && (
+                          <div className="px-3 py-2 text-[11px] text-[var(--text-muted)]">{tr('form.noResults', 'Ingen treff')}</div>
+                        )}
+                        {filtered.map((id) => (
                           <button
                             key={id}
                             type="button"
@@ -1094,11 +1120,28 @@ export default function EditCardModal({
                 {multiSelectors.map((opt) => {
                   const selected = Array.isArray(editSettings[opt.key]) ? editSettings[opt.key] : [];
                   const matching = allEntityIds.filter(opt.filter).sort((a, b) => (entities[a]?.attributes?.friendly_name || a).localeCompare(entities[b]?.attributes?.friendly_name || b));
+                  const query = String(saunaMultiSearch?.[opt.key] || '').toLowerCase().trim();
+                  const filtered = query
+                    ? matching.filter((id) => {
+                      const friendly = String(entities[id]?.attributes?.friendly_name || '').toLowerCase();
+                      return id.toLowerCase().includes(query) || friendly.includes(query);
+                    })
+                    : matching;
                   return (
                     <div key={opt.key} className="space-y-2">
                       <label className="text-xs uppercase font-bold text-gray-500 ml-1">{opt.label}</label>
+                      <input
+                        type="text"
+                        value={saunaMultiSearch?.[opt.key] || ''}
+                        onChange={(e) => setSaunaMultiSearch((prev) => ({ ...prev, [opt.key]: e.target.value }))}
+                        placeholder={tr('form.search', 'Søk')}
+                        className="w-full px-3 py-2 rounded-xl bg-[var(--glass-bg)] border border-[var(--glass-border)] text-[var(--text-primary)] text-xs outline-none"
+                      />
                       <div className="popup-surface rounded-2xl p-3 max-h-44 overflow-y-auto custom-scrollbar space-y-1">
-                        {matching.map((id) => {
+                        {filtered.length === 0 && (
+                          <div className="px-3 py-2 text-[11px] text-[var(--text-muted)]">{tr('form.noResults', 'Ingen treff')}</div>
+                        )}
+                        {filtered.map((id) => {
                           const isSelected = selected.includes(id);
                           return (
                             <button
