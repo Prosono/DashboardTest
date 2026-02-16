@@ -59,11 +59,37 @@ router.get('/ha-config', authRequired, (_req, res) => {
 });
 
 router.put('/ha-config', authRequired, adminRequired, (req, res) => {
-  const url = String(req.body?.url || '').trim();
-  const fallbackUrl = String(req.body?.fallbackUrl || '').trim();
-  const authMethod = String(req.body?.authMethod || 'oauth').trim() === 'token' ? 'token' : 'oauth';
-  const token = String(req.body?.token || '').trim();
-  const oauthTokens = req.body?.oauthTokens ?? null;
+  const existing = db.prepare('SELECT * FROM ha_config WHERE id = 1').get();
+  const currentAuthMethod = existing?.auth_method === 'token' ? 'token' : 'oauth';
+
+  const hasUrl = Object.prototype.hasOwnProperty.call(req.body || {}, 'url');
+  const hasFallbackUrl = Object.prototype.hasOwnProperty.call(req.body || {}, 'fallbackUrl');
+  const hasAuthMethod = Object.prototype.hasOwnProperty.call(req.body || {}, 'authMethod');
+  const hasToken = Object.prototype.hasOwnProperty.call(req.body || {}, 'token');
+  const hasOauthTokens = Object.prototype.hasOwnProperty.call(req.body || {}, 'oauthTokens');
+
+  const url = hasUrl ? String(req.body?.url || '').trim() : (existing?.url || '');
+  const fallbackUrl = hasFallbackUrl ? String(req.body?.fallbackUrl || '').trim() : (existing?.fallback_url || '');
+  const authMethod = hasAuthMethod
+    ? (String(req.body?.authMethod || '').trim() === 'token' ? 'token' : 'oauth')
+    : currentAuthMethod;
+  const token = hasToken ? String(req.body?.token || '').trim() : (existing?.token || '');
+
+  let oauthTokens;
+  if (hasOauthTokens) {
+    oauthTokens = req.body?.oauthTokens ?? null;
+  } else {
+    oauthTokens = existing?.oauth_tokens
+      ? (() => {
+        try {
+          return JSON.parse(existing.oauth_tokens);
+        } catch {
+          return null;
+        }
+      })()
+      : null;
+  }
+
   const now = new Date().toISOString();
 
   const oauthTokensJson = oauthTokens ? JSON.stringify(oauthTokens) : null;

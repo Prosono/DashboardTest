@@ -295,8 +295,9 @@ export default function ConfigModal({
       if (!saveGlobalDashboard) return;
       const ok = await saveGlobalDashboard(target);
       if (ok) {
+        const canonicalId = String(target || 'default').trim().replace(/\s+/g, '_').toLowerCase();
         setGlobalActionMessage(`Saved globally: ${target}`);
-        setSelectedGlobalDashboard(target);
+        setSelectedGlobalDashboard(canonicalId);
       }
     };
 
@@ -318,7 +319,7 @@ export default function ConfigModal({
         return;
       }
       try {
-        await userAdminApi.createUser({
+        const createdUser = await userAdminApi.createUser({
           username,
           password,
           role: newRole,
@@ -326,8 +327,18 @@ export default function ConfigModal({
         });
         setNewUsername('');
         setNewPassword('');
-        const list = await userAdminApi.listUsers();
-        setUsers(Array.isArray(list) ? list : []);
+        const list = await userAdminApi.listUsers().catch(() => null);
+        if (Array.isArray(list)) {
+          setUsers(list);
+        } else if (createdUser) {
+          setUsers((prev) => {
+            const next = Array.isArray(prev) ? prev.slice() : [];
+            const idx = next.findIndex((u) => u.id === createdUser.id);
+            if (idx === -1) next.push(createdUser);
+            else next[idx] = createdUser;
+            return next.sort((a, b) => String(a.username || '').localeCompare(String(b.username || '')));
+          });
+        }
         setGlobalActionMessage(`Created user: ${username}`);
       } catch (error) {
         setGlobalActionMessage(error?.message || 'Failed to create user');
