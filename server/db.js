@@ -42,6 +42,18 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_users_username ON users(username);
   CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions(user_id);
   CREATE INDEX IF NOT EXISTS idx_dashboards_updated_at ON dashboards(updated_at DESC);
+
+  CREATE TABLE IF NOT EXISTS ha_config (
+    id INTEGER PRIMARY KEY CHECK (id = 1),
+    url TEXT NOT NULL DEFAULT '',
+    fallback_url TEXT NOT NULL DEFAULT '',
+    auth_method TEXT NOT NULL CHECK (auth_method IN ('oauth', 'token')) DEFAULT 'oauth',
+    token TEXT NOT NULL DEFAULT '',
+    oauth_tokens TEXT,
+    updated_by TEXT,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+  );
 `);
 
 const now = new Date().toISOString();
@@ -56,6 +68,12 @@ const hasAdmin = db.prepare('SELECT id FROM users WHERE username = ?').get('admi
 if (!hasAdmin) {
   db.prepare('INSERT INTO users (id, username, password_hash, role, assigned_dashboard_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)')
     .run('admin-default', 'admin', hashPassword('admin'), 'admin', 'default', now, now);
+}
+
+const hasHaConfig = db.prepare('SELECT id FROM ha_config WHERE id = 1').get();
+if (!hasHaConfig) {
+  db.prepare('INSERT INTO ha_config (id, url, fallback_url, auth_method, token, oauth_tokens, updated_by, created_at, updated_at) VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?)')
+    .run('', '', 'oauth', '', null, null, now, now);
 }
 
 export default db;

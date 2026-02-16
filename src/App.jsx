@@ -38,13 +38,15 @@ import {
 
 import { formatDuration } from './utils';
 import './styles/dashboard.css';
-import { hasOAuthTokens } from './services/oauthStorage';
+import { clearOAuthTokens, hasOAuthTokens, loadTokens, saveTokens } from './services/oauthStorage';
 import {
   fetchCurrentUser,
   loginWithPassword,
   logoutUser,
   listUsers as listServerUsers,
   createUser as createServerUser,
+  fetchSharedHaConfig,
+  saveSharedHaConfig,
 } from './services/appAuth';
 import { isCardRemovable as _isCardRemovable, isCardHiddenByLogic as _isCardHiddenByLogic, isMediaPage as _isMediaPage } from './utils/cardUtils';
 import { getCardGridSize as _getCardGridSize, buildGridLayout as _buildGridLayout } from './utils/gridLayout';
@@ -871,22 +873,57 @@ export default function App() {
   const [loggingIn, setLoggingIn] = useState(false);
   const [username, setUsername] = useState('admin');
   const [password, setPassword] = useState('admin');
+  const [haConfigHydrated, setHaConfigHydrated] = useState(false);
+  const { config, setConfig } = useConfig();
+
+  const applySharedHaConfig = useCallback((sharedConfig) => {
+    if (!sharedConfig) return;
+
+    setConfig((prev) => ({
+      ...prev,
+      url: sharedConfig.url || '',
+      fallbackUrl: sharedConfig.fallbackUrl || '',
+      authMethod: sharedConfig.authMethod === 'token' ? 'token' : 'oauth',
+      token: sharedConfig.token || '',
+    }));
+
+    try {
+      localStorage.setItem('ha_url', sharedConfig.url || '');
+      localStorage.setItem('ha_fallback_url', sharedConfig.fallbackUrl || '');
+      localStorage.setItem('ha_auth_method', sharedConfig.authMethod === 'token' ? 'token' : 'oauth');
+      localStorage.setItem('ha_token', sharedConfig.token || '');
+    } catch {
+      // best effort
+    }
+
+    if (sharedConfig.oauthTokens) saveTokens(sharedConfig.oauthTokens);
+    else clearOAuthTokens();
+  }, [setConfig]);
 
   useEffect(() => {
     let mounted = true;
     const init = async () => {
       try {
         const user = await fetchCurrentUser();
-        if (mounted) setCurrentUser(user);
+        if (!mounted) return;
+        setCurrentUser(user);
+
+        if (user) {
+          const shared = await fetchSharedHaConfig().catch(() => null);
+          if (mounted) applySharedHaConfig(shared);
+        }
       } catch {
         if (mounted) setCurrentUser(null);
       } finally {
-        if (mounted) setAuthReady(true);
+        if (mounted) {
+          setHaConfigHydrated(true);
+          setAuthReady(true);
+        }
       }
     };
     init();
     return () => { mounted = false; };
-  }, []);
+  }, [applySharedHaConfig]);
 
   const doLogin = async (e) => {
     e.preventDefault();
@@ -894,7 +931,12 @@ export default function App() {
     setAuthError('');
     try {
       const result = await loginWithPassword(username, password);
-      setCurrentUser(result?.user || null);
+      const user = result?.user || null;
+      setCurrentUser(user);
+
+      const shared = await fetchSharedHaConfig().catch(() => null);
+      applySharedHaConfig(shared);
+      setHaConfigHydrated(true);
     } catch (error) {
       setAuthError(error?.message || 'Login failed');
     } finally {
@@ -907,7 +949,27 @@ export default function App() {
     setCurrentUser(null);
   };
 
-  const { config } = useConfig();
+  useEffect(() => {
+    if (!currentUser || currentUser.role !== 'admin' || !haConfigHydrated) return undefined;
+
+    const timer = setTimeout(() => {
+      const authMethod = config.authMethod === 'token' ? 'token' : 'oauth';
+      const oauthTokens = authMethod === 'oauth' ? (loadTokens() || null) : null;
+
+      saveSharedHaConfig({
+        url: config.url || '',
+        fallbackUrl: config.fallbackUrl || '',
+        authMethod,
+        token: authMethod === 'token' ? (config.token || '') : '',
+        oauthTokens,
+      }).catch(() => {
+        // best effort sync
+      });
+    }, 500);
+
+    return () => clearTimeout(timer);
+  }, [currentUser, haConfigHydrated, config.url, config.fallbackUrl, config.authMethod, config.token]);
+
   // Detect if we're returning from an OAuth2 redirect
   const isOAuthCallback = typeof window !== 'undefined' && new URLSearchParams(window.location.search).has('auth_callback');
   const hasAuth = config.token || (config.authMethod === 'oauth' && (hasOAuthTokens() || isOAuthCallback));

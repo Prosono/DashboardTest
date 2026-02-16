@@ -1,6 +1,8 @@
 // OAuth2 token persistence for Home Assistant
 // Used as saveTokens / loadTokens callbacks for HAWS getAuth()
 
+import { saveSharedHaConfig } from './appAuth';
+
 const OAUTH_TOKENS_KEY = 'ha_oauth_tokens';
 
 const getSessionStorage = () => {
@@ -19,6 +21,13 @@ const getLocalStorage = () => {
   }
 };
 
+const pushTokensToServer = (tokenInfo) => {
+  saveSharedHaConfig({ authMethod: 'oauth', oauthTokens: tokenInfo || null })
+    .catch(() => {
+      // best effort sync only
+    });
+};
+
 export function saveTokens(tokenInfo) {
   try {
     const sessionStore = getSessionStorage();
@@ -29,6 +38,8 @@ export function saveTokens(tokenInfo) {
   } catch (error) {
     console.error('Failed to save OAuth tokens to localStorage:', error);
   }
+
+  pushTokensToServer(tokenInfo);
 }
 
 export function loadTokens() {
@@ -58,6 +69,8 @@ export function clearOAuthTokens() {
   } catch (error) {
     console.error('Failed to clear OAuth tokens from localStorage:', error);
   }
+
+  pushTokensToServer(null);
 }
 
 export function hasOAuthTokens() {

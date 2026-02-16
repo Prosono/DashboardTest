@@ -76,3 +76,16 @@ export const createUser = async (user) => {
   });
   return payload?.user || null;
 };
+
+export const fetchSharedHaConfig = async () => {
+  const payload = await apiRequest('/api/auth/ha-config', { method: 'GET' });
+  return payload?.config || null;
+};
+
+export const saveSharedHaConfig = async (config) => {
+  const payload = await apiRequest('/api/auth/ha-config', {
+    method: 'PUT',
+    body: JSON.stringify(config || {}),
+  });
+  return payload?.config || null;
+};
