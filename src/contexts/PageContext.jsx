@@ -23,9 +23,14 @@ const readJSON = (key, fallback) => {
 };
 
 const readNumber = (key, fallback) => {
-  const raw = localStorage.getItem(key);
-  const parsed = raw === null ? NaN : Number(raw);
-  return Number.isFinite(parsed) ? parsed : fallback;
+  try {
+    const raw = localStorage.getItem(key);
+    const parsed = raw === null ? NaN : Number(raw);
+    return Number.isFinite(parsed) ? parsed : fallback;
+  } catch (error) {
+    console.error(`Failed to read ${key}:`, error);
+    return fallback;
+  }
 };
 
 const deprecatedCardIds = ['power', 'rocky', 'climate', 'shield', 'weather', 'car', 'sonos'];
@@ -56,37 +61,39 @@ const getDefaultDashboardState = () => ({
 function normalizePagesConfig(parsed) {
   if (!parsed) return DEFAULT_PAGES_CONFIG;
 
-  if (parsed.automations) { delete parsed.automations; }
-  if (parsed.lights) { delete parsed.lights; }
+  const next = { ...parsed };
 
-  Object.keys(parsed).forEach(pageKey => {
-    if (Array.isArray(parsed[pageKey])) {
-      const filtered = parsed[pageKey].filter(id =>
+  if (next.automations) { delete next.automations; }
+  if (next.lights) { delete next.lights; }
+
+  Object.keys(next).forEach(pageKey => {
+    if (Array.isArray(next[pageKey])) {
+      const filtered = next[pageKey].filter(id =>
         !deprecatedCardIds.includes(id) && !String(id).startsWith('energy_price_')
       );
-      if (filtered.length !== parsed[pageKey].length) {
-        parsed[pageKey] = filtered;
+      if (filtered.length !== next[pageKey].length) {
+        next[pageKey] = filtered;
       }
     }
   });
 
-  if (!Array.isArray(parsed.pages)) {
-    const detectedPages = Object.keys(parsed)
-      .filter(key => Array.isArray(parsed[key]) &&
+  if (!Array.isArray(next.pages)) {
+    const detectedPages = Object.keys(next)
+      .filter(key => Array.isArray(next[key]) &&
         !['header', 'settings', 'lights', 'automations'].includes(key));
-    parsed.pages = detectedPages.length > 0 ? detectedPages : ['home'];
+    next.pages = detectedPages.length > 0 ? detectedPages : ['home'];
   }
 
-  parsed.pages = parsed.pages.filter(id => id !== 'settings' && id !== 'lights' && id !== 'automations');
-  if (parsed.pages.length === 0) { parsed.pages = ['home']; }
+  next.pages = next.pages.filter(id => id !== 'settings' && id !== 'lights' && id !== 'automations');
+  if (next.pages.length === 0) { next.pages = ['home']; }
 
-  parsed.pages.forEach((pageId) => {
-    if (!Array.isArray(parsed[pageId])) { parsed[pageId] = []; }
+  next.pages.forEach((pageId) => {
+    if (!Array.isArray(next[pageId])) { next[pageId] = []; }
   });
 
-  if (!parsed.header) { parsed.header = []; }
+  if (!next.header) { next.header = []; }
 
-  return parsed;
+  return next;
 }
 
 function normalizeDashboardState(raw) {
@@ -457,12 +464,6 @@ export const PageProvider = ({ children }) => {
     ? globalDashboardState.error
     : '';
 
-  // Keep canonical identifiers defined to be resilient against partial merges
-  // that might reintroduce shorthand usage in the `value` object.
-  const globalDashboardProfiles = safeGlobalDashboardProfiles;
-  const globalStorageBusy = safeGlobalStorageBusy;
-  const globalStorageError = safeGlobalStorageError;
-
   const value = {
     pagesConfig,
     setPagesConfig,
@@ -481,9 +482,7 @@ export const PageProvider = ({ children }) => {
     persistPageSettings,
     savePageSetting,
     gridColumns,
-    setGridColumns: (val) => {
-      setGridColumns(val);
-    },
+    setGridColumns,
     headerScale,
     updateHeaderScale,
     headerTitle,
@@ -492,17 +491,11 @@ export const PageProvider = ({ children }) => {
     updateHeaderSettings,
     sectionSpacing,
     updateSectionSpacing,
-    persistCardSettings: (newSettings) => {
-      setCardSettings(newSettings);
-    },
+    persistCardSettings: setCardSettings,
     gridGapH,
-    setGridGapH: (val) => {
-      setGridGapH(val);
-    },
+    setGridGapH,
     gridGapV,
-    setGridGapV: (val) => {
-      setGridGapV(val);
-    },
+    setGridGapV,
     statusPillsConfig,
     saveStatusPillsConfig,
     cardBorderRadius,
@@ -510,9 +503,9 @@ export const PageProvider = ({ children }) => {
       setCardBorderRadius(val);
       document.documentElement.style.setProperty('--card-border-radius', `${val}px`);
     },
-    globalDashboardProfiles,
-    globalStorageBusy,
-    globalStorageError,
+    globalDashboardProfiles: safeGlobalDashboardProfiles,
+    globalStorageBusy: safeGlobalStorageBusy,
+    globalStorageError: safeGlobalStorageError,
     refreshGlobalDashboards,
     saveGlobalDashboard,
     loadGlobalDashboard,
