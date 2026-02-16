@@ -118,6 +118,13 @@ export default function EditCardModal({
     return str;
   }, [t]);
 
+  const tr = React.useCallback((key, fallback) => {
+    const out = typeof t === 'function' ? t(key) : undefined;
+    const str = String(out ?? '').trim();
+    if (!str || str === key || str.toLowerCase() === key.toLowerCase()) return fallback;
+    return str;
+  }, [t]);
+
   if (!isOpen) return null;
 
   const isPerson = entityId?.startsWith('person.');
