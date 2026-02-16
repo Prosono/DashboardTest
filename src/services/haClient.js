@@ -31,10 +31,17 @@ export async function getHistory(conn, { start, end, entityId, minimal_response 
   });
   let payload = res;
   if (payload && typeof payload === 'object' && !Array.isArray(payload)) {
-    if (Array.isArray(payload.result)) payload = payload.result;
-    else if (Array.isArray(payload.response)) payload = payload.response;
-    else if (Array.isArray(payload.data)) payload = payload.data;
-    else if (Array.isArray(payload.history)) payload = payload.history;
+    if (Object.prototype.hasOwnProperty.call(payload, 'result')) payload = payload.result;
+    else if (Object.prototype.hasOwnProperty.call(payload, 'response')) payload = payload.response;
+    else if (Object.prototype.hasOwnProperty.call(payload, 'data')) payload = payload.data;
+    else if (Object.prototype.hasOwnProperty.call(payload, 'history')) payload = payload.history;
+  }
+
+  if (payload && typeof payload === 'object' && !Array.isArray(payload)) {
+    if (Object.prototype.hasOwnProperty.call(payload, 'result')) payload = payload.result;
+    else if (Object.prototype.hasOwnProperty.call(payload, 'response')) payload = payload.response;
+    else if (Object.prototype.hasOwnProperty.call(payload, 'data')) payload = payload.data;
+    else if (Object.prototype.hasOwnProperty.call(payload, 'history')) payload = payload.history;
   }
 
   // Support both object keyed by entity_id and array formats
@@ -87,9 +94,15 @@ export async function getStatistics(conn, { start, end, statisticId, period = '5
 
   let payload = res;
   if (payload && typeof payload === 'object' && !Array.isArray(payload)) {
-    if (payload.result && typeof payload.result === 'object') payload = payload.result;
-    else if (payload.response && typeof payload.response === 'object') payload = payload.response;
-    else if (payload.data && typeof payload.data === 'object') payload = payload.data;
+    if (Object.prototype.hasOwnProperty.call(payload, 'result')) payload = payload.result;
+    else if (Object.prototype.hasOwnProperty.call(payload, 'response')) payload = payload.response;
+    else if (Object.prototype.hasOwnProperty.call(payload, 'data')) payload = payload.data;
+  }
+
+  if (payload && typeof payload === 'object' && !Array.isArray(payload)) {
+    if (Object.prototype.hasOwnProperty.call(payload, 'result')) payload = payload.result;
+    else if (Object.prototype.hasOwnProperty.call(payload, 'response')) payload = payload.response;
+    else if (Object.prototype.hasOwnProperty.call(payload, 'data')) payload = payload.data;
   }
 
   const stats = payload && payload[statisticId];
