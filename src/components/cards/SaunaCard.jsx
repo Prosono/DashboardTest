@@ -284,8 +284,18 @@ export default function SaunaCard({
 
     return [];
   }, [statusGraphEntityId, tempHistoryById, tempIsValid, currentTemp]);
-  const tempPath = useMemo(() => buildPath(tempSeries, 100, 28), [tempSeries]);
   const statusPath = useMemo(() => buildPath(tempSeries, 100, 56), [tempSeries]);
+  const statusRange = useMemo(() => {
+    if (!tempSeries.length) return null;
+    const values = tempSeries.map((p) => p.v).filter((v) => Number.isFinite(v));
+    if (!values.length) return null;
+    const min = Math.min(...values);
+    const max = Math.max(...values);
+    return {
+      min: Math.round(min * 10) / 10,
+      max: Math.round(max * 10) / 10,
+    };
+  }, [tempSeries]);
 
   const preheatSeries = useMemo(() => {
     if (!settings?.preheatMinutesEntityId) return [];
@@ -489,10 +499,16 @@ export default function SaunaCard({
               {statusPath && (
                 <svg className="absolute inset-x-2 top-1.5 w-[calc(100%-1rem)] h-[3.6rem] opacity-85 pointer-events-none" viewBox="0 0 100 56" preserveAspectRatio="none" aria-hidden="true">
                   <path d={`${statusPath} L100,56 L0,56 Z`} fill="rgba(249,115,22,0.05)" />
-                  <path d={statusPath} fill="none" stroke="rgba(251,146,60,0.95)" strokeWidth="1.6" strokeLinecap="round" />
+                  <path d={statusPath} fill="none" stroke="rgba(251,146,60,0.95)" strokeWidth="1.35" strokeLinecap="round" strokeLinejoin="round" />
                 </svg>
               )}
-              <div className="relative z-10 flex items-center justify-center gap-2 min-w-0 text-center">
+              {statusRange && (
+                <div className="absolute left-2 top-1.5 bottom-1.5 z-10 flex flex-col justify-between text-[10px] leading-none text-orange-200/80 pointer-events-none">
+                  <span>{statusRange.max.toFixed(1)}°</span>
+                  <span>{statusRange.min.toFixed(1)}°</span>
+                </div>
+              )}
+              <div className="relative z-10 flex items-center justify-center gap-2 min-w-0 text-center px-2 py-0.5 rounded-full bg-black/20 shadow-[0_2px_8px_rgba(0,0,0,0.35)]">
                 <BookingIcon className={cx('w-4 h-4 shrink-0', statusVisual.color)} />
                 <p className="text-sm font-normal text-[var(--text-primary)] truncate">{bookingLine || tr('sauna.preheat', 'Forvarmer')}</p>
               </div>
