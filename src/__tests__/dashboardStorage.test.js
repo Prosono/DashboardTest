@@ -7,62 +7,40 @@ import {
   __resetDashboardStorageRuntime,
 } from '../services/dashboardStorage';
 
-describe('dashboardStorage fallbacks', () => {
+describe('dashboardStorage profile-api integration', () => {
   beforeEach(() => {
     localStorage.clear();
     vi.restoreAllMocks();
     __resetDashboardStorageRuntime();
   });
 
-  it('falls back to default envelope when /profiles list is unavailable', async () => {
-    vi.stubGlobal('fetch', vi.fn(async (url, options = {}) => {
-      if (String(url).endsWith('/profiles') && options.method === 'GET') {
-        return { ok: false, status: 405, json: async () => ({}) };
-      }
-      if (String(url).endsWith('/api/dashboard-config') && options.method === 'GET') {
+  it('lists profiles from /api/profiles and normalizes ids by profile name', async () => {
+    vi.stubGlobal('fetch', vi.fn(async (url) => {
+      if (String(url).includes('/api/profiles?')) {
         return {
           ok: true,
-          status: 200,
-          json: async () => ({
-            updatedAt: '2026-01-01T00:00:00.000Z',
-            data: {
-              __saved_profiles__: {
-                my_dash: {
-                  id: 'my_dash',
-                  name: 'My Dash',
-                  updatedAt: '2026-01-01T00:00:00.000Z',
-                  data: { pagesConfig: { pages: ['home'], home: [] } },
-                },
-              },
-            },
-          }),
+          json: async () => ([
+            { id: 'uuid-1', name: 'My Dash', updated_at: '2026-01-01T00:00:00.000Z' },
+          ]),
         };
       }
       return { ok: false, status: 404, json: async () => ({}) };
     }));
 
     const profiles = await listSharedDashboards();
-
-    expect(profiles.map((p) => p.id)).toEqual(['default', 'my_dash']);
+    expect(profiles.map((p) => p.id)).toEqual(['my_dash', 'default']);
   });
 
-  it('stores named profile in embedded default payload when profile save endpoint fails', async () => {
+  it('saves a new named profile through POST /api/profiles', async () => {
     const fetchMock = vi.fn(async (url, options = {}) => {
-      if (String(url).includes('/profiles/') && options.method === 'PUT') {
-        return { ok: false, status: 500, json: async () => ({}) };
+      if (String(url).includes('/api/profiles?')) {
+        return { ok: true, json: async () => ([]) };
       }
-      if (String(url).endsWith('/api/dashboard-config') && options.method === 'GET') {
+      if (String(url).endsWith('/api/profiles') && options.method === 'POST') {
         return {
           ok: true,
-          status: 200,
-          json: async () => ({
-            updatedAt: '2026-01-01T00:00:00.000Z',
-            data: { existing: true },
-          }),
+          json: async () => ({ id: 'uuid-2', name: 'Team Night', updated_at: '2026-01-01T00:00:00.000Z' }),
         };
-      }
-      if (String(url).endsWith('/api/dashboard-config') && options.method === 'PUT') {
-        return { ok: true, status: 200, json: async () => ({}) };
       }
       return { ok: false, status: 404, json: async () => ({}) };
     });
@@ -70,88 +48,24 @@ describe('dashboardStorage fallbacks', () => {
 
     await saveSharedDashboardProfile('Team Night', { pagesConfig: { pages: ['home'], home: [] } });
 
-    const putCall = fetchMock.mock.calls.find(([url, options]) => String(url).endsWith('/api/dashboard-config') && options.method === 'PUT');
-    const payload = JSON.parse(putCall[1].body);
-
-    expect(payload.data.__saved_profiles__.team_night.name).toBe('Team Night');
+    const postCall = fetchMock.mock.calls.find(([url, options]) => String(url).endsWith('/api/profiles') && options.method === 'POST');
+    expect(postCall).toBeTruthy();
   });
 
+  it('loads profile data from cached fallback when backend is unavailable', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => ({ ok: false, status: 503, json: async () => ({}) })));
 
-
-  it('does not throw when shared default save endpoint returns 404 and still caches default profile', async () => {
-    vi.stubGlobal('fetch', vi.fn(async (url, options = {}) => {
-      if (String(url).endsWith('/api/dashboard-config') && options.method === 'PUT') {
-        return { ok: false, status: 404, json: async () => ({}) };
-      }
-      return { ok: false, status: 404, json: async () => ({}) };
-    }));
-
-    await expect(saveSharedDashboard({ pagesConfig: { pages: ['home'], home: [] } })).resolves.toBeTruthy();
-
-    const profiles = JSON.parse(localStorage.getItem('tunet_shared_dashboard_profiles_cache') || '[]');
-    expect(profiles.some((p) => p.id === 'default')).toBe(true);
-  });
-
-  it('saves named profile to local cache when both /profiles and default backend are 404', async () => {
-    vi.stubGlobal('fetch', vi.fn(async () => ({ ok: false, status: 404, json: async () => ({}) })));
-
-    await expect(saveSharedDashboardProfile('Night', { pagesConfig: { pages: ['home'], home: [] } })).resolves.toBeTruthy();
-
-    const cachedProfiles = JSON.parse(localStorage.getItem('tunet_shared_dashboard_profiles_cache') || '[]');
-    expect(cachedProfiles.some((p) => p.id === 'night')).toBe(true);
-  });
-
-  it('stops probing /profiles after first unsupported response to prevent request spam', async () => {
-    const fetchMock = vi.fn(async (url, options = {}) => {
-      if (String(url).endsWith('/profiles') && options.method === 'GET') {
-        return { ok: false, status: 404, json: async () => ({}) };
-      }
-      if (String(url).endsWith('/api/dashboard-config') && options.method === 'GET') {
-        return {
-          ok: true,
-          status: 200,
-          json: async () => ({ updatedAt: '2026-01-01T00:00:00.000Z', data: {} }),
-        };
-      }
-      return { ok: false, status: 404, json: async () => ({}) };
-    });
-    vi.stubGlobal('fetch', fetchMock);
-
-    await listSharedDashboards();
-    await listSharedDashboards();
-
-    const profileGets = fetchMock.mock.calls.filter(([url, options]) => String(url).endsWith('/profiles') && options?.method === 'GET');
-    expect(profileGets).toHaveLength(1);
-  });
-
-  it('loads named profile from embedded default payload when profile load endpoint fails', async () => {
-    vi.stubGlobal('fetch', vi.fn(async (url, options = {}) => {
-      if (String(url).includes('/profiles/') && options.method === 'GET') {
-        return { ok: false, status: 503, json: async () => ({}) };
-      }
-      if (String(url).endsWith('/api/dashboard-config') && options.method === 'GET') {
-        return {
-          ok: true,
-          status: 200,
-          json: async () => ({
-            updatedAt: '2026-01-01T00:00:00.000Z',
-            data: {
-              __saved_profiles__: {
-                team_night: {
-                  id: 'team_night',
-                  name: 'Team Night',
-                  updatedAt: '2026-01-01T00:00:00.000Z',
-                  data: { pagesConfig: { pages: ['home'], home: ['light.a'] } },
-                },
-              },
-            },
-          }),
-        };
-      }
-      return { ok: false, status: 404, json: async () => ({}) };
-    }));
+    await saveSharedDashboardProfile('Team Night', { pagesConfig: { pages: ['home'], home: ['light.a'] } });
 
     const loaded = await fetchSharedDashboardProfile('Team Night');
     expect(loaded.pagesConfig.home).toEqual(['light.a']);
+  });
+
+  it('caches default dashboard when save fails', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => ({ ok: false, status: 404, json: async () => ({}) })));
+
+    await expect(saveSharedDashboard({ pagesConfig: { pages: ['home'], home: [] } })).resolves.toBeTruthy();
+
+    expect(localStorage.getItem('tunet_shared_dashboard_cache')).toBeTruthy();
   });
 });
