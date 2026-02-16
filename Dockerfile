@@ -1,37 +1,36 @@
-# Build stage
+# Stage 1: Build frontend
 FROM node:20-alpine AS builder
-
 WORKDIR /app
-
-# Copy package files
 COPY package*.json ./
-
-# Install dependencies
 RUN npm install
-
-# Copy source code
 COPY . .
+# Skip postbuild (docker compose build) inside Docker
+RUN SKIP_POSTBUILD=1 npm run build
 
-# Build the project
-RUN npm run build
-
-# Production stage
+# Stage 2: Production server (Express + static files)
 FROM node:20-alpine
 
+# Install build tools for native modules (better-sqlite3)
+RUN apk add --no-cache python3 make g++
+
 WORKDIR /app
 
-# Install a simple HTTP server to serve the built files
-RUN npm install -g serve
+COPY package*.json ./
+RUN npm install --omit=dev
 
-# Copy built files from builder
+# Clean up build tools to reduce image size
+RUN apk del python3 make g++
+
+# Copy server code
+COPY server ./server
+# Copy built frontend
 COPY --from=builder /app/dist ./dist
 
-# Expose port
-EXPOSE 5173
+ENV NODE_ENV=production
+ENV PORT=3002
+ENV DATA_DIR=/app/data
 
-# Health check
-HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-  CMD node -e "require('http').get('http://localhost:5173', (r) => {if (r.statusCode !== 200) throw new Error(r.statusCode)})"
+EXPOSE 3002
+VOLUME ["/app/data"]
 
-# Serve the app
-CMD ["serve", "-s", "dist", "-l", "5173"]
+CMD ["node", "server/index.js"]

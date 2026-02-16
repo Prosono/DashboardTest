@@ -157,6 +157,10 @@ export default function ModalOrchestrator({
     refreshGlobalDashboards,
     saveGlobalDashboard,
     loadGlobalDashboard,
+    currentUser,
+    canEditDashboard,
+    onLogout,
+    userAdminApi,
   } = cardConfig;
 
   // ── Edit modal props (computed here, not passed from App) ──────────────
@@ -267,6 +271,10 @@ export default function ModalOrchestrator({
             refreshGlobalDashboards={refreshGlobalDashboards}
             saveGlobalDashboard={saveGlobalDashboard}
             loadGlobalDashboard={loadGlobalDashboard}
+            currentUser={currentUser}
+            canEditDashboard={canEditDashboard}
+            onLogout={onLogout}
+            userAdminApi={userAdminApi}
             onClose={() => setShowConfigModal(false)}
             onFinishOnboarding={() => { setShowOnboarding(false); setShowConfigModal(false); }}
           />
