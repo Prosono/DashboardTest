@@ -60,7 +60,8 @@ export const writeCachedDashboard = (payload) => {
   }
 };
 
-export const listSharedDashboards = async () => {
+export const fetchSharedDashboardProfile = async (profileId) => {
+  const id = toProfileId(profileId);
   try {
     const payload = await apiRequest('/api/dashboards', { method: 'GET' });
     return normalizeList(payload?.dashboards || []);
@@ -68,6 +69,7 @@ export const listSharedDashboards = async () => {
     const cached = readProfilesCache();
     return cached.length ? cached : [{ id: 'default', name: 'default', updatedAt: null }];
   }
+  return readCachedProfileData(id);
 };
 
 export const fetchSharedDashboardProfile = async (profileId) => {
