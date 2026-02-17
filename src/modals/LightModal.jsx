@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { X, AlertTriangle, Lightbulb, Utensils, Sofa, LampDesk, Palette, Thermometer, Sun } from '../icons';
 import M3Slider from '../components/ui/M3Slider';
 import { getIconComponent } from '../icons';
+import GenericLightModal from './GenericLightModal';
 
 const makeTr = (t) => (key, fallback) => {
   const out = typeof t === 'function' ? t(key) : undefined;
@@ -25,6 +26,10 @@ export default function LightModal({
   t
 }) {
   const tr = makeTr(t);
+  const isLightTheme = typeof document !== 'undefined' && document.documentElement?.dataset?.theme === 'light';
+  const modalSurfaceStyle = isLightTheme
+    ? { background: '#f1f5f9', borderColor: 'rgba(148,163,184,0.45)', color: 'var(--text-primary)' }
+    : { background: 'linear-gradient(135deg, var(--card-bg) 0%, var(--modal-bg) 100%)', borderColor: 'var(--glass-border)', color: 'var(--text-primary)' };
   const openHistory = (entityId) => {
     if (typeof onShowHistory !== 'function' || !entityId) return;
     onShowHistory(entityId);
@@ -161,13 +166,13 @@ export default function LightModal({
   if (selectableLightIds.length > 1) {
     return (
       <div
-        className="fixed inset-0 z-50 flex items-center justify-center p-4 md:p-6"
+        className="fixed inset-0 z-50 flex items-start md:items-center justify-center p-4 md:p-6"
         style={{ backdropFilter: 'blur(20px)', backgroundColor: 'rgba(0,0,0,0.3)' }}
         onClick={onClose}
       >
         <div
-          className="border w-full max-w-6xl rounded-3xl md:rounded-[3rem] overflow-y-auto md:overflow-hidden backdrop-blur-xl shadow-2xl popup-anim relative max-h-[92dvh]"
-          style={{ background: 'linear-gradient(135deg, var(--card-bg) 0%, var(--modal-bg) 100%)', borderColor: 'var(--glass-border)', color: 'var(--text-primary)' }}
+          className="border w-full max-w-6xl rounded-3xl md:rounded-[3rem] overflow-hidden backdrop-blur-xl shadow-2xl popup-anim relative max-h-[92dvh] flex flex-col"
+          style={modalSurfaceStyle}
           onClick={(e) => e.stopPropagation()}
         >
           <div className="absolute top-3 right-4 md:top-5 md:right-6 z-50">
@@ -176,91 +181,39 @@ export default function LightModal({
             </button>
           </div>
 
-          <div
-            className="overflow-visible md:overflow-y-auto overscroll-contain custom-scrollbar pt-14 md:pt-16 px-3 pb-3 md:px-4 md:pb-4 lg:px-5 lg:pb-5 space-y-3 md:space-y-4"
-            style={{ WebkitOverflowScrolling: 'touch', touchAction: 'pan-y' }}
-          >
-            {selectableLightIds.map((id) => {
-              const meta = getLightMeta(id);
-              const rowEntity = meta.entity;
-              const rowBrightness = meta.brightness;
-              const RowIcon = meta.IconComp;
-              return (
-                <div
-                  key={id}
-                  className="rounded-3xl overflow-hidden border flex flex-col lg:grid lg:grid-cols-5"
-                  style={{ borderColor: 'var(--glass-border)', background: 'linear-gradient(135deg, rgba(255,255,255,0.02) 0%, rgba(255,255,255,0.01) 100%)' }}
-                >
-                  <div className="lg:col-span-3 p-4 md:p-6 border-b lg:border-b-0 lg:border-r flex items-center gap-4" style={{ borderColor: 'var(--glass-border)' }}>
-                    <div className={`p-4 rounded-2xl transition-all duration-500 ${meta.unavailable ? 'bg-red-500/10 text-red-400' : (meta.on ? 'bg-amber-500/15 text-amber-400' : 'bg-[var(--glass-bg)] text-[var(--text-secondary)]')}`}>
-                      <RowIcon className="w-8 h-8" />
-                    </div>
-                    <div className="min-w-0">
-                      <h3 className="text-lg sm:text-xl md:text-2xl font-light tracking-tight text-[var(--text-primary)] uppercase italic leading-tight break-words">
-                        {meta.name}
-                      </h3>
-                      <div className={`mt-2 px-3 py-1 rounded-full border inline-flex items-center gap-2 ${meta.unavailable ? 'bg-red-500/10 border-red-500/20 text-red-400' : 'bg-[var(--glass-bg)] border-[var(--glass-border)] text-[var(--text-secondary)]'}`}>
-                        <div className={`w-1.5 h-1.5 rounded-full ${meta.unavailable ? 'bg-red-400' : (meta.on ? 'bg-green-400 shadow-[0_0_6px_rgba(74,222,128,0.5)]' : 'bg-slate-600')}`} />
-                        <span className="text-[10px] uppercase font-bold italic tracking-widest">
-                          {meta.unavailable ? t('status.unavailable') : (meta.on ? t('common.on') : t('common.off'))}
-                        </span>
-                        <span className="text-[10px] uppercase font-bold italic tracking-widest pl-2 border-l border-[var(--glass-border)] text-[var(--text-muted)]">
-                          {meta.pct}%
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="lg:col-span-2 p-4 md:p-6 flex flex-col justify-center gap-3">
-                    <div className="flex items-center justify-between">
-                      <label className="text-xs font-bold uppercase tracking-widest text-[var(--text-secondary)]">{t('light.brightness')}</label>
-                      <div className="flex items-center gap-2">
-                        <button
-                          type="button"
-                          onClick={() => openHistory(id)}
-                          className="h-10 px-3 rounded-xl border text-[10px] uppercase tracking-widest font-bold bg-[var(--glass-bg)] border-[var(--glass-border)] text-[var(--text-primary)]"
-                        >
-                          {tr('common.history', 'Historikk')}
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => !meta.unavailable && callService('light', 'toggle', { entity_id: id })}
-                          disabled={meta.unavailable}
-                          className={`w-10 h-10 rounded-full border flex items-center justify-center transition-all ${meta.on ? 'bg-amber-500/15 border-amber-500/35 text-amber-300' : 'bg-[var(--glass-bg)] border-[var(--glass-border)] text-[var(--text-secondary)]'} ${meta.unavailable ? 'opacity-50 cursor-not-allowed' : ''}`}
-                          title={meta.on ? t('common.turnOff', 'Slå av') : t('common.turnOn', 'Slå på')}
-                        >
-                          <X className="w-4 h-4" />
-                        </button>
-                      </div>
-                    </div>
-                    <div className="h-10">
-                      <M3Slider
-                        min={0}
-                        max={255}
-                        step={1}
-                        value={rowBrightness}
-                        disabled={!meta.on || meta.unavailable}
-                        onChange={(e) => {
-                          const val = parseInt(e.target.value, 10);
-                          setOptimisticLightBrightness((prev) => ({ ...prev, [id]: val }));
-                          callService('light', 'turn_on', { entity_id: id, brightness: val });
-                        }}
-                        colorClass="bg-amber-500"
-                        variant="fat"
-                      />
-                    </div>
-                    <div className="text-right text-3xl font-semibold leading-none text-[var(--text-primary)] tabular-nums">
-                      {meta.pct}%
-                    </div>
-                    {Array.isArray(rowEntity?.attributes?.entity_id) && rowEntity.attributes.entity_id.length > 0 && (
-                      <div className="text-[10px] uppercase tracking-widest text-[var(--text-secondary)]">
-                        {rowEntity.attributes.entity_id.length} {t('common.entities')}
-                      </div>
-                    )}
-                  </div>
+          <div className="px-3 md:px-4 lg:px-5 pt-14 md:pt-16 pb-3 md:pb-4 lg:pb-5 flex-1 min-h-0 overflow-y-auto custom-scrollbar space-y-3 md:space-y-4">
+            <section className="rounded-2xl border p-3 md:p-4 space-y-3 popup-surface" style={{ borderColor: 'var(--glass-border)' }}>
+              <div className="flex items-center gap-3 min-w-0">
+                <div className="w-10 h-10 rounded-2xl border flex items-center justify-center bg-[var(--glass-bg)]" style={{ borderColor: 'var(--glass-border)' }}>
+                  <Lightbulb className="w-5 h-5 text-[var(--text-secondary)]" />
                 </div>
-              );
-            })}
+                <div className="min-w-0">
+                  <div className="text-sm md:text-base font-bold truncate">{tr('sauna.lights', 'Lys')}</div>
+                  <div className="text-[10px] uppercase tracking-widest text-[var(--text-secondary)]">{selectableLightIds.length} {tr('common.entities', 'entiteter')}</div>
+                </div>
+              </div>
+              <div className="space-y-3">
+                {selectableLightIds.map((id) => {
+                  const meta = getLightMeta(id);
+                  if (!meta.entity) return null;
+                  return (
+                    <GenericLightModal
+                      key={id}
+                      entityId={id}
+                      entity={meta.entity}
+                      callService={callService}
+                      t={t}
+                      onShowHistory={openHistory}
+                      optimisticBrightness={meta.brightness}
+                      setOptimisticBrightness={(val) => setOptimisticLightBrightness((prev) => ({ ...prev, [id]: val }))}
+                      customIcons={customIcons}
+                      embedded
+                      showCloseButton={false}
+                    />
+                  );
+                })}
+              </div>
+            </section>
           </div>
         </div>
       </div>
@@ -275,7 +228,7 @@ export default function LightModal({
     >
       <div 
         className="border w-full max-w-5xl rounded-3xl md:rounded-[3rem] overflow-y-auto lg:overflow-hidden flex flex-col lg:grid lg:grid-cols-5 backdrop-blur-xl shadow-2xl popup-anim relative max-h-[92dvh] md:h-auto md:min-h-[550px]"
-        style={{ background: 'linear-gradient(135deg, var(--card-bg) 0%, var(--modal-bg) 100%)', borderColor: 'var(--glass-border)', color: 'var(--text-primary)' }}
+        style={modalSurfaceStyle}
         onClick={(e) => e.stopPropagation()}
       >
         {/* Close Button Row (Mobile & Desktop) */}

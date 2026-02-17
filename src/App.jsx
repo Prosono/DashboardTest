@@ -1499,20 +1499,42 @@ export default function App() {
 
   if (!currentUser) {
     return (
-      <div className="min-h-screen flex items-center justify-center px-4 bg-[radial-gradient(circle_at_top,#1f2937_0%,#0b1220_45%,#05070d_100%)]" style={{ color: 'var(--text-primary)' }}>
-        <form onSubmit={doLogin} className="w-full max-w-md rounded-3xl border border-white/10 bg-black/40 backdrop-blur-xl p-8 space-y-5 shadow-2xl shadow-black/40">
+      <div
+        className="min-h-screen flex items-center justify-center px-4"
+        style={{
+          color: 'var(--text-primary)',
+          background:
+            'radial-gradient(1000px 420px at 50% -10%, color-mix(in srgb, var(--accent-color) 18%, transparent), transparent 60%), linear-gradient(145deg, var(--bg-gradient-from), var(--bg-primary), var(--bg-gradient-to))',
+        }}
+      >
+        <form
+          onSubmit={doLogin}
+          className="w-full max-w-md rounded-3xl border p-8 space-y-5 shadow-2xl backdrop-blur-xl"
+          style={{
+            background: 'linear-gradient(145deg, color-mix(in srgb, var(--card-bg) 92%, transparent), color-mix(in srgb, var(--modal-bg) 94%, transparent))',
+            borderColor: 'var(--glass-border)',
+            boxShadow: '0 22px 48px rgba(2, 6, 23, 0.28)',
+          }}
+        >
           <div className="flex flex-col items-center gap-3 pb-2">
-            <div className="w-14 h-14 rounded-2xl flex items-center justify-center bg-orange-500/20 border border-orange-400/30">
-              <Flame className="w-8 h-8 text-orange-300" />
+            <div
+              className="w-14 h-14 rounded-2xl flex items-center justify-center border"
+              style={{
+                background: 'color-mix(in srgb, var(--accent-color) 14%, transparent)',
+                borderColor: 'color-mix(in srgb, var(--accent-color) 35%, transparent)',
+              }}
+            >
+              <Flame className="w-8 h-8" style={{ color: 'var(--accent-color)' }} />
             </div>
-            <h1 className="text-lg font-black uppercase tracking-[0.28em] text-center">SMART SAUNA SYSTEMS</h1>
-            <p className="text-xs uppercase tracking-[0.2em] text-slate-300">Secure Dashboard Access</p>
+            <h1 className="text-lg font-black uppercase tracking-[0.24em] text-center">SMART SAUNA SYSTEMS</h1>
+            <p className="text-xs uppercase tracking-[0.2em] text-[var(--text-secondary)]">Secure Dashboard Access</p>
           </div>
 
           <div className="space-y-1.5">
-            <label className="block text-[11px] uppercase tracking-[0.18em] text-slate-300">Username</label>
+            <label className="block text-[11px] uppercase tracking-[0.18em] text-[var(--text-secondary)]">Username</label>
             <input
-              className="w-full px-4 py-3 rounded-xl bg-white/5 border border-white/15 focus:border-blue-400/70 outline-none transition-colors"
+              className="w-full px-4 py-3 rounded-xl border outline-none transition-colors"
+              style={{ backgroundColor: 'var(--glass-bg)', borderColor: 'var(--glass-border)' }}
               value={username}
               onChange={(e) => setUsername(e.target.value)}
               autoComplete="username"
@@ -1520,10 +1542,11 @@ export default function App() {
           </div>
 
           <div className="space-y-1.5">
-            <label className="block text-[11px] uppercase tracking-[0.18em] text-slate-300">Password</label>
+            <label className="block text-[11px] uppercase tracking-[0.18em] text-[var(--text-secondary)]">Password</label>
             <input
               type="password"
-              className="w-full px-4 py-3 rounded-xl bg-white/5 border border-white/15 focus:border-blue-400/70 outline-none transition-colors"
+              className="w-full px-4 py-3 rounded-xl border outline-none transition-colors"
+              style={{ backgroundColor: 'var(--glass-bg)', borderColor: 'var(--glass-border)' }}
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               autoComplete="current-password"
@@ -1534,7 +1557,8 @@ export default function App() {
 
           <button
             disabled={loggingIn}
-            className="w-full py-3 rounded-xl bg-blue-500 hover:bg-blue-600 text-white font-bold uppercase tracking-[0.16em] disabled:opacity-60"
+            className="w-full py-3 rounded-xl text-white font-bold uppercase tracking-[0.16em] disabled:opacity-60 transition-colors"
+            style={{ backgroundColor: 'var(--accent-color)' }}
           >
             {loggingIn ? <span className="inline-block w-4 h-4 mr-2 border-2 border-white/30 border-t-white rounded-full animate-spin align-[-2px]" /> : <Lock className="w-4 h-4 inline mr-2" />}
             {loggingIn ? 'Signing in…' : 'Sign in'}

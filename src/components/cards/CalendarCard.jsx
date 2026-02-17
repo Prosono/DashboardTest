@@ -18,12 +18,14 @@ class CalendarErrorBoundary extends React.Component {
   }
 
   render() {
+    const t = this.props.t;
+    const errorTitle = typeof t === 'function' ? (t('calendar.errorTitle') || 'Calendar error') : 'Calendar error';
     if (this.state.hasError) {
       return (
         <div className="h-full rounded-3xl flex flex-col bg-[var(--card-bg)] border border-[var(--card-border)] p-5 text-red-400">
           <div className="flex items-center gap-3">
             <AlertCircle className="w-5 h-5" />
-            <span className="text-sm font-semibold">Calendar error</span>
+            <span className="text-sm font-semibold">{errorTitle}</span>
           </div>
           <p className="text-xs mt-2 opacity-80">{this.state.message}</p>
         </div>
@@ -215,6 +217,7 @@ function CalendarCard({
   const IconComp = iconName ? (getIconComponent(iconName) || CalendarIcon) : CalendarIcon;
   const displayName = customName || settings?.name || t('calendar.title') || 'Calendar';
   const isSmall = size === 'small';
+  const isLightTheme = typeof document !== 'undefined' && document.documentElement?.dataset?.theme === 'light';
 
   const nextEvent = events.length > 0 ? events[0] : null;
   const nextEventTitle = nextEvent
@@ -244,7 +247,7 @@ function CalendarCard({
         style={style}
       >
         {getControls && getControls(cardId)}
-        <div className="w-12 h-12 rounded-2xl flex-shrink-0 flex items-center justify-center bg-[var(--glass-bg)] text-[var(--text-secondary)]">
+        <div className={`w-12 h-12 rounded-2xl flex-shrink-0 flex items-center justify-center ${isLightTheme ? 'bg-blue-100 text-blue-700 border border-blue-200' : 'bg-[var(--glass-bg)] text-[var(--text-secondary)]'}`}>
           <IconComp className="w-6 h-6 stroke-[1.5px]" />
         </div>
         
@@ -293,12 +296,15 @@ function CalendarCard({
         {/* Header */}
         <div className="p-5 pb-2 flex items-center justify-between z-10">
           <div className="flex items-center gap-3">
-              <div className={`p-2 rounded-xl bg-blue-500/10 text-blue-400`}>
+              <div className={`${isLightTheme ? 'p-2 rounded-xl bg-blue-100 text-blue-700 border border-blue-200' : 'p-2 rounded-xl bg-blue-500/10 text-blue-400'}`}>
                   <IconComp className="w-5 h-5" />
               </div>
-              <h3 className="text-lg font-medium text-[var(--text-primary)] tracking-tight">
-                {displayName}
-              </h3>
+              <div className="min-w-0">
+                <h3 className="text-lg font-medium text-[var(--text-primary)] tracking-tight truncate">{displayName}</h3>
+                <p className="text-[10px] uppercase tracking-widest text-[var(--text-secondary)]">
+                  {events.length} {events.length === 1 ? (t('calendar.eventSingle') || 'hendelse') : (t('calendar.eventPlural') || 'hendelser')}
+                </p>
+              </div>
           </div>
         </div>
 
@@ -325,9 +331,27 @@ function CalendarCard({
                 <p className="text-xs uppercase font-bold tracking-widest">{t('calendar.noEvents') || 'No upcoming events'}</p>
             </div>
         ) : (
-            Object.entries(groupedEvents).map(([dateKey, dayEvents]) => (
+            <>
+              {nextEvent && (
+                <div className={`rounded-2xl border p-3 ${isLightTheme ? 'bg-blue-50 border-blue-200' : 'bg-blue-500/10 border-blue-400/20'}`}>
+                  <div className="flex items-center justify-between gap-2">
+                    <span className={`text-[10px] uppercase tracking-widest font-bold ${isLightTheme ? 'text-blue-700' : 'text-blue-300'}`}>
+                      {t('calendar.next') || 'Neste'}
+                    </span>
+                    {nextTimeString && (
+                      <span className={`text-[10px] uppercase tracking-widest font-bold ${isLightTheme ? 'text-slate-700' : 'text-[var(--text-secondary)]'}`}>
+                        {nextTimeString}
+                      </span>
+                    )}
+                  </div>
+                  <p className="mt-1 text-sm font-semibold text-[var(--text-primary)] leading-snug line-clamp-2">
+                    {nextEventTitle}
+                  </p>
+                </div>
+              )}
+              {Object.entries(groupedEvents).map(([dateKey, dayEvents]) => (
                 <div key={dateKey} className="space-y-1">
-                    <h4 className="text-[10px] font-bold text-blue-400 uppercase tracking-widest py-1 mb-1">
+                    <h4 className={`text-[10px] font-bold uppercase tracking-widest py-1 mb-1 ${isLightTheme ? 'text-blue-700' : 'text-blue-400'}`}>
                         {formatDateHeader(dateKey)}
                     </h4>
                     <div className="space-y-3">
@@ -347,7 +371,7 @@ function CalendarCard({
                            return (
                            <div key={`${evt.uid || evt.id || evt.summary || 'event'}-${idx}`} className="flex gap-4 group items-start">
                                 <div className="flex flex-col items-center pt-1.5">
-                                    <div className={`w-2 h-2 rounded-full ${isAllDay ? 'bg-blue-400' : 'bg-[var(--glass-border)] group-hover:bg-blue-400 transition-colors'}`} />
+                                    <div className={`w-2 h-2 rounded-full ${isAllDay ? (isLightTheme ? 'bg-blue-700' : 'bg-blue-400') : 'bg-[var(--glass-border)] group-hover:bg-blue-400 transition-colors'}`} />
                                     <div className="w-0.5 h-full bg-[var(--glass-border)]/50 my-1 -mb-4 group-last:hidden" />
                                 </div>
                                 <div className="flex-1 pb-1">
@@ -356,8 +380,8 @@ function CalendarCard({
                                         {timeString}
                                         </p>
                                     )}
-                                    <div className="relative pl-4 pr-3 py-2.5 rounded-xl border border-transparent bg-transparent hover:border-[var(--glass-border)] hover:bg-[var(--glass-bg)] transition-colors">
-                                      <span className={`absolute left-0 top-2 bottom-2 w-1 rounded-full ${isAllDay ? 'bg-blue-400/70' : 'bg-[var(--glass-border)] group-hover:bg-blue-400/70 transition-colors'}`} />
+                                    <div className={`relative pl-4 pr-3 py-2.5 rounded-xl border transition-colors ${isLightTheme ? 'bg-white/90 border-slate-200 hover:border-blue-300 hover:bg-blue-50/80' : 'bg-[var(--glass-bg)] border-[var(--glass-border)] hover:bg-[var(--glass-bg-hover)]'}`}>
+                                      <span className={`absolute left-0 top-2 bottom-2 w-1 rounded-full ${isAllDay ? (isLightTheme ? 'bg-blue-700/80' : 'bg-blue-400/70') : 'bg-[var(--glass-border)] group-hover:bg-blue-400/70 transition-colors'}`} />
                                       <p className="text-sm font-medium text-[var(--text-primary)] leading-snug">
                                         {evt.summary}
                                       </p>
@@ -379,7 +403,8 @@ function CalendarCard({
                         })}
                     </div>
                 </div>
-            ))
+              ))}
+            </>
         )}
       </div>
     </div>
@@ -388,7 +413,7 @@ function CalendarCard({
 
 export default function CalendarCardWithBoundary(props) {
   return (
-    <CalendarErrorBoundary>
+    <CalendarErrorBoundary t={props.t}>
       <CalendarCard {...props} />
     </CalendarErrorBoundary>
   );

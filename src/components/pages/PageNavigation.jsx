@@ -91,7 +91,7 @@ export default function PageNavigation({
             } ${editMode && isHidden ? 'opacity-50 border-gray-500 scale-95' : ''} ${editMode ? 'cursor-move' : ''} ${isDragOver ? 'border-blue-500/50' : ''}`}
           >
             <Icon className={`w-4 h-4 ${editMode && isHidden ? 'animate-pulse' : ''}`} />
-            <span className="hidden sm:inline">{label}</span>
+            <span className="inline max-w-[11ch] sm:max-w-none truncate">{label}</span>
             {editMode && <Edit2 className="w-4 h-4 ml-1 text-blue-400 hidden sm:inline" />}
           </button>
         );
@@ -107,7 +107,7 @@ export default function PageNavigation({
           }`}
         >
           <Plus className="w-3 h-3" />
-          <span className="hidden sm:inline">{t('nav.addPage')}</span>
+          <span className="inline max-w-[9ch] sm:max-w-none truncate">{t('nav.addPage')}</span>
         </button>
       )}
     </div>
