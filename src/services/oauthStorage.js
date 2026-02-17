@@ -1,7 +1,7 @@
 // OAuth2 token persistence for Home Assistant
 // Used as saveTokens / loadTokens callbacks for HAWS getAuth()
 
-import { saveSharedHaConfig } from './appAuth';
+import { fetchSharedHaConfig, saveSharedHaConfig } from './appAuth';
 
 const OAUTH_TOKENS_KEY = 'ha_oauth_tokens';
 
@@ -42,7 +42,8 @@ export function saveTokens(tokenInfo) {
   pushTokensToServer(tokenInfo);
 }
 
-export function loadTokens() {
+export async function loadTokens() {
+  // 1) prøv local/session først (som i dag)
   try {
     const sessionStore = getSessionStorage();
     const localStore = getLocalStorage();
@@ -56,13 +57,25 @@ export function loadTokens() {
       sessionStore?.removeItem(OAUTH_TOKENS_KEY);
       return parsed;
     }
-  } catch (error) {
-    console.error('Failed to load OAuth tokens from localStorage:', error);
-  }
+  } catch {}
+
+  // 2) hvis tomt lokalt: hent fra server (shared)
+  try {
+    const shared = await fetchSharedHaConfig();
+    if (shared?.oauthTokens) {
+      // cache lokalt så HAWS blir fornøyd
+      const payload = JSON.stringify(shared.oauthTokens);
+      getLocalStorage()?.setItem(OAUTH_TOKENS_KEY, payload);
+      return shared.oauthTokens;
+    }
+  } catch {}
+
   return undefined;
 }
 
-export function clearOAuthTokens() {
+export function clearOAuthTokens(options = {}) {
+  const { syncServer = true } = options;
+
   try {
     getSessionStorage()?.removeItem(OAUTH_TOKENS_KEY);
     getLocalStorage()?.removeItem(OAUTH_TOKENS_KEY);
@@ -70,7 +83,7 @@ export function clearOAuthTokens() {
     console.error('Failed to clear OAuth tokens from localStorage:', error);
   }
 
-  pushTokensToServer(null);
+  if (syncServer) pushTokensToServer(null);
 }
 
 export function hasOAuthTokens() {

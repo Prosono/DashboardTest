@@ -1,18 +1,19 @@
+// src/App.jsx
+
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { en, nn } from './i18n';
 import {
   AlertTriangle,
   Check,
   Edit2,
+  Flame,
   LayoutGrid,
   Plus,
   Lock,
   User,
 } from './icons';
 
-
 import SettingsDropdown from './components/ui/SettingsDropdown';
-
 import { Header, StatusBar } from './layouts';
 
 import {
@@ -20,7 +21,6 @@ import {
   PageNavigation,
   PersonStatus,
 } from './components';
-
 
 import {
   HomeAssistantProvider,
@@ -38,16 +38,21 @@ import {
 
 import { formatDuration } from './utils';
 import './styles/dashboard.css';
-import { clearOAuthTokens, hasOAuthTokens, loadTokens, saveTokens } from './services/oauthStorage';
+
+import { clearOAuthTokens, loadTokens, saveTokens } from './services/oauthStorage';
 import {
   fetchCurrentUser,
   loginWithPassword,
   logoutUser,
+  updateProfile as updateCurrentProfile,
   listUsers as listServerUsers,
   createUser as createServerUser,
+  updateUser as updateServerUser,
+  deleteUser as deleteServerUser,
   fetchSharedHaConfig,
   saveSharedHaConfig,
 } from './services/appAuth';
+
 import { isCardRemovable as _isCardRemovable, isCardHiddenByLogic as _isCardHiddenByLogic, isMediaPage as _isMediaPage } from './utils/cardUtils';
 import { getCardGridSize as _getCardGridSize, buildGridLayout as _buildGridLayout } from './utils/gridLayout';
 import { createDragAndDropHandlers } from './utils/dragAndDrop';
@@ -57,7 +62,15 @@ import CardErrorBoundary from './components/ui/CardErrorBoundary';
 import EditOverlay from './components/ui/EditOverlay';
 import AuroraBackground from './components/effects/AuroraBackground';
 
-function AppContent({ showOnboarding, setShowOnboarding, currentUser, onLogout, userAdminApi }) {
+function AppContent({
+  showOnboarding,
+  setShowOnboarding,
+  currentUser,
+  onLogout,
+  onProfileUpdated,
+  userAdminApi,
+  haConfigHydrated,
+}) {
   const {
     currentTheme,
     setCurrentTheme,
@@ -132,19 +145,22 @@ function AppContent({ showOnboarding, setShowOnboarding, currentUser, onLogout, 
     activeUrl,
     authRef
   } = useHomeAssistant();
+
   const translations = useMemo(() => ({ en, nn }), []);
   const nnFallback = useMemo(() => ({
     'system.tabHeader': 'Topptekst',
     'system.tabLayout': 'Oppsett'
   }), []);
+
   const t = (key) => {
     const value = translations[language]?.[key] ?? translations.nn[key];
     if (value !== undefined) return value;
     if (language === 'nn' && nnFallback[key]) return nnFallback[key];
     return key;
   };
+
   const resolvedHeaderTitle = headerTitle || t('page.home');
-  
+
   // Modal state management
   const modals = useModals();
   const {
@@ -181,25 +197,29 @@ function AppContent({ showOnboarding, setShowOnboarding, currentUser, onLogout, 
     hasOpenModal,
     closeAllModals,
   } = modals;
-  
+
   const [activeVacuumId, setActiveVacuumId] = useState(null);
   const [showThemeSidebar, setShowThemeSidebar] = useState(false);
   const [showLayoutSidebar, setShowLayoutSidebar] = useState(false);
   const [editCardSettingsKey, setEditCardSettingsKey] = useState(null);
+
   const [editMode, setEditMode] = useState(false);
   const canEditDashboard = currentUser?.role === 'admin';
 
   useEffect(() => {
     if (!canEditDashboard && editMode) setEditMode(false);
   }, [canEditDashboard, editMode]);
+
   const [draggingId, setDraggingId] = useState(null);
   const [activePage, _setActivePage] = useState(() => {
     try { return localStorage.getItem('tunet_active_page') || 'home'; } catch { return 'home'; }
   });
+
   const setActivePage = useCallback((page) => {
     _setActivePage(page);
     try { localStorage.setItem('tunet_active_page', page); } catch {}
   }, []);
+
   const dragSourceRef = useRef(null);
   const touchTargetRef = useRef(null);
   const [touchTargetId, setTouchTargetId] = useState(null);
@@ -228,22 +248,34 @@ function AppContent({ showOnboarding, setShowOnboarding, currentUser, onLogout, 
     showConfigModal, setShowConfigModal, t,
   });
 
+  // ✅ Onboarding skal kun vises når vi faktisk ser at HA ikke er tilgjengelig
+  // (dvs. HA-provider har forsøkt å koble og meldt unavailable/expired).
+  useEffect(() => {
+    if (!haConfigHydrated) return;
+
+    const attempted = Boolean(haUnavailableVisible || oauthExpired);
+    const desiredShow = attempted && !connected;
+
+    setShowOnboarding((prev) => (prev === desiredShow ? prev : desiredShow));
+  }, [haConfigHydrated, haUnavailableVisible, oauthExpired, connected, setShowOnboarding]);
+
   const updateCount = Object.values(entities).filter(e => e.entity_id.startsWith('update.') && e.state === 'on' && !e.attributes.skipped_version).length;
+
   const resetToHome = () => {
     const isHome = activePage === 'home';
     const noModals = !hasOpenModal() && !editingPage && !editMode;
-    
+
     if (!isHome || !noModals) {
-        setActivePage('home');
-        closeAllModals();
-        setActiveVacuumId(null);
-        setEditCardSettingsKey(null);
-        setEditingPage(null);
-        setEditMode(false);
-        setShowStatusPillsConfig(false);
-        setShowCalendarModal(false);
-        setShowTodoModal(null);
-        setShowWeatherModal(null);
+      setActivePage('home');
+      closeAllModals();
+      setActiveVacuumId(null);
+      setEditCardSettingsKey(null);
+      setEditingPage(null);
+      setEditMode(false);
+      setShowStatusPillsConfig(false);
+      setShowCalendarModal(false);
+      setShowTodoModal(null);
+      setShowWeatherModal(null);
     }
   };
 
@@ -269,10 +301,63 @@ function AppContent({ showOnboarding, setShowOnboarding, currentUser, onLogout, 
 
   // ── Entity accessor helpers ────────────────────────────────────────────
   const {
-    getS, getA, getEntityImageUrl, callService,
+    getS, getA, getEntityImageUrl, callService: rawCallService,
     isSonosActive, isMediaActive,
     hvacMap, fanMap, swingMap,
   } = useEntityHelpers({ entities, conn, activeUrl, language, now, t });
+
+  const canControlDevices = currentUser?.role !== 'inspector';
+  const callService = useCallback((domain, service, payload, target) => {
+    if (!canControlDevices) return false;
+    return rawCallService(domain, service, payload, target);
+  }, [canControlDevices, rawCallService]);
+
+  const [showProfileModal, setShowProfileModal] = useState(false);
+  const [profileSaving, setProfileSaving] = useState(false);
+  const [profileError, setProfileError] = useState('');
+  const loadedAssignedDashboardRef = useRef('');
+  const [profileState, setProfileState] = useState({
+    fullName: '',
+    email: '',
+    phone: '',
+    avatarUrl: '',
+  });
+
+  useEffect(() => {
+    setProfileState({
+      fullName: currentUser?.fullName || '',
+      email: currentUser?.email || '',
+      phone: currentUser?.phone || '',
+      avatarUrl: currentUser?.avatarUrl || '',
+    });
+  }, [currentUser?.fullName, currentUser?.email, currentUser?.phone, currentUser?.avatarUrl]);
+
+  const saveProfile = useCallback(async (e) => {
+    e?.preventDefault?.();
+    setProfileSaving(true);
+    setProfileError('');
+    try {
+      const updated = await updateCurrentProfile(profileState);
+      if (updated && onProfileUpdated) onProfileUpdated(updated);
+      setShowProfileModal(false);
+    } catch (error) {
+      setProfileError(error?.message || 'Failed to save profile');
+    } finally {
+      setProfileSaving(false);
+    }
+  }, [profileState, onProfileUpdated]);
+
+  useEffect(() => {
+    if (!currentUser?.id) return;
+    const assignedDashboardId = String(currentUser.assignedDashboardId || 'default');
+    const loadKey = `${currentUser.id}:${assignedDashboardId}`;
+    if (loadedAssignedDashboardRef.current === loadKey) return;
+    loadedAssignedDashboardRef.current = loadKey;
+
+    loadGlobalDashboard(assignedDashboardId).catch(() => {
+      // best effort: keep current/cached dashboard if assigned load fails
+    });
+  }, [currentUser?.id, currentUser?.assignedDashboardId, loadGlobalDashboard]);
 
   // ── Page management ────────────────────────────────────────────────────
   const {
@@ -287,6 +372,8 @@ function AppContent({ showOnboarding, setShowOnboarding, currentUser, onLogout, 
     showAddPageModal, setShowAddPageModal,
     showAddCardModal, setShowAddCardModal, t,
   });
+
+  const getCardSettingsKey = useCallback((cardId, pageId = activePage) => `${pageId}::${cardId}`, [activePage]);
 
   const personStatus = (id) => (
     <PersonStatus
@@ -303,13 +390,12 @@ function AppContent({ showOnboarding, setShowOnboarding, currentUser, onLogout, 
   const pageDefaults = {
     home: { label: t('page.home'), icon: LayoutGrid }
   };
+
   const pages = (pagesConfig.pages || []).map(id => ({
     id,
     label: pageDefaults[id]?.label || id,
     icon: pageDefaults[id]?.icon || LayoutGrid
   }));
-
-  const getCardSettingsKey = useCallback((cardId, pageId = activePage) => `${pageId}::${cardId}`, [activePage]);
 
   const cardUtilCtx = { getCardSettingsKey, cardSettings, entities, activePage };
   const isCardRemovable = (cardId, pageId = activePage) => _isCardRemovable(cardId, pageId, cardUtilCtx);
@@ -341,7 +427,10 @@ function AppContent({ showOnboarding, setShowOnboarding, currentUser, onLogout, 
     setShowAddCardModal, setShowEditCardModal, setEditCardSettingsKey, t,
   });
 
-  const getCardGridSize = useCallback((cardId) => _getCardGridSize(cardId, getCardSettingsKey, cardSettings, activePage, gridColCount), [getCardSettingsKey, cardSettings, activePage, gridColCount]);
+  const getCardGridSize = useCallback(
+    (cardId) => _getCardGridSize(cardId, getCardSettingsKey, cardSettings, activePage, gridColCount),
+    [getCardSettingsKey, cardSettings, activePage, gridColCount]
+  );
 
   const moveCardInArray = useCallback((cardId, direction) => {
     const newConfig = { ...pagesConfig };
@@ -352,9 +441,7 @@ function AppContent({ showOnboarding, setShowOnboarding, currentUser, onLogout, 
     const newIndex = direction === 'left' ? currentIndex - 1 : currentIndex + 1;
     if (newIndex < 0 || newIndex >= pageCards.length) return;
 
-    // Swap cards
     [pageCards[currentIndex], pageCards[newIndex]] = [pageCards[newIndex], pageCards[currentIndex]];
-    
     persistConfig(newConfig);
   }, [pagesConfig, activePage, persistConfig]);
 
@@ -398,8 +485,6 @@ function AppContent({ showOnboarding, setShowOnboarding, currentUser, onLogout, 
 
     const dragProps = getDragProps({ cardId, index, colIndex });
     const baseCardStyle = getCardStyle({ cardId, isHidden, isDragging });
-    
-    // Removed animation delay to prevent slow reanimation on card move
     const cardStyle = baseCardStyle;
 
     const settingsKey = getCardSettingsKey(cardId);
@@ -407,7 +492,7 @@ function AppContent({ showOnboarding, setShowOnboarding, currentUser, onLogout, 
     const getControls = (targetId) => {
       if (!editMode) return null;
       const editId = targetId || cardId;
-      const isHidden = hiddenCards.includes(cardId) || isCardHiddenByLogic(cardId);
+      const isHiddenNow = hiddenCards.includes(cardId) || isCardHiddenByLogic(cardId);
       const settings = cardSettings[settingsKey] || cardSettings[editId] || {};
 
       return (
@@ -415,7 +500,7 @@ function AppContent({ showOnboarding, setShowOnboarding, currentUser, onLogout, 
           cardId={cardId}
           editId={editId}
           settingsKey={settingsKey}
-          isHidden={isHidden}
+          isHidden={isHiddenNow}
           currentSize={cardSettings[settingsKey]?.size || 'large'}
           settings={settings}
           canRemove={isCardRemovable(cardId)}
@@ -432,7 +517,7 @@ function AppContent({ showOnboarding, setShowOnboarding, currentUser, onLogout, 
           onDecreaseGridSize={() => {
             const current = getCardGridSize(cardId);
             saveCardSetting(settingsKey, 'gridColSpan', Math.max(1, current.colSpan - 1));
-            saveCardSetting(settingsKey, 'gridRowSpan', Math.max(1, current.rowSpan - 1));
+            saveCardSetting(settingsKey, 'gridRowSpan', Math.max(1, Math.min(8, current.rowSpan - 1)));
           }}
           onAdjustGridSize={(deltaCol, deltaRow) => {
             if (!deltaCol && !deltaRow) return;
@@ -483,14 +568,12 @@ function AppContent({ showOnboarding, setShowOnboarding, currentUser, onLogout, 
       );
     };
 
-    // Build shared context for card renderers
     const ctx = {
       entities, editMode, conn, cardSettings, customNames, customIcons,
       getA, getS, getEntityImageUrl, callService, isMediaActive,
       saveCardSetting, language, isMobile, activePage, t,
       optimisticLightBrightness, setOptimisticLightBrightness,
       tempHistoryById, isCardHiddenByLogic,
-      // Modal openers
       setShowLightModal, setShowSensorInfoModal, setActiveClimateEntityModal,
       setShowCostModal, setActiveVacuumId, setShowVacuumModal,
       setShowAndroidTVModal, setActiveCarModal, setShowWeatherModal,
@@ -509,16 +592,31 @@ function AppContent({ showOnboarding, setShowOnboarding, currentUser, onLogout, 
   };
 
   return (
-    <div className="min-h-screen font-sans selection:bg-blue-500/30 overflow-x-hidden transition-colors duration-500" style={{backgroundColor: 'var(--bg-primary)', color: 'var(--text-primary)'}}>
+    <div
+      className="min-h-screen font-sans selection:bg-blue-500/30 overflow-x-hidden transition-colors duration-500"
+      style={{ backgroundColor: 'var(--bg-primary)', color: 'var(--text-primary)' }}
+    >
       {bgMode === 'animated' ? (
         <AuroraBackground />
       ) : (
         <div className="fixed inset-0 pointer-events-none z-0">
-          <div className="absolute inset-0" style={{background: 'linear-gradient(to bottom right, var(--bg-gradient-from), var(--bg-primary), var(--bg-gradient-to))'}} />
-          <div className="absolute top-[-15%] right-[-10%] w-[70%] h-[70%] rounded-full pointer-events-none" style={{background: 'rgba(59, 130, 246, 0.08)', filter: 'blur(150px)'}} />
-          <div className="absolute bottom-[-15%] left-[-10%] w-[70%] h-[70%] rounded-full pointer-events-none" style={{background: 'rgba(30, 58, 138, 0.1)', filter: 'blur(150px)'}} />
+          <div
+            className="absolute inset-0"
+            style={{
+              background: 'linear-gradient(to bottom right, var(--bg-gradient-from), var(--bg-primary), var(--bg-gradient-to))',
+            }}
+          />
+          <div
+            className="absolute top-[-15%] right-[-10%] w-[70%] h-[70%] rounded-full pointer-events-none"
+            style={{ background: 'rgba(59, 130, 246, 0.08)', filter: 'blur(150px)' }}
+          />
+          <div
+            className="absolute bottom-[-15%] left-[-10%] w-[70%] h-[70%] rounded-full pointer-events-none"
+            style={{ background: 'rgba(30, 58, 138, 0.1)', filter: 'blur(150px)' }}
+          />
         </div>
       )}
+
       {editMode && draggingId && touchPath && (
         <svg className="fixed inset-0 pointer-events-none z-40">
           <line
@@ -534,6 +632,7 @@ function AppContent({ showOnboarding, setShowOnboarding, currentUser, onLogout, 
           <circle cx={touchPath.x} cy={touchPath.y} r="8" fill="rgba(59, 130, 246, 0.9)" />
         </svg>
       )}
+
       <div
         className={`relative z-10 w-full max-w-[1600px] mx-auto py-6 md:py-10 ${
           isMobile ? 'px-5 mobile-grid' : (gridColCount === 1 ? 'px-10 sm:px-16 md:px-24' : 'px-6 md:px-20')
@@ -557,8 +656,8 @@ function AppContent({ showOnboarding, setShowOnboarding, currentUser, onLogout, 
             <div className={`flex flex-wrap gap-2.5 items-center min-w-0 ${isMobile ? 'scale-90 origin-left w-full' : ''}`}>
               {(pagesConfig.header || []).map(id => personStatus(id))}
               {editMode && canEditDashboard && (
-                <button 
-                  onClick={() => { setAddCardTargetPage('header'); setShowAddCardModal(true); }} 
+                <button
+                  onClick={() => { setAddCardTargetPage('header'); setShowAddCardModal(true); }}
                   className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-blue-500/20 border border-blue-500/30 text-blue-400 hover:bg-blue-500/30 transition-all text-[10px] font-bold uppercase tracking-[0.2em]"
                 >
                   <Plus className="w-3 h-3" /> {t('addCard.type.entity')}
@@ -566,6 +665,7 @@ function AppContent({ showOnboarding, setShowOnboarding, currentUser, onLogout, 
               )}
               {(pagesConfig.header || []).length > 0 && <div className="w-px h-8 bg-[var(--glass-border)] mx-2"></div>}
             </div>
+
             <div className={`min-w-0 ${isMobile ? 'w-full' : 'flex-1'}`}>
               <StatusBar
                 entities={entities}
@@ -623,42 +723,56 @@ function AppContent({ showOnboarding, setShowOnboarding, currentUser, onLogout, 
             setShowAddPageModal={setShowAddPageModal}
             t={t}
           />
+
           <div className="relative flex items-center gap-6 flex-shrink-0 overflow-visible pb-2 justify-end">
-            {editMode && canEditDashboard && <button onClick={() => setShowAddCardModal(true)} className="group flex items-center gap-2 text-xs font-bold uppercase text-blue-400 hover:text-white transition-all whitespace-nowrap"><Plus className="w-4 h-4" /> {t('nav.addCard')}</button>}
             {editMode && canEditDashboard && (
-              <button onClick={() => {
-                const currentSettings = pageSettings[activePage];
-                if (currentSettings?.hidden) setActivePage('home');
-                setEditMode(false);
-              }} className="group flex items-center gap-2 text-xs font-bold uppercase text-green-400 hover:text-white transition-all whitespace-nowrap">
+              <button
+                onClick={() => setShowAddCardModal(true)}
+                className="group flex items-center gap-2 text-xs font-bold uppercase text-blue-400 hover:text-white transition-all whitespace-nowrap"
+              >
+                <Plus className="w-4 h-4" /> {t('nav.addCard')}
+              </button>
+            )}
+
+            {editMode && canEditDashboard && (
+              <button
+                onClick={() => {
+                  const currentSettings = pageSettings[activePage];
+                  if (currentSettings?.hidden) setActivePage('home');
+                  setEditMode(false);
+                }}
+                className="group flex items-center gap-2 text-xs font-bold uppercase text-green-400 hover:text-white transition-all whitespace-nowrap"
+              >
                 <Check className="w-4 h-4" /> {t('nav.done')}
               </button>
             )}
-            
-            <button 
+
+            <button
               onClick={() => {
                 if (!canEditDashboard) return;
                 const currentSettings = pageSettings[activePage];
                 if (currentSettings?.hidden) setActivePage('home');
                 setEditMode(!editMode);
-              }} 
+              }}
               className={`p-2 rounded-full group ${editMode ? 'bg-blue-500/20 text-blue-400' : 'text-[var(--text-secondary)]'}`}
               title={canEditDashboard ? (editMode ? t('nav.done') : t('menu.edit')) : 'Admin only'}
             >
               <Edit2 className="w-5 h-5" />
             </button>
+
             {currentUser && (
               <button
-                onClick={onLogout}
+                onClick={() => setShowProfileModal(true)}
                 className="px-2 py-1 rounded-full border border-[var(--glass-border)] text-[10px] uppercase tracking-wider text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
-                title="Log out"
+                title="Profile"
               >
                 <User className="w-3 h-3 inline mr-1" />
                 {currentUser.username} ({currentUser.role})
               </button>
             )}
+
             <div className="relative">
-              <SettingsDropdown 
+              <SettingsDropdown
                 onOpenSettings={() => { setShowConfigModal(true); setConfigTab('connection'); }}
                 onOpenTheme={() => setShowThemeSidebar(true)}
                 onOpenLayout={() => setShowLayoutSidebar(true)}
@@ -671,7 +785,15 @@ function AppContent({ showOnboarding, setShowOnboarding, currentUser, onLogout, 
                 </div>
               )}
             </div>
-            {!connected && <div className={`flex items-center justify-center h-8 w-8 rounded-full transition-all border flex-shrink-0`} style={{backgroundColor: 'rgba(255,255,255,0.01)', borderColor: 'rgba(239, 68, 68, 0.2)'}}><div className="h-2 w-2 rounded-full" style={{backgroundColor: '#ef4444'}} /></div>}
+
+            {!connected && (
+              <div
+                className="flex items-center justify-center h-8 w-8 rounded-full transition-all border flex-shrink-0"
+                style={{ backgroundColor: 'rgba(255,255,255,0.01)', borderColor: 'rgba(239, 68, 68, 0.2)' }}
+              >
+                <div className="h-2 w-2 rounded-full" style={{ backgroundColor: '#ef4444' }} />
+              </div>
+            )}
           </div>
         </div>
 
@@ -695,31 +817,39 @@ function AppContent({ showOnboarding, setShowOnboarding, currentUser, onLogout, 
           </div>
         ) : (pagesConfig[activePage] || []).filter(id => gridLayout[id]).length === 0 ? (
           <div key={`${activePage}-empty`} className="flex flex-col items-center justify-center min-h-[60vh] text-center p-8 opacity-90 animate-in fade-in zoom-in duration-500 font-sans">
-             <div className="bg-[var(--glass-bg)] border border-[var(--glass-border)] p-5 rounded-full mb-6 shadow-lg shadow-black/5">
-                <LayoutGrid className="w-12 h-12 text-[var(--text-primary)] opacity-80" />
-             </div>
-             
-             <h2 className="text-3xl font-light mb-3 text-[var(--text-primary)] uppercase tracking-tight">{t('welcome.title')}</h2>
-             <p className="text-lg text-[var(--text-secondary)] mb-8 max-w-md leading-relaxed">{t('welcome.subtitle')}</p>
-             
-             <div className="flex gap-4">
-                  <button 
-                    onClick={() => setShowAddCardModal(true)} 
-                    className="flex items-center gap-3 px-8 py-4 bg-blue-500 hover:bg-blue-600 active:scale-95 text-white rounded-2xl shadow-lg shadow-blue-500/20 transition-all duration-200 font-bold uppercase tracking-widest text-sm"
-                  >
-                     <Plus className="w-5 h-5" />
-                     {t('welcome.addCard')}
-                  </button>
-             </div>
+            <div className="bg-[var(--glass-bg)] border border-[var(--glass-border)] p-5 rounded-full mb-6 shadow-lg shadow-black/5">
+              <LayoutGrid className="w-12 h-12 text-[var(--text-primary)] opacity-80" />
+            </div>
 
-             <div className="mt-12 max-w-xs mx-auto p-4 rounded-2xl bg-[var(--glass-bg)] border border-[var(--glass-border)]">
-                <p className="text-[10px] text-[var(--text-muted)] uppercase tracking-widest leading-relaxed">
-                   {t('welcome.editHint')}
-                </p>
-             </div>
+            <h2 className="text-3xl font-light mb-3 text-[var(--text-primary)] uppercase tracking-tight">{t('welcome.title')}</h2>
+            <p className="text-lg text-[var(--text-secondary)] mb-8 max-w-md leading-relaxed">{t('welcome.subtitle')}</p>
+
+            <div className="flex gap-4">
+              <button
+                onClick={() => setShowAddCardModal(true)}
+                className="flex items-center gap-3 px-8 py-4 bg-blue-500 hover:bg-blue-600 active:scale-95 text-white rounded-2xl shadow-lg shadow-blue-500/20 transition-all duration-200 font-bold uppercase tracking-widest text-sm"
+              >
+                <Plus className="w-5 h-5" />
+                {t('welcome.addCard')}
+              </button>
+            </div>
+
+            <div className="mt-12 max-w-xs mx-auto p-4 rounded-2xl bg-[var(--glass-bg)] border border-[var(--glass-border)]">
+              <p className="text-[10px] text-[var(--text-muted)] uppercase tracking-widest leading-relaxed">
+                {t('welcome.editHint')}
+              </p>
+            </div>
           </div>
         ) : (
-          <div key={activePage} className="grid font-sans page-transition items-start" style={{ gap: isMobile ? '12px' : `${gridGapV}px ${gridGapH}px`, gridAutoRows: isMobile ? '82px' : '100px', gridTemplateColumns: `repeat(${gridColCount}, minmax(0, 1fr))` }}>
+          <div
+            key={activePage}
+            className="grid font-sans page-transition items-start"
+            style={{
+              gap: isMobile ? '12px' : `${gridGapV}px ${gridGapH}px`,
+              gridAutoRows: isMobile ? '82px' : '100px',
+              gridTemplateColumns: `repeat(${gridColCount}, minmax(0, 1fr))`,
+            }}
+          >
             {(pagesConfig[activePage] || [])
               .map((id) => ({ id, placement: gridLayout[id] }))
               .filter(({ placement }) => placement)
@@ -727,53 +857,76 @@ function AppContent({ showOnboarding, setShowOnboarding, currentUser, onLogout, 
                 if (a.placement.row !== b.placement.row) return a.placement.row - b.placement.row;
                 return a.placement.col - b.placement.col;
               })
-              .map(({ id }, _sortedIndex) => {
-              const index = (pagesConfig[activePage] || []).indexOf(id);
-              const placement = gridLayout[id];
-              const settingsKey = getCardSettingsKey(id);
-              const settings = cardSettings[settingsKey] || cardSettings[id] || {};
-              const defaultLegacyRowSpan = placement?.rowSpan || 1;
-              const defaultLegacyColSpan = placement?.colSpan || 1;
-              const rowSpan = Number.isFinite(Number(settings.gridRowSpan))
-                ? Math.max(1, Math.round(Number(settings.gridRowSpan)))
-                : defaultLegacyRowSpan;
-              const colSpan = Number.isFinite(Number(settings.gridColSpan))
-                ? Math.max(1, Math.min(gridColCount, Math.round(Number(settings.gridColSpan))))
-                : defaultLegacyColSpan;
-              const heading = cardSettings[settingsKey]?.heading;
+              .map(({ id }) => {
+                const index = (pagesConfig[activePage] || []).indexOf(id);
+                const placement = gridLayout[id];
+                const settingsKey = getCardSettingsKey(id);
+                const settings = cardSettings[settingsKey] || cardSettings[id] || {};
+                const defaultLegacyRowSpan = placement?.rowSpan || 1;
+                const defaultLegacyColSpan = placement?.colSpan || 1;
+                const rowSpan = Number.isFinite(Number(settings.gridRowSpan))
+                  ? Math.max(1, Math.round(Number(settings.gridRowSpan)))
+                  : defaultLegacyRowSpan;
+                const colSpan = Number.isFinite(Number(settings.gridColSpan))
+                  ? Math.max(1, Math.min(gridColCount, Math.round(Number(settings.gridColSpan))))
+                  : defaultLegacyColSpan;
+                const heading = cardSettings[settingsKey]?.heading;
 
-              if (!editMode && (hiddenCards.includes(id) || isCardHiddenByLogic(id))) return null;
+                if (!editMode && (hiddenCards.includes(id) || isCardHiddenByLogic(id))) return null;
 
-              const cardContent = renderCard(id, index);
-              if (!cardContent) return null;
+                const cardContent = renderCard(id, index);
+                if (!cardContent) return null;
 
-              return (
-                <div
-                  key={id}
-                  className={`h-full relative ${(isCompactCards || isMobile) ? 'card-compact' : ''}`}
-                  style={{
-                    gridRowStart: placement.row,
-                    gridColumnStart: placement.col,
-                    gridColumnEnd: `span ${colSpan}`,
-                    gridRowEnd: `span ${rowSpan}`
-                  }}
-                >
-                  {heading && (
-                    <div className="absolute -top-4 left-2 text-[10px] uppercase tracking-[0.2em] font-bold text-[var(--text-secondary)]">
-                      {heading}
+                return (
+                  <div
+                    key={id}
+                    className={`h-full relative ${(isCompactCards || isMobile) ? 'card-compact' : ''}`}
+                    style={{
+                      gridRowStart: placement.row,
+                      gridColumnStart: placement.col,
+                      gridColumnEnd: `span ${colSpan}`,
+                      gridRowEnd: `span ${rowSpan}`,
+                    }}
+                  >
+                    {heading && (
+                      <div className="absolute -top-4 left-2 text-[10px] uppercase tracking-[0.2em] font-bold text-[var(--text-secondary)]">
+                        {heading}
+                      </div>
+                    )}
+                    <div className="h-full">
+                      <CardErrorBoundary cardId={id} t={t}>
+                        {cardContent}
+                      </CardErrorBoundary>
                     </div>
-                  )}
-                  <div className="h-full">
-                    <CardErrorBoundary cardId={id} t={t}>
-                      {cardContent}
-                    </CardErrorBoundary>
                   </div>
-                </div>
-              );
-            })}
+                );
+              })}
           </div>
         )}
-        
+
+        {showProfileModal && (
+          <div className="fixed inset-0 z-[120] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+            <form onSubmit={saveProfile} className="w-full max-w-lg rounded-2xl border border-white/10 bg-[var(--card-bg)] p-5 space-y-4 shadow-2xl">
+              <div className="flex items-center justify-between">
+                <h3 className="text-sm font-bold uppercase tracking-wider">Profile</h3>
+                <button type="button" onClick={() => setShowProfileModal(false)} className="text-xs px-2 py-1 rounded-lg border border-[var(--glass-border)]">Close</button>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <input value={profileState.fullName} onChange={(e) => setProfileState((prev) => ({ ...prev, fullName: e.target.value }))} placeholder="Name" className="px-3 py-2 rounded-xl bg-[var(--glass-bg)] border border-[var(--glass-border)] text-sm md:col-span-2" />
+                <input value={profileState.email} onChange={(e) => setProfileState((prev) => ({ ...prev, email: e.target.value }))} placeholder="Email" className="px-3 py-2 rounded-xl bg-[var(--glass-bg)] border border-[var(--glass-border)] text-sm" />
+                <input value={profileState.phone} onChange={(e) => setProfileState((prev) => ({ ...prev, phone: e.target.value }))} placeholder="Phone" className="px-3 py-2 rounded-xl bg-[var(--glass-bg)] border border-[var(--glass-border)] text-sm" />
+                <input value={profileState.avatarUrl} onChange={(e) => setProfileState((prev) => ({ ...prev, avatarUrl: e.target.value }))} placeholder="Profile picture URL" className="px-3 py-2 rounded-xl bg-[var(--glass-bg)] border border-[var(--glass-border)] text-sm md:col-span-2" />
+                <input value={currentUser?.role || ''} disabled className="px-3 py-2 rounded-xl bg-[var(--glass-bg)] border border-[var(--glass-border)] text-sm opacity-70 md:col-span-2" />
+              </div>
+              {profileError && <div className="text-xs text-red-300 bg-red-500/10 border border-red-500/20 rounded-lg px-3 py-2">{profileError}</div>}
+              <div className="flex items-center justify-between">
+                <button type="button" onClick={onLogout} className="px-3 py-2 rounded-lg text-xs font-bold uppercase tracking-wider bg-red-500/10 text-red-300 border border-red-500/25">Logout</button>
+                <button type="submit" disabled={profileSaving} className="px-4 py-2 rounded-lg text-xs font-bold uppercase tracking-wider bg-blue-500 hover:bg-blue-600 text-white disabled:opacity-60">{profileSaving ? 'Saving…' : 'Save profile'}</button>
+              </div>
+            </form>
+          </div>
+        )}
+
         <ModalOrchestrator
           entities={entities} conn={conn} activeUrl={activeUrl}
           connected={connected} authRef={authRef}
@@ -826,7 +979,8 @@ function AppContent({ showOnboarding, setShowOnboarding, currentUser, onLogout, 
             isSonosActive, isMediaActive,
           }}
           addCard={{
-            addCardTargetPage, addCardType, setAddCardType,
+            addCardTargetPage, setAddCardTargetPage,
+            addCardType, setAddCardType,
             searchTerm, setSearchTerm,
             selectedEntities, setSelectedEntities,
             selectedWeatherId, setSelectedWeatherId,
@@ -840,6 +994,7 @@ function AppContent({ showOnboarding, setShowOnboarding, currentUser, onLogout, 
             nordpoolDecimals, setNordpoolDecimals,
             onAddSelected,
             getAddCardAvailableLabel, getAddCardNoneLeftLabel,
+            setShowAddCardModal,
           }}
           cardConfig={{
             cardSettings, saveCardSetting, persistCardSettings,
@@ -871,33 +1026,38 @@ export default function App() {
   const [currentUser, setCurrentUser] = useState(null);
   const [authError, setAuthError] = useState('');
   const [loggingIn, setLoggingIn] = useState(false);
-  const [username, setUsername] = useState('admin');
-  const [password, setPassword] = useState('admin');
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
   const [haConfigHydrated, setHaConfigHydrated] = useState(false);
+
   const { config, setConfig } = useConfig();
 
   const applySharedHaConfig = useCallback((sharedConfig) => {
     if (!sharedConfig) return;
+    const resolvedAuthMethod = sharedConfig.authMethod === 'token'
+      ? 'token'
+      : (sharedConfig.oauthTokens ? 'oauth' : (sharedConfig.token ? 'token' : 'oauth'));
 
     setConfig((prev) => ({
       ...prev,
       url: sharedConfig.url || '',
       fallbackUrl: sharedConfig.fallbackUrl || '',
-      authMethod: sharedConfig.authMethod === 'token' ? 'token' : 'oauth',
+      authMethod: resolvedAuthMethod,
       token: sharedConfig.token || '',
     }));
 
     try {
       localStorage.setItem('ha_url', sharedConfig.url || '');
       localStorage.setItem('ha_fallback_url', sharedConfig.fallbackUrl || '');
-      localStorage.setItem('ha_auth_method', sharedConfig.authMethod === 'token' ? 'token' : 'oauth');
+      localStorage.setItem('ha_auth_method', resolvedAuthMethod);
       localStorage.setItem('ha_token', sharedConfig.token || '');
-    } catch {
-      // best effort
-    }
+    } catch {}
 
-    if (sharedConfig.oauthTokens) saveTokens(sharedConfig.oauthTokens);
-    else clearOAuthTokens();
+    if (resolvedAuthMethod === 'oauth' && sharedConfig.oauthTokens) {
+      saveTokens(sharedConfig.oauthTokens);
+    } else {
+      clearOAuthTokens({ syncServer: false });
+    }
   }, [setConfig]);
 
   useEffect(() => {
@@ -910,7 +1070,8 @@ export default function App() {
 
         if (user) {
           const shared = await fetchSharedHaConfig().catch(() => null);
-          if (mounted) applySharedHaConfig(shared);
+          if (!mounted) return;
+          applySharedHaConfig(shared);
         }
       } catch {
         if (mounted) setCurrentUser(null);
@@ -932,8 +1093,10 @@ export default function App() {
     try {
       const result = await loginWithPassword(username, password);
       const user = result?.user || null;
+
       const shared = await fetchSharedHaConfig().catch(() => null);
       applySharedHaConfig(shared);
+
       setCurrentUser(user);
       setHaConfigHydrated(true);
     } catch (error) {
@@ -948,12 +1111,13 @@ export default function App() {
     setCurrentUser(null);
   };
 
+  // ✅ Admin sync til server (loadTokens er async)
   useEffect(() => {
     if (!currentUser || currentUser.role !== 'admin' || !haConfigHydrated) return undefined;
 
-    const timer = setTimeout(() => {
+    const timer = setTimeout(async () => {
       const authMethod = config.authMethod === 'token' ? 'token' : 'oauth';
-      const oauthTokens = authMethod === 'oauth' ? (loadTokens() || null) : null;
+      const oauthTokens = authMethod === 'oauth' ? (await loadTokens() || null) : null;
 
       saveSharedHaConfig({
         url: config.url || '',
@@ -961,30 +1125,17 @@ export default function App() {
         authMethod,
         token: authMethod === 'token' ? (config.token || '') : '',
         oauthTokens,
-      }).catch(() => {
-        // best effort sync
-      });
+      }).catch(() => {});
     }, 500);
 
     return () => clearTimeout(timer);
   }, [currentUser, haConfigHydrated, config.url, config.fallbackUrl, config.authMethod, config.token]);
 
-  // Detect if we're returning from an OAuth2 redirect
-  const isOAuthCallback = typeof window !== 'undefined' && new URLSearchParams(window.location.search).has('auth_callback');
-  const hasAuth = config.token || (config.authMethod === 'oauth' && (hasOAuthTokens() || isOAuthCallback));
+  // ✅ showOnboarding styres i AppContent (attempted + !connected)
   const [showOnboarding, setShowOnboarding] = useState(false);
 
-  useEffect(() => {
-    if (!authReady || !haConfigHydrated || !currentUser) return;
-    setShowOnboarding(!hasAuth);
-  }, [authReady, haConfigHydrated, currentUser, hasAuth]);
-
-  // During onboarding, block token connections but ALLOW OAuth (including callbacks)
-  const haConfig = showOnboarding
-    ? config.authMethod === 'oauth'
-      ? config                     // OAuth: pass config through so callback can be processed
-      : { ...config, token: '' }   // Token: block until onboarding finishes
-    : config;
+  // Send alltid config inn; HA-provider får forsøke
+  const haConfig = config;
 
   if (!authReady) {
     return <div className="min-h-screen flex items-center justify-center text-[var(--text-secondary)]">Loading…</div>;
@@ -992,20 +1143,46 @@ export default function App() {
 
   if (!currentUser) {
     return (
-      <div className="min-h-screen flex items-center justify-center px-4" style={{ backgroundColor: 'var(--bg-primary)', color: 'var(--text-primary)' }}>
-        <form onSubmit={doLogin} className="w-full max-w-md rounded-3xl border border-[var(--glass-border)] bg-[var(--card-bg)] p-6 space-y-4 shadow-xl">
-          <h1 className="text-xl font-bold uppercase tracking-wider">Dashboard login</h1>
-          <p className="text-sm text-[var(--text-secondary)]">Logg inn for å laste dashboard og tilgangsnivå.</p>
-          <label className="block text-xs uppercase tracking-wider">Username</label>
-          <input className="w-full px-3 py-2 rounded-xl bg-[var(--glass-bg)] border border-[var(--glass-border)]" value={username} onChange={(e) => setUsername(e.target.value)} />
-          <label className="block text-xs uppercase tracking-wider">Password</label>
-          <input type="password" className="w-full px-3 py-2 rounded-xl bg-[var(--glass-bg)] border border-[var(--glass-border)]" value={password} onChange={(e) => setPassword(e.target.value)} />
-          {authError && <div className="text-sm text-red-400">{authError}</div>}
-          <button disabled={loggingIn} className="w-full py-2.5 rounded-xl bg-blue-500 hover:bg-blue-600 text-white font-bold uppercase tracking-wider disabled:opacity-60">
-            <Lock className="w-4 h-4 inline mr-2" />
-            {loggingIn ? 'Logger inn…' : 'Logg inn'}
+      <div className="min-h-screen flex items-center justify-center px-4 bg-[radial-gradient(circle_at_top,#1f2937_0%,#0b1220_45%,#05070d_100%)]" style={{ color: 'var(--text-primary)' }}>
+        <form onSubmit={doLogin} className="w-full max-w-md rounded-3xl border border-white/10 bg-black/40 backdrop-blur-xl p-8 space-y-5 shadow-2xl shadow-black/40">
+          <div className="flex flex-col items-center gap-3 pb-2">
+            <div className="w-14 h-14 rounded-2xl flex items-center justify-center bg-orange-500/20 border border-orange-400/30">
+              <Flame className="w-8 h-8 text-orange-300" />
+            </div>
+            <h1 className="text-lg font-black uppercase tracking-[0.28em] text-center">SMART SAUNA SYSTEMS</h1>
+            <p className="text-xs uppercase tracking-[0.2em] text-slate-300">Secure Dashboard Access</p>
+          </div>
+
+          <div className="space-y-1.5">
+            <label className="block text-[11px] uppercase tracking-[0.18em] text-slate-300">Username</label>
+            <input
+              className="w-full px-4 py-3 rounded-xl bg-white/5 border border-white/15 focus:border-blue-400/70 outline-none transition-colors"
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
+              autoComplete="username"
+            />
+          </div>
+
+          <div className="space-y-1.5">
+            <label className="block text-[11px] uppercase tracking-[0.18em] text-slate-300">Password</label>
+            <input
+              type="password"
+              className="w-full px-4 py-3 rounded-xl bg-white/5 border border-white/15 focus:border-blue-400/70 outline-none transition-colors"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              autoComplete="current-password"
+            />
+          </div>
+
+          {authError && <div className="text-sm text-red-300 bg-red-500/15 border border-red-500/30 rounded-xl px-3 py-2">{authError}</div>}
+
+          <button
+            disabled={loggingIn}
+            className="w-full py-3 rounded-xl bg-blue-500 hover:bg-blue-600 text-white font-bold uppercase tracking-[0.16em] disabled:opacity-60"
+          >
+            {loggingIn ? <span className="inline-block w-4 h-4 mr-2 border-2 border-white/30 border-t-white rounded-full animate-spin align-[-2px]" /> : <Lock className="w-4 h-4 inline mr-2" />}
+            {loggingIn ? 'Signing in…' : 'Sign in'}
           </button>
-          <p className="text-xs text-[var(--text-secondary)]">Standard testbruker: <strong>admin / admin</strong>.</p>
         </form>
       </div>
     );
@@ -1018,6 +1195,8 @@ export default function App() {
   const userAdminApi = {
     listUsers: listServerUsers,
     createUser: createServerUser,
+    updateUser: updateServerUser,
+    deleteUser: deleteServerUser,
   };
 
   return (
@@ -1027,7 +1206,9 @@ export default function App() {
         setShowOnboarding={setShowOnboarding}
         currentUser={currentUser}
         onLogout={doLogout}
+        onProfileUpdated={setCurrentUser}
         userAdminApi={userAdminApi}
+        haConfigHydrated={haConfigHydrated}
       />
     </HomeAssistantProvider>
   );

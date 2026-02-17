@@ -34,7 +34,27 @@ router.get('/me', authRequired, (req, res) => {
   return res.json({ user: safeUser(user) });
 });
 
-router.get('/ha-config', authRequired, (_req, res) => {
+router.put('/profile', authRequired, (req, res) => {
+  const existing = db.prepare('SELECT * FROM users WHERE id = ?').get(req.auth.user.id);
+  if (!existing) return res.status(401).json({ error: 'User no longer exists' });
+
+  const fullName = req.body?.fullName !== undefined ? String(req.body.fullName || '').trim() : (existing.full_name || '');
+  const email = req.body?.email !== undefined ? String(req.body.email || '').trim() : (existing.email || '');
+  const phone = req.body?.phone !== undefined ? String(req.body.phone || '').trim() : (existing.phone || '');
+  const avatarUrl = req.body?.avatarUrl !== undefined ? String(req.body.avatarUrl || '').trim() : (existing.avatar_url || '');
+
+  const now = new Date().toISOString();
+  db.prepare(`
+    UPDATE users
+    SET full_name = ?, email = ?, phone = ?, avatar_url = ?, updated_at = ?
+    WHERE id = ?
+  `).run(fullName, email, phone, avatarUrl, now, req.auth.user.id);
+
+  const user = db.prepare('SELECT * FROM users WHERE id = ?').get(req.auth.user.id);
+  return res.json({ user: safeUser(user) });
+});
+
+router.get('/ha-config', authRequired, (req, res) => {
   const row = db.prepare('SELECT * FROM ha_config WHERE id = 1').get();
   const oauthTokens = row?.oauth_tokens
     ? (() => {
@@ -45,6 +65,21 @@ router.get('/ha-config', authRequired, (_req, res) => {
       }
     })()
     : null;
+
+  const user = db.prepare('SELECT * FROM users WHERE id = ?').get(req.auth.user.id);
+  const hasUserTokenConfig = Boolean(user?.ha_url && user?.ha_token);
+  if (req.auth.user.role !== 'admin' && hasUserTokenConfig) {
+    return res.json({
+      config: {
+        url: user.ha_url || '',
+        fallbackUrl: '',
+        authMethod: 'token',
+        token: user.ha_token || '',
+        oauthTokens: null,
+        updatedAt: user.updated_at || null,
+      },
+    });
+  }
 
   return res.json({
     config: {

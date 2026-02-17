@@ -66,6 +66,12 @@ export const safeUser = (userRow) => ({
   username: userRow.username,
   role: userRow.role,
   assignedDashboardId: userRow.assigned_dashboard_id || 'default',
+  haUrl: userRow.ha_url || '',
+  haToken: userRow.ha_token || '',
+  fullName: userRow.full_name || '',
+  email: userRow.email || '',
+  phone: userRow.phone || '',
+  avatarUrl: userRow.avatar_url || '',
   createdAt: userRow.created_at,
   updatedAt: userRow.updated_at,
 });

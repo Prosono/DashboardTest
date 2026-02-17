@@ -17,6 +17,7 @@ export const HomeAssistantProvider = ({ children, config }) => {
   const [haUnavailable, setHaUnavailable] = useState(false);
   const [haUnavailableVisible, setHaUnavailableVisible] = useState(false);
   const [oauthExpired, setOauthExpired] = useState(false);
+  const [oauthBootstrapTick, setOauthBootstrapTick] = useState(0);
   const [libLoaded, setLibLoaded] = useState(false);
   const [conn, setConn] = useState(null);
   const [activeUrl, setActiveUrl] = useState(config.url);
@@ -34,6 +35,25 @@ export const HomeAssistantProvider = ({ children, config }) => {
     script.onload = () => setLibLoaded(true);
     document.head.appendChild(script);
   }, []);
+
+  // Bootstrap shared OAuth tokens into localStorage for fresh browsers/devices.
+  useEffect(() => {
+    const isOAuth = config.authMethod === 'oauth';
+    const isOAuthCallback = typeof window !== 'undefined' && new URLSearchParams(window.location.search).has('auth_callback');
+
+    if (!isOAuth || !config.url || hasOAuthTokens() || isOAuthCallback) return undefined;
+
+    let cancelled = false;
+    loadTokens()
+      .catch(() => undefined)
+      .finally(() => {
+        if (!cancelled) setOauthBootstrapTick((v) => v + 1);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [config.authMethod, config.url]);
 
   // Connect to Home Assistant
   useEffect(() => {
@@ -172,7 +192,7 @@ export const HomeAssistantProvider = ({ children, config }) => {
       cancelled = true; 
       if (connection) connection.close(); 
     };
-  }, [libLoaded, config.url, config.fallbackUrl, config.token, config.authMethod]);
+  }, [libLoaded, config.url, config.fallbackUrl, config.token, config.authMethod, oauthBootstrapTick]);
 
   // Handle connection events
   useEffect(() => {

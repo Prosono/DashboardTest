@@ -114,6 +114,21 @@ export default function ConfigModal({
   const [newPassword, setNewPassword] = useState('');
   const [newRole, setNewRole] = useState('user');
   const [newUserDashboard, setNewUserDashboard] = useState('default');
+  const [newUserHaUrl, setNewUserHaUrl] = useState('');
+  const [newUserHaToken, setNewUserHaToken] = useState('');
+  const [userEdits, setUserEdits] = useState({});
+  const [savingUserIds, setSavingUserIds] = useState({});
+  const [deletingUserIds, setDeletingUserIds] = useState({});
+  const [expandedUserId, setExpandedUserId] = useState('');
+
+  const buildUserEditState = (user) => ({
+    username: user?.username || '',
+    role: user?.role === 'admin' ? 'admin' : 'user',
+    assignedDashboardId: user?.assignedDashboardId || 'default',
+    haUrl: user?.haUrl || '',
+    haToken: user?.haToken || '',
+    password: '',
+  });
 
   const isLayoutPreview = configTab === 'layout' && layoutPreview;
 
@@ -147,9 +162,26 @@ export default function ConfigModal({
     if (configTab !== 'storage' || !canEditDashboard || !userAdminApi?.listUsers) return;
     let cancelled = false;
     userAdminApi.listUsers().then((list) => {
-      if (!cancelled) setUsers(Array.isArray(list) ? list : []);
+      if (!cancelled) {
+        const nextUsers = Array.isArray(list) ? list : [];
+        setUsers(nextUsers);
+        setUserEdits((prev) => {
+          const next = { ...prev };
+          nextUsers.forEach((user) => {
+            next[user.id] = {
+              ...(next[user.id] || {}),
+              ...buildUserEditState(user),
+              password: next[user.id]?.password || '',
+            };
+          });
+          return next;
+        });
+      }
     }).catch(() => {
-      if (!cancelled) setUsers([]);
+      if (!cancelled) {
+        setUsers([]);
+        setUserEdits({});
+      }
     });
     return () => { cancelled = true; };
   }, [configTab, canEditDashboard, userAdminApi]);
@@ -160,18 +192,20 @@ export default function ConfigModal({
     if (!isOnboardingActive) onClose?.();
   };
 
+  const isAdmin = currentUser?.role === 'admin';
+  const isInspector = currentUser?.role === 'inspector';
+  const canManageConnection = !isInspector;
+
   const TABS = [
     { key: 'connection', icon: Wifi, label: t('system.tabConnection') },
-    { key: 'storage', icon: Server, label: t('system.tabStorage') || 'Global dashboards' },
-    // Appearance and Layout have been moved to Sidebars
-    // { key: 'appearance', icon: Palette, label: t('system.tabAppearance') },
-    // { key: 'layout', icon: LayoutGrid, label: t('system.tabLayout') },
-    { key: 'updates', icon: Download, label: t('updates.title') },
+    ...(isAdmin ? [{ key: 'storage', icon: Server, label: 'User Management' }] : []),
+    ...(isAdmin ? [{ key: 'updates', icon: Download, label: t('updates.title') }] : []),
   ];
 
   const availableTabs = isLayoutPreview
     ? [{ key: 'layout', icon: LayoutGrid, label: t('system.tabLayout') }]
     : TABS;
+  const activeConfigTab = availableTabs.some((tab) => tab.key === configTab) ? configTab : 'connection';
 
   const handleInstallUpdate = (entityId) => {
     setInstallingIds(prev => ({ ...prev, [entityId]: true }));
@@ -199,8 +233,9 @@ export default function ConfigModal({
       <div className="flex gap-2">
         <button
           type="button"
-          onClick={() => { setConfig({ ...config, authMethod: 'oauth' }); setConnectionTestResult(null); }}
-          className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-xs font-bold uppercase tracking-wider transition-all relative ${isOAuth ? 'bg-blue-500 text-white shadow-lg shadow-blue-500/20' : 'bg-[var(--glass-bg)] text-[var(--text-secondary)] border border-[var(--glass-border)] hover:bg-[var(--glass-bg-hover)]'}`}
+          onClick={() => { if (!canManageConnection) return; setConfig({ ...config, authMethod: 'oauth' }); setConnectionTestResult(null); }}
+          disabled={!canManageConnection}
+          className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-xs font-bold uppercase tracking-wider transition-all relative ${isOAuth ? 'bg-blue-500 text-white shadow-lg shadow-blue-500/20' : 'bg-[var(--glass-bg)] text-[var(--text-secondary)] border border-[var(--glass-border)] hover:bg-[var(--glass-bg-hover)]'} ${!canManageConnection ? 'opacity-50 cursor-not-allowed' : ''}`}
         >
           <LogIn className="w-3.5 h-3.5" />
           OAuth2
@@ -210,8 +245,9 @@ export default function ConfigModal({
         </button>
         <button
           type="button"
-          onClick={() => { setConfig({ ...config, authMethod: 'token' }); setConnectionTestResult(null); }}
-          className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-xs font-bold uppercase tracking-wider transition-all ${!isOAuth ? 'bg-blue-500 text-white shadow-lg shadow-blue-500/20' : 'bg-[var(--glass-bg)] text-[var(--text-secondary)] border border-[var(--glass-border)] hover:bg-[var(--glass-bg-hover)]'}`}
+          onClick={() => { if (!canManageConnection) return; setConfig({ ...config, authMethod: 'token' }); setConnectionTestResult(null); }}
+          disabled={!canManageConnection}
+          className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-xs font-bold uppercase tracking-wider transition-all ${!isOAuth ? 'bg-blue-500 text-white shadow-lg shadow-blue-500/20' : 'bg-[var(--glass-bg)] text-[var(--text-secondary)] border border-[var(--glass-border)] hover:bg-[var(--glass-bg-hover)]'} ${!canManageConnection ? 'opacity-50 cursor-not-allowed' : ''}`}
         >
           <Key className="w-3.5 h-3.5" />
           Token
@@ -239,7 +275,8 @@ export default function ConfigModal({
             <button
               type="button"
               onClick={handleOAuthLogout}
-              className="w-full py-2.5 rounded-xl font-bold uppercase tracking-widest text-sm flex items-center justify-center gap-2 bg-red-500/10 text-red-400 border border-red-500/20 hover:bg-red-500/20 transition-all"
+              disabled={!canManageConnection}
+              className={`w-full py-2.5 rounded-xl font-bold uppercase tracking-widest text-sm flex items-center justify-center gap-2 bg-red-500/10 text-red-400 border border-red-500/20 hover:bg-red-500/20 transition-all ${!canManageConnection ? 'opacity-50 cursor-not-allowed' : ''}`}
             >
               <LogOut className="w-4 h-4" />
               {t('system.oauth.logoutButton')}
@@ -249,7 +286,7 @@ export default function ConfigModal({
           <button
             type="button"
             onClick={startOAuthLogin}
-            disabled={!config.url || !validateUrl(config.url)}
+            disabled={!canManageConnection || !config.url || !validateUrl(config.url)}
             className={`w-full py-3 rounded-xl font-bold uppercase tracking-widest text-sm flex items-center justify-center gap-2 shadow-lg transition-all ${!config.url || !validateUrl(config.url) ? 'bg-[var(--glass-bg)] text-[var(--text-secondary)] opacity-50 cursor-not-allowed' : 'bg-blue-500 hover:bg-blue-600 text-white shadow-blue-500/20'}`}
           >
             <LogIn className="w-5 h-5" />
@@ -258,6 +295,9 @@ export default function ConfigModal({
         )}
         {!config.url && (
           <p className="text-xs text-[var(--text-muted)] ml-1">{t('system.oauth.urlRequired')}</p>
+        )}
+        {!canManageConnection && (
+          <p className="text-xs text-[var(--text-muted)] ml-1">Inspector role is view-only for connection settings.</p>
         )}
         {connectionTestResult && !connectionTestResult.success && isOAuth && (
           <div className="p-3 rounded-xl flex items-center gap-2 bg-red-500/20 text-red-400 border border-red-500/30 animate-in fade-in slide-in-from-bottom-2">
@@ -274,6 +314,22 @@ export default function ConfigModal({
       ? globalDashboardProfiles
       : [{ id: 'default', name: 'default', updatedAt: null }];
 
+    const syncUsers = (nextUsers) => {
+      const normalized = Array.isArray(nextUsers) ? nextUsers : [];
+      setUsers(normalized);
+      setUserEdits((prev) => {
+        const next = { ...prev };
+        normalized.forEach((user) => {
+          next[user.id] = {
+            ...(next[user.id] || {}),
+            ...buildUserEditState(user),
+            password: next[user.id]?.password || '',
+          };
+        });
+        return next;
+      });
+    };
+
     const handleRefresh = async () => {
       if (!refreshGlobalDashboards) return;
       const nextProfiles = await refreshGlobalDashboards();
@@ -282,7 +338,7 @@ export default function ConfigModal({
       }
       if (canEditDashboard && userAdminApi?.listUsers) {
         const list = await userAdminApi.listUsers().catch(() => []);
-        setUsers(Array.isArray(list) ? list : []);
+        syncUsers(list);
       }
     };
 
@@ -324,24 +380,78 @@ export default function ConfigModal({
           password,
           role: newRole,
           assignedDashboardId: newUserDashboard || 'default',
+          haUrl: newUserHaUrl.trim(),
+          haToken: newUserHaToken.trim(),
         });
         setNewUsername('');
         setNewPassword('');
+        setNewUserHaUrl('');
+        setNewUserHaToken('');
         const list = await userAdminApi.listUsers().catch(() => null);
         if (Array.isArray(list)) {
-          setUsers(list);
+          syncUsers(list);
         } else if (createdUser) {
-          setUsers((prev) => {
+          const nextUsers = ((prev) => {
             const next = Array.isArray(prev) ? prev.slice() : [];
             const idx = next.findIndex((u) => u.id === createdUser.id);
             if (idx === -1) next.push(createdUser);
             else next[idx] = createdUser;
             return next.sort((a, b) => String(a.username || '').localeCompare(String(b.username || '')));
-          });
+          })(users);
+          syncUsers(nextUsers);
         }
         setGlobalActionMessage(`Created user: ${username}`);
       } catch (error) {
         setGlobalActionMessage(error?.message || 'Failed to create user');
+      }
+    };
+
+    const updateUserEdit = (id, patch) => {
+      setUserEdits((prev) => ({ ...prev, [id]: { ...(prev[id] || {}), ...patch } }));
+    };
+
+    const handleSaveUser = async (userId) => {
+      if (!userAdminApi?.updateUser) return;
+      const draft = userEdits[userId];
+      if (!draft) return;
+      setSavingUserIds((prev) => ({ ...prev, [userId]: true }));
+      try {
+        const updated = await userAdminApi.updateUser(userId, {
+          username: String(draft.username || '').trim(),
+          role: String(draft.role || 'user').trim() === 'admin'
+            ? 'admin'
+            : (String(draft.role || 'user').trim() === 'inspector' ? 'inspector' : 'user'),
+          assignedDashboardId: String(draft.assignedDashboardId || 'default').trim() || 'default',
+          haUrl: String(draft.haUrl || '').trim(),
+          haToken: String(draft.haToken || '').trim(),
+          password: String(draft.password || '').trim(),
+        });
+        setUsers((prev) => prev.map((user) => (user.id === userId ? updated : user)));
+        setUserEdits((prev) => ({ ...prev, [userId]: { ...buildUserEditState(updated), password: '' } }));
+        setGlobalActionMessage(`Saved user: ${updated?.username || userId}`);
+      } catch (error) {
+        setGlobalActionMessage(error?.message || 'Failed to save user');
+      } finally {
+        setSavingUserIds((prev) => ({ ...prev, [userId]: false }));
+      }
+    };
+
+    const handleDeleteUser = async (userId) => {
+      if (!userAdminApi?.deleteUser) return;
+      setDeletingUserIds((prev) => ({ ...prev, [userId]: true }));
+      try {
+        await userAdminApi.deleteUser(userId);
+        setUsers((prev) => prev.filter((user) => user.id !== userId));
+        setUserEdits((prev) => {
+          const next = { ...prev };
+          delete next[userId];
+          return next;
+        });
+        setGlobalActionMessage('User deleted');
+      } catch (error) {
+        setGlobalActionMessage(error?.message || 'Failed to delete user');
+      } finally {
+        setDeletingUserIds((prev) => ({ ...prev, [userId]: false }));
       }
     };
 
@@ -351,7 +461,7 @@ export default function ConfigModal({
           <div className="flex items-center justify-between gap-3">
             <div>
               <h3 className="text-sm font-bold uppercase tracking-wider text-[var(--text-primary)]">
-                {t('system.tabStorage') || 'Global dashboards'}
+                User Management
               </h3>
               <p className="text-xs text-[var(--text-secondary)] mt-1">
                 Dashboard user: {currentUser?.username || '-'} ({currentUser?.role || 'unknown'})
@@ -419,25 +529,119 @@ export default function ConfigModal({
 
           {canEditDashboard && (
             <div className="space-y-3 pt-2 border-t border-[var(--glass-border)]">
-              <h4 className="text-xs uppercase font-bold tracking-wider text-[var(--text-secondary)]">Users</h4>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                <input value={newUsername} onChange={(e) => setNewUsername(e.target.value)} placeholder="username" className="px-3 py-2 rounded-xl bg-[var(--glass-bg)] border border-[var(--glass-border)] text-sm" />
-                <input value={newPassword} onChange={(e) => setNewPassword(e.target.value)} type="password" placeholder="password" className="px-3 py-2 rounded-xl bg-[var(--glass-bg)] border border-[var(--glass-border)] text-sm" />
-                <select value={newRole} onChange={(e) => setNewRole(e.target.value)} className="px-3 py-2 rounded-xl bg-[var(--glass-bg)] border border-[var(--glass-border)] text-sm">
-                  <option value="user">user</option>
-                  <option value="admin">admin</option>
-                </select>
-                <select value={newUserDashboard} onChange={(e) => setNewUserDashboard(e.target.value)} className="px-3 py-2 rounded-xl bg-[var(--glass-bg)] border border-[var(--glass-border)] text-sm">
-                  {profiles.map((profile) => <option key={profile.id} value={profile.id}>{profile.name || profile.id}</option>)}
-                </select>
+              <h4 className="text-xs uppercase font-bold tracking-wider text-[var(--text-secondary)]">User Accounts</h4>
+
+              <div className="rounded-xl border border-[var(--glass-border)] bg-[var(--glass-bg)] p-3 space-y-3">
+                <p className="text-[11px] uppercase tracking-wider text-[var(--text-secondary)] font-bold">Create User</p>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                  <input value={newUsername} onChange={(e) => setNewUsername(e.target.value)} placeholder="Username" className="px-3 py-2 rounded-lg bg-[var(--glass-bg-hover)] border border-[var(--glass-border)] text-sm" />
+                  <input value={newPassword} onChange={(e) => setNewPassword(e.target.value)} type="password" placeholder="Password" className="px-3 py-2 rounded-lg bg-[var(--glass-bg-hover)] border border-[var(--glass-border)] text-sm" />
+                  <select value={newRole} onChange={(e) => setNewRole(e.target.value)} className="px-3 py-2 rounded-lg bg-[var(--glass-bg-hover)] border border-[var(--glass-border)] text-sm">
+                    <option value="user">user</option>
+                    <option value="admin">admin</option>
+                    <option value="inspector">inspector</option>
+                  </select>
+                  <select value={newUserDashboard} onChange={(e) => setNewUserDashboard(e.target.value)} className="px-3 py-2 rounded-lg bg-[var(--glass-bg-hover)] border border-[var(--glass-border)] text-sm">
+                    {profiles.map((profile) => <option key={profile.id} value={profile.id}>{profile.name || profile.id}</option>)}
+                  </select>
+                  <input value={newUserHaUrl} onChange={(e) => setNewUserHaUrl(e.target.value)} placeholder="HA URL (optional)" className="px-3 py-2 rounded-lg bg-[var(--glass-bg-hover)] border border-[var(--glass-border)] text-sm md:col-span-2" />
+                  <input value={newUserHaToken} onChange={(e) => setNewUserHaToken(e.target.value)} placeholder="HA Token (optional)" className="px-3 py-2 rounded-lg bg-[var(--glass-bg-hover)] border border-[var(--glass-border)] text-sm md:col-span-2" />
+                </div>
+                <button onClick={handleCreateUser} className="w-full py-2.5 rounded-lg bg-indigo-500 hover:bg-indigo-600 text-white text-xs font-bold uppercase tracking-wider">Create user</button>
               </div>
-              <button onClick={handleCreateUser} className="w-full py-2.5 rounded-xl bg-indigo-500 hover:bg-indigo-600 text-white text-xs font-bold uppercase tracking-wider">Create user</button>
-              <div className="space-y-1 max-h-44 overflow-auto">
-                {users.map((u) => (
-                  <div key={u.id} className="text-xs rounded-lg border border-[var(--glass-border)] px-3 py-2 bg-[var(--glass-bg)]">
-                    <span className="font-semibold">{u.username}</span> · {u.role} · dashboard: {u.assignedDashboardId || 'default'}
-                  </div>
-                ))}
+
+              <div className="rounded-xl border border-[var(--glass-border)] bg-[var(--glass-bg)] p-3 space-y-2">
+                <div className="flex items-center justify-between">
+                  <p className="text-[11px] uppercase tracking-wider text-[var(--text-secondary)] font-bold">Existing Users</p>
+                  <span className="text-[10px] text-[var(--text-secondary)]">{users.length} total</span>
+                </div>
+                <div className="space-y-2 max-h-[26rem] overflow-auto pr-1">
+                  {users.map((u) => {
+                    const expanded = expandedUserId === u.id;
+                    return (
+                      <div key={u.id} className="rounded-lg border border-[var(--glass-border)] bg-[var(--glass-bg-hover)]">
+                        <button
+                          type="button"
+                          onClick={() => setExpandedUserId(expanded ? '' : u.id)}
+                          className="w-full px-3 py-2 flex items-center justify-between text-left"
+                        >
+                          <div className="min-w-0">
+                            <p className="text-sm font-semibold truncate">{u.username}</p>
+                            <p className="text-[11px] text-[var(--text-secondary)] truncate">role: {u.role} • dashboard: {u.assignedDashboardId || 'default'}</p>
+                          </div>
+                          <span className="text-[10px] uppercase tracking-wider text-[var(--text-secondary)]">{expanded ? 'Hide' : 'Edit'}</span>
+                        </button>
+
+                        {expanded && (
+                          <div className="px-3 pb-3 space-y-2 border-t border-[var(--glass-border)]">
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-2 pt-2">
+                              <input
+                                value={userEdits[u.id]?.username ?? ''}
+                                onChange={(e) => updateUserEdit(u.id, { username: e.target.value })}
+                                className="px-3 py-2 rounded-lg bg-[var(--glass-bg)] border border-[var(--glass-border)] text-sm"
+                                placeholder="Username"
+                              />
+                              <input
+                                value={userEdits[u.id]?.password ?? ''}
+                                onChange={(e) => updateUserEdit(u.id, { password: e.target.value })}
+                                className="px-3 py-2 rounded-lg bg-[var(--glass-bg)] border border-[var(--glass-border)] text-sm"
+                                type="password"
+                                placeholder="New password (optional)"
+                              />
+                              <select
+                                value={userEdits[u.id]?.role ?? 'user'}
+                                onChange={(e) => updateUserEdit(u.id, { role: e.target.value })}
+                                className="px-3 py-2 rounded-lg bg-[var(--glass-bg)] border border-[var(--glass-border)] text-sm"
+                              >
+                                <option value="user">user</option>
+                                <option value="admin">admin</option>
+                                <option value="inspector">inspector</option>
+                              </select>
+                              <select
+                                value={userEdits[u.id]?.assignedDashboardId ?? 'default'}
+                                onChange={(e) => updateUserEdit(u.id, { assignedDashboardId: e.target.value })}
+                                className="px-3 py-2 rounded-lg bg-[var(--glass-bg)] border border-[var(--glass-border)] text-sm"
+                              >
+                                {profiles.map((profile) => <option key={profile.id} value={profile.id}>{profile.name || profile.id}</option>)}
+                              </select>
+                              <input
+                                value={userEdits[u.id]?.haUrl ?? ''}
+                                onChange={(e) => updateUserEdit(u.id, { haUrl: e.target.value })}
+                                className="px-3 py-2 rounded-lg bg-[var(--glass-bg)] border border-[var(--glass-border)] text-sm md:col-span-2"
+                                placeholder="HA URL (optional)"
+                              />
+                              <input
+                                value={userEdits[u.id]?.haToken ?? ''}
+                                onChange={(e) => updateUserEdit(u.id, { haToken: e.target.value })}
+                                className="px-3 py-2 rounded-lg bg-[var(--glass-bg)] border border-[var(--glass-border)] text-sm md:col-span-2"
+                                placeholder="HA Token (optional)"
+                              />
+                            </div>
+                            <div className="flex items-center justify-between gap-2">
+                              <span className="text-[10px] uppercase tracking-wider text-[var(--text-secondary)] truncate">ID: {u.id}</span>
+                              <div className="flex gap-2">
+                                <button
+                                  onClick={() => handleSaveUser(u.id)}
+                                  disabled={!!savingUserIds[u.id]}
+                                  className="px-3 py-1.5 rounded-lg bg-green-500/90 hover:bg-green-500 text-white font-bold uppercase tracking-wider disabled:opacity-60"
+                                >
+                                  {savingUserIds[u.id] ? 'Saving…' : 'Save'}
+                                </button>
+                                <button
+                                  onClick={() => handleDeleteUser(u.id)}
+                                  disabled={!!deletingUserIds[u.id] || u.id === currentUser?.id}
+                                  className="px-3 py-1.5 rounded-lg bg-red-500/15 border border-red-500/30 text-red-300 font-bold uppercase tracking-wider disabled:opacity-40"
+                                >
+                                  {deletingUserIds[u.id] ? 'Deleting…' : 'Delete'}
+                                </button>
+                              </div>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
             </div>
           )}
@@ -470,6 +674,7 @@ export default function ConfigModal({
             type="text"
             className="w-full px-4 py-3 rounded-xl bg-[var(--glass-bg)] border border-[var(--glass-border)] text-[var(--text-primary)] focus:bg-[var(--glass-bg-hover)] focus:border-blue-500/50 outline-none transition-all placeholder:text-[var(--text-muted)]"
             value={config.url}
+            disabled={!canManageConnection}
             onChange={(e) => setConfig({ ...config, url: e.target.value.trim() })}
             placeholder="https://homeassistant.local:8123"
           />
@@ -500,6 +705,7 @@ export default function ConfigModal({
                 type="text"
                 className="w-full px-4 py-3 rounded-xl bg-[var(--glass-bg)] border border-[var(--glass-border)] text-[var(--text-primary)] focus:bg-[var(--glass-bg-hover)] focus:border-blue-500/50 outline-none transition-all placeholder:text-[var(--text-muted)]"
                 value={config.fallbackUrl}
+                disabled={!canManageConnection}
                 onChange={(e) => setConfig({ ...config, fallbackUrl: e.target.value.trim() })}
                 placeholder={t('common.optional')}
               />
@@ -522,6 +728,7 @@ export default function ConfigModal({
               <textarea
                 className="w-full px-4 py-3 h-32 rounded-xl bg-[var(--glass-bg)] border border-[var(--glass-border)] text-[var(--text-primary)] focus:bg-[var(--glass-bg-hover)] focus:border-blue-500/50 outline-none transition-all font-mono text-xs leading-relaxed resize-none"
                 value={config.token}
+                disabled={!canManageConnection}
                 onChange={(e) => setConfig({ ...config, token: e.target.value.trim() })}
                 placeholder="ey..."
               />
@@ -1268,8 +1475,8 @@ export default function ConfigModal({
                       <>
                         <button
                           onClick={testConnection}
-                          disabled={!config.url || !config.token || !validateUrl(config.url) || testingConnection}
-                          className={`w-full py-2.5 rounded-xl font-bold uppercase tracking-widest transition-all flex items-center justify-center gap-2 shadow-lg text-sm ${!config.url || !config.token || !validateUrl(config.url) || testingConnection ? 'bg-[var(--glass-bg)] text-[var(--text-secondary)] opacity-50 cursor-not-allowed' : 'bg-blue-500 hover:bg-blue-600 text-white shadow-blue-500/20'}`}
+                          disabled={!canManageConnection || !config.url || !config.token || !validateUrl(config.url) || testingConnection}
+                          className={`w-full py-2.5 rounded-xl font-bold uppercase tracking-widest transition-all flex items-center justify-center gap-2 shadow-lg text-sm ${!canManageConnection || !config.url || !config.token || !validateUrl(config.url) || testingConnection ? 'bg-[var(--glass-bg)] text-[var(--text-secondary)] opacity-50 cursor-not-allowed' : 'bg-blue-500 hover:bg-blue-600 text-white shadow-blue-500/20'}`}
                         >
                           {testingConnection ? <RefreshCw className="w-5 h-5 animate-spin" /> : <Wifi className="w-5 h-5" />}
                           {testingConnection ? t('onboarding.testing') : t('onboarding.testConnection')}
@@ -1373,7 +1580,7 @@ export default function ConfigModal({
                 </div>
 
                 {availableTabs.map(tab => {
-                  const active = configTab === tab.key;
+                  const active = activeConfigTab === tab.key;
                   const TabIcon = tab.icon;
                   return (
                     <button
@@ -1415,9 +1622,9 @@ export default function ConfigModal({
                   <div className="p-2 rounded-lg bg-[var(--accent-bg)] text-[var(--accent-color)] shadow-inner">
                     <LayoutGrid className="w-4 h-4" />
                   </div>
-                  <h3 className="font-bold text-base uppercase tracking-wide">
-                    {availableTabs.find(tb => tb.key === configTab)?.label}
-                  </h3>
+                    <h3 className="font-bold text-base uppercase tracking-wide">
+                      {availableTabs.find(tb => tb.key === activeConfigTab)?.label}
+                    </h3>
                 </div>
                 <button onClick={onClose} className="modal-close relative"><X className="w-4 h-4" /></button>
               </div>
@@ -1427,7 +1634,7 @@ export default function ConfigModal({
                 {!isLayoutPreview && (
                   <div className="hidden md:flex items-center justify-between mb-8">
                     <h2 className="text-2xl font-bold">
-                      {availableTabs.find(tab => tab.key === configTab)?.label}
+                      {availableTabs.find(tab => tab.key === activeConfigTab)?.label}
                     </h2>
                     <button onClick={handleClose} className="p-2 rounded-full hover:bg-[var(--glass-bg-hover)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors">
                       <X className="w-5 h-5" />
@@ -1435,11 +1642,11 @@ export default function ConfigModal({
                   </div>
                 )}
 
-                {configTab === 'connection' && renderConnectionTab()}
-                {configTab === 'storage' && renderStorageTab()}
+                {activeConfigTab === 'connection' && renderConnectionTab()}
+                {isAdmin && activeConfigTab === 'storage' && renderStorageTab()}
                 {/* {configTab === 'appearance' && renderAppearanceTab()} */}
                 {/* {configTab === 'layout' && renderLayoutTab()} */}
-                {configTab === 'updates' && renderUpdatesTab()}
+                {isAdmin && activeConfigTab === 'updates' && renderUpdatesTab()}
               </div>
 
               {/* Mobile Footer */}

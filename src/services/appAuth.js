@@ -64,6 +64,14 @@ export const fetchCurrentUser = async () => {
   return payload?.user || null;
 };
 
+export const updateProfile = async (profile) => {
+  const payload = await apiRequest('/api/auth/profile', {
+    method: 'PUT',
+    body: JSON.stringify(profile || {}),
+  });
+  return payload?.user || null;
+};
+
 export const listUsers = async () => {
   const payload = await apiRequest('/api/users', { method: 'GET' });
   return Array.isArray(payload?.users) ? payload.users : [];
@@ -75,6 +83,21 @@ export const createUser = async (user) => {
     body: JSON.stringify(user),
   });
   return payload?.user || null;
+};
+
+export const updateUser = async (id, user) => {
+  const payload = await apiRequest(`/api/users/${encodeURIComponent(id)}`, {
+    method: 'PUT',
+    body: JSON.stringify(user || {}),
+  });
+  return payload?.user || null;
+};
+
+export const deleteUser = async (id) => {
+  const payload = await apiRequest(`/api/users/${encodeURIComponent(id)}`, {
+    method: 'DELETE',
+  });
+  return Boolean(payload?.success);
 };
 
 export const fetchSharedHaConfig = async () => {
