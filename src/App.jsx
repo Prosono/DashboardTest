@@ -1,7 +1,7 @@
 // src/App.jsx
 
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
-import { en, nn } from './i18n';
+import { en, nn, nb } from './i18n';
 import {
   AlertTriangle,
   Check,
@@ -146,7 +146,7 @@ function AppContent({
     authRef
   } = useHomeAssistant();
 
-  const translations = useMemo(() => ({ en, nn }), []);
+  const translations = useMemo(() => ({ en, nn, nb }), []);
   const nnFallback = useMemo(() => ({
     'system.tabHeader': 'Topptekst',
     'system.tabLayout': 'Oppsett'
@@ -155,7 +155,7 @@ function AppContent({
   const t = (key) => {
     const value = translations[language]?.[key] ?? translations.nn[key];
     if (value !== undefined) return value;
-    if (language === 'nn' && nnFallback[key]) return nnFallback[key];
+    if ((language === 'nn' || language === 'nb') && nnFallback[key]) return nnFallback[key];
     return key;
   };
 

@@ -29,6 +29,7 @@ export default function Header({
     : (isMobile ? 8 : 40);
 
   const fontWeight = headerSettings?.fontWeight || '300';
+  const selectedFont = headerSettings?.fontFamily || headerSettings?.headerFont || 'sans';
   const letterSpacingMap = { tight: '0.05em', normal: '0.2em', wide: '0.5em', extraWide: '0.8em' };
   const letterSpacingMobile = { tight: '0.05em', normal: '0.2em', wide: '0.3em', extraWide: '0.5em' };
   const lsDesktop = letterSpacingMap[headerSettings?.letterSpacing || 'normal'] || '0.2em';
@@ -71,8 +72,8 @@ export default function Header({
               <>
                 <h1 
                   className={`leading-none select-none ${
-                    headerSettings?.headerFont === 'serif' ? 'font-serif' :
-                    headerSettings?.headerFont === 'mono' ? 'font-mono' :
+                    selectedFont === 'serif' ? 'font-serif' :
+                    selectedFont === 'mono' ? 'font-mono' :
                     'font-sans'
                   }`}
                   style={{
@@ -83,13 +84,20 @@ export default function Header({
                     fontStyle: fontStyleVal === 'italic' ? 'italic' : 'normal',
                     textTransform: fontStyleVal === 'uppercase' ? 'uppercase' : 'none',
                     fontFamily: 
-                      headerSettings?.headerFont === 'georgia' ? 'Georgia, serif' :
-                      headerSettings?.headerFont === 'courier' ? '"Courier New", monospace' :
-                      headerSettings?.headerFont === 'trebuchet' ? '"Trebuchet MS", sans-serif' :
-                      headerSettings?.headerFont === 'comic' ? '"Comic Sans MS", cursive' :
-                      headerSettings?.headerFont === 'times' ? '"Times New Roman", serif' :
-                      headerSettings?.headerFont === 'verdana' ? 'Verdana, sans-serif' :
-                      undefined
+                      selectedFont === 'georgia' ? 'Georgia, serif' :
+                      selectedFont === 'courier' ? '"Courier New", monospace' :
+                      selectedFont === 'trebuchet' ? '"Trebuchet MS", sans-serif' :
+                      selectedFont === 'comic' ? '"Comic Sans MS", cursive' :
+                      selectedFont === 'times' ? '"Times New Roman", serif' :
+                      selectedFont === 'verdana' ? 'Verdana, sans-serif' :
+                      selectedFont === 'sans' ? 'ui-sans-serif, system-ui, -apple-system, sans-serif' :
+                      selectedFont === 'serif' ? 'ui-serif, Georgia, serif' :
+                      selectedFont === 'mono' ? 'ui-monospace, SFMono-Regular, Menlo, monospace' :
+                      String(selectedFont),
+                    fontFeatureSettings:
+                      selectedFont === 'mono' || selectedFont === 'courier' ? '"tnum" 1' : undefined,
+                    fontVariantNumeric:
+                      selectedFont === 'mono' || selectedFont === 'courier' ? 'tabular-nums' : undefined,
                   }}
                 >
                   {headerTitle || 'Tunet'}

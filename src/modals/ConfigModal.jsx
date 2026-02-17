@@ -773,10 +773,10 @@ export default function ConfigModal({
             <ModernDropdown
               label={t('settings.language')}
               icon={Globe}
-              options={['nn', 'en']}
+              options={['nn', 'nb', 'en']}
               current={language}
               onChange={setLanguage}
-              map={{ nn: t('language.nn'), en: t('language.en') }}
+              map={{ nn: t('language.nn'), nb: t('language.nb'), en: t('language.en') }}
               placeholder={t('dropdown.noneSelected')}
             />
           </div>
@@ -1497,7 +1497,7 @@ export default function ConfigModal({
                   <div className="space-y-6 animate-in fade-in slide-in-from-right-4 duration-300">
                     <div className="space-y-4">
                       <p className="text-xs uppercase font-bold text-gray-500 ml-1">{t('settings.language')}</p>
-                      <ModernDropdown label={t('settings.language')} icon={Globe} options={['nn', 'en']} current={language} onChange={setLanguage} map={{ nn: t('language.nn'), en: t('language.en') }} placeholder={t('dropdown.noneSelected')} />
+                      <ModernDropdown label={t('settings.language')} icon={Globe} options={['nn', 'nb', 'en']} current={language} onChange={setLanguage} map={{ nn: t('language.nn'), nb: t('language.nb'), en: t('language.en') }} placeholder={t('dropdown.noneSelected')} />
                     </div>
                     <div className="space-y-4">
                       <p className="text-xs uppercase font-bold text-gray-500 ml-1">{t('settings.theme')}</p>
