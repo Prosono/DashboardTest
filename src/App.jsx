@@ -308,6 +308,7 @@ function AppContent({
 
   const canControlDevices = currentUser?.role !== 'inspector';
   const isAdminUser = currentUser?.role === 'admin';
+  const profileDisplayName = String(currentUser?.fullName || currentUser?.username || 'User').trim();
   const [dashboardDirty, setDashboardDirty] = useState(false);
   const dashboardDirtyReadyRef = useRef(false);
   const quickSaveBusyRef = useRef(false);
@@ -845,7 +846,7 @@ function AppContent({
                 title="Profile"
               >
                 <User className="w-3 h-3 inline mr-1" />
-                {currentUser.username} ({currentUser.role})
+                {profileDisplayName} ({currentUser.role})
               </button>
             )}
 
