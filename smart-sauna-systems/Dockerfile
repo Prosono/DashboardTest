@@ -1,19 +1,26 @@
-ARG BUILD_FROM=node:20-alpine
-FROM ${BUILD_FROM}
-
+FROM node:20-alpine AS builder
 WORKDIR /app
 
-# Native build deps for better-sqlite3
-RUN apk add --no-cache python3 make g++
+COPY package*.json ./
+RUN npm install
 
+COPY index.html vite.config.js postcss.config.js tailwind.config.js ./
+COPY public ./public
+COPY src ./src
+COPY scripts ./scripts
+
+RUN SKIP_POSTBUILD=1 npm run build
+
+FROM node:20-alpine
+WORKDIR /app
+
+RUN apk add --no-cache python3 make g++
 COPY package*.json ./
 RUN npm install --omit=dev
-
-# Remove build deps after install to keep image smaller
 RUN apk del python3 make g++
 
 COPY server ./server
-COPY dist ./dist
+COPY --from=builder /app/dist ./dist
 
 ENV NODE_ENV=production
 ENV PORT=8099

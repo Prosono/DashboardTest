@@ -1,0 +1,47 @@
+@import "tailwindcss";
+@import "./animations.css";
+
+@theme {
+  --color-primary: var(--bg-primary);
+}
+
+/* Card border radius — controlled from settings */
+:root {
+  --card-border-radius: 16px;
+}
+
+html,
+body,
+#root {
+  min-height: 100%;
+}
+
+/* Keep native mobile bounce behavior. */
+@media (max-width: 768px) {
+  html,
+  body {
+    overscroll-behavior-y: auto;
+  }
+}
+
+/* When custom bg image is active, add overlay for readability */
+html.custom-bg-active body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.35);
+  pointer-events: none;
+  z-index: 0;
+}
+
+@layer utilities {
+  /* Hide scrollbar for Chrome, Safari and Opera */
+  .no-scrollbar::-webkit-scrollbar {
+      display: none;
+  }
+  /* Hide scrollbar for IE, Edge and Firefox */
+  .no-scrollbar {
+      -ms-overflow-style: none;  /* IE and Edge */
+      scrollbar-width: none;  /* Firefox */
+  }
+}

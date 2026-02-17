@@ -1,0 +1,271 @@
+import { useEffect, useMemo, useState } from 'react';
+import { 
+  X, Cloud, CloudRain, Sun, Moon, CloudSun, Wind, Snowflake, Zap, AlertTriangle 
+} from '../icons';
+import SensorHistoryGraph from '../components/charts/SensorHistoryGraph';
+import { getForecast } from '../services/haClient';
+import { getIconComponent } from '../icons';
+
+const getWeatherInfo = (condition, t) => {
+  const map = {
+    'clear-night': { label: t?.('weather.condition.clearNight') || 'Clear', Icon: Moon, color: 'text-blue-200' },
+    'cloudy': { label: t?.('weather.condition.cloudy') || 'Cloudy', Icon: Cloud, color: 'text-gray-400' },
+    'fog': { label: t?.('weather.condition.fog') || 'Fog', Icon: Cloud, color: 'text-gray-400' },
+    'hail': { label: t?.('weather.condition.hail') || 'Hail', Icon: CloudRain, color: 'text-blue-300' },
+    'lightning': { label: t?.('weather.condition.lightning') || 'Lightning', Icon: Zap, color: 'text-yellow-400' },
+    'lightning-rainy': { label: t?.('weather.condition.lightning') || 'Lightning', Icon: Zap, color: 'text-yellow-400' },
+    'partlycloudy': { label: t?.('weather.condition.partlyCloudy') || 'Partly cloudy', Icon: CloudSun, color: 'text-yellow-200' },
+    'pouring': { label: t?.('weather.condition.pouring') || 'Heavy rain', Icon: CloudRain, color: 'text-blue-500' },
+    'rainy': { label: t?.('weather.condition.rainy') || 'Rain', Icon: CloudRain, color: 'text-blue-400' },
+    'snowy': { label: t?.('weather.condition.snowy') || 'Snow', Icon: Snowflake, color: 'text-white' },
+    'snowy-rainy': { label: t?.('weather.condition.snowy') || 'Snow', Icon: Snowflake, color: 'text-white' },
+    'sunny': { label: t?.('weather.condition.sunny') || 'Sunny', Icon: Sun, color: 'text-yellow-400' },
+    'windy': { label: t?.('weather.condition.windy') || 'Wind', Icon: Wind, color: 'text-gray-300' },
+    'windy-variant': { label: t?.('weather.condition.windy') || 'Wind', Icon: Wind, color: 'text-gray-300' },
+    'exceptional': { label: t?.('weather.condition.exceptional') || 'Extreme', Icon: AlertTriangle, color: 'text-red-400' }
+  };
+  return map[condition] || { label: condition || 'Unknown', Icon: Cloud, color: 'text-gray-400' };
+};
+
+const formatValue = (value, unit, fallback = '--') => {
+  if (value === null || value === undefined || Number.isNaN(value)) return fallback;
+  return `${value}${unit || ''}`;
+};
+
+export default function WeatherModal({
+  show,
+  onClose,
+  conn,
+  weatherEntity,
+  tempEntity,
+  t
+}) {
+  if (!show || !weatherEntity) return null;
+
+  const translate = t || ((key) => key);
+  const condition = weatherEntity.state;
+  const info = getWeatherInfo(condition, t);
+  const MainIcon = info.Icon;
+
+  const currentTempRaw = tempEntity?.state ?? weatherEntity.attributes?.temperature;
+  const currentTemp = Number.isFinite(parseFloat(currentTempRaw)) ? parseFloat(currentTempRaw) : null;
+
+  const attrs = weatherEntity.attributes || {};
+  const temperatureUnit = attrs.temperature_unit || '°C';
+  const windUnit = attrs.wind_speed_unit || 'km/h';
+  const pressureUnit = attrs.pressure_unit || 'hPa';
+  const precipitationUnit = attrs.precipitation_unit || 'mm';
+
+  const windVal = formatValue(attrs.wind_speed, '');
+  const gustVal = formatValue(attrs.wind_gust_speed, '');
+  const windDisplay = (gustVal && gustVal !== '--' && gustVal !== windVal)
+    ? `${windVal} (${gustVal}) ${windUnit}`
+    : `${windVal} ${windUnit}`;
+
+  const details = [
+    { key: 'humidity', label: translate('weather.detail.humidity'), value: formatValue(attrs.humidity, '%'), iconName: 'mdi:water-percent' },
+    { key: 'pressure', label: translate('weather.detail.pressure'), value: formatValue(attrs.pressure, ` ${pressureUnit}`), iconName: 'mdi:gauge' },
+    { key: 'wind', label: `${translate('weather.detail.wind')} / ${translate('weather.detail.gust')}`, value: windDisplay, iconName: 'mdi:weather-windy' },
+    { key: 'dew', label: translate('weather.detail.dewPoint'), value: formatValue(attrs.dew_point, ` ${temperatureUnit}`), iconName: 'mdi:thermometer' },
+    { key: 'precip', label: translate('weather.detail.precip'), value: formatValue(attrs.precipitation, ` ${precipitationUnit}`), iconName: 'mdi:weather-rainy' }
+  ];
+
+  const [forecastType, setForecastType] = useState('hourly');
+  const [forecast, setForecast] = useState([]);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (!conn || !weatherEntity?.entity_id) return;
+
+    let cancelled = false;
+    const fetchForecast = async () => {
+      setLoading(true);
+      try {
+        const data = await getForecast(conn, { entityId: weatherEntity.entity_id, type: forecastType });
+        if (!cancelled) {
+          const next = Array.isArray(data) && data.length > 0
+            ? data
+            : (Array.isArray(weatherEntity.attributes?.forecast) ? weatherEntity.attributes.forecast : []);
+          setForecast(next);
+        }
+      } catch {
+        if (!cancelled) {
+          const fallback = Array.isArray(weatherEntity.attributes?.forecast) ? weatherEntity.attributes.forecast : [];
+          setForecast(fallback);
+        }
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    };
+
+    fetchForecast();
+    return () => {
+      cancelled = true;
+    };
+  }, [conn, weatherEntity?.entity_id, forecastType, weatherEntity?.attributes?.forecast]);
+
+  const forecastSeries = useMemo(() => {
+    if (!forecast.length) return [];
+    return forecast
+      .map((f) => ({
+        value: Number.isFinite(parseFloat(f.temperature)) ? parseFloat(f.temperature) : null,
+        time: new Date(f.datetime || f.datetime_local || f.time || f.start || f.forecast_time)
+      }))
+      .filter((p) => p.value !== null && p.time instanceof Date && !Number.isNaN(p.time.getTime()));
+  }, [forecast]);
+
+  const forecastList = useMemo(() => {
+    const sliced = forecastType === 'hourly' ? forecast.slice(0, 12) : forecast.slice(0, 7);
+    return sliced.map((f, index) => {
+      const time = new Date(f.datetime || f.datetime_local || f.time || f.start || f.forecast_time);
+      const temp = Number.isFinite(parseFloat(f.temperature)) ? parseFloat(f.temperature) : '--';
+      const label = forecastType === 'hourly'
+        ? time.toLocaleTimeString('nb-NO', { hour: '2-digit', minute: '2-digit' })
+        : time.toLocaleDateString('nb-NO', { weekday: 'short', day: 'numeric' });
+      const itemCondition = f.condition || condition;
+      const itemInfo = getWeatherInfo(itemCondition, t);
+      const precip = f.precipitation ?? f.precipitation_probability ?? f.precipitation_amount;
+      return {
+        key: `${label}-${index}`,
+        label,
+        temp,
+        info: itemInfo,
+        precip
+      };
+    });
+  }, [forecast, forecastType, condition, t]);
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 md:p-6"
+      style={{ backdropFilter: 'blur(20px)', backgroundColor: 'rgba(0,0,0,0.3)' }}
+      onClick={onClose}
+    >
+      <div
+        className="border w-full max-w-4xl rounded-3xl md:rounded-[3rem] p-5 md:p-8 font-sans relative max-h-[80vh] overflow-y-auto backdrop-blur-xl popup-anim"
+        style={{
+          background: 'linear-gradient(135deg, var(--card-bg) 0%, var(--modal-bg) 100%)',
+          borderColor: 'var(--glass-border)',
+          color: 'var(--text-primary)'
+        }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <button onClick={onClose} className="absolute top-6 right-6 md:top-10 md:right-10 modal-close">
+          <X className="w-4 h-4" />
+        </button>
+
+        <div className="flex items-center gap-4 mb-6 font-sans">
+          <div className="p-4 rounded-2xl transition-all duration-500" style={{ backgroundColor: 'rgba(59, 130, 246, 0.12)', color: '#60a5fa' }}>
+            <MainIcon className={`w-8 h-8 ${info.color}`} strokeWidth={1.5} />
+            {/* <img src={iconUrl} alt={info.label} className="w-8 h-8 object-contain" /> */}
+          </div>
+          <div>
+            <h3 className="text-lg sm:text-xl md:text-2xl font-light tracking-tight text-[var(--text-primary)] uppercase italic leading-tight break-words">
+              {attrs.friendly_name || translate('weather.name')}
+            </h3>
+            <div className="mt-2 px-3 py-1 rounded-full border inline-flex items-center gap-2" style={{ backgroundColor: 'var(--glass-bg)', borderColor: 'var(--glass-border)', color: 'var(--text-secondary)' }}>
+              <span className="text-[10px] uppercase font-bold italic tracking-widest">{info.label}</span>
+            </div>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-8 items-start">
+          <div className="md:col-span-2 space-y-6">
+            <div className="p-5 rounded-2xl popup-surface">
+              <div className="flex items-start justify-between">
+                <div>
+                  <p className="text-[11px] uppercase tracking-widest text-[var(--text-secondary)]">{translate('weather.detail.temperature')}</p>
+                  <div className="flex items-baseline gap-2 mt-1">
+                    <span className="text-4xl font-light text-[var(--text-primary)]">
+                      {currentTemp !== null ? `${currentTemp}` : '--'}
+                    </span>
+                    <span className="text-lg text-[var(--text-secondary)]">{temperatureUnit}</span>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => setForecastType('hourly')}
+                    className={`px-3 py-2 rounded-full text-[10px] font-bold uppercase tracking-widest border transition-all ${forecastType === 'hourly' ? 'bg-[var(--glass-bg-hover)] text-[var(--text-primary)] border-[var(--glass-border)]' : 'bg-[var(--glass-bg)] text-[var(--text-secondary)] border-transparent hover:bg-[var(--glass-bg-hover)] hover:text-[var(--text-primary)]'}`}
+                  >
+                    {translate('weather.view.hourly')}
+                  </button>
+                  <button
+                    onClick={() => setForecastType('daily')}
+                    className={`px-3 py-2 rounded-full text-[10px] font-bold uppercase tracking-widest border transition-all ${forecastType === 'daily' ? 'bg-[var(--glass-bg-hover)] text-[var(--text-primary)] border-[var(--glass-border)]' : 'bg-[var(--glass-bg)] text-[var(--text-secondary)] border-transparent hover:bg-[var(--glass-bg-hover)] hover:text-[var(--text-primary)]'}`}
+                  >
+                    {translate('weather.view.daily')}
+                  </button>
+                </div>
+              </div>
+              <div className="mt-4">
+                {loading ? (
+                  <div className="h-[140px] flex items-center justify-center text-[var(--text-secondary)] text-sm">{translate('common.loading')}</div>
+                ) : forecastSeries.length === 0 ? (
+                  <div className="h-[140px] flex items-center justify-center text-[var(--text-secondary)] text-sm">{translate('weather.noForecast')}</div>
+                ) : (
+                  <SensorHistoryGraph 
+                    data={forecastSeries} 
+                    height={140} 
+                    color="#60a5fa" 
+                    noDataLabel={translate('weather.noForecast')} 
+                    formatXLabel={(date) => {
+                      if (forecastType === 'daily') {
+                        return date.toLocaleDateString('nb-NO', { weekday: 'short' }).replace('.', '');
+                      }
+                      return date.toLocaleTimeString('nb-NO', { hour: '2-digit', minute: '2-digit' });
+                    }}
+                  />
+                )}
+              </div>
+            </div>
+
+            <div className="px-1">
+              <div className="flex items-start justify-between overflow-x-auto scrollbar-hide pb-2 mask-linear gap-6">
+                {forecastList.map((item, _index) => {
+                  return (
+                    <div
+                      key={item.key}
+                      className="flex flex-col items-center gap-3 flex-shrink-0 group cursor-default min-w-[3.5rem]"
+                    >
+                      <span className="text-[10px] font-bold uppercase tracking-widest text-[var(--text-secondary)] group-hover:text-[var(--text-primary)] transition-colors opacity-70 group-hover:opacity-100">{item.label}</span>
+                      <div className="relative my-1">
+                         <item.info.Icon className={`w-8 h-8 md:w-10 md:h-10 drop-shadow-md transform group-hover:scale-110 group-hover:-translate-y-1 transition-all duration-500 ${item.info.color}`} strokeWidth={1.5} />
+                         {/* <img src={item.iconUrl} alt="" className="w-8 h-8 md:w-10 md:h-10 drop-shadow-md transform group-hover:scale-110 group-hover:-translate-y-1 transition-all duration-500" /> */}
+                      </div>
+                      <div className="flex flex-col items-center gap-0.5">
+                        <span className="text-lg md:text-xl font-light text-[var(--text-primary)] tracking-tight">{item.temp}°</span>
+                        {(parseFloat(item.precip) > 0) && (
+                          <div className="flex items-center gap-0.5 text-blue-400 mt-1">
+                            <span className="text-[9px] font-bold">{item.precip}</span>
+                            <span className="text-[7px] opacity-70">{precipitationUnit}</span>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+
+          <div className="md:col-span-1 pt-6 md:pt-0 md:border-l border-white/5 md:pl-8 flex flex-col gap-6">
+            <div className="grid grid-cols-2 md:grid-cols-1 gap-x-4 gap-y-6">
+              {details.map((detail) => {
+                const DetailIcon = getIconComponent(detail.iconName);
+                return (
+                  <div key={detail.key} className="flex flex-col gap-1 group">
+                    <div className="flex items-center gap-2 text-[var(--text-secondary)] opacity-60 group-hover:opacity-100 transition-opacity">
+                      {DetailIcon && <DetailIcon className="w-3.5 h-3.5" />}
+                      <span className="text-[9px] uppercase tracking-widest truncate">{detail.label}</span>
+                    </div>
+                    <span className="text-sm font-medium text-[var(--text-primary)] pl-5.5">{detail.value}</span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}

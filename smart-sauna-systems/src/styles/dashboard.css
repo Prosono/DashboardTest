@@ -1,0 +1,248 @@
+/* Dashboard component animations and styles */
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes slideUp {
+  from { opacity: 0; transform: translateY(20px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes popupIn {
+  0% { opacity: 0; transform: scale(0.95) translateY(10px); }
+  100% { opacity: 1; transform: scale(1) translateY(0); }
+}
+@keyframes editControlsIn {
+  from { opacity: 0; transform: scale(0.9) translateY(-5px); }
+  to { opacity: 1; transform: scale(1) translateY(0); }
+}
+.edit-controls-anim {
+  animation: editControlsIn 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+.edit-mode-card {
+  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+@keyframes editJiggle {
+  0% { transform: rotate(-0.15deg) scale(0.99); }
+  50% { transform: rotate(0.15deg) scale(0.99); }
+  100% { transform: rotate(-0.15deg) scale(0.99); }
+}
+.popup-anim {
+  animation: popupIn 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+.fade-in-anim {
+  animation: fadeIn 0.4s ease-out forwards;
+}
+.card-animate {
+  animation: slideUp 0.6s cubic-bezier(0.16, 1, 0.3, 1) backwards;
+}
+.card-unavailable {
+  position: relative;
+  overflow: hidden;
+}
+.card-unavailable::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(255, 59, 48, 0.03), transparent);
+  animation: shimmer 2s infinite;
+}
+@keyframes shimmer {
+  0% { left: -100%; }
+  100% { left: 100%; }
+}
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}
+.scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+.vacuum-card-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  align-items: center;
+}
+.card-controls--temp {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  align-items: center;
+}
+.card-controls--temp .control-plus {
+  order: 0;
+}
+.card-controls--temp .control-minus {
+  order: 1;
+}
+.sensor-card-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  align-items: center;
+}
+.sensor-card-controls .control-on {
+  order: 0;
+}
+.sensor-card-controls .control-off {
+  order: 1;
+}
+@container (min-width: 248px) {
+  .vacuum-card-controls {
+    flex-direction: row;
+  }
+  .card-controls--temp {
+    flex-direction: row;
+  }
+  .card-controls--temp .control-plus {
+    order: 1;
+  }
+  .card-controls--temp .control-minus {
+    order: 0;
+  }
+  .sensor-card-controls {
+    flex-direction: row;
+  }
+  .sensor-card-controls .control-on {
+    order: 1;
+  }
+  .sensor-card-controls .control-off {
+    order: 0;
+  }
+}
+.popup-surface {
+  background: var(--modal-surface, var(--glass-bg));
+  border: none;
+  box-shadow: var(--modal-surface-shadow, 0 10px 24px rgba(0, 0, 0, 0.25));
+  backdrop-filter: blur(16px);
+  transition: background 0.15s ease, box-shadow 0.15s ease;
+}
+.popup-surface-hover:hover {
+  background: var(--modal-surface-hover, var(--glass-bg-hover));
+  border: none;
+}
+.popup-surface-divider {
+  background: color-mix(in srgb, var(--glass-border) 35%, transparent);
+}
+.popup-anim {
+  border-color: var(--modal-border, var(--glass-border));
+  box-shadow: var(--modal-shadow, 0 20px 40px rgba(0, 0, 0, 0.35));
+  border-width: var(--modal-border-width, 0px);
+}
+.compact-cards .card-compact {
+  transform: scale(0.92);
+  transform-origin: top center;
+}
+.compact-cards .card-compact > * {
+  width: 100%;
+}
+.mobile-grid .card-compact {
+  transform: scale(0.92);
+  transform-origin: top center;
+  width: 100%;
+  height: auto;
+  margin-left: 0;
+}
+.mobile-grid .card-compact > * {
+  width: 100%;
+  height: auto;
+}
+.modal-close {
+  width: 36px;
+  height: 36px;
+  border-radius: 9999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: color-mix(in srgb, var(--glass-bg) 85%, transparent);
+  color: var(--text-secondary);
+  border: none;
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  transition: transform 150ms ease, background 150ms ease, color 150ms ease;
+}
+.modal-close:hover {
+  background: color-mix(in srgb, var(--glass-bg-hover) 90%, transparent);
+  color: var(--text-primary);
+  transform: translateY(-1px);
+}
+.modal-close:active {
+  transform: scale(0.96);
+}
+.modal-close-dark {
+  background: rgba(0, 0, 0, 0.55);
+  color: #ffffff;
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.06);
+}
+.modal-close-dark:hover {
+  background: rgba(0, 0, 0, 0.7);
+}
+.touch-feedback {
+  transition: transform 120ms ease, filter 120ms ease, box-shadow 120ms ease, border-color 120ms ease;
+  -webkit-tap-highlight-color: transparent;
+}
+.touch-feedback:hover {
+  transform: scale(1.02);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+  border-color: rgba(255, 255, 255, 0.15) !important;
+  z-index: 10;
+}
+.touch-feedback:active {
+  transform: scale(0.98);
+  filter: brightness(1.05);
+}
+::selection {
+  background: var(--selection-bg, rgba(59, 130, 246, 0.3));
+  color: var(--selection-text, #fff);
+}
+html[data-theme='flat'] * {
+  box-shadow: none !important;
+  border-color: transparent !important;
+}
+html[data-theme='flat'] .modal-close,
+html[data-theme='flat'] .modal-close-dark,
+html[data-theme='flat'] .popup-surface,
+html[data-theme='flat'] .popup-surface-hover {
+  box-shadow: none !important;
+}
+
+/* Light theme readability: darken green text used in pill/badge UI. */
+html[data-theme='light'] .rounded-full[class*="text-emerald-"],
+html[data-theme='light'] .rounded-xl[class*="text-emerald-"],
+html[data-theme='light'] .rounded-2xl[class*="text-emerald-"] {
+  color: #14532d !important;
+}
+
+html[data-theme='light'] .rounded-full [class*="text-emerald-"],
+html[data-theme='light'] .rounded-xl [class*="text-emerald-"],
+html[data-theme='light'] .rounded-2xl [class*="text-emerald-"] {
+  color: #14532d !important;
+}
+
+/* Mobile light-theme card elevation so cards separate from pale backgrounds. */
+@media (max-width: 768px) {
+  html[data-theme='light'] [data-grid-card] .touch-feedback {
+    box-shadow:
+      0 14px 30px rgba(15, 23, 42, 0.14),
+      0 3px 8px rgba(15, 23, 42, 0.08);
+    border-color: rgba(51, 65, 85, 0.2) !important;
+  }
+}
+
+/* Custom scrollbar for modal content */
+.custom-scrollbar::-webkit-scrollbar {
+  width: 4px;
+}
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.02);
+}
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: 10px;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.25);
+}

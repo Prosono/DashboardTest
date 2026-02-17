@@ -1,0 +1,79 @@
+/**
+ * Pure utility functions for card type detection and visibility logic.
+ * These are extracted from App.jsx to reduce file size and improve testability.
+ */
+
+/** Prefixes for card types that can always be removed from user pages. */
+const REMOVABLE_PREFIXES = [
+  'light_', 'light.', 'vacuum.', 'media_player.', 'media_group_',
+  'weather_temp_', 'calendar_card_', 'climate_card_', 'cost_card_',
+  'androidtv_card_', 'car_card_', 'nordpool_card_', 'todo_card_', 'room_card_', 'sauna_card_',
+  'cover_card_', 'fan_card_', 'door_card_', 'motion_card_', 'lock_card_', 'switch_card_', 'number_card_',
+  'camera_card_', 'alarm_card_', 'timer_card_', 'select_card_', 'button_card_', 'script_card_',
+];
+
+/** Prefixes for "special" composite cards that don't map 1:1 to an entity. */
+const SPECIAL_CARD_PREFIXES = [
+  'media_group_', 'weather_temp_', 'calendar_card_', 'climate_card_',
+  'cost_card_', 'androidtv_card_', 'car_card_', 'nordpool_card_',
+  'todo_card_', 'room_card_', 'sauna_card_', 'cover_card_',
+  'fan_card_', 'door_card_', 'motion_card_', 'lock_card_', 'switch_card_', 'number_card_',
+  'camera_card_', 'alarm_card_', 'timer_card_', 'select_card_', 'button_card_', 'script_card_',
+];
+
+/**
+ * Determine whether a card can be removed from a given page.
+ */
+export function isCardRemovable(cardId, pageId, { getCardSettingsKey, cardSettings }) {
+  if (pageId === 'header') return cardId.startsWith('person.');
+  if (pageId === 'settings') {
+    if (['car'].includes(cardId)) return false;
+    if (cardId.startsWith('media_player')) return false;
+    return true;
+  }
+  const settingsKey = getCardSettingsKey(cardId, pageId);
+  const typeSetting = cardSettings[settingsKey]?.type || cardSettings[cardId]?.type;
+  if (typeSetting === 'entity' || typeSetting === 'toggle' || typeSetting === 'sensor') return true;
+  if (cardId === 'media_player') return true;
+  return REMOVABLE_PREFIXES.some(p => cardId.startsWith(p));
+}
+
+/**
+ * Determine whether a card should be hidden in view mode based on entity availability.
+ */
+export function isCardHiddenByLogic(cardId, { activePage, getCardSettingsKey, cardSettings, entities }) {
+  if (cardId === 'media_player') {
+    return true;
+  }
+
+  if (cardId.startsWith('media_group_')) {
+    const settingsKey = getCardSettingsKey(cardId);
+    const groupSettings = cardSettings[settingsKey] || cardSettings[cardId] || {};
+    const selectedIds = Array.isArray(groupSettings.mediaIds) ? groupSettings.mediaIds : [];
+    const hasEntities = selectedIds.some(id => entities[id]);
+    return !hasEntities;
+  }
+
+  if (activePage === 'settings' && !['car'].includes(cardId) && !cardId.startsWith('light_') && !cardId.startsWith('media_player')) {
+      return !entities[cardId];
+  }
+
+  const isSpecialCard = cardId === 'car' || 
+    SPECIAL_CARD_PREFIXES.some(p => cardId.startsWith(p));
+
+  if (!isSpecialCard && !entities[cardId]) {
+     if (cardId.startsWith('light_') || cardId.startsWith('light.')) return false;
+     return true;
+  }
+
+  return false;
+}
+
+/**
+ * Check if a page is a media/sonos page.
+ */
+export function isMediaPage(pageId, pageSettings) {
+  if (!pageId) return false;
+  const settings = pageSettings[pageId];
+  return settings?.type === 'media' || settings?.type === 'sonos' || pageId.startsWith('media') || pageId.startsWith('sonos');
+}
