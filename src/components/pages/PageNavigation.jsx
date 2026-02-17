@@ -30,6 +30,7 @@ export default function PageNavigation({
   t
 }) {
   const [dragOverId, setDragOverId] = useState(null);
+  const isLightTheme = typeof document !== 'undefined' && document.documentElement?.dataset?.theme === 'light';
   const pageOrder = pagesConfig?.pages || [];
 
   const movePage = (sourceId, targetId) => {
@@ -99,7 +100,11 @@ export default function PageNavigation({
       {editMode && (
         <button
           onClick={() => setShowAddPageModal(true)}
-          className="flex items-center gap-1.5 px-3 py-1 rounded-2xl sm:rounded-full font-bold uppercase tracking-[0.2em] text-[10px] whitespace-nowrap border-2 bg-white/5 text-white border-white/20 hover:bg-white/10 hover:border-white/30 transition-all"
+          className={`flex items-center gap-1.5 px-3 py-1 rounded-2xl sm:rounded-full font-bold uppercase tracking-[0.2em] text-[10px] whitespace-nowrap border-2 transition-all ${
+            isLightTheme
+              ? 'bg-black/5 text-black border-black/40 hover:bg-black/10 hover:border-black/60'
+              : 'bg-white/5 text-white border-white/20 hover:bg-white/10 hover:border-white/30'
+          }`}
         >
           <Plus className="w-3 h-3" />
           <span className="hidden sm:inline">{t('nav.addPage')}</span>

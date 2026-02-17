@@ -158,6 +158,24 @@ function AppContent({
     if ((language === 'nn' || language === 'nb') && nnFallback[key]) return nnFallback[key];
     return key;
   };
+  const normalizeRole = (role) => {
+    const value = String(role || '').trim().toLowerCase();
+    if (value === 'admin' || value === 'administrator') return 'admin';
+    if (value === 'inspector' || value === 'inspektør') return 'inspector';
+    return 'user';
+  };
+  const isVisibleForRole = (visibleRoles, role) => {
+    const rawTargets = Array.isArray(visibleRoles)
+      ? visibleRoles
+      : (typeof visibleRoles === 'string' ? visibleRoles.split(',') : []);
+    if (rawTargets.length === 0) return true;
+    const normalizedRole = normalizeRole(role);
+    const normalizedTargets = rawTargets
+      .map((item) => String(item || '').trim().toLowerCase())
+      .filter(Boolean);
+    if (normalizedTargets.length === 0 || normalizedTargets.includes('all')) return true;
+    return normalizedTargets.some((target) => normalizeRole(target) === normalizedRole);
+  };
 
   const resolvedHeaderTitle = headerTitle || t('page.home');
 
@@ -205,6 +223,7 @@ function AppContent({
 
   const [editMode, setEditMode] = useState(false);
   const canEditDashboard = currentUser?.role === 'admin';
+  const currentUserRole = normalizeRole(currentUser?.role);
   const WARNING_SENSOR_ID = 'sensor.system_warning_details';
   const CRITICAL_SENSOR_ID = 'sensor.system_critical_details';
 
@@ -356,12 +375,19 @@ function AppContent({
   useSmartTheme({ currentTheme, bgMode, entities, now });
 
   // ── Validate persisted activePage still exists in config ───────────────
+  const visiblePageIds = useMemo(() => {
+    const allPageIds = pagesConfig.pages || [];
+    if (editMode && canEditDashboard) return allPageIds;
+    return allPageIds.filter((id) => {
+      const settings = pageSettings[id] || {};
+      return isVisibleForRole(settings.visibleRoles, currentUserRole);
+    });
+  }, [pagesConfig.pages, pageSettings, editMode, canEditDashboard, currentUserRole]);
+
   useEffect(() => {
-    const pages = pagesConfig.pages || [];
-    if (activePage !== 'home' && !pages.includes(activePage)) {
-      setActivePage('home');
-    }
-  }, [pagesConfig.pages]); // eslint-disable-line react-hooks/exhaustive-deps
+    if (visiblePageIds.includes(activePage)) return;
+    setActivePage(visiblePageIds[0] || 'home');
+  }, [visiblePageIds, activePage, setActivePage]);
 
   // ── Entity accessor helpers ────────────────────────────────────────────
   const {
@@ -509,11 +535,21 @@ function AppContent({
     home: { label: t('page.home'), icon: LayoutGrid }
   };
 
-  const pages = (pagesConfig.pages || []).map(id => ({
+  const pages = visiblePageIds.map(id => ({
     id,
     label: pageDefaults[id]?.label || id,
     icon: pageDefaults[id]?.icon || LayoutGrid
   }));
+
+  const isCardVisibleForCurrentRole = useCallback((cardId, pageId = activePage) => {
+    if (editMode && canEditDashboard) return true;
+    const settingsKey = `${pageId}::${cardId}`;
+    const settings = {
+      ...(cardSettings[cardId] || {}),
+      ...(cardSettings[settingsKey] || {}),
+    };
+    return isVisibleForRole(settings.visibleRoles, currentUserRole);
+  }, [editMode, canEditDashboard, activePage, cardSettings, currentUserRole]);
 
   const cardUtilCtx = { getCardSettingsKey, cardSettings, entities, activePage };
   const isCardRemovable = (cardId, pageId = activePage) => _isCardRemovable(cardId, pageId, cardUtilCtx);
@@ -584,9 +620,14 @@ function AppContent({
   const gridLayout = useMemo(() => {
     const ids = pagesConfig[activePage] || [];
     const hiddenCtx = { getCardSettingsKey, cardSettings, entities, activePage };
-    const visibleIds = editMode ? ids : ids.filter(id => !(hiddenCards.includes(id) || _isCardHiddenByLogic(id, hiddenCtx)));
+    const visibleIds = editMode
+      ? ids
+      : ids.filter((id) => {
+        if (!isCardVisibleForCurrentRole(id, activePage)) return false;
+        return !(hiddenCards.includes(id) || _isCardHiddenByLogic(id, hiddenCtx));
+      });
     return _buildGridLayout(visibleIds, gridColCount, getCardGridSize);
-  }, [pagesConfig, activePage, gridColCount, hiddenCards, editMode, getCardGridSize, getCardSettingsKey, cardSettings, entities]);
+  }, [pagesConfig, activePage, gridColCount, hiddenCards, editMode, getCardGridSize, getCardSettingsKey, cardSettings, entities, isCardVisibleForCurrentRole]);
 
   const dragAndDrop = createDragAndDropHandlers({
     editMode,
@@ -606,7 +647,8 @@ function AppContent({
   });
 
   const renderCard = (cardId, index, colIndex) => {
-    const isHidden = hiddenCards.includes(cardId) || isCardHiddenByLogic(cardId);
+    const hiddenByRole = !isCardVisibleForCurrentRole(cardId);
+    const isHidden = hiddenCards.includes(cardId) || isCardHiddenByLogic(cardId) || hiddenByRole;
     if (isHidden && !editMode) return null;
     const isDragging = draggingId === cardId;
 
@@ -628,7 +670,7 @@ function AppContent({
     const getControls = (targetId) => {
       if (!editMode) return null;
       const editId = targetId || cardId;
-      const isHiddenNow = hiddenCards.includes(cardId) || isCardHiddenByLogic(cardId);
+      const isHiddenNow = hiddenCards.includes(cardId) || isCardHiddenByLogic(cardId) || !isCardVisibleForCurrentRole(cardId);
       const settings = cardSettings[settingsKey] || cardSettings[editId] || {};
 
       return (
@@ -972,7 +1014,17 @@ function AppContent({
           </div>
         </div>
 
-        {isMediaPage(activePage) ? (
+        {!visiblePageIds.includes(activePage) ? (
+          <div key={`${activePage}-restricted`} className="flex flex-col items-center justify-center min-h-[45vh] text-center p-8 opacity-90 animate-in fade-in zoom-in duration-300 font-sans">
+            <div className="bg-[var(--glass-bg)] border border-[var(--glass-border)] p-5 rounded-full mb-4 shadow-lg shadow-black/5">
+              <Lock className="w-10 h-10 text-[var(--text-secondary)]" />
+            </div>
+            <h2 className="text-2xl font-light mb-2 text-[var(--text-primary)] uppercase tracking-tight">{t('common.noAccess') || 'Ingen tilgang'}</h2>
+            <p className="text-sm text-[var(--text-secondary)] max-w-md">
+              {t('form.visibilityHint') || 'Denne siden er ikke synlig for din rolle.'}
+            </p>
+          </div>
+        ) : isMediaPage(activePage) ? (
           <div key={activePage} className="page-transition">
             <MediaPage
               pageId={activePage}
@@ -1048,7 +1100,7 @@ function AppContent({
                   : defaultLegacyColSpan;
                 const heading = cardSettings[settingsKey]?.heading;
 
-                if (!editMode && (hiddenCards.includes(id) || isCardHiddenByLogic(id))) return null;
+                if (!editMode && (hiddenCards.includes(id) || isCardHiddenByLogic(id) || !isCardVisibleForCurrentRole(id))) return null;
 
                 const cardContent = renderCard(id, index);
                 if (!cardContent) return null;

@@ -119,6 +119,19 @@ export default function EditCardModal({
   }, [t]);
 
   if (!isOpen) return null;
+  const visibleRoles = Array.isArray(editSettings?.visibleRoles) ? editSettings.visibleRoles : [];
+  const roleOptions = [
+    { id: 'admin', label: t('role.admin') || 'Admin' },
+    { id: 'user', label: t('role.user') || 'User' },
+    { id: 'inspector', label: t('role.inspector') || 'Inspector' },
+  ];
+  const toggleVisibleRole = (roleId) => {
+    if (!editSettingsKey) return;
+    const next = visibleRoles.includes(roleId)
+      ? visibleRoles.filter((id) => id !== roleId)
+      : [...visibleRoles, roleId];
+    saveCardSetting(editSettingsKey, 'visibleRoles', next.length ? next : null);
+  };
 
   const isPerson = entityId?.startsWith('person.');
   const personDisplay = editSettings?.personDisplay || 'photo';
@@ -272,6 +285,43 @@ export default function EditCardModal({
                   />
                 </div>
               )}
+            </div>
+          )}
+
+          {editSettingsKey && (
+            <div className="space-y-2">
+              <label className="text-xs uppercase font-bold text-gray-500 ml-1">{t('form.visibilityRoles') || 'Visible for roles'}</label>
+              <div className="rounded-2xl popup-surface p-3 space-y-2">
+                <div className="flex flex-wrap gap-2">
+                  {roleOptions.map((role) => {
+                    const selected = visibleRoles.includes(role.id);
+                    return (
+                      <button
+                        key={role.id}
+                        type="button"
+                        onClick={() => toggleVisibleRole(role.id)}
+                        className={`px-3 py-1.5 rounded-full text-[11px] uppercase tracking-widest font-bold border transition-all ${
+                          selected
+                            ? 'bg-blue-500/15 border-blue-500/35 text-blue-400'
+                            : 'bg-[var(--glass-bg)] border-[var(--glass-border)] text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
+                        }`}
+                      >
+                        {role.label}
+                      </button>
+                    );
+                  })}
+                </div>
+                <button
+                  type="button"
+                  onClick={() => saveCardSetting(editSettingsKey, 'visibleRoles', null)}
+                  className="text-[10px] uppercase tracking-widest font-bold text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
+                >
+                  {t('form.visibilityAllRoles') || 'Allow all roles'}
+                </button>
+                <p className="text-[10px] text-[var(--text-secondary)]">
+                  {t('form.visibilityHint') || 'If nothing is selected, all roles can see this card.'}
+                </p>
+              </div>
             </div>
           )}
 
@@ -926,16 +976,6 @@ export default function EditCardModal({
                   const e = entities[id];
                   return e && (e.attributes?.device_class === 'temperature' || id.includes('temp'));
                 },
-              },
-              {
-                key: 'targetTempEntityId',
-                label: translateText('sauna.targetTempSensor', 'Måltemperatur - sensor'),
-                filter: (id) => id.startsWith('sensor.') || id.startsWith('input_number.'),
-              },
-              {
-                key: 'imageEntityId',
-                label: translateText('sauna.imageEntity', 'Bilde - entitet'),
-                filter: (id) => id.startsWith('camera.') || id.startsWith('image.') || id.startsWith('sensor.'),
               },
               {
                 key: 'peopleNowEntityId',

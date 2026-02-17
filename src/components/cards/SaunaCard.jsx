@@ -26,10 +26,16 @@ function makeTr(t) {
   };
 }
 
-const FlameAnimated = ({ className }) => (
+const FlameAnimated = ({ className, isLightTheme = false }) => (
   <div className={cx('relative', className)}>
-    <div className="absolute inset-0 rounded-full blur-md opacity-70 bg-orange-400/30 animate-pulse" />
-    <Flame className="relative w-full h-full text-orange-300 animate-[flameWiggle_1.2s_ease-in-out_infinite]" />
+    <div className={cx(
+      'absolute inset-0 rounded-full blur-md animate-pulse',
+      isLightTheme ? 'opacity-90 bg-orange-500/40' : 'opacity-70 bg-orange-400/30'
+    )} />
+    <Flame className={cx(
+      'relative w-full h-full animate-[flameWiggle_1.2s_ease-in-out_infinite]',
+      isLightTheme ? 'text-orange-600 drop-shadow-[0_0_10px_rgba(249,115,22,0.6)]' : 'text-orange-300'
+    )} />
     <style>{`
       @keyframes flameWiggle {
         0%   { transform: translateY(0) rotate(-2deg) scale(1.00); }
@@ -360,8 +366,13 @@ export default function SaunaCard({
       <div className="relative z-10 h-full min-h-0 flex flex-col overflow-y-auto custom-scrollbar pr-1">
         <div className="grid grid-cols-3 items-start gap-4">
           <div className="flex items-center gap-3 min-w-0">
-            <div className="w-12 h-12 rounded-full flex items-center justify-center border bg-[var(--glass-bg-hover)] border-[var(--glass-border)]">
-              {flameOn ? <FlameAnimated className="w-6 h-6" /> : <SaunaIcon className={cx('w-6 h-6', tone.icon)} />}
+            <div className={cx(
+              'w-12 h-12 rounded-full flex items-center justify-center border',
+              flameOn && isLightTheme
+                ? 'bg-orange-100 border-orange-300/80'
+                : 'bg-[var(--glass-bg-hover)] border-[var(--glass-border)]'
+            )}>
+              {flameOn ? <FlameAnimated className="w-6 h-6" isLightTheme={isLightTheme} /> : <SaunaIcon className={cx('w-6 h-6', tone.icon)} />}
             </div>
             <div className="min-w-0">
               <h3 className="text-lg font-bold text-[var(--text-primary)] truncate">{saunaName}</h3>
@@ -374,8 +385,13 @@ export default function SaunaCard({
               {settings?.peopleNowEntityId && (
                 <button
                   type="button"
-                  onClick={() => openFieldModal(tr('sauna.peopleNow', 'Antall folk nå'), [settings?.peopleNowEntityId])}
-                  className="absolute top-0 left-1/2 -translate-x-1/2 min-w-[2.7rem] h-10 px-3 rounded-full border border-emerald-400/25 bg-emerald-500/20 text-emerald-100 flex items-center justify-center text-2xl font-extrabold z-20 shadow-lg shadow-emerald-900/30"
+                  onClick={() => openFieldModal(tr('sauna.peopleNow', 'Antall folk nå'), [settings?.peopleNowEntityId], { fieldType: 'number' })}
+                  className={cx(
+                    'absolute top-0 left-1/2 -translate-x-1/2 min-w-[2.7rem] h-10 px-3 rounded-full border flex items-center justify-center text-2xl font-extrabold z-20 shadow-lg',
+                    isLightTheme
+                      ? 'border-slate-300/70 bg-white text-slate-800 shadow-slate-300/40'
+                      : 'border-emerald-400/25 bg-emerald-500/20 text-emerald-100 shadow-emerald-900/30'
+                  )}
                 >
                   {peopleNow}
                 </button>

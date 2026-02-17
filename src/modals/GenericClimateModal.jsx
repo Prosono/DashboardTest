@@ -21,6 +21,7 @@ export default function GenericClimateModal({
   const hvacAction = entity.attributes?.hvac_action || 'idle';
   const isCooling = hvacAction === 'cooling';
   const isHeating = hvacAction === 'heating';
+  const isLightTheme = typeof document !== 'undefined' && document.documentElement?.dataset?.theme === 'light';
   const clTheme = isCooling ? 'blue' : isHeating ? 'orange' : 'gray';
   const currentTemp = entity.attributes?.current_temperature;
   const targetTemp = entity.attributes?.temperature;
@@ -79,7 +80,17 @@ export default function GenericClimateModal({
                 </span>
               </div>
               <div className="flex items-center justify-center gap-4 mb-10">
-                <span className="text-6xl md:text-9xl font-light italic text-[var(--text-primary)] tracking-tighter leading-none select-none" style={{ textShadow: '0 10px 25px rgba(0,0,0,0.1)', color: isHeating ? '#fef2f2' : isCooling ? '#f0f9ff' : 'var(--text-primary)' }}>
+                <span
+                  className="text-6xl md:text-9xl font-light italic text-[var(--text-primary)] tracking-tighter leading-none select-none"
+                  style={{
+                    textShadow: '0 10px 25px rgba(0,0,0,0.1)',
+                    color: isHeating
+                      ? (isLightTheme ? '#c2410c' : '#fef2f2')
+                      : isCooling
+                        ? '#f0f9ff'
+                        : 'var(--text-primary)',
+                  }}
+                >
                   {String(tempValue)}
                 </span>
                 <span className="text-5xl font-medium leading-none mt-10 italic text-gray-700">°C</span>

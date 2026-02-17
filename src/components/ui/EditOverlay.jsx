@@ -231,27 +231,6 @@ function EditOverlay({
             <button
               onClick={(e) => {
                 e.stopPropagation();
-                onDecreaseGridSize?.();
-              }}
-              className="p-2 rounded-full transition-colors hover:bg-purple-500/80 text-white border border-white/20 shadow-lg bg-black/60"
-              title="Decrease card size"
-            >
-              <Minimize2 className="w-4 h-4" />
-            </button>
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                onIncreaseGridSize?.();
-              }}
-              className="p-2 rounded-full transition-colors hover:bg-purple-500/80 text-white border border-white/20 shadow-lg"
-              style={{ backgroundColor: 'rgba(168, 85, 247, 0.8)' }}
-              title="Increase card size"
-            >
-              <Maximize2 className="w-4 h-4" />
-            </button>
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
                 onSaveSize(getNextSize(editId, currentSize));
               }}
               className="p-2 rounded-full transition-colors hover:bg-purple-500/80 text-white border border-white/20 shadow-lg bg-black/60"

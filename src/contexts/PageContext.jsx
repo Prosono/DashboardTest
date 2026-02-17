@@ -415,11 +415,10 @@ export const PageProvider = ({ children }) => {
   };
 
   const savePageSetting = (id, setting, value) => {
-    const newSettings = {
-      ...pageSettings,
-      [id]: { ...(pageSettings[id] || {}), [setting]: value }
-    };
-    setPageSettings(newSettings);
+    setPageSettings((prev) => ({
+      ...prev,
+      [id]: { ...(prev[id] || {}), [setting]: value },
+    }));
   };
 
   const persistPageSettings = (newSettings) => {

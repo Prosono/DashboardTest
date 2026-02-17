@@ -121,9 +121,15 @@ export default function ConfigModal({
   const [deletingUserIds, setDeletingUserIds] = useState({});
   const [expandedUserId, setExpandedUserId] = useState('');
 
+  const normalizeRole = (role) => {
+    const value = String(role || '').trim();
+    if (value === 'admin' || value === 'inspector') return value;
+    return 'user';
+  };
+
   const buildUserEditState = (user) => ({
     username: user?.username || '',
-    role: user?.role === 'admin' ? 'admin' : 'user',
+    role: normalizeRole(user?.role),
     assignedDashboardId: user?.assignedDashboardId || 'default',
     haUrl: user?.haUrl || '',
     haToken: user?.haToken || '',
@@ -420,9 +426,7 @@ export default function ConfigModal({
       try {
         const updated = await userAdminApi.updateUser(userId, {
           username: String(draft.username || '').trim(),
-          role: String(draft.role || 'user').trim() === 'admin'
-            ? 'admin'
-            : (String(draft.role || 'user').trim() === 'inspector' ? 'inspector' : 'user'),
+          role: normalizeRole(draft.role),
           assignedDashboardId: String(draft.assignedDashboardId || 'default').trim() || 'default',
           haUrl: String(draft.haUrl || '').trim(),
           haToken: String(draft.haToken || '').trim(),

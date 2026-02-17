@@ -13,6 +13,18 @@ const EditPageModal = ({
   onDelete 
 }) => {
   if (!isOpen) return null;
+  const visibleRoles = Array.isArray(pageSettings[editingPage]?.visibleRoles) ? pageSettings[editingPage].visibleRoles : [];
+  const roleOptions = [
+    { id: 'admin', label: t('role.admin') || 'Admin' },
+    { id: 'user', label: t('role.user') || 'User' },
+    { id: 'inspector', label: t('role.inspector') || 'Inspector' },
+  ];
+  const toggleVisibleRole = (roleId) => {
+    const next = visibleRoles.includes(roleId)
+      ? visibleRoles.filter((id) => id !== roleId)
+      : [...visibleRoles, roleId];
+    savePageSetting(editingPage, 'visibleRoles', next.length ? next : null);
+  };
 
   return (
     <div className="fixed inset-0 z-[130] flex items-center justify-center p-3 sm:p-4" style={{
@@ -65,6 +77,41 @@ const EditPageModal = ({
               >
                 <div className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-all ${pageSettings[editingPage]?.hidden ? 'left-7' : 'left-1'}`} />
               </button>
+           </div>
+
+           <div className="space-y-2">
+             <label className="text-xs uppercase font-bold text-gray-500 ml-1">{t('form.visibilityRoles') || 'Visible for roles'}</label>
+             <div className="rounded-2xl popup-surface p-3 space-y-2">
+               <div className="flex flex-wrap gap-2">
+                 {roleOptions.map((role) => {
+                   const selected = visibleRoles.includes(role.id);
+                   return (
+                     <button
+                       key={role.id}
+                       type="button"
+                       onClick={() => toggleVisibleRole(role.id)}
+                       className={`px-3 py-1.5 rounded-full text-[11px] uppercase tracking-widest font-bold border transition-all ${
+                         selected
+                           ? 'bg-blue-500/15 border-blue-500/35 text-blue-400'
+                           : 'bg-[var(--glass-bg)] border-[var(--glass-border)] text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
+                       }`}
+                     >
+                       {role.label}
+                     </button>
+                   );
+                 })}
+               </div>
+               <button
+                 type="button"
+                 onClick={() => savePageSetting(editingPage, 'visibleRoles', null)}
+                 className="text-[10px] uppercase tracking-widest font-bold text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
+               >
+                 {t('form.visibilityAllRoles') || 'Allow all roles'}
+               </button>
+               <p className="text-[10px] text-[var(--text-secondary)]">
+                 {t('form.visibilityHint') || 'If nothing is selected, all roles can see this page.'}
+               </p>
+             </div>
            </div>
 
            {editingPage !== 'home' && (
