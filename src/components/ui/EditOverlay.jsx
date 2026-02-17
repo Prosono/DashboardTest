@@ -4,7 +4,7 @@
  *
  * Extracted from the inline `getControls` function in App.jsx.
  */
-import { memo, useRef } from 'react';
+import { memo, useEffect, useRef } from 'react';
 import {
   ChevronLeft,
   ChevronRight,
@@ -46,6 +46,8 @@ function EditOverlay({
   _settingsKey,
   isHidden,
   currentSize,
+  currentGridSize,
+  gridColumnCount,
   settings,
   canRemove,
   onMoveLeft,
@@ -64,34 +66,97 @@ function EditOverlay({
   const isSmall = currentSize === 'small';
   const isTriple = TRIPLE_SIZE_PREFIXES.some(p => editId.startsWith(p));
   const resizeDragRef = useRef(null);
+  const resizeCleanupRef = useRef(null);
+  const resizeRafRef = useRef(0);
+  const pendingDeltaRef = useRef({ x: 0, y: 0 });
+  
+  const parsePx = (value, fallback = 0) => {
+    const parsed = Number.parseFloat(String(value || '').replace('px', ''));
+    return Number.isFinite(parsed) ? parsed : fallback;
+  };
+
+  const getAxisStep = (distance, threshold) => {
+    if (!threshold || threshold <= 0) return 0;
+    const sign = distance < 0 ? -1 : 1;
+    return sign * Math.floor(Math.abs(distance) / threshold);
+  };
+
+  const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
 
   const startResizeDrag = (e) => {
     e.stopPropagation();
     e.preventDefault();
-    e.currentTarget.setPointerCapture?.(e.pointerId);
+    const cardElement = e.currentTarget.closest('[data-grid-card]');
+    const gridElement = e.currentTarget.closest('[data-dashboard-grid]');
+
+    const gridStyles = gridElement ? window.getComputedStyle(gridElement) : null;
+    const colGap = parsePx(gridStyles?.columnGap ?? gridStyles?.gap, 0);
+    const rowGap = parsePx(gridStyles?.rowGap ?? gridStyles?.gap, 0);
+    const baseRowHeight = parsePx(gridStyles?.gridAutoRows, 100);
+    const cardRect = cardElement?.getBoundingClientRect?.();
+    const gridRect = gridElement?.getBoundingClientRect?.();
+    const columnCount = Math.max(1, Number(gridColumnCount) || 1);
+    const gridBasedColWidth = gridRect
+      ? (gridRect.width - Math.max(0, columnCount - 1) * colGap) / columnCount
+      : 0;
+    const currentColSpan = Math.max(1, Number(currentGridSize?.colSpan) || Number(settings?.gridColSpan) || 1);
+    const cardBasedColWidth = cardRect
+      ? (cardRect.width - Math.max(0, currentColSpan - 1) * colGap) / currentColSpan
+      : 0;
+    const baseColWidth = Math.max(24, gridBasedColWidth || cardBasedColWidth || 120);
+
+    const sensitivityFactor = 1.3;
+    const xThreshold = clamp((baseColWidth + colGap) * sensitivityFactor, 72, 220);
+    const yThreshold = clamp((baseRowHeight + rowGap) * sensitivityFactor, 72, 200);
+
     resizeDragRef.current = {
+      pointerId: e.pointerId,
       startX: e.clientX,
       startY: e.clientY,
       lastStepX: 0,
       lastStepY: 0,
+      stepX: xThreshold,
+      stepY: yThreshold,
+    };
+
+    const handleMove = (event) => moveResizeDrag(event);
+    const handleEnd = (event) => endResizeDrag(event);
+    window.addEventListener('pointermove', handleMove);
+    window.addEventListener('pointerup', handleEnd);
+    resizeCleanupRef.current = () => {
+      window.removeEventListener('pointermove', handleMove);
+      window.removeEventListener('pointerup', handleEnd);
+      resizeCleanupRef.current = null;
     };
   };
 
   const moveResizeDrag = (e) => {
     const drag = resizeDragRef.current;
     if (!drag) return;
+    if (typeof e.pointerId === 'number' && e.pointerId !== drag.pointerId) return;
     e.stopPropagation();
     e.preventDefault();
 
     const dx = e.clientX - drag.startX;
     const dy = e.clientY - drag.startY;
-    const stepX = Math.round(dx / 32);
-    const stepY = Math.round(dy / 32);
+    const stepX = getAxisStep(dx, drag.stepX);
+    const stepY = getAxisStep(dy, drag.stepY);
 
     const deltaX = stepX - drag.lastStepX;
     const deltaY = stepY - drag.lastStepY;
     if (deltaX || deltaY) {
-      onAdjustGridSize?.(deltaX, deltaY);
+      pendingDeltaRef.current.x += deltaX;
+      pendingDeltaRef.current.y += deltaY;
+      if (!resizeRafRef.current) {
+        resizeRafRef.current = window.requestAnimationFrame(() => {
+          resizeRafRef.current = 0;
+          const pending = pendingDeltaRef.current;
+          if (pending.x || pending.y) {
+            onAdjustGridSize?.(pending.x, pending.y);
+            pendingDeltaRef.current = { x: 0, y: 0 };
+          }
+        });
+      }
       drag.lastStepX = stepX;
       drag.lastStepY = stepY;
     }
@@ -99,10 +164,30 @@ function EditOverlay({
 
   const endResizeDrag = (e) => {
     if (!resizeDragRef.current) return;
-    e.stopPropagation();
-    e.preventDefault();
+    const drag = resizeDragRef.current;
+    if (typeof e?.pointerId === 'number' && e.pointerId !== drag.pointerId) return;
+    e?.stopPropagation?.();
+    e?.preventDefault?.();
+    if (resizeRafRef.current) {
+      window.cancelAnimationFrame(resizeRafRef.current);
+      resizeRafRef.current = 0;
+    }
+    const pending = pendingDeltaRef.current;
+    if (pending.x || pending.y) {
+      onAdjustGridSize?.(pending.x, pending.y);
+      pendingDeltaRef.current = { x: 0, y: 0 };
+    }
     resizeDragRef.current = null;
+    resizeCleanupRef.current?.();
   };
+
+  useEffect(() => () => {
+    if (resizeRafRef.current) {
+      window.cancelAnimationFrame(resizeRafRef.current);
+      resizeRafRef.current = 0;
+    }
+    resizeCleanupRef.current?.();
+  }, []);
 
   return (
     <>
@@ -191,9 +276,6 @@ function EditOverlay({
         <div className="absolute bottom-2 right-2 z-50">
           <button
             onPointerDown={startResizeDrag}
-            onPointerMove={moveResizeDrag}
-            onPointerUp={endResizeDrag}
-            onPointerCancel={endResizeDrag}
             className="p-2 rounded-full text-white border border-white/20 shadow-lg bg-purple-500/80 cursor-nwse-resize touch-none"
             title="Drag to resize"
           >

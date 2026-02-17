@@ -68,6 +68,10 @@ router.put('/:id', (req, res) => {
   const assignedDashboardId = req.body?.assignedDashboardId !== undefined ? String(req.body.assignedDashboardId || '').trim() : existing.assigned_dashboard_id;
   const password = req.body?.password !== undefined ? String(req.body.password) : '';
   const parsedHa = parseHaFields(req.body, existing);
+  const fullName = req.body?.fullName !== undefined ? String(req.body.fullName || '').trim() : (existing.full_name || '');
+  const email = req.body?.email !== undefined ? String(req.body.email || '').trim() : (existing.email || '');
+  const phone = req.body?.phone !== undefined ? String(req.body.phone || '').trim() : (existing.phone || '');
+  const avatarUrl = req.body?.avatarUrl !== undefined ? String(req.body.avatarUrl || '').trim() : (existing.avatar_url || '');
 
   if (!username) return res.status(400).json({ error: 'Username cannot be empty' });
   if (parsedHa.error) return res.status(400).json({ error: parsedHa.error });
@@ -86,9 +90,9 @@ router.put('/:id', (req, res) => {
 
   db.prepare(`
     UPDATE users
-    SET username = ?, role = ?, assigned_dashboard_id = ?, ha_url = ?, ha_token = ?, updated_at = ?
+    SET username = ?, role = ?, assigned_dashboard_id = ?, ha_url = ?, ha_token = ?, full_name = ?, email = ?, phone = ?, avatar_url = ?, updated_at = ?
     WHERE id = ?
-  `).run(username, role, assignedDashboardId, parsedHa.haUrl, parsedHa.haToken, now, id);
+  `).run(username, role, assignedDashboardId, parsedHa.haUrl, parsedHa.haToken, fullName, email, phone, avatarUrl, now, id);
 
   if (password) {
     db.prepare('UPDATE users SET password_hash = ?, updated_at = ? WHERE id = ?')

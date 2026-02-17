@@ -65,11 +65,31 @@ export const fetchCurrentUser = async () => {
 };
 
 export const updateProfile = async (profile) => {
-  const payload = await apiRequest('/api/auth/profile', {
-    method: 'PUT',
-    body: JSON.stringify(profile || {}),
-  });
-  return payload?.user || null;
+  try {
+    const payload = await apiRequest('/api/auth/profile', {
+      method: 'PUT',
+      body: JSON.stringify(profile || {}),
+    });
+    return payload?.user || null;
+  } catch (error) {
+    if (error?.status !== 404 && error?.status !== 405) throw error;
+    try {
+      const payload = await apiRequest('/api/auth/profile', {
+        method: 'POST',
+        body: JSON.stringify(profile || {}),
+      });
+      return payload?.user || null;
+    } catch (fallbackError) {
+      if (fallbackError?.status !== 404 && fallbackError?.status !== 405) throw fallbackError;
+      const me = await fetchCurrentUser();
+      if (!me?.id) throw fallbackError;
+      const payload = await apiRequest(`/api/users/${encodeURIComponent(me.id)}`, {
+        method: 'PUT',
+        body: JSON.stringify(profile || {}),
+      });
+      return payload?.user || null;
+    }
+  }
 };
 
 export const listUsers = async () => {

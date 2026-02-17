@@ -307,6 +307,10 @@ function AppContent({
   } = useEntityHelpers({ entities, conn, activeUrl, language, now, t });
 
   const canControlDevices = currentUser?.role !== 'inspector';
+  const isAdminUser = currentUser?.role === 'admin';
+  const [dashboardDirty, setDashboardDirty] = useState(false);
+  const dashboardDirtyReadyRef = useRef(false);
+  const quickSaveBusyRef = useRef(false);
   const callService = useCallback((domain, service, payload, target) => {
     if (!canControlDevices) return false;
     return rawCallService(domain, service, payload, target);
@@ -317,6 +321,7 @@ function AppContent({
   const [profileError, setProfileError] = useState('');
   const loadedAssignedDashboardRef = useRef('');
   const [profileState, setProfileState] = useState({
+    username: '',
     fullName: '',
     email: '',
     phone: '',
@@ -325,12 +330,13 @@ function AppContent({
 
   useEffect(() => {
     setProfileState({
+      username: currentUser?.username || '',
       fullName: currentUser?.fullName || '',
       email: currentUser?.email || '',
       phone: currentUser?.phone || '',
       avatarUrl: currentUser?.avatarUrl || '',
     });
-  }, [currentUser?.fullName, currentUser?.email, currentUser?.phone, currentUser?.avatarUrl]);
+  }, [currentUser?.username, currentUser?.fullName, currentUser?.email, currentUser?.phone, currentUser?.avatarUrl]);
 
   const saveProfile = useCallback(async (e) => {
     e?.preventDefault?.();
@@ -354,10 +360,57 @@ function AppContent({
     if (loadedAssignedDashboardRef.current === loadKey) return;
     loadedAssignedDashboardRef.current = loadKey;
 
-    loadGlobalDashboard(assignedDashboardId).catch(() => {
-      // best effort: keep current/cached dashboard if assigned load fails
-    });
+    loadGlobalDashboard(assignedDashboardId)
+      .then(() => {
+        dashboardDirtyReadyRef.current = false;
+        setDashboardDirty(false);
+      })
+      .catch(() => {
+        // best effort: keep current/cached dashboard if assigned load fails
+      });
   }, [currentUser?.id, currentUser?.assignedDashboardId, loadGlobalDashboard]);
+
+  useEffect(() => {
+    if (!isAdminUser) {
+      dashboardDirtyReadyRef.current = false;
+      setDashboardDirty(false);
+      return;
+    }
+    if (!dashboardDirtyReadyRef.current) {
+      dashboardDirtyReadyRef.current = true;
+      return;
+    }
+    setDashboardDirty(true);
+  }, [
+    isAdminUser,
+    pagesConfig,
+    cardSettings,
+    customNames,
+    customIcons,
+    hiddenCards,
+    pageSettings,
+    gridColumns,
+    gridGapH,
+    gridGapV,
+    cardBorderRadius,
+    headerScale,
+    sectionSpacing,
+    headerTitle,
+    headerSettings,
+    statusPillsConfig,
+  ]);
+
+  const quickSaveDashboard = useCallback(async () => {
+    if (!isAdminUser || quickSaveBusyRef.current) return;
+    quickSaveBusyRef.current = true;
+    const target = String(currentUser?.assignedDashboardId || 'default');
+    try {
+      const ok = await saveGlobalDashboard(target);
+      if (ok) setDashboardDirty(false);
+    } finally {
+      quickSaveBusyRef.current = false;
+    }
+  }, [isAdminUser, currentUser?.assignedDashboardId, saveGlobalDashboard]);
 
   // ── Page management ────────────────────────────────────────────────────
   const {
@@ -432,6 +485,24 @@ function AppContent({
     [getCardSettingsKey, cardSettings, activePage, gridColCount]
   );
 
+  const adjustCardGridSize = useCallback((cardId, deltaCol = 0, deltaRow = 0) => {
+    if (!deltaCol && !deltaRow) return;
+    const settingsKey = getCardSettingsKey(cardId);
+    persistCardSettings((prev) => {
+      const current = _getCardGridSize(cardId, getCardSettingsKey, prev, activePage, gridColCount);
+      const nextCol = Math.max(1, Math.min(gridColCount, current.colSpan + deltaCol));
+      const nextRow = Math.max(1, Math.min(8, current.rowSpan + deltaRow));
+      return {
+        ...prev,
+        [settingsKey]: {
+          ...(prev[settingsKey] || {}),
+          gridColSpan: nextCol,
+          gridRowSpan: nextRow,
+        },
+      };
+    });
+  }, [persistCardSettings, getCardSettingsKey, activePage, gridColCount]);
+
   const moveCardInArray = useCallback((cardId, direction) => {
     const newConfig = { ...pagesConfig };
     const pageCards = newConfig[activePage];
@@ -502,6 +573,8 @@ function AppContent({
           settingsKey={settingsKey}
           isHidden={isHiddenNow}
           currentSize={cardSettings[settingsKey]?.size || 'large'}
+          currentGridSize={getCardGridSize(cardId)}
+          gridColumnCount={gridColCount}
           settings={settings}
           canRemove={isCardRemovable(cardId)}
           onMoveLeft={() => moveCardInArray(cardId, 'left')}
@@ -510,20 +583,13 @@ function AppContent({
           onToggleVisibility={() => toggleCardVisibility(cardId)}
           onSaveSize={(size) => saveCardSetting(settingsKey, 'size', size)}
           onIncreaseGridSize={() => {
-            const current = getCardGridSize(cardId);
-            saveCardSetting(settingsKey, 'gridColSpan', Math.min(gridColCount, current.colSpan + 1));
-            saveCardSetting(settingsKey, 'gridRowSpan', Math.min(8, current.rowSpan + 1));
+            adjustCardGridSize(cardId, 1, 1);
           }}
           onDecreaseGridSize={() => {
-            const current = getCardGridSize(cardId);
-            saveCardSetting(settingsKey, 'gridColSpan', Math.max(1, current.colSpan - 1));
-            saveCardSetting(settingsKey, 'gridRowSpan', Math.max(1, Math.min(8, current.rowSpan - 1)));
+            adjustCardGridSize(cardId, -1, -1);
           }}
           onAdjustGridSize={(deltaCol, deltaRow) => {
-            if (!deltaCol && !deltaRow) return;
-            const current = getCardGridSize(cardId);
-            saveCardSetting(settingsKey, 'gridColSpan', Math.max(1, Math.min(gridColCount, current.colSpan + deltaCol)));
-            saveCardSetting(settingsKey, 'gridRowSpan', Math.max(1, Math.min(8, current.rowSpan + deltaRow)));
+            adjustCardGridSize(cardId, deltaCol, deltaRow);
           }}
           onRemove={() => removeCard(cardId)}
           dragHandleProps={{
@@ -747,6 +813,18 @@ function AppContent({
               </button>
             )}
 
+            {canEditDashboard && dashboardDirty && (
+              <button
+                onClick={quickSaveDashboard}
+                disabled={globalStorageBusy}
+                className="group flex items-center gap-2 text-xs font-bold uppercase text-amber-300 hover:text-white transition-all whitespace-nowrap disabled:opacity-60 disabled:cursor-not-allowed"
+                title="Save dashboard changes"
+              >
+                <Check className={`w-4 h-4 ${globalStorageBusy ? 'animate-pulse' : ''}`} />
+                {globalStorageBusy ? 'Saving...' : 'Save'}
+              </button>
+            )}
+
             <button
               onClick={() => {
                 if (!canEditDashboard) return;
@@ -777,6 +855,9 @@ function AppContent({
                 onOpenTheme={() => setShowThemeSidebar(true)}
                 onOpenLayout={() => setShowLayoutSidebar(true)}
                 onOpenHeader={() => setShowHeaderEditModal(true)}
+                showLayout={isAdminUser}
+                showHeader={isAdminUser}
+                showConnection={isAdminUser}
                 t={t}
               />
               {updateCount > 0 && (
@@ -844,6 +925,7 @@ function AppContent({
           <div
             key={activePage}
             className="grid font-sans page-transition items-start"
+            data-dashboard-grid
             style={{
               gap: isMobile ? '12px' : `${gridGapV}px ${gridGapH}px`,
               gridAutoRows: isMobile ? '82px' : '100px',
@@ -881,6 +963,7 @@ function AppContent({
                   <div
                     key={id}
                     className={`h-full relative ${(isCompactCards || isMobile) ? 'card-compact' : ''}`}
+                    data-grid-card
                     style={{
                       gridRowStart: placement.row,
                       gridColumnStart: placement.col,
@@ -912,6 +995,7 @@ function AppContent({
                 <button type="button" onClick={() => setShowProfileModal(false)} className="text-xs px-2 py-1 rounded-lg border border-[var(--glass-border)]">Close</button>
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <input value={profileState.username} onChange={(e) => setProfileState((prev) => ({ ...prev, username: e.target.value }))} placeholder="Username" className="px-3 py-2 rounded-xl bg-[var(--glass-bg)] border border-[var(--glass-border)] text-sm md:col-span-2" />
                 <input value={profileState.fullName} onChange={(e) => setProfileState((prev) => ({ ...prev, fullName: e.target.value }))} placeholder="Name" className="px-3 py-2 rounded-xl bg-[var(--glass-bg)] border border-[var(--glass-border)] text-sm md:col-span-2" />
                 <input value={profileState.email} onChange={(e) => setProfileState((prev) => ({ ...prev, email: e.target.value }))} placeholder="Email" className="px-3 py-2 rounded-xl bg-[var(--glass-bg)] border border-[var(--glass-border)] text-sm" />
                 <input value={profileState.phone} onChange={(e) => setProfileState((prev) => ({ ...prev, phone: e.target.value }))} placeholder="Phone" className="px-3 py-2 rounded-xl bg-[var(--glass-bg)] border border-[var(--glass-border)] text-sm" />

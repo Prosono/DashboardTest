@@ -408,8 +408,10 @@ export const PageProvider = ({ children }) => {
   };
 
   const saveCardSetting = (id, setting, value) => {
-    const newSettings = { ...cardSettings, [id]: { ...cardSettings[id], [setting]: value } };
-    setCardSettings(newSettings);
+    setCardSettings((prev) => ({
+      ...prev,
+      [id]: { ...(prev[id] || {}), [setting]: value },
+    }));
   };
 
   const savePageSetting = (id, setting, value) => {

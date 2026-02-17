@@ -34,25 +34,33 @@ router.get('/me', authRequired, (req, res) => {
   return res.json({ user: safeUser(user) });
 });
 
-router.put('/profile', authRequired, (req, res) => {
+const saveProfile = (req, res) => {
   const existing = db.prepare('SELECT * FROM users WHERE id = ?').get(req.auth.user.id);
   if (!existing) return res.status(401).json({ error: 'User no longer exists' });
 
+  const username = req.body?.username !== undefined ? String(req.body.username || '').trim() : existing.username;
   const fullName = req.body?.fullName !== undefined ? String(req.body.fullName || '').trim() : (existing.full_name || '');
   const email = req.body?.email !== undefined ? String(req.body.email || '').trim() : (existing.email || '');
   const phone = req.body?.phone !== undefined ? String(req.body.phone || '').trim() : (existing.phone || '');
   const avatarUrl = req.body?.avatarUrl !== undefined ? String(req.body.avatarUrl || '').trim() : (existing.avatar_url || '');
+  if (!username) return res.status(400).json({ error: 'Username cannot be empty' });
+
+  const duplicate = db.prepare('SELECT id FROM users WHERE username = ? AND id != ?').get(username, req.auth.user.id);
+  if (duplicate) return res.status(409).json({ error: 'Username already exists' });
 
   const now = new Date().toISOString();
   db.prepare(`
     UPDATE users
-    SET full_name = ?, email = ?, phone = ?, avatar_url = ?, updated_at = ?
+    SET username = ?, full_name = ?, email = ?, phone = ?, avatar_url = ?, updated_at = ?
     WHERE id = ?
-  `).run(fullName, email, phone, avatarUrl, now, req.auth.user.id);
+  `).run(username, fullName, email, phone, avatarUrl, now, req.auth.user.id);
 
   const user = db.prepare('SELECT * FROM users WHERE id = ?').get(req.auth.user.id);
   return res.json({ user: safeUser(user) });
-});
+};
+
+router.put('/profile', authRequired, saveProfile);
+router.post('/profile', authRequired, saveProfile);
 
 router.get('/ha-config', authRequired, (req, res) => {
   const row = db.prepare('SELECT * FROM ha_config WHERE id = 1').get();

@@ -7,6 +7,9 @@ export default function SettingsDropdown({
   onOpenTheme, 
   onOpenLayout,
   onOpenHeader,
+  showLayout = true,
+  showHeader = true,
+  showConnection = true,
   t 
 }) {
   const [isOpen, setIsOpen] = useState(false);
@@ -58,43 +61,50 @@ export default function SettingsDropdown({
             </div>
           </button>
 
-          <button
-            onClick={() => handleSelect(onOpenLayout)}
-            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-white/10 transition-colors text-left group"
-          >
-            <div className="p-2 rounded-lg bg-blue-500/10 text-blue-400 group-hover:bg-blue-500 group-hover:text-white transition-colors">
-              <LayoutGrid className="w-4 h-4" />
-            </div>
-            <div>
-              <p className="text-sm font-bold text-[var(--text-primary)] group-hover:text-white">{t('system.tabLayout')}</p>
-            </div>
-          </button>
+          {showLayout && (
+            <button
+              onClick={() => handleSelect(onOpenLayout)}
+              className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-white/10 transition-colors text-left group"
+            >
+              <div className="p-2 rounded-lg bg-blue-500/10 text-blue-400 group-hover:bg-blue-500 group-hover:text-white transition-colors">
+                <LayoutGrid className="w-4 h-4" />
+              </div>
+              <div>
+                <p className="text-sm font-bold text-[var(--text-primary)] group-hover:text-white">{t('system.tabLayout')}</p>
+              </div>
+            </button>
+          )}
 
-          <button
-            onClick={() => handleSelect(onOpenHeader)}
-            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-white/10 transition-colors text-left group"
-          >
-            <div className="p-2 rounded-lg bg-indigo-500/10 text-indigo-400 group-hover:bg-indigo-500 group-hover:text-white transition-colors">
-              <Type className="w-4 h-4" />
-            </div>
-            <div>
-              <p className="text-sm font-bold text-[var(--text-primary)] group-hover:text-white">{t('system.tabHeader')}</p>
-            </div>
-          </button>
+          {showHeader && (
+            <button
+              onClick={() => handleSelect(onOpenHeader)}
+              className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-white/10 transition-colors text-left group"
+            >
+              <div className="p-2 rounded-lg bg-indigo-500/10 text-indigo-400 group-hover:bg-indigo-500 group-hover:text-white transition-colors">
+                <Type className="w-4 h-4" />
+              </div>
+              <div>
+                <p className="text-sm font-bold text-[var(--text-primary)] group-hover:text-white">{t('system.tabHeader')}</p>
+              </div>
+            </button>
+          )}
 
-          <div className="h-px bg-white/5 my-1 mx-2" />
-
-          <button
-            onClick={() => handleSelect(onOpenSettings)}
-            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-white/10 transition-colors text-left group"
-          >
-            <div className="p-2 rounded-lg bg-emerald-500/10 text-emerald-400 group-hover:bg-emerald-500 group-hover:text-white transition-colors">
-              <Server className="w-4 h-4" />
-            </div>
-            <div>
-              <p className="text-sm font-bold text-[var(--text-primary)] group-hover:text-white">{t('system.tabConnection')}</p>
-            </div>
-          </button>
+          {showConnection && (
+            <>
+              <div className="h-px bg-white/5 my-1 mx-2" />
+              <button
+                onClick={() => handleSelect(onOpenSettings)}
+                className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-white/10 transition-colors text-left group"
+              >
+                <div className="p-2 rounded-lg bg-emerald-500/10 text-emerald-400 group-hover:bg-emerald-500 group-hover:text-white transition-colors">
+                  <Server className="w-4 h-4" />
+                </div>
+                <div>
+                  <p className="text-sm font-bold text-[var(--text-primary)] group-hover:text-white">{t('system.tabConnection')}</p>
+                </div>
+              </button>
+            </>
+          )}
         </div>
       </div>
     </div>
