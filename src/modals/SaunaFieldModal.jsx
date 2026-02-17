@@ -1,5 +1,8 @@
 import React from 'react';
 import { X, Lightbulb, Lock, Fan, Shield, Hash, Thermometer, DoorOpen, ToggleRight } from '../icons';
+import M3Slider from '../components/ui/M3Slider';
+import GenericClimateModal from './GenericClimateModal';
+import GenericFanModal from './GenericFanModal';
 
 const domainFor = (entityId = '') => String(entityId).split('.')[0] || '';
 const getFriendlyName = (entityId, entities) => entities?.[entityId]?.attributes?.friendly_name || entityId;
@@ -38,9 +41,37 @@ const domainLabel = (domain, tr) => {
   return domain || tr('common.other', 'Annet');
 };
 
+const normalize = (v) => String(v ?? '').toLowerCase();
+const isActiveState = (domain, state) => {
+  const s = normalize(state);
+  if (domain === 'lock') return s === 'unlocked';
+  return ['on', 'open', 'unlocked', 'heat', 'heating', 'true', '1'].includes(s);
+};
+
+const stateLabelFor = (domain, state, tr) => {
+  const s = normalize(state);
+  if (domain === 'lock') return s === 'locked' ? tr('binary.lock.locked', 'Låst') : s === 'unlocked' ? tr('binary.lock.unlocked', 'Ulåst') : state;
+  if (domain === 'binary_sensor') {
+    if (s === 'on') return tr('status.on', 'På');
+    if (s === 'off') return tr('status.off', 'Av');
+  }
+  if (s === 'on') return tr('common.on', 'På');
+  if (s === 'off') return tr('common.off', 'Av');
+  return state;
+};
+
+const toggleActionLabel = (domain, state, tr) => {
+  if (domain === 'lock') return normalize(state) === 'locked' ? tr('sauna.unlock', 'Lås opp') : tr('sauna.lock', 'Lås');
+  return isActiveState(domain, state) ? tr('common.turnOff', 'Slå av') : tr('common.turnOn', 'Slå på');
+};
+
+const isNumericDomain = (domain) => domain === 'input_number' || domain === 'number';
+const isReadOnlyDomain = (domain) => domain === 'sensor' || domain === 'binary_sensor';
+
 export default function SaunaFieldModal({
   show,
   title,
+  fieldType,
   entityIds,
   entities,
   callService,
@@ -49,9 +80,14 @@ export default function SaunaFieldModal({
   setShowLightModal,
   setActiveClimateEntityModal,
   setShowSensorInfoModal,
+  hvacMap,
+  fanMap,
+  swingMap,
 }) {
   const tr = makeTr(t);
   const ids = Array.isArray(entityIds) ? entityIds.filter(Boolean) : [];
+  const [activityFilter, setActivityFilter] = React.useState('all');
+  const [activeFanEntityModal, setActiveFanEntityModal] = React.useState(null);
 
   const grouped = {};
   ids.forEach((entityId) => {
@@ -68,17 +104,34 @@ export default function SaunaFieldModal({
     const bi = order.indexOf(b);
     return (ai === -1 ? 99 : ai) - (bi === -1 ? 99 : bi);
   });
+  const fanEntityIds = fieldType === 'fan'
+    ? ids.filter((entityId) => {
+      const domain = domainFor(entityId);
+      return domain === 'fan' || domain === 'switch';
+    })
+    : [];
+  const fanOnly = fieldType === 'fan' && fanEntityIds.length > 0;
+  const thermostatOnly = sortedDomains.length === 1 && sortedDomains[0] === 'climate';
+  const focusedLayout = thermostatOnly || fanOnly;
 
   const openEntityModal = (entityId) => {
     const domain = domainFor(entityId);
     if (domain === 'light' && setShowLightModal) {
-      setShowLightModal(entityId);
+      const allLights = Array.isArray(grouped.light) ? grouped.light.filter(Boolean) : [];
+      setShowLightModal({
+        lightId: entityId,
+        lightIds: allLights.length ? allLights : [entityId],
+      });
       onClose?.();
       return;
     }
     if (domain === 'climate' && setActiveClimateEntityModal) {
       setActiveClimateEntityModal(entityId);
       onClose?.();
+      return;
+    }
+    if (domain === 'fan' || domain === 'switch') {
+      setActiveFanEntityModal(entityId);
       return;
     }
     if (setShowSensorInfoModal) {
@@ -104,14 +157,47 @@ export default function SaunaFieldModal({
     callService(domain, direction === 'up' ? 'increment' : 'decrement', { entity_id: entityId });
   };
 
+  const filteredByState = (list, domain) => {
+    if (activityFilter === 'all') return list;
+    return list.filter((entityId) => {
+      const active = isActiveState(domain, getEntityState(entityId, entities));
+      return activityFilter === 'active' ? active : !active;
+    });
+  };
+
+  const getVisibleList = (domain) => filteredByState(grouped[domain] || [], domain);
+
+  const handleDomainBulk = (domain, direction) => {
+    const list = getVisibleList(domain);
+    list.forEach((entityId) => {
+      const state = normalize(getEntityState(entityId, entities));
+      if (domain === 'lock') {
+        callService('lock', direction === 'on' ? 'unlock' : 'lock', { entity_id: entityId });
+        return;
+      }
+      if (!canToggleDomain(domain)) return;
+      if (direction === 'on' && !['on', 'open', 'unlocked', 'true', '1'].includes(state)) {
+        callService(domain, 'toggle', { entity_id: entityId });
+      } else if (direction === 'off' && ['on', 'open', 'unlocked', 'true', '1'].includes(state)) {
+        callService(domain, 'toggle', { entity_id: entityId });
+      }
+    });
+  };
+
+  const showEntityHistory = (entityId) => {
+    if (!entityId || !setShowSensorInfoModal) return;
+    setShowSensorInfoModal(entityId);
+  };
+
   return (
-    <div
+    <>
+      <div
       className="fixed inset-0 z-50 flex items-start justify-center p-6 pt-12 md:pt-16"
       style={{ backdropFilter: 'blur(20px)', backgroundColor: 'rgba(0,0,0,0.3)' }}
       onClick={onClose}
     >
       <div
-        className="border w-full max-w-2xl max-h-[88vh] rounded-3xl md:rounded-[2.5rem] p-5 md:p-8 shadow-2xl relative font-sans flex flex-col backdrop-blur-xl popup-anim"
+        className={`border w-full max-w-5xl rounded-3xl md:rounded-[3rem] overflow-hidden flex flex-col ${focusedLayout ? '' : 'lg:grid lg:grid-cols-5'} backdrop-blur-xl shadow-2xl popup-anim relative max-h-[90vh] h-[90vh] md:min-h-[560px] min-h-0`}
         style={{
           background: 'linear-gradient(135deg, var(--card-bg) 0%, var(--modal-bg) 100%)',
           borderColor: 'var(--glass-border)',
@@ -122,116 +208,329 @@ export default function SaunaFieldModal({
         <button
           type="button"
           onClick={onClose}
-          className="absolute top-5 right-5 w-10 h-10 rounded-full flex items-center justify-center border hover:scale-105 transition-all"
+          className="absolute top-4 right-4 md:top-6 md:right-6 z-[80] w-10 h-10 rounded-full flex items-center justify-center border hover:scale-105 transition-all"
           style={{ borderColor: 'var(--glass-border)', backgroundColor: 'var(--glass-bg)', color: 'var(--text-secondary)' }}
           aria-label={tr('common.close', 'Lukk')}
         >
           <X className="w-5 h-5" />
         </button>
 
-        <div className="pr-14">
-          <div className="text-xs uppercase tracking-[0.2em] font-bold text-[var(--text-secondary)] mb-2">
-            {tr('sauna.details', 'Sauna detaljer')}
+        {!focusedLayout && (
+          <div className="lg:col-span-2 relative p-5 md:p-8 lg:p-10 border-b lg:border-b-0 lg:border-r flex flex-col gap-5" style={{ borderColor: 'var(--glass-border)' }}>
+          <div className="pr-14">
+            <div className="text-xs uppercase tracking-[0.22em] font-extrabold text-[var(--text-secondary)] mb-2">
+              {tr('sauna.details', 'Sauna detaljer')}
+            </div>
+            <h2 className="text-2xl md:text-3xl font-light italic uppercase leading-tight">{title || tr('sauna.details', 'Detaljer')}</h2>
+            <div className="mt-3 inline-flex items-center gap-2 px-3 py-1 rounded-full border bg-[var(--glass-bg)] border-[var(--glass-border)] text-[var(--text-secondary)]">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+              <span className="text-[10px] uppercase tracking-widest font-extrabold">
+                {ids.length} {ids.length === 1 ? tr('common.entity', 'entitet') : tr('common.entities', 'entiteter')}
+              </span>
+            </div>
           </div>
-          <h2 className="text-2xl font-bold text-[var(--text-primary)]">{title || tr('sauna.details', 'Detaljer')}</h2>
-          <p className="text-sm text-[var(--text-secondary)] mt-1">
-            {ids.length} {ids.length === 1 ? tr('common.entity', 'entitet') : tr('common.entities', 'entiteter')}
-          </p>
-        </div>
 
-        <div className="mt-6 overflow-y-auto custom-scrollbar space-y-4 pr-1">
+          <div className="rounded-2xl border p-1 bg-[var(--glass-bg)] border-[var(--glass-border)] flex">
+            <button
+              type="button"
+              onClick={() => setActivityFilter('all')}
+              className={`flex-1 py-2 rounded-xl text-[11px] uppercase tracking-widest font-bold transition-all ${activityFilter === 'all' ? 'bg-[var(--glass-bg-hover)] text-[var(--text-primary)]' : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'}`}
+            >
+              {tr('common.all', 'Alle')}
+            </button>
+            <button
+              type="button"
+              onClick={() => setActivityFilter('active')}
+              className={`flex-1 py-2 rounded-xl text-[11px] uppercase tracking-widest font-bold transition-all ${activityFilter === 'active' ? 'bg-emerald-500/20 text-emerald-300' : 'text-[var(--text-secondary)] hover:text-emerald-300'}`}
+            >
+              {tr('common.on', 'På')}
+            </button>
+            <button
+              type="button"
+              onClick={() => setActivityFilter('inactive')}
+              className={`flex-1 py-2 rounded-xl text-[11px] uppercase tracking-widest font-bold transition-all ${activityFilter === 'inactive' ? 'bg-[var(--glass-bg-hover)] text-[var(--text-primary)]' : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'}`}
+            >
+              {tr('common.off', 'Av')}
+            </button>
+          </div>
+
+          <div className="mt-auto rounded-2xl border p-4 bg-[var(--glass-bg)] border-[var(--glass-border)] text-[11px] leading-relaxed text-[var(--text-secondary)]">
+            {tr('sauna.quickHint', 'Trykk på en rad for å åpne full kontroll. Bruk hurtigknapper til høyre for raske av/på-kommandoer.')}
+          </div>
+          </div>
+        )}
+
+        <div className={`${focusedLayout ? 'flex-1 min-h-0 p-4 md:p-6 pt-14 md:pt-16' : 'lg:col-span-3 p-5 md:p-8'} overflow-y-auto custom-scrollbar space-y-4`}>
           {ids.length === 0 && (
             <div className="rounded-2xl border p-4 text-sm" style={{ borderColor: 'var(--glass-border)', backgroundColor: 'var(--glass-bg)' }}>
               {tr('common.noData', 'Ingen entiteter konfigurert for dette feltet.')}
             </div>
           )}
 
-          {sortedDomains.map((domain) => {
-            const list = grouped[domain] || [];
-            const DomainIcon = iconForDomain(domain);
-            return (
-              <section
-                key={domain}
-                className="rounded-2xl border p-3 md:p-4 space-y-3"
-                style={{ borderColor: 'var(--glass-border)', backgroundColor: 'var(--glass-bg)' }}
-              >
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <div className="w-8 h-8 rounded-full border flex items-center justify-center" style={{ borderColor: 'var(--glass-border)', backgroundColor: 'var(--glass-bg-hover)' }}>
-                      <DomainIcon className="w-4 h-4 text-[var(--text-secondary)]" />
-                    </div>
-                    <div className="text-sm font-bold text-[var(--text-primary)]">{domainLabel(domain, tr)}</div>
+          {fanOnly && (
+            <section className="rounded-2xl border p-3 md:p-4 space-y-3 popup-surface" style={{ borderColor: 'var(--glass-border)' }}>
+              <div className="flex items-center justify-between gap-3">
+                <div className="flex items-center gap-3 min-w-0">
+                  <div className="w-10 h-10 rounded-2xl border flex items-center justify-center bg-[var(--glass-bg)]" style={{ borderColor: 'var(--glass-border)' }}>
+                    <Fan className="w-5 h-5 text-[var(--text-secondary)]" />
                   </div>
-                  <div className="text-xs text-[var(--text-secondary)] font-semibold">{list.length}</div>
+                  <div className="min-w-0">
+                    <div className="text-sm md:text-base font-bold truncate">{tr('sauna.fans', 'Vifter')}</div>
+                    <div className="text-[10px] uppercase tracking-widest text-[var(--text-secondary)]">{fanEntityIds.length} {tr('common.entities', 'entiteter')}</div>
+                  </div>
+                </div>
+              </div>
+              <div className="space-y-3">
+                {fanEntityIds
+                  .filter((entityId) => {
+                    if (activityFilter === 'all') return true;
+                    const domain = domainFor(entityId);
+                    const active = isActiveState(domain, getEntityState(entityId, entities));
+                    return activityFilter === 'active' ? active : !active;
+                  })
+                  .map((entityId) => {
+                    const ent = entities?.[entityId];
+                    if (!ent) return null;
+                    return (
+                      <GenericFanModal
+                        key={entityId}
+                        entityId={entityId}
+                        entity={ent}
+                        callService={callService}
+                        t={t}
+                        onShowHistory={showEntityHistory}
+                        embedded
+                        showCloseButton={false}
+                      />
+                    );
+                  })}
+              </div>
+            </section>
+          )}
+
+          {sortedDomains.map((domain) => {
+            if (fanOnly && (domain === 'fan' || domain === 'switch')) return null;
+            const list = getVisibleList(domain);
+            if (list.length === 0) return null;
+            const DomainIcon = iconForDomain(domain);
+            const supportsBulk = canToggleDomain(domain);
+
+            if (domain === 'climate') {
+              return (
+                <section key={domain} className="rounded-2xl border p-3 md:p-4 space-y-3 popup-surface" style={{ borderColor: 'var(--glass-border)' }}>
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-3 min-w-0">
+                      <div className="w-10 h-10 rounded-2xl border flex items-center justify-center bg-[var(--glass-bg)]" style={{ borderColor: 'var(--glass-border)' }}>
+                        <DomainIcon className="w-5 h-5 text-[var(--text-secondary)]" />
+                      </div>
+                      <div className="min-w-0">
+                        <div className="text-sm md:text-base font-bold truncate">{domainLabel(domain, tr)}</div>
+                        <div className="text-[10px] uppercase tracking-widest text-[var(--text-secondary)]">{list.length} {tr('common.entities', 'entiteter')}</div>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="space-y-3">
+                    {list.map((entityId) => {
+                      const ent = entities?.[entityId];
+                      if (!ent) return null;
+                      return (
+                        <GenericClimateModal
+                          key={entityId}
+                          entityId={entityId}
+                          entity={ent}
+                          callService={callService}
+                          hvacMap={hvacMap}
+                          fanMap={fanMap}
+                          swingMap={swingMap}
+                          t={t}
+                          embedded
+                          showCloseButton={false}
+                        />
+                      );
+                    })}
+                  </div>
+                </section>
+              );
+            }
+
+            return (
+              <section key={domain} className="rounded-2xl border p-3 md:p-4 space-y-3 popup-surface" style={{ borderColor: 'var(--glass-border)' }}>
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div className="w-10 h-10 rounded-2xl border flex items-center justify-center bg-[var(--glass-bg)]" style={{ borderColor: 'var(--glass-border)' }}>
+                      <DomainIcon className="w-5 h-5 text-[var(--text-secondary)]" />
+                    </div>
+                    <div className="min-w-0">
+                      <div className="text-sm md:text-base font-bold truncate">{domainLabel(domain, tr)}</div>
+                      <div className="text-[10px] uppercase tracking-widest text-[var(--text-secondary)]">{list.length} {tr('common.entities', 'entiteter')}</div>
+                    </div>
+                  </div>
+                  {supportsBulk && (
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => handleDomainBulk(domain, 'on')}
+                        className="px-3 py-1.5 rounded-full text-[10px] uppercase tracking-widest font-bold border bg-emerald-500/15 text-emerald-300 border-emerald-500/30"
+                      >
+                        {tr('common.turnOn', 'Slå på')}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleDomainBulk(domain, 'off')}
+                        className="px-3 py-1.5 rounded-full text-[10px] uppercase tracking-widest font-bold border bg-[var(--glass-bg)] text-[var(--text-secondary)] border-[var(--glass-border)]"
+                      >
+                        {tr('common.turnOff', 'Slå av')}
+                      </button>
+                    </div>
+                  )}
                 </div>
 
-                <div className="space-y-2">
+                <div className="space-y-2.5">
                   {list.map((entityId) => {
-                    const state = String(getEntityState(entityId, entities));
+                    const entity = entities?.[entityId];
+                    const rawState = String(getEntityState(entityId, entities));
                     const friendly = getFriendlyName(entityId, entities);
                     const canToggle = canToggleDomain(domain);
-                    const isNumeric = domain === 'input_number' || domain === 'number';
+                    const isNumeric = isNumericDomain(domain);
+                    const active = isActiveState(domain, rawState);
+                    const stateLabel = stateLabelFor(domain, rawState, tr);
+                    const numericValue = Number(rawState);
+                    const hasNumeric = Number.isFinite(numericValue);
+                    const readOnly = isReadOnlyDomain(domain);
+                    const climateTarget = Number(entity?.attributes?.temperature);
+                    const hasClimateTarget = Number.isFinite(climateTarget);
+                    const climateCurrent = Number(entity?.attributes?.current_temperature);
+                    const minTemp = Number.isFinite(Number(entity?.attributes?.min_temp)) ? Number(entity.attributes.min_temp) : 16;
+                    const maxTemp = Number.isFinite(Number(entity?.attributes?.max_temp)) ? Number(entity.attributes.max_temp) : 30;
+                    const climateColor = rawState === 'cool' ? 'bg-blue-500' : rawState === 'heat' ? 'bg-orange-500' : 'bg-emerald-500';
 
                     return (
                       <div
                         key={entityId}
-                        className="rounded-xl border p-3"
-                        style={{ borderColor: 'var(--glass-border)', backgroundColor: 'var(--glass-bg-hover)' }}
+                        className={`rounded-2xl border overflow-hidden transition-all ${active ? 'bg-emerald-500/10 border-emerald-500/25' : 'bg-[var(--glass-bg-hover)] border-[var(--glass-border)]'} lg:grid lg:grid-cols-5`}
                       >
-                        <div className="flex items-center justify-between gap-3">
-                          <div className="min-w-0">
-                            <div className="text-sm font-semibold text-[var(--text-primary)] truncate">{friendly}</div>
-                            <div className="text-[10px] text-[var(--text-secondary)] truncate">{entityId}</div>
+                        <div className="lg:col-span-3 p-3 md:p-4 border-b lg:border-b-0 lg:border-r" style={{ borderColor: 'var(--glass-border)' }}>
+                          <div className="flex items-start justify-between gap-3">
+                            <button type="button" onClick={() => openEntityModal(entityId)} className="min-w-0 text-left group">
+                              <div className="text-base md:text-lg font-light italic uppercase truncate group-hover:underline">{friendly}</div>
+                              <div className="text-[10px] text-[var(--text-secondary)] truncate mt-1">{entityId}</div>
+                            </button>
+                            <div className={`px-2.5 py-1 rounded-full text-[10px] uppercase tracking-widest font-bold border ${active ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30' : 'bg-[var(--glass-bg)] text-[var(--text-secondary)] border-[var(--glass-border)]'}`}>
+                              {stateLabel}
+                            </div>
                           </div>
-                          <div className="text-sm font-bold text-[var(--text-primary)]">{state}</div>
                         </div>
 
-                        <div className="mt-3 flex flex-wrap gap-2">
-                          <button
-                            type="button"
-                            onClick={() => openEntityModal(entityId)}
-                            className="h-9 px-4 rounded-full border transition-all"
-                            style={{ borderColor: 'var(--glass-border)', backgroundColor: 'var(--glass-bg)', color: 'var(--text-primary)' }}
-                          >
-                            {domain === 'light'
-                              ? tr('sauna.openLightCard', 'Åpne lyskort')
-                              : domain === 'climate'
-                                ? tr('sauna.openThermostatCard', 'Åpne termostatkort')
-                                : domain === 'fan'
-                                  ? tr('sauna.openFanCard', 'Åpne viftekort')
-                                  : tr('sauna.openEntityCard', 'Åpne kort')}
-                          </button>
+                        <div className="lg:col-span-2 p-3 md:p-4 flex flex-col justify-center gap-2.5">
+                          <div className="flex items-center justify-between">
+                            <label className="text-xs font-bold uppercase tracking-widest text-[var(--text-secondary)]">
+                              {domain === 'climate'
+                                ? tr('sauna.thermostat', 'Termostat')
+                                : domain === 'lock'
+                                  ? tr('sauna.locks', 'Lås')
+                                  : domain === 'fan'
+                                    ? tr('sauna.fans', 'Vifte')
+                                    : domain === 'binary_sensor'
+                                      ? tr('status.statusLabel', 'Status')
+                                      : tr('common.value', 'Verdi')}
+                            </label>
+                            {hasNumeric ? (
+                              <span className="text-xl font-semibold tabular-nums text-[var(--text-primary)]">{numericValue}</span>
+                            ) : (
+                              <span className="text-sm font-semibold text-[var(--text-primary)]">{stateLabel}</span>
+                            )}
+                          </div>
 
-                          {canToggle && (
+                          <div className="flex flex-wrap gap-2">
                             <button
                               type="button"
-                              onClick={() => handleToggle(entityId)}
-                              className="h-9 px-4 rounded-full border transition-all flex items-center gap-2 backdrop-blur-md"
-                              style={{ borderColor: 'var(--glass-border)', backgroundColor: 'var(--glass-bg)', color: 'var(--text-primary)' }}
+                              onClick={() => openEntityModal(entityId)}
+                              className="h-9 px-4 rounded-xl border transition-all popup-surface popup-surface-hover text-[var(--text-primary)] font-semibold"
+                              style={{ borderColor: 'var(--glass-border)' }}
                             >
-                              {tr('common.toggle', 'Slå av/på')}
+                              {domain === 'climate'
+                                ? tr('sauna.openThermostatCard', 'Åpne termostat')
+                                : tr('common.open', 'Åpne')}
                             </button>
-                          )}
 
-                          {isNumeric && (
-                            <>
+                            {canToggle && (
                               <button
                                 type="button"
-                                onClick={() => handleAdjustNumber(entityId, 'down')}
-                                className="h-9 px-4 rounded-full border transition-all"
-                                style={{ borderColor: 'var(--glass-border)', backgroundColor: 'var(--glass-bg)', color: 'var(--text-primary)' }}
+                                onClick={() => handleToggle(entityId)}
+                                className={`h-9 px-4 rounded-xl border transition-all font-semibold ${active ? 'bg-[var(--glass-bg)] text-[var(--text-primary)] border-[var(--glass-border)]' : 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30'}`}
                               >
-                                {tr('common.decrease', 'Ned')}
+                                {toggleActionLabel(domain, rawState, tr)}
                               </button>
+                            )}
+
+                            {isNumeric && (
+                              <>
+                                <button
+                                  type="button"
+                                  onClick={() => handleAdjustNumber(entityId, 'down')}
+                                  className="h-9 px-3 rounded-xl border transition-all popup-surface popup-surface-hover"
+                                  style={{ borderColor: 'var(--glass-border)' }}
+                                >
+                                  {tr('common.decrease', 'Ned')}
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleAdjustNumber(entityId, 'up')}
+                                  className="h-9 px-3 rounded-xl border transition-all popup-surface popup-surface-hover"
+                                  style={{ borderColor: 'var(--glass-border)' }}
+                                >
+                                  {tr('common.increase', 'Opp')}
+                                </button>
+                              </>
+                            )}
+
+                            {readOnly && !isNumeric && (
                               <button
                                 type="button"
-                                onClick={() => handleAdjustNumber(entityId, 'up')}
-                                className="h-9 px-4 rounded-full border transition-all"
-                                style={{ borderColor: 'var(--glass-border)', backgroundColor: 'var(--glass-bg)', color: 'var(--text-primary)' }}
+                                onClick={() => openEntityModal(entityId)}
+                                className="h-9 px-3 rounded-xl border transition-all popup-surface popup-surface-hover text-[var(--text-secondary)] text-[11px] uppercase tracking-widest font-semibold"
+                                style={{ borderColor: 'var(--glass-border)' }}
                               >
-                                {tr('common.increase', 'Opp')}
+                                {tr('common.details', 'Detaljer')}
                               </button>
-                            </>
+                            )}
+                          </div>
+
+                          {domain === 'climate' && hasClimateTarget && (
+                            <div className="mt-1 space-y-2">
+                              <div className="flex items-center justify-between text-[11px] text-[var(--text-secondary)]">
+                                <span>{tr('climate.current', 'Nå')}: {Number.isFinite(climateCurrent) ? `${climateCurrent.toFixed(1)}°` : '--'}</span>
+                                <span>{tr('climate.target', 'Mål')}: {climateTarget.toFixed(1)}°</span>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <button
+                                  type="button"
+                                  onClick={() => callService('climate', 'set_temperature', { entity_id: entityId, temperature: climateTarget - 0.5 })}
+                                  className="h-8 px-2.5 rounded-lg border popup-surface popup-surface-hover"
+                                  style={{ borderColor: 'var(--glass-border)' }}
+                                >
+                                  -
+                                </button>
+                                <div className="flex-1">
+                                  <M3Slider
+                                    min={minTemp}
+                                    max={maxTemp}
+                                    step={0.5}
+                                    value={climateTarget}
+                                    onChange={(e) => callService('climate', 'set_temperature', { entity_id: entityId, temperature: parseFloat(e.target.value) })}
+                                    colorClass={climateColor}
+                                  />
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={() => callService('climate', 'set_temperature', { entity_id: entityId, temperature: climateTarget + 0.5 })}
+                                  className="h-8 px-2.5 rounded-lg border popup-surface popup-surface-hover"
+                                  style={{ borderColor: 'var(--glass-border)' }}
+                                >
+                                  +
+                                </button>
+                              </div>
+                            </div>
                           )}
                         </div>
                       </div>
@@ -243,6 +542,21 @@ export default function SaunaFieldModal({
           })}
         </div>
       </div>
-    </div>
+      </div>
+
+      {activeFanEntityModal && entities?.[activeFanEntityModal] && (
+        <GenericFanModal
+          entityId={activeFanEntityModal}
+          entity={entities[activeFanEntityModal]}
+          callService={callService}
+          t={t}
+          onShowHistory={(entityId) => {
+            setActiveFanEntityModal(null);
+            showEntityHistory(entityId);
+          }}
+          onClose={() => setActiveFanEntityModal(null)}
+        />
+      )}
+    </>
   );
 }

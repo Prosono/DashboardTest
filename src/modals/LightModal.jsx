@@ -1,12 +1,21 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { X, AlertTriangle, Lightbulb, Utensils, Sofa, LampDesk, Palette, Thermometer, Sun } from '../icons';
 import M3Slider from '../components/ui/M3Slider';
 import { getIconComponent } from '../icons';
 
+const makeTr = (t) => (key, fallback) => {
+  const out = typeof t === 'function' ? t(key) : undefined;
+  const s = String(out ?? '');
+  const looksLikeKey = !s || s === key || s.toLowerCase() === key.toLowerCase() || s === s.toUpperCase() || s.includes('.');
+  return looksLikeKey ? fallback : s;
+};
+
 export default function LightModal({
   show,
   onClose,
+  onShowHistory,
   lightId,
+  lightIds,
   entities,
   callService,
   getA,
@@ -15,9 +24,34 @@ export default function LightModal({
   customIcons,
   t
 }) {
-  if (!show || !lightId) return null;
+  const tr = makeTr(t);
+  const openHistory = (entityId) => {
+    if (typeof onShowHistory !== 'function' || !entityId) return;
+    onShowHistory(entityId);
+  };
+  const selectableLightIds = useMemo(() => {
+    const raw = Array.isArray(lightIds) ? lightIds : [];
+    const base = [...raw, lightId].filter(Boolean);
+    const deduped = Array.from(new Set(base));
+    return deduped.filter((id) => id.startsWith('light.') && entities?.[id]);
+  }, [lightIds, lightId, entities]);
 
-  const entity = entities[lightId];
+  const [activeLightId, setActiveLightId] = useState(lightId || null);
+
+  useEffect(() => {
+    if (!show) return;
+    if (lightId && lightId !== activeLightId) {
+      setActiveLightId(lightId);
+      return;
+    }
+    if (!activeLightId && selectableLightIds.length) {
+      setActiveLightId(selectableLightIds[0]);
+    }
+  }, [show, lightId, activeLightId, selectableLightIds]);
+
+  const currentLightId = activeLightId || lightId || '';
+
+  const entity = entities[currentLightId];
   const isUnavailable = entity?.state === 'unavailable' || entity?.state === 'unknown' || !entity;
   const isOn = entity?.state === 'on';
 
@@ -29,10 +63,10 @@ export default function LightModal({
 
   // --- Icon ---
   let DefaultIcon = Lightbulb;
-  if (lightId.includes('kjokken') || lightId.includes('kitchen')) DefaultIcon = Utensils;
-  else if (lightId.includes('stova') || lightId.includes('living')) DefaultIcon = Sofa;
-  else if (lightId.includes('studio') || lightId.includes('office')) DefaultIcon = LampDesk;
-  const lightIconName = customIcons[lightId] || entities[lightId]?.attributes?.icon;
+  if (currentLightId.includes('kjokken') || currentLightId.includes('kitchen')) DefaultIcon = Utensils;
+  else if (currentLightId.includes('stova') || currentLightId.includes('living')) DefaultIcon = Sofa;
+  else if (currentLightId.includes('studio') || currentLightId.includes('office')) DefaultIcon = LampDesk;
+  const lightIconName = customIcons[currentLightId] || entities[currentLightId]?.attributes?.icon;
   const LightIcon = lightIconName ? (getIconComponent(lightIconName) || DefaultIcon) : DefaultIcon;
 
   // --- Values & Ranges ---
@@ -75,13 +109,13 @@ export default function LightModal({
   const handleTempChange = (e) => {
     const val = parseInt(e.target.value, 10);
     setLocalKelvin(val);
-    callService("light", "turn_on", { entity_id: lightId, color_temp_kelvin: val });
+    callService("light", "turn_on", { entity_id: currentLightId, color_temp_kelvin: val });
   };
 
   const handleHueChange = (e) => {
     const val = parseInt(e.target.value, 10);
     setLocalHue(val);
-    callService("light", "turn_on", { entity_id: lightId, hs_color: [val, 100] });
+    callService("light", "turn_on", { entity_id: currentLightId, hs_color: [val, 100] });
   };
 
   // Determine glow color
@@ -97,6 +131,138 @@ export default function LightModal({
     }
     return '#fbbf24'; // Default amber
   };
+
+  const getLightMeta = (id) => {
+    const ent = entities?.[id];
+    const unavailable = ent?.state === 'unavailable' || ent?.state === 'unknown' || !ent;
+    const on = ent?.state === 'on';
+    let FallbackIcon = Lightbulb;
+    if (id.includes('kjokken') || id.includes('kitchen')) FallbackIcon = Utensils;
+    else if (id.includes('stova') || id.includes('living')) FallbackIcon = Sofa;
+    else if (id.includes('studio') || id.includes('office')) FallbackIcon = LampDesk;
+    const iconName = customIcons?.[id] || ent?.attributes?.icon;
+    const IconComp = iconName ? (getIconComponent(iconName) || FallbackIcon) : FallbackIcon;
+    const brightnessRaw = optimisticLightBrightness?.[id] ?? (getA(id, 'brightness') || 0);
+    const brightness = Number.isFinite(Number(brightnessRaw)) ? Number(brightnessRaw) : 0;
+    const pct = Math.round((brightness / 255) * 100);
+    return {
+      entity: ent,
+      unavailable,
+      on,
+      IconComp,
+      name: getA(id, 'friendly_name', t('common.light')),
+      brightness,
+      pct,
+    };
+  };
+
+  if (!show || !currentLightId) return null;
+
+  if (selectableLightIds.length > 1) {
+    return (
+      <div
+        className="fixed inset-0 z-50 flex items-center justify-center p-4 md:p-6"
+        style={{ backdropFilter: 'blur(20px)', backgroundColor: 'rgba(0,0,0,0.3)' }}
+        onClick={onClose}
+      >
+        <div
+          className="border w-full max-w-6xl rounded-3xl md:rounded-[3rem] overflow-hidden backdrop-blur-xl shadow-2xl popup-anim relative max-h-[92vh]"
+          style={{ background: 'linear-gradient(135deg, var(--card-bg) 0%, var(--modal-bg) 100%)', borderColor: 'var(--glass-border)', color: 'var(--text-primary)' }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <div className="absolute top-3 right-4 md:top-5 md:right-6 z-50">
+            <button onClick={onClose} className="modal-close">
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+
+          <div className="overflow-y-auto custom-scrollbar pt-14 md:pt-16 px-3 pb-3 md:px-4 md:pb-4 lg:px-5 lg:pb-5 space-y-3 md:space-y-4">
+            {selectableLightIds.map((id) => {
+              const meta = getLightMeta(id);
+              const rowEntity = meta.entity;
+              const rowBrightness = meta.brightness;
+              const RowIcon = meta.IconComp;
+              return (
+                <div
+                  key={id}
+                  className="rounded-3xl overflow-hidden border flex flex-col lg:grid lg:grid-cols-5"
+                  style={{ borderColor: 'var(--glass-border)', background: 'linear-gradient(135deg, rgba(255,255,255,0.02) 0%, rgba(255,255,255,0.01) 100%)' }}
+                >
+                  <div className="lg:col-span-3 p-4 md:p-6 border-b lg:border-b-0 lg:border-r flex items-center gap-4" style={{ borderColor: 'var(--glass-border)' }}>
+                    <div className={`p-4 rounded-2xl transition-all duration-500 ${meta.unavailable ? 'bg-red-500/10 text-red-400' : (meta.on ? 'bg-amber-500/15 text-amber-400' : 'bg-[var(--glass-bg)] text-[var(--text-secondary)]')}`}>
+                      <RowIcon className="w-8 h-8" />
+                    </div>
+                    <div className="min-w-0">
+                      <h3 className="text-2xl font-light tracking-tight text-[var(--text-primary)] uppercase italic leading-none truncate">
+                        {meta.name}
+                      </h3>
+                      <div className={`mt-2 px-3 py-1 rounded-full border inline-flex items-center gap-2 ${meta.unavailable ? 'bg-red-500/10 border-red-500/20 text-red-400' : 'bg-[var(--glass-bg)] border-[var(--glass-border)] text-[var(--text-secondary)]'}`}>
+                        <div className={`w-1.5 h-1.5 rounded-full ${meta.unavailable ? 'bg-red-400' : (meta.on ? 'bg-green-400 shadow-[0_0_6px_rgba(74,222,128,0.5)]' : 'bg-slate-600')}`} />
+                        <span className="text-[10px] uppercase font-bold italic tracking-widest">
+                          {meta.unavailable ? t('status.unavailable') : (meta.on ? t('common.on') : t('common.off'))}
+                        </span>
+                        <span className="text-[10px] uppercase font-bold italic tracking-widest pl-2 border-l border-[var(--glass-border)] text-[var(--text-muted)]">
+                          {meta.pct}%
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="lg:col-span-2 p-4 md:p-6 flex flex-col justify-center gap-3">
+                    <div className="flex items-center justify-between">
+                      <label className="text-xs font-bold uppercase tracking-widest text-[var(--text-secondary)]">{t('light.brightness')}</label>
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => openHistory(id)}
+                          className="h-10 px-3 rounded-xl border text-[10px] uppercase tracking-widest font-bold bg-[var(--glass-bg)] border-[var(--glass-border)] text-[var(--text-primary)]"
+                        >
+                          {tr('common.history', 'Historikk')}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => !meta.unavailable && callService('light', 'toggle', { entity_id: id })}
+                          disabled={meta.unavailable}
+                          className={`w-10 h-10 rounded-full border flex items-center justify-center transition-all ${meta.on ? 'bg-amber-500/15 border-amber-500/35 text-amber-300' : 'bg-[var(--glass-bg)] border-[var(--glass-border)] text-[var(--text-secondary)]'} ${meta.unavailable ? 'opacity-50 cursor-not-allowed' : ''}`}
+                          title={meta.on ? t('common.turnOff', 'Slå av') : t('common.turnOn', 'Slå på')}
+                        >
+                          <X className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </div>
+                    <div className="h-10">
+                      <M3Slider
+                        min={0}
+                        max={255}
+                        step={1}
+                        value={rowBrightness}
+                        disabled={!meta.on || meta.unavailable}
+                        onChange={(e) => {
+                          const val = parseInt(e.target.value, 10);
+                          setOptimisticLightBrightness((prev) => ({ ...prev, [id]: val }));
+                          callService('light', 'turn_on', { entity_id: id, brightness: val });
+                        }}
+                        colorClass="bg-amber-500"
+                        variant="fat"
+                      />
+                    </div>
+                    <div className="text-right text-3xl font-semibold leading-none text-[var(--text-primary)] tabular-nums">
+                      {meta.pct}%
+                    </div>
+                    {Array.isArray(rowEntity?.attributes?.entity_id) && rowEntity.attributes.entity_id.length > 0 && (
+                      <div className="text-[10px] uppercase tracking-widest text-[var(--text-secondary)]">
+                        {rowEntity.attributes.entity_id.length} {t('common.entities')}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div 
@@ -132,7 +298,7 @@ export default function LightModal({
                </div>
                <div className="min-w-0">
                  <h2 className="text-2xl font-light tracking-tight text-[var(--text-primary)] uppercase italic leading-none truncate">
-                   {getA(lightId, "friendly_name", t('common.light'))}
+                   {getA(currentLightId, "friendly_name", t('common.light'))}
                  </h2>
                  <div className={`mt-2 px-3 py-1 rounded-full border inline-flex items-center gap-2 ${isUnavailable ? 'bg-red-500/10 border-red-500/20 text-red-400' : 'bg-[var(--glass-bg)] border-[var(--glass-border)] text-[var(--text-secondary)]'}`}>
                    <div className={`w-1.5 h-1.5 rounded-full ${isUnavailable ? 'bg-red-400' : (isOn ? 'bg-green-400 shadow-[0_0_6px_rgba(74,222,128,0.5)]' : 'bg-slate-600')}`} />
@@ -141,7 +307,7 @@ export default function LightModal({
                    </span>
                    {isOn && (
                      <span className="text-[10px] uppercase font-bold italic tracking-widest pl-2 border-l border-[var(--glass-border)] text-[var(--text-muted)]">
-                       {Math.round((((optimisticLightBrightness[lightId] ?? (getA(lightId, "brightness") || 0)) / 255) * 100))}%
+                       {Math.round((((optimisticLightBrightness[currentLightId] ?? (getA(currentLightId, "brightness") || 0)) / 255) * 100))}%
                      </span>
                    )}
                  </div>
@@ -151,7 +317,7 @@ export default function LightModal({
              {/* Centerpiece Icon - Toggle Button */}
              <div className="relative z-10 flex-1 flex items-center justify-center my-4 md:my-0 min-h-[100px] md:min-h-0">
                 <button 
-                  onClick={() => !isUnavailable && callService("light", "toggle", { entity_id: lightId })}
+                  onClick={() => !isUnavailable && callService("light", "toggle", { entity_id: currentLightId })}
                   disabled={isUnavailable}
                   className={`relative w-24 h-24 md:w-36 md:h-36 rounded-full flex items-center justify-center transition-all duration-700
                     ${isUnavailable ? 'cursor-not-allowed bg-red-500/5 text-red-500' : 
@@ -213,13 +379,22 @@ export default function LightModal({
               
               {/* Dynamic Control Area - Simplified */}
               <div className="min-h-[100px] md:min-h-[140px] flex flex-col justify-center">
+                   <div className="flex justify-end mb-2">
+                     <button
+                       type="button"
+                       onClick={() => openHistory(currentLightId)}
+                       className="h-9 px-3 rounded-xl border text-[10px] uppercase tracking-widest font-bold bg-[var(--glass-bg)] border-[var(--glass-border)] text-[var(--text-primary)]"
+                     >
+                       {tr('common.history', 'Historikk')}
+                     </button>
+                   </div>
                    {/* Brightness Slider */}
                    {activeTab === 'brightness' && (
                      <div className="space-y-2 md:space-y-4">
-                        <div className="flex justify-between items-end px-1">
+                       <div className="flex justify-between items-end px-1">
                           <label className="text-xs font-bold uppercase tracking-widest text-[var(--text-secondary)]">{t('light.brightness')}</label>
                           <span className="text-lg font-medium text-[var(--text-primary)] font-mono">
-                            {Math.round((((optimisticLightBrightness[lightId] ?? (getA(lightId, "brightness") || 0)) / 255) * 100))}%
+                            {Math.round((((optimisticLightBrightness[currentLightId] ?? (getA(currentLightId, "brightness") || 0)) / 255) * 100))}%
                           </span>
                         </div>
                         <div className="h-10">
@@ -227,12 +402,12 @@ export default function LightModal({
                                 min={0} 
                                 max={255} 
                                 step={1} 
-                                value={optimisticLightBrightness[lightId] ?? (getA(lightId, "brightness") || 0)} 
+                                value={optimisticLightBrightness[currentLightId] ?? (getA(currentLightId, "brightness") || 0)} 
                                 disabled={!isOn || isUnavailable} 
                                 onChange={(e) => { 
                                   const val = parseInt(e.target.value); 
-                                  setOptimisticLightBrightness(prev => ({ ...prev, [lightId]: val })); 
-                                  callService("light", "turn_on", { entity_id: lightId, brightness: val }); 
+                                  setOptimisticLightBrightness(prev => ({ ...prev, [currentLightId]: val })); 
+                                  callService("light", "turn_on", { entity_id: currentLightId, brightness: val }); 
                                 }} 
                                 colorClass="bg-amber-500"
                                 variant="fat" // Keep fat for touch, but in smaller container
@@ -316,14 +491,45 @@ export default function LightModal({
                    )}
               </div>
 
+              {selectableLightIds.length > 1 && (
+                <div className="pt-4 md:pt-6 border-t border-[var(--glass-border)]">
+                  <h3 className="text-xs font-bold uppercase tracking-[0.2em] text-[var(--text-secondary)] mb-2 md:mb-3 pl-1">
+                    {t('light.roomLights')}
+                  </h3>
+                  <div className="flex gap-2 overflow-x-auto custom-scrollbar pb-1">
+                    {selectableLightIds.map((id) => {
+                      const name = getA(id, "friendly_name", id);
+                      const on = entities?.[id]?.state === 'on';
+                      const selected = id === currentLightId;
+                      return (
+                        <button
+                          key={id}
+                          type="button"
+                          onClick={() => setActiveLightId(id)}
+                          className={`px-3 py-2 rounded-xl border text-xs font-bold uppercase tracking-widest whitespace-nowrap transition-all ${
+                            selected
+                              ? 'bg-amber-500/20 border-amber-500/35 text-amber-300'
+                              : on
+                                ? 'bg-emerald-500/12 border-emerald-500/30 text-emerald-300'
+                                : 'bg-[var(--glass-bg)] border-[var(--glass-border)] text-[var(--text-secondary)]'
+                          }`}
+                        >
+                          {name}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
               {/* Sub Entities - Cleaner list */}
-              {getA(lightId, "entity_id", []).length > 0 && (
+              {getA(currentLightId, "entity_id", []).length > 0 && (
                 <div className="pt-4 md:pt-6 border-t border-[var(--glass-border)]">
                   <h3 className="text-xs font-bold uppercase tracking-[0.2em] text-[var(--text-secondary)] mb-2 md:mb-4 pl-1">
                     {t('light.roomLights')}
                   </h3>
                   <div className="space-y-2 md:space-y-3">
-                    {getA(lightId, "entity_id", []).map(cid => {
+                    {getA(currentLightId, "entity_id", []).map(cid => {
                         const subEnt = entities[cid];
                         const subName = subEnt?.attributes?.friendly_name || cid.split('.')[1].replace(/_/g, ' ');
                         const subIsOn = subEnt?.state === 'on';

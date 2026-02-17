@@ -23,7 +23,7 @@ const createBezierPath = (points, smoothing = 0.3) => {
   }, '');
 };
 
-export default function SparkLine({ data, currentIndex, height = 40, fade = false }) {
+export default function SparkLine({ data, currentIndex, height = 40, fade = false, minValue, maxValue }) {
   if (!data || data.length === 0) return null;
   
   const idSuffix = useMemo(() => Math.random().toString(36).substr(2, 9), []);
@@ -32,8 +32,13 @@ export default function SparkLine({ data, currentIndex, height = 40, fade = fals
   const maskId = `cardMask-${idSuffix}`;
 
   const values = data.map(d => d.value);
-  let min = Math.min(...values);
-  let max = Math.max(...values);
+  let min = Number.isFinite(minValue) ? Number(minValue) : Math.min(...values);
+  let max = Number.isFinite(maxValue) ? Number(maxValue) : Math.max(...values);
+  if (max < min) {
+    const tmp = max;
+    max = min;
+    min = tmp;
+  }
   if (min === max) {
     min -= 1;
     max += 1;

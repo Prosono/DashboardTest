@@ -410,10 +410,23 @@ export default function ModalOrchestrator({
 
       {showLightModal && (
         <ModalSuspense>
+          {(() => {
+            const lightPayload = (typeof showLightModal === 'string')
+              ? { lightId: showLightModal, lightIds: [showLightModal] }
+              : (showLightModal || {});
+            const activeLightId = lightPayload.lightId || lightPayload.entityId || null;
+            const activeLightIds = Array.isArray(lightPayload.lightIds) ? lightPayload.lightIds : (activeLightId ? [activeLightId] : []);
+            if (!activeLightId) return null;
+            return (
           <LightModal
             show={!!showLightModal}
             onClose={() => setShowLightModal(null)}
-            lightId={showLightModal}
+            onShowHistory={(entityId) => {
+              setShowLightModal(null);
+              setShowSensorInfoModal(entityId);
+            }}
+            lightId={activeLightId}
+            lightIds={activeLightIds}
             entities={entities}
             callService={callService}
             getA={getA}
@@ -422,6 +435,8 @@ export default function ModalOrchestrator({
             customIcons={customIcons}
             t={t}
           />
+            );
+          })()}
         </ModalSuspense>
       )}
 
@@ -573,6 +588,7 @@ export default function ModalOrchestrator({
           <SaunaFieldModal
             show={!!activeSaunaFieldModal}
             title={activeSaunaFieldModal.title}
+            fieldType={activeSaunaFieldModal.fieldType}
             entityIds={activeSaunaFieldModal.entityIds}
             entities={entities}
             callService={callService}
@@ -581,6 +597,9 @@ export default function ModalOrchestrator({
             setShowLightModal={setShowLightModal}
             setActiveClimateEntityModal={setActiveClimateEntityModal}
             setShowSensorInfoModal={setShowSensorInfoModal}
+            hvacMap={hvacMap}
+            fanMap={fanMap}
+            swingMap={swingMap}
           />
         </ModalSuspense>
       )}

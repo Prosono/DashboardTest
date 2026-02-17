@@ -198,7 +198,7 @@ export default function ConfigModal({
 
   const TABS = [
     { key: 'connection', icon: Wifi, label: t('system.tabConnection') },
-    ...(isAdmin ? [{ key: 'storage', icon: Server, label: 'User Management' }] : []),
+    ...(isAdmin ? [{ key: 'storage', icon: Server, label: t('userMgmt.title') }] : []),
     ...(isAdmin ? [{ key: 'updates', icon: Download, label: t('updates.title') }] : []),
   ];
 
@@ -314,6 +314,8 @@ export default function ConfigModal({
       ? globalDashboardProfiles
       : [{ id: 'default', name: 'default', updatedAt: null }];
 
+    const roleLabel = (role) => t(`role.${role}`) || role;
+
     const syncUsers = (nextUsers) => {
       const normalized = Array.isArray(nextUsers) ? nextUsers : [];
       setUsers(normalized);
@@ -334,7 +336,7 @@ export default function ConfigModal({
       if (!refreshGlobalDashboards) return;
       const nextProfiles = await refreshGlobalDashboards();
       if (Array.isArray(nextProfiles)) {
-        setGlobalActionMessage(`Refreshed ${nextProfiles.length} dashboard${nextProfiles.length === 1 ? '' : 's'}.`);
+        setGlobalActionMessage(`${t('userMgmt.refreshedDashboards')}: ${nextProfiles.length}`);
       }
       if (canEditDashboard && userAdminApi?.listUsers) {
         const list = await userAdminApi.listUsers().catch(() => []);
@@ -344,15 +346,15 @@ export default function ConfigModal({
 
     const handleSaveGlobal = async () => {
       if (!canEditDashboard) {
-        setGlobalActionMessage('Only admin can save dashboard changes.');
+        setGlobalActionMessage(t('userMgmt.adminOnlySave'));
         return;
       }
       const target = newGlobalDashboardName.trim() || selectedGlobalDashboard || 'default';
       if (!saveGlobalDashboard) return;
-      const ok = await saveGlobalDashboard(target);
-      if (ok) {
-        const canonicalId = String(target || 'default').trim().replace(/\s+/g, '_').toLowerCase();
-        setGlobalActionMessage(`Saved globally: ${target}`);
+        const ok = await saveGlobalDashboard(target);
+        if (ok) {
+          const canonicalId = String(target || 'default').trim().replace(/\s+/g, '_').toLowerCase();
+        setGlobalActionMessage(`${t('userMgmt.savedGlobally')}: ${target}`);
         setSelectedGlobalDashboard(canonicalId);
       }
     };
@@ -362,7 +364,7 @@ export default function ConfigModal({
       if (!loadGlobalDashboard) return;
       const ok = await loadGlobalDashboard(target);
       if (ok) {
-        setGlobalActionMessage(`Loaded dashboard: ${target}`);
+        setGlobalActionMessage(`${t('userMgmt.loadedDashboard')}: ${target}`);
       }
     };
 
@@ -371,7 +373,7 @@ export default function ConfigModal({
       const username = newUsername.trim();
       const password = newPassword.trim();
       if (!username || !password) {
-        setGlobalActionMessage('Username and password are required.');
+        setGlobalActionMessage(t('userMgmt.usernamePasswordRequired'));
         return;
       }
       try {
@@ -400,9 +402,9 @@ export default function ConfigModal({
           })(users);
           syncUsers(nextUsers);
         }
-        setGlobalActionMessage(`Created user: ${username}`);
+        setGlobalActionMessage(`${t('userMgmt.createdUser')}: ${username}`);
       } catch (error) {
-        setGlobalActionMessage(error?.message || 'Failed to create user');
+        setGlobalActionMessage(error?.message || t('userMgmt.createUserFailed'));
       }
     };
 
@@ -428,9 +430,9 @@ export default function ConfigModal({
         });
         setUsers((prev) => prev.map((user) => (user.id === userId ? updated : user)));
         setUserEdits((prev) => ({ ...prev, [userId]: { ...buildUserEditState(updated), password: '' } }));
-        setGlobalActionMessage(`Saved user: ${updated?.username || userId}`);
+        setGlobalActionMessage(`${t('userMgmt.savedUser')}: ${updated?.username || userId}`);
       } catch (error) {
-        setGlobalActionMessage(error?.message || 'Failed to save user');
+        setGlobalActionMessage(error?.message || t('userMgmt.saveUserFailed'));
       } finally {
         setSavingUserIds((prev) => ({ ...prev, [userId]: false }));
       }
@@ -447,9 +449,9 @@ export default function ConfigModal({
           delete next[userId];
           return next;
         });
-        setGlobalActionMessage('User deleted');
+        setGlobalActionMessage(t('userMgmt.userDeleted'));
       } catch (error) {
-        setGlobalActionMessage(error?.message || 'Failed to delete user');
+        setGlobalActionMessage(error?.message || t('userMgmt.deleteUserFailed'));
       } finally {
         setDeletingUserIds((prev) => ({ ...prev, [userId]: false }));
       }
@@ -461,10 +463,10 @@ export default function ConfigModal({
           <div className="flex items-center justify-between gap-3">
             <div>
               <h3 className="text-sm font-bold uppercase tracking-wider text-[var(--text-primary)]">
-                User Management
+                {t('userMgmt.title')}
               </h3>
               <p className="text-xs text-[var(--text-secondary)] mt-1">
-                Dashboard user: {currentUser?.username || '-'} ({currentUser?.role || 'unknown'})
+                {t('userMgmt.dashboardUser')}: {currentUser?.username || '-'} ({roleLabel(currentUser?.role || 'user')})
               </p>
             </div>
             <div className="flex gap-2">
@@ -474,19 +476,19 @@ export default function ConfigModal({
                 className="px-3 py-2 rounded-lg text-xs font-bold uppercase tracking-wider bg-[var(--glass-bg-hover)] hover:bg-[var(--glass-bg)] text-[var(--text-primary)] border border-[var(--glass-border)] disabled:opacity-50"
               >
                 <RefreshCw className={`w-3.5 h-3.5 inline mr-1 ${globalStorageBusy ? 'animate-spin' : ''}`} />
-                Refresh
+                {t('common.refresh')}
               </button>
               <button
                 onClick={onLogout}
                 className="px-3 py-2 rounded-lg text-xs font-bold uppercase tracking-wider bg-red-500/10 text-red-400 border border-red-500/20 hover:bg-red-500/20"
               >
-                Logout
+                {t('common.logout')}
               </button>
             </div>
           </div>
 
           <div className="space-y-2">
-            <label className="text-xs uppercase font-bold text-[var(--text-secondary)]">Load dashboard</label>
+            <label className="text-xs uppercase font-bold text-[var(--text-secondary)]">{t('userMgmt.loadDashboard')}</label>
             <select
               value={selectedGlobalDashboard}
               onChange={(e) => setSelectedGlobalDashboard(e.target.value)}
@@ -503,13 +505,13 @@ export default function ConfigModal({
               disabled={globalStorageBusy}
               className="w-full py-2.5 rounded-xl bg-blue-500 hover:bg-blue-600 text-white text-xs font-bold uppercase tracking-wider disabled:opacity-50"
             >
-              {globalStorageBusy ? 'Loading…' : 'Load dashboard'}
+              {globalStorageBusy ? t('common.loading') : t('userMgmt.loadDashboard')}
             </button>
           </div>
 
           {canEditDashboard && (
             <div className="space-y-2">
-              <label className="text-xs uppercase font-bold text-[var(--text-secondary)]">Save globally</label>
+              <label className="text-xs uppercase font-bold text-[var(--text-secondary)]">{t('userMgmt.saveGlobally')}</label>
               <input
                 type="text"
                 value={newGlobalDashboardName}
@@ -522,38 +524,38 @@ export default function ConfigModal({
                 disabled={globalStorageBusy}
                 className="w-full py-2.5 rounded-xl bg-green-500 hover:bg-green-600 text-white text-xs font-bold uppercase tracking-wider disabled:opacity-50"
               >
-                {globalStorageBusy ? 'Saving…' : 'Save globally'}
+                {globalStorageBusy ? t('common.saving') : t('userMgmt.saveGlobally')}
               </button>
             </div>
           )}
 
           {canEditDashboard && (
             <div className="space-y-3 pt-2 border-t border-[var(--glass-border)]">
-              <h4 className="text-xs uppercase font-bold tracking-wider text-[var(--text-secondary)]">User Accounts</h4>
+              <h4 className="text-xs uppercase font-bold tracking-wider text-[var(--text-secondary)]">{t('userMgmt.userAccounts')}</h4>
 
               <div className="rounded-xl border border-[var(--glass-border)] bg-[var(--glass-bg)] p-3 space-y-3">
-                <p className="text-[11px] uppercase tracking-wider text-[var(--text-secondary)] font-bold">Create User</p>
+                <p className="text-[11px] uppercase tracking-wider text-[var(--text-secondary)] font-bold">{t('userMgmt.createUser')}</p>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                  <input value={newUsername} onChange={(e) => setNewUsername(e.target.value)} placeholder="Username" className="px-3 py-2 rounded-lg bg-[var(--glass-bg-hover)] border border-[var(--glass-border)] text-sm" />
-                  <input value={newPassword} onChange={(e) => setNewPassword(e.target.value)} type="password" placeholder="Password" className="px-3 py-2 rounded-lg bg-[var(--glass-bg-hover)] border border-[var(--glass-border)] text-sm" />
+                  <input value={newUsername} onChange={(e) => setNewUsername(e.target.value)} placeholder={t('profile.username')} className="px-3 py-2 rounded-lg bg-[var(--glass-bg-hover)] border border-[var(--glass-border)] text-sm" />
+                  <input value={newPassword} onChange={(e) => setNewPassword(e.target.value)} type="password" placeholder={t('userMgmt.password')} className="px-3 py-2 rounded-lg bg-[var(--glass-bg-hover)] border border-[var(--glass-border)] text-sm" />
                   <select value={newRole} onChange={(e) => setNewRole(e.target.value)} className="px-3 py-2 rounded-lg bg-[var(--glass-bg-hover)] border border-[var(--glass-border)] text-sm">
-                    <option value="user">user</option>
-                    <option value="admin">admin</option>
-                    <option value="inspector">inspector</option>
+                    <option value="user">{roleLabel('user')}</option>
+                    <option value="admin">{roleLabel('admin')}</option>
+                    <option value="inspector">{roleLabel('inspector')}</option>
                   </select>
                   <select value={newUserDashboard} onChange={(e) => setNewUserDashboard(e.target.value)} className="px-3 py-2 rounded-lg bg-[var(--glass-bg-hover)] border border-[var(--glass-border)] text-sm">
                     {profiles.map((profile) => <option key={profile.id} value={profile.id}>{profile.name || profile.id}</option>)}
                   </select>
-                  <input value={newUserHaUrl} onChange={(e) => setNewUserHaUrl(e.target.value)} placeholder="HA URL (optional)" className="px-3 py-2 rounded-lg bg-[var(--glass-bg-hover)] border border-[var(--glass-border)] text-sm md:col-span-2" />
-                  <input value={newUserHaToken} onChange={(e) => setNewUserHaToken(e.target.value)} placeholder="HA Token (optional)" className="px-3 py-2 rounded-lg bg-[var(--glass-bg-hover)] border border-[var(--glass-border)] text-sm md:col-span-2" />
+                  <input value={newUserHaUrl} onChange={(e) => setNewUserHaUrl(e.target.value)} placeholder={t('userMgmt.haUrlOptional')} className="px-3 py-2 rounded-lg bg-[var(--glass-bg-hover)] border border-[var(--glass-border)] text-sm md:col-span-2" />
+                  <input value={newUserHaToken} onChange={(e) => setNewUserHaToken(e.target.value)} placeholder={t('userMgmt.haTokenOptional')} className="px-3 py-2 rounded-lg bg-[var(--glass-bg-hover)] border border-[var(--glass-border)] text-sm md:col-span-2" />
                 </div>
-                <button onClick={handleCreateUser} className="w-full py-2.5 rounded-lg bg-indigo-500 hover:bg-indigo-600 text-white text-xs font-bold uppercase tracking-wider">Create user</button>
+                <button onClick={handleCreateUser} className="w-full py-2.5 rounded-lg bg-indigo-500 hover:bg-indigo-600 text-white text-xs font-bold uppercase tracking-wider">{t('userMgmt.createUser')}</button>
               </div>
 
               <div className="rounded-xl border border-[var(--glass-border)] bg-[var(--glass-bg)] p-3 space-y-2">
                 <div className="flex items-center justify-between">
-                  <p className="text-[11px] uppercase tracking-wider text-[var(--text-secondary)] font-bold">Existing Users</p>
-                  <span className="text-[10px] text-[var(--text-secondary)]">{users.length} total</span>
+                  <p className="text-[11px] uppercase tracking-wider text-[var(--text-secondary)] font-bold">{t('userMgmt.existingUsers')}</p>
+                  <span className="text-[10px] text-[var(--text-secondary)]">{users.length} {t('userMgmt.total')}</span>
                 </div>
                 <div className="space-y-2 max-h-[26rem] overflow-auto pr-1">
                   {users.map((u) => {
@@ -567,9 +569,9 @@ export default function ConfigModal({
                         >
                           <div className="min-w-0">
                             <p className="text-sm font-semibold truncate">{u.username}</p>
-                            <p className="text-[11px] text-[var(--text-secondary)] truncate">role: {u.role} • dashboard: {u.assignedDashboardId || 'default'}</p>
+                            <p className="text-[11px] text-[var(--text-secondary)] truncate">{t('userMgmt.role')}: {roleLabel(u.role)} • {t('userMgmt.dashboard')}: {u.assignedDashboardId || 'default'}</p>
                           </div>
-                          <span className="text-[10px] uppercase tracking-wider text-[var(--text-secondary)]">{expanded ? 'Hide' : 'Edit'}</span>
+                          <span className="text-[10px] uppercase tracking-wider text-[var(--text-secondary)]">{expanded ? t('common.hide') : t('menu.edit')}</span>
                         </button>
 
                         {expanded && (
@@ -579,23 +581,23 @@ export default function ConfigModal({
                                 value={userEdits[u.id]?.username ?? ''}
                                 onChange={(e) => updateUserEdit(u.id, { username: e.target.value })}
                                 className="px-3 py-2 rounded-lg bg-[var(--glass-bg)] border border-[var(--glass-border)] text-sm"
-                                placeholder="Username"
+                                placeholder={t('profile.username')}
                               />
                               <input
                                 value={userEdits[u.id]?.password ?? ''}
                                 onChange={(e) => updateUserEdit(u.id, { password: e.target.value })}
                                 className="px-3 py-2 rounded-lg bg-[var(--glass-bg)] border border-[var(--glass-border)] text-sm"
                                 type="password"
-                                placeholder="New password (optional)"
+                                placeholder={t('userMgmt.newPasswordOptional')}
                               />
                               <select
                                 value={userEdits[u.id]?.role ?? 'user'}
                                 onChange={(e) => updateUserEdit(u.id, { role: e.target.value })}
                                 className="px-3 py-2 rounded-lg bg-[var(--glass-bg)] border border-[var(--glass-border)] text-sm"
                               >
-                                <option value="user">user</option>
-                                <option value="admin">admin</option>
-                                <option value="inspector">inspector</option>
+                                <option value="user">{roleLabel('user')}</option>
+                                <option value="admin">{roleLabel('admin')}</option>
+                                <option value="inspector">{roleLabel('inspector')}</option>
                               </select>
                               <select
                                 value={userEdits[u.id]?.assignedDashboardId ?? 'default'}
@@ -608,13 +610,13 @@ export default function ConfigModal({
                                 value={userEdits[u.id]?.haUrl ?? ''}
                                 onChange={(e) => updateUserEdit(u.id, { haUrl: e.target.value })}
                                 className="px-3 py-2 rounded-lg bg-[var(--glass-bg)] border border-[var(--glass-border)] text-sm md:col-span-2"
-                                placeholder="HA URL (optional)"
+                                placeholder={t('userMgmt.haUrlOptional')}
                               />
                               <input
                                 value={userEdits[u.id]?.haToken ?? ''}
                                 onChange={(e) => updateUserEdit(u.id, { haToken: e.target.value })}
                                 className="px-3 py-2 rounded-lg bg-[var(--glass-bg)] border border-[var(--glass-border)] text-sm md:col-span-2"
-                                placeholder="HA Token (optional)"
+                                placeholder={t('userMgmt.haTokenOptional')}
                               />
                             </div>
                             <div className="flex items-center justify-between gap-2">
@@ -625,14 +627,14 @@ export default function ConfigModal({
                                   disabled={!!savingUserIds[u.id]}
                                   className="px-3 py-1.5 rounded-lg bg-green-500/90 hover:bg-green-500 text-white font-bold uppercase tracking-wider disabled:opacity-60"
                                 >
-                                  {savingUserIds[u.id] ? 'Saving…' : 'Save'}
+                                  {savingUserIds[u.id] ? t('common.saving') : t('common.save')}
                                 </button>
                                 <button
                                   onClick={() => handleDeleteUser(u.id)}
                                   disabled={!!deletingUserIds[u.id] || u.id === currentUser?.id}
                                   className="px-3 py-1.5 rounded-lg bg-red-500/15 border border-red-500/30 text-red-300 font-bold uppercase tracking-wider disabled:opacity-40"
                                 >
-                                  {deletingUserIds[u.id] ? 'Deleting…' : 'Delete'}
+                                  {deletingUserIds[u.id] ? t('common.deleting') : t('common.delete')}
                                 </button>
                               </div>
                             </div>

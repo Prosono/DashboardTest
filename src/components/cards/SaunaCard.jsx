@@ -1,6 +1,7 @@
 import React, { useMemo } from 'react';
 import { Flame, Thermometer, Lock, DoorOpen, Activity, Lightbulb, Shield, Fan, Hash, ToggleRight, Wrench, Power } from '../../icons';
 import { getIconComponent } from '../../icons';
+import SparkLine from '../charts/SparkLine';
 
 const asArray = (v) => (Array.isArray(v) ? v.filter(Boolean) : []);
 const norm = (s) => String(s ?? '').toLowerCase();
@@ -117,78 +118,6 @@ function extractHistorySeries(raw) {
     .sort((a, b) => a.t - b.t);
 }
 
-function buildPath(series, width, height) {
-  if (!series.length) return '';
-
-  const normalized = series.length === 1
-    ? [series[0], { ...series[0], t: series[0].t + 1 }]
-    : [...series];
-
-  const maxPoints = 28;
-  const reduced = normalized.length > maxPoints
-    ? Array.from({ length: maxPoints }, (_, i) => {
-      const from = Math.floor((i * normalized.length) / maxPoints);
-      const to = Math.max(from + 1, Math.floor(((i + 1) * normalized.length) / maxPoints));
-      const bucket = normalized.slice(from, to);
-      const avgT = bucket.reduce((acc, p) => acc + p.t, 0) / bucket.length;
-      const avgV = bucket.reduce((acc, p) => acc + p.v, 0) / bucket.length;
-      return { t: avgT, v: avgV };
-    })
-    : normalized;
-
-  const smoothed = reduced.map((point, idx, arr) => {
-    if (arr.length < 3 || idx === 0 || idx === arr.length - 1) return point;
-    const avg = (arr[idx - 1].v + point.v + arr[idx + 1].v) / 3;
-    return { ...point, v: avg };
-  });
-
-  const min = Math.min(...smoothed.map((s) => s.v));
-  const max = Math.max(...smoothed.map((s) => s.v));
-  const range = max - min;
-  const isFlat = range < 0.001;
-  const yPadding = 8;
-  const usableHeight = Math.max(4, height - (yPadding * 2));
-  const minT = smoothed[0].t;
-  const maxT = smoothed[smoothed.length - 1].t;
-  const tRange = Math.max(1, maxT - minT);
-
-  const points = smoothed.map((p) => {
-    const x = ((p.t - minT) / tRange) * width;
-    const y = isFlat
-      ? height * 0.5
-      : yPadding + (usableHeight - (((p.v - min) / range) * usableHeight));
-    return { x, y };
-  });
-
-  if (points.length <= 2) {
-    return points
-      .map((pt, i) => `${i === 0 ? 'M' : 'L'}${pt.x.toFixed(1)},${pt.y.toFixed(1)}`)
-      .join(' ');
-  }
-
-  const first = points[0];
-  const startPath = `M${first.x.toFixed(1)},${first.y.toFixed(1)}`;
-  const curves = [];
-
-  for (let i = 0; i < points.length - 1; i += 1) {
-    const p0 = points[Math.max(0, i - 1)];
-    const p1 = points[i];
-    const p2 = points[i + 1];
-    const p3 = points[Math.min(points.length - 1, i + 2)];
-
-    const smooth = 0.2;
-    const cp1x = p1.x + ((p2.x - p0.x) * smooth);
-    const cp1y = p1.y + ((p2.y - p0.y) * smooth);
-    const cp2x = p2.x - ((p3.x - p1.x) * smooth);
-    const cp2y = p2.y - ((p3.y - p1.y) * smooth);
-
-    curves.push(`C${cp1x.toFixed(1)},${cp1y.toFixed(1)} ${cp2x.toFixed(1)},${cp2y.toFixed(1)} ${p2.x.toFixed(1)},${p2.y.toFixed(1)}`);
-  }
-
-  return `${startPath} ${curves.join(' ')}`;
-}
-
-
 export default function SaunaCard({
   cardId,
   settings,
@@ -285,42 +214,27 @@ export default function SaunaCard({
 
     return [];
   }, [statusGraphEntityId, tempHistoryById, tempIsValid, currentTemp]);
-  const statusPath = useMemo(() => buildPath(tempSeries, 100, 56), [tempSeries]);
-  const statusRange = useMemo(() => {
-    if (!tempSeries.length) return null;
-    const values = tempSeries.map((p) => p.v).filter((v) => Number.isFinite(v));
-    if (!values.length) return null;
-    const min = Math.min(...values);
-    const max = Math.max(...values);
-    return {
-      min: Math.round(min * 10) / 10,
-      max: Math.round(max * 10) / 10,
-    };
-  }, [tempSeries]);
-
-  const preheatSeries = useMemo(() => {
-    if (!settings?.preheatMinutesEntityId) return [];
-    const raw = tempHistoryById?.[settings.preheatMinutesEntityId];
-    return extractHistorySeries(raw).slice(-40);
-  }, [settings?.preheatMinutesEntityId, tempHistoryById]);
-  const preheatPath = useMemo(() => buildPath(preheatSeries, 100, 24), [preheatSeries]);
-
-  const openFieldModal = (title, entityIds) => {
+  const statusHistory = useMemo(
+    () => tempSeries.map((p) => ({ value: p.v, time: new Date(p.t) })),
+    [tempSeries]
+  );
+  const openFieldModal = (title, entityIds, options = {}) => {
     if (editMode) return;
     const ids = asArray(entityIds);
     if (!ids.length) return;
-    modals?.setActiveSaunaFieldModal?.({ title, entityIds: ids, cardId });
+    modals?.setActiveSaunaFieldModal?.({ title, entityIds: ids, cardId, ...options });
   };
 
   const openGlobalLightModal = () => {
     if (editMode) return;
-    if (lightIds.length > 1) {
-      openFieldModal(tr('sauna.lights', 'Lys'), lightIds);
-      return;
-    }
     const target = settings?.lightsModalEntityId || lightIds?.[0];
     if (!target) return;
-    if (modals?.setShowLightModal) modals.setShowLightModal(target);
+    if (modals?.setShowLightModal) {
+      modals.setShowLightModal({
+        lightId: target,
+        lightIds: lightIds.length ? lightIds : [target],
+      });
+    }
     else openFieldModal(tr('sauna.lights', 'Lys'), lightIds);
   };
 
@@ -377,7 +291,7 @@ export default function SaunaCard({
   const statItems = [
     settings?.showThermostat !== false && { key: 'thermostat', icon: iconFor(settings?.thermostatIcon, Shield), title: tr('sauna.thermostat', 'Termostat'), value: thermostatOn ? tr('common.on', 'På') : tr('common.off', 'Av'), active: thermostatOn, onClick: () => openFieldModal(tr('sauna.thermostat', 'Termostat'), [settings?.thermostatEntityId]), clickable: Boolean(settings?.thermostatEntityId), category: 'control' },
     settings?.showLights !== false && { key: 'lights', icon: iconFor(settings?.lightsIcon, Lightbulb), title: tr('sauna.lights', 'Lys'), value: lightIds.length ? `${lightsOn}/${lightIds.length} ${tr('common.on', 'på')}` : '--', active: lightsOn > 0, onClick: openGlobalLightModal, clickable: Boolean(settings?.lightsModalEntityId || lightIds?.length), category: 'control' },
-    settings?.showFans !== false && { key: 'fans', icon: iconFor(settings?.fansIcon, Fan), title: tr('sauna.fans', 'Vifter'), value: fanIds.length ? `${activeFans}/${fanIds.length} ${tr('common.on', 'på')}` : '--', active: activeFans > 0, onClick: () => openFieldModal(tr('sauna.fans', 'Vifter'), fanIds), clickable: fanIds.length > 0, category: 'control' },
+    settings?.showFans !== false && { key: 'fans', icon: iconFor(settings?.fansIcon, Fan), title: tr('sauna.fans', 'Vifter'), value: fanIds.length ? `${activeFans}/${fanIds.length} ${tr('common.on', 'på')}` : '--', active: activeFans > 0, onClick: () => openFieldModal(tr('sauna.fans', 'Vifter'), fanIds, { fieldType: 'fan' }), clickable: fanIds.length > 0, category: 'control' },
     settings?.showThermostatOverview !== false && { key: 'thermostatGroup', icon: iconFor(settings?.thermostatsIcon, Shield), title: tr('sauna.thermostats', 'Termostater'), value: thermostatIds.length ? `${activeThermostats}/${thermostatIds.length} ${tr('common.on', 'på')}` : '--', active: activeThermostats > 0, onClick: () => openFieldModal(tr('sauna.thermostats', 'Termostater'), thermostatIds), clickable: thermostatIds.length > 0, category: 'control' },
     settings?.showActiveCodes !== false && { key: 'codes', icon: iconFor(settings?.codesIcon, Hash), title: tr('sauna.activeCodes', 'Aktive koder'), value: codeIds.length ? `${codeIds.length}` : '--', active: codeIds.length > 0, onClick: () => openFieldModal(tr('sauna.activeCodes', 'Aktive koder'), codeIds), clickable: codeIds.length > 0, category: 'safety' },
     settings?.showAutoLock !== false && { key: 'autoLock', icon: iconFor(settings?.autoLockIcon, ToggleRight), title: tr('sauna.autoLock', 'Autolåsing'), value: autoLockOn ? tr('common.on', 'På') : tr('common.off', 'Av'), active: autoLockOn, onClick: () => openFieldModal(tr('sauna.autoLock', 'Autolåsing'), [settings?.autoLockEntityId]), clickable: Boolean(settings?.autoLockEntityId), category: 'safety' },
@@ -496,7 +410,6 @@ export default function SaunaCard({
                 isLightTheme ? 'font-medium text-white' : 'font-extrabold',
                 tone.pill
               )}>
-                <span className={cx('inline-block w-2 h-2 rounded-full mr-2 align-middle', primaryState.tone === 'muted' ? 'bg-[var(--text-secondary)]/50' : 'bg-current')} />
                 <span className="align-middle">{primaryState.label}</span>
               </div>
               <div className="text-[12px] text-[var(--text-secondary)] font-normal text-right">{primaryState.desc}</div>
@@ -507,19 +420,19 @@ export default function SaunaCard({
         {(bookingLine || preheatOn) && (() => {
           const BookingIcon = statusVisual.icon;
           return (
-            <div className="mt-7 relative min-h-[4.25rem] flex items-center justify-center">
-              {statusPath && (
-                <svg className="absolute inset-x-2 top-1.5 w-[calc(100%-1rem)] h-[3.6rem] opacity-85 pointer-events-none" viewBox="0 0 100 56" preserveAspectRatio="none" aria-hidden="true">
-                  <path d={`${statusPath} L100,56 L0,56 Z`} fill="rgba(249,115,22,0.05)" />
-                  <path d={statusPath} fill="none" stroke="rgba(251,146,60,0.95)" strokeWidth="1.35" strokeLinecap="round" strokeLinejoin="round" />
-                </svg>
-              )}
-              {statusRange && (
-                <div className="absolute left-2 top-1.5 bottom-1.5 z-10 flex flex-col justify-between text-[10px] leading-none text-orange-200/80 pointer-events-none">
-                  <span>{statusRange.max.toFixed(1)}°</span>
-                  <span>{statusRange.min.toFixed(1)}°</span>
+            <div className="mt-7 relative min-h-[5rem] flex items-center justify-center">
+              {statusHistory.length > 0 && (
+                <div className="absolute inset-x-2 top-0 h-[4.4rem] opacity-85 pointer-events-none">
+                  <SparkLine data={statusHistory} height={72} currentIndex={statusHistory.length - 1} fade minValue={0} maxValue={100} />
                 </div>
               )}
+              <div className="absolute left-2 top-1.5 bottom-1.5 z-10 flex flex-col justify-between text-[10px] leading-none text-orange-200/80 pointer-events-none">
+                <span>100°</span>
+                <span>0°</span>
+              </div>
+              <div className="absolute right-2 top-1.5 bottom-1.5 z-10 flex items-center text-[10px] leading-none text-orange-200/80 pointer-events-none">
+                <span>{tempIsValid ? `${currentTemp.toFixed(1)}°` : '--'}</span>
+              </div>
               <div className="relative z-10 flex items-center justify-center gap-2 min-w-0 text-center px-2 py-0.5 rounded-full bg-black/20 shadow-[0_2px_8px_rgba(0,0,0,0.35)]">
                 <BookingIcon className={cx('w-4 h-4 shrink-0', statusVisual.color)} />
                 <p className="text-sm font-normal text-[var(--text-primary)] truncate">{bookingLine || tr('sauna.preheat', 'Forvarmer')}</p>

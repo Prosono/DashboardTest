@@ -308,7 +308,7 @@ function AppContent({
 
   const canControlDevices = currentUser?.role !== 'inspector';
   const isAdminUser = currentUser?.role === 'admin';
-  const profileDisplayName = String(currentUser?.fullName || currentUser?.username || 'User').trim();
+  const profileDisplayName = String(currentUser?.fullName || currentUser?.username || t('profile.userFallback')).trim();
   const [dashboardDirty, setDashboardDirty] = useState(false);
   const dashboardDirtyReadyRef = useRef(false);
   const quickSaveBusyRef = useRef(false);
@@ -348,11 +348,11 @@ function AppContent({
       if (updated && onProfileUpdated) onProfileUpdated(updated);
       setShowProfileModal(false);
     } catch (error) {
-      setProfileError(error?.message || 'Failed to save profile');
+      setProfileError(error?.message || t('profile.saveFailed'));
     } finally {
       setProfileSaving(false);
     }
-  }, [profileState, onProfileUpdated]);
+  }, [profileState, onProfileUpdated, t]);
 
   useEffect(() => {
     if (!currentUser?.id) return;
@@ -843,7 +843,7 @@ function AppContent({
               <button
                 onClick={() => setShowProfileModal(true)}
                 className="px-2 py-1 rounded-full border border-[var(--glass-border)] text-[10px] uppercase tracking-wider text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
-                title="Profile"
+                title={t('profile.title')}
               >
                 <User className="w-3 h-3 inline mr-1" />
                 {profileDisplayName} ({currentUser.role})
@@ -992,21 +992,21 @@ function AppContent({
           <div className="fixed inset-0 z-[120] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
             <form onSubmit={saveProfile} className="w-full max-w-lg rounded-2xl border border-white/10 bg-[var(--card-bg)] p-5 space-y-4 shadow-2xl">
               <div className="flex items-center justify-between">
-                <h3 className="text-sm font-bold uppercase tracking-wider">Profile</h3>
-                <button type="button" onClick={() => setShowProfileModal(false)} className="text-xs px-2 py-1 rounded-lg border border-[var(--glass-border)]">Close</button>
+                <h3 className="text-sm font-bold uppercase tracking-wider">{t('profile.title')}</h3>
+                <button type="button" onClick={() => setShowProfileModal(false)} className="text-xs px-2 py-1 rounded-lg border border-[var(--glass-border)]">{t('common.close')}</button>
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                <input value={profileState.username} onChange={(e) => setProfileState((prev) => ({ ...prev, username: e.target.value }))} placeholder="Username" className="px-3 py-2 rounded-xl bg-[var(--glass-bg)] border border-[var(--glass-border)] text-sm md:col-span-2" />
-                <input value={profileState.fullName} onChange={(e) => setProfileState((prev) => ({ ...prev, fullName: e.target.value }))} placeholder="Name" className="px-3 py-2 rounded-xl bg-[var(--glass-bg)] border border-[var(--glass-border)] text-sm md:col-span-2" />
-                <input value={profileState.email} onChange={(e) => setProfileState((prev) => ({ ...prev, email: e.target.value }))} placeholder="Email" className="px-3 py-2 rounded-xl bg-[var(--glass-bg)] border border-[var(--glass-border)] text-sm" />
-                <input value={profileState.phone} onChange={(e) => setProfileState((prev) => ({ ...prev, phone: e.target.value }))} placeholder="Phone" className="px-3 py-2 rounded-xl bg-[var(--glass-bg)] border border-[var(--glass-border)] text-sm" />
-                <input value={profileState.avatarUrl} onChange={(e) => setProfileState((prev) => ({ ...prev, avatarUrl: e.target.value }))} placeholder="Profile picture URL" className="px-3 py-2 rounded-xl bg-[var(--glass-bg)] border border-[var(--glass-border)] text-sm md:col-span-2" />
+                <input value={profileState.username} onChange={(e) => setProfileState((prev) => ({ ...prev, username: e.target.value }))} placeholder={t('profile.username')} className="px-3 py-2 rounded-xl bg-[var(--glass-bg)] border border-[var(--glass-border)] text-sm md:col-span-2" />
+                <input value={profileState.fullName} onChange={(e) => setProfileState((prev) => ({ ...prev, fullName: e.target.value }))} placeholder={t('profile.name')} className="px-3 py-2 rounded-xl bg-[var(--glass-bg)] border border-[var(--glass-border)] text-sm md:col-span-2" />
+                <input value={profileState.email} onChange={(e) => setProfileState((prev) => ({ ...prev, email: e.target.value }))} placeholder={t('profile.email')} className="px-3 py-2 rounded-xl bg-[var(--glass-bg)] border border-[var(--glass-border)] text-sm" />
+                <input value={profileState.phone} onChange={(e) => setProfileState((prev) => ({ ...prev, phone: e.target.value }))} placeholder={t('profile.phone')} className="px-3 py-2 rounded-xl bg-[var(--glass-bg)] border border-[var(--glass-border)] text-sm" />
+                <input value={profileState.avatarUrl} onChange={(e) => setProfileState((prev) => ({ ...prev, avatarUrl: e.target.value }))} placeholder={t('profile.avatarUrl')} className="px-3 py-2 rounded-xl bg-[var(--glass-bg)] border border-[var(--glass-border)] text-sm md:col-span-2" />
                 <input value={currentUser?.role || ''} disabled className="px-3 py-2 rounded-xl bg-[var(--glass-bg)] border border-[var(--glass-border)] text-sm opacity-70 md:col-span-2" />
               </div>
               {profileError && <div className="text-xs text-red-300 bg-red-500/10 border border-red-500/20 rounded-lg px-3 py-2">{profileError}</div>}
               <div className="flex items-center justify-between">
-                <button type="button" onClick={onLogout} className="px-3 py-2 rounded-lg text-xs font-bold uppercase tracking-wider bg-red-500/10 text-red-300 border border-red-500/25">Logout</button>
-                <button type="submit" disabled={profileSaving} className="px-4 py-2 rounded-lg text-xs font-bold uppercase tracking-wider bg-blue-500 hover:bg-blue-600 text-white disabled:opacity-60">{profileSaving ? 'Saving…' : 'Save profile'}</button>
+                <button type="button" onClick={onLogout} className="px-3 py-2 rounded-lg text-xs font-bold uppercase tracking-wider bg-red-500/10 text-red-300 border border-red-500/25">{t('common.logout')}</button>
+                <button type="submit" disabled={profileSaving} className="px-4 py-2 rounded-lg text-xs font-bold uppercase tracking-wider bg-blue-500 hover:bg-blue-600 text-white disabled:opacity-60">{profileSaving ? t('common.saving') : t('profile.save')}</button>
               </div>
             </form>
           </div>
