@@ -599,6 +599,12 @@ export function dispatchCardRender(cardId, dragProps, getControls, cardStyle, se
     || cardId.startsWith('lock_card_')
     || cardId.startsWith('switch_card_')
     || cardId.startsWith('number_card_')
+    || cardId.startsWith('camera_card_')
+    || cardId.startsWith('alarm_card_')
+    || cardId.startsWith('timer_card_')
+    || cardId.startsWith('select_card_')
+    || cardId.startsWith('button_card_')
+    || cardId.startsWith('script_card_')
   ) {
     return renderEntityGroupControlCard(cardId, dragProps, getControls, cardStyle, settingsKey, ctx);
   }

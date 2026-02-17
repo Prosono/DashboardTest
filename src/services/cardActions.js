@@ -242,6 +242,54 @@ export const handleAddSelected = (ctx) => {
       return;
     }
 
+    case 'cameraCard': {
+      if (selectedEntities.length === 0) return;
+      const cardId = `camera_card_${Date.now()}`;
+      commitSingleCard(cardId, { type: 'group_control', fieldType: 'camera', title: 'Kamera', entityIds: selectedEntities });
+      setSelectedEntities([]);
+      return;
+    }
+
+    case 'alarmCard': {
+      if (selectedEntities.length === 0) return;
+      const cardId = `alarm_card_${Date.now()}`;
+      commitSingleCard(cardId, { type: 'group_control', fieldType: 'alarm', title: 'Alarm', entityIds: selectedEntities });
+      setSelectedEntities([]);
+      return;
+    }
+
+    case 'timerCard': {
+      if (selectedEntities.length === 0) return;
+      const cardId = `timer_card_${Date.now()}`;
+      commitSingleCard(cardId, { type: 'group_control', fieldType: 'timer', title: 'Timer', entityIds: selectedEntities });
+      setSelectedEntities([]);
+      return;
+    }
+
+    case 'selectCard': {
+      if (selectedEntities.length === 0) return;
+      const cardId = `select_card_${Date.now()}`;
+      commitSingleCard(cardId, { type: 'group_control', fieldType: 'select', title: 'Valg', entityIds: selectedEntities });
+      setSelectedEntities([]);
+      return;
+    }
+
+    case 'buttonCard': {
+      if (selectedEntities.length === 0) return;
+      const cardId = `button_card_${Date.now()}`;
+      commitSingleCard(cardId, { type: 'group_control', fieldType: 'button', title: 'Knapper', entityIds: selectedEntities });
+      setSelectedEntities([]);
+      return;
+    }
+
+    case 'scriptCard': {
+      if (selectedEntities.length === 0) return;
+      const cardId = `script_card_${Date.now()}`;
+      commitSingleCard(cardId, { type: 'group_control', fieldType: 'script', title: 'Scener', entityIds: selectedEntities });
+      setSelectedEntities([]);
+      return;
+    }
+
     // entity / toggle / sensor — default path for plain HA entities
     default: {
       if (addCardType === 'entity' || addCardType === 'toggle' || addCardType === 'sensor') {

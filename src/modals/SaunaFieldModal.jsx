@@ -1,5 +1,5 @@
 import React from 'react';
-import { X, Lightbulb, Lock, Fan, Shield, Hash, Thermometer, DoorOpen, ToggleRight, Activity } from '../icons';
+import { X, Lightbulb, Lock, Fan, Shield, Hash, Thermometer, DoorOpen, ToggleRight, Activity, Camera, AlarmClock, ListChecks, Zap, Workflow } from '../icons';
 import M3Slider from '../components/ui/M3Slider';
 import GenericClimateModal from './GenericClimateModal';
 import GenericFanModal from './GenericFanModal';
@@ -8,6 +8,7 @@ import GenericMotionModal from './GenericMotionModal';
 import GenericNumberModal from './GenericNumberModal';
 import GenericLockModal from './GenericLockModal';
 import GenericSwitchModal from './GenericSwitchModal';
+import GenericUtilityModal from './GenericUtilityModal';
 
 const domainFor = (entityId = '') => String(entityId).split('.')[0] || '';
 const getFriendlyName = (entityId, entities) => entities?.[entityId]?.attributes?.friendly_name || entityId;
@@ -21,6 +22,12 @@ const iconForDomain = (domain) => {
   if (domain === 'fan') return Fan;
   if (domain === 'climate') return Shield;
   if (domain === 'input_number' || domain === 'number') return Hash;
+  if (domain === 'camera') return Camera;
+  if (domain === 'alarm_control_panel') return Shield;
+  if (domain === 'timer') return AlarmClock;
+  if (domain === 'select' || domain === 'input_select') return ListChecks;
+  if (domain === 'button') return Zap;
+  if (domain === 'script' || domain === 'scene') return Workflow;
   if (domain === 'sensor') return Thermometer;
   if (domain === 'binary_sensor') return DoorOpen;
   return ToggleRight;
@@ -41,6 +48,12 @@ const domainLabel = (domain, tr) => {
   if (domain === 'fan') return tr('room.domain.fan', 'Vifter');
   if (domain === 'climate') return tr('room.domain.climate', 'Klima');
   if (domain === 'input_number' || domain === 'number') return tr('room.domain.number', 'Nummer');
+  if (domain === 'camera') return tr('room.domain.camera', 'Kamera');
+  if (domain === 'alarm_control_panel') return tr('room.domain.alarm', 'Alarm');
+  if (domain === 'timer') return tr('room.domain.timer', 'Timer');
+  if (domain === 'select' || domain === 'input_select') return tr('room.domain.select', 'Valg');
+  if (domain === 'button') return tr('room.domain.button', 'Knapp');
+  if (domain === 'script' || domain === 'scene') return tr('room.domain.script', 'Script/Scene');
   if (domain === 'sensor') return tr('room.domain.sensor', 'Sensorer');
   if (domain === 'binary_sensor') return tr('room.domain.binarySensor', 'Binærsensor');
   return domain || tr('common.other', 'Annet');
@@ -109,7 +122,7 @@ export default function SaunaFieldModal({
   if (!show) return null;
 
   const sortedDomains = Object.keys(grouped).sort((a, b) => {
-    const order = ['light', 'climate', 'fan', 'lock', 'switch', 'input_boolean', 'input_number', 'number', 'sensor', 'binary_sensor'];
+    const order = ['light', 'climate', 'fan', 'lock', 'switch', 'input_boolean', 'input_number', 'number', 'camera', 'alarm_control_panel', 'timer', 'select', 'input_select', 'button', 'script', 'scene', 'sensor', 'binary_sensor'];
     const ai = order.indexOf(a);
     const bi = order.indexOf(b);
     return (ai === -1 ? 99 : ai) - (bi === -1 ? 99 : bi);
@@ -149,14 +162,44 @@ export default function SaunaFieldModal({
       return domain === 'switch' || domain === 'input_boolean';
     })
     : [];
+  const cameraEntityIds = fieldType === 'camera'
+    ? ids.filter((entityId) => domainFor(entityId) === 'camera')
+    : [];
+  const alarmEntityIds = fieldType === 'alarm'
+    ? ids.filter((entityId) => domainFor(entityId) === 'alarm_control_panel')
+    : [];
+  const timerEntityIds = fieldType === 'timer'
+    ? ids.filter((entityId) => domainFor(entityId) === 'timer')
+    : [];
+  const selectEntityIds = fieldType === 'select'
+    ? ids.filter((entityId) => {
+      const domain = domainFor(entityId);
+      return domain === 'select' || domain === 'input_select';
+    })
+    : [];
+  const buttonEntityIds = fieldType === 'button'
+    ? ids.filter((entityId) => domainFor(entityId) === 'button')
+    : [];
+  const scriptEntityIds = fieldType === 'script'
+    ? ids.filter((entityId) => {
+      const domain = domainFor(entityId);
+      return domain === 'script' || domain === 'scene';
+    })
+    : [];
   const fanOnly = fieldType === 'fan' && fanEntityIds.length > 0;
   const doorOnly = fieldType === 'door' && doorEntityIds.length > 0;
   const motionOnly = fieldType === 'motion' && motionEntityIds.length > 0;
   const lockOnly = fieldType === 'lock' && lockEntityIds.length > 0;
   const numberOnly = fieldType === 'number' && numberEntityIds.length > 0;
   const switchOnly = fieldType === 'switch' && switchEntityIds.length > 0;
+  const cameraOnly = fieldType === 'camera' && cameraEntityIds.length > 0;
+  const alarmOnly = fieldType === 'alarm' && alarmEntityIds.length > 0;
+  const timerOnly = fieldType === 'timer' && timerEntityIds.length > 0;
+  const selectOnly = fieldType === 'select' && selectEntityIds.length > 0;
+  const buttonOnly = fieldType === 'button' && buttonEntityIds.length > 0;
+  const scriptOnly = fieldType === 'script' && scriptEntityIds.length > 0;
   const thermostatOnly = sortedDomains.length === 1 && sortedDomains[0] === 'climate';
-  const focusedLayout = thermostatOnly || fanOnly || doorOnly || motionOnly || lockOnly || numberOnly || switchOnly;
+  const focusedLayout = thermostatOnly || fanOnly || doorOnly || motionOnly || lockOnly || numberOnly || switchOnly || cameraOnly || alarmOnly || timerOnly || selectOnly || buttonOnly || scriptOnly;
 
   const openEntityModal = (entityId) => {
     const domain = domainFor(entityId);
@@ -559,6 +602,198 @@ export default function SaunaFieldModal({
               </div>
             </section>
           )}
+          {cameraOnly && (
+            <section className="rounded-2xl border p-3 md:p-4 space-y-3 popup-surface" style={{ borderColor: 'var(--glass-border)' }}>
+              <div className="flex items-center gap-3 min-w-0">
+                <div className="w-10 h-10 rounded-2xl border flex items-center justify-center bg-[var(--glass-bg)]" style={{ borderColor: 'var(--glass-border)' }}>
+                  <Camera className="w-5 h-5 text-[var(--text-secondary)]" />
+                </div>
+                <div className="min-w-0">
+                  <div className="text-sm md:text-base font-bold truncate">{tr('room.domain.camera', 'Kamera')}</div>
+                  <div className="text-[10px] uppercase tracking-widest text-[var(--text-secondary)]">{cameraEntityIds.length} {tr('common.entities', 'entiteter')}</div>
+                </div>
+              </div>
+              <div className="space-y-3">
+                {cameraEntityIds.map((entityId) => {
+                  const ent = entities?.[entityId];
+                  if (!ent) return null;
+                  return (
+                    <GenericUtilityModal
+                      key={entityId}
+                      mode="camera"
+                      entityId={entityId}
+                      entity={ent}
+                      callService={callService}
+                      t={t}
+                      onShowHistory={showEntityHistory}
+                      embedded
+                      showCloseButton={false}
+                    />
+                  );
+                })}
+              </div>
+            </section>
+          )}
+          {alarmOnly && (
+            <section className="rounded-2xl border p-3 md:p-4 space-y-3 popup-surface" style={{ borderColor: 'var(--glass-border)' }}>
+              <div className="flex items-center gap-3 min-w-0">
+                <div className="w-10 h-10 rounded-2xl border flex items-center justify-center bg-[var(--glass-bg)]" style={{ borderColor: 'var(--glass-border)' }}>
+                  <Shield className="w-5 h-5 text-[var(--text-secondary)]" />
+                </div>
+                <div className="min-w-0">
+                  <div className="text-sm md:text-base font-bold truncate">{tr('room.domain.alarm', 'Alarm')}</div>
+                  <div className="text-[10px] uppercase tracking-widest text-[var(--text-secondary)]">{alarmEntityIds.length} {tr('common.entities', 'entiteter')}</div>
+                </div>
+              </div>
+              <div className="space-y-3">
+                {alarmEntityIds.map((entityId) => {
+                  const ent = entities?.[entityId];
+                  if (!ent) return null;
+                  return (
+                    <GenericUtilityModal
+                      key={entityId}
+                      mode="alarm"
+                      entityId={entityId}
+                      entity={ent}
+                      callService={callService}
+                      t={t}
+                      onShowHistory={showEntityHistory}
+                      embedded
+                      showCloseButton={false}
+                    />
+                  );
+                })}
+              </div>
+            </section>
+          )}
+          {timerOnly && (
+            <section className="rounded-2xl border p-3 md:p-4 space-y-3 popup-surface" style={{ borderColor: 'var(--glass-border)' }}>
+              <div className="flex items-center gap-3 min-w-0">
+                <div className="w-10 h-10 rounded-2xl border flex items-center justify-center bg-[var(--glass-bg)]" style={{ borderColor: 'var(--glass-border)' }}>
+                  <AlarmClock className="w-5 h-5 text-[var(--text-secondary)]" />
+                </div>
+                <div className="min-w-0">
+                  <div className="text-sm md:text-base font-bold truncate">{tr('room.domain.timer', 'Timer')}</div>
+                  <div className="text-[10px] uppercase tracking-widest text-[var(--text-secondary)]">{timerEntityIds.length} {tr('common.entities', 'entiteter')}</div>
+                </div>
+              </div>
+              <div className="space-y-3">
+                {timerEntityIds.map((entityId) => {
+                  const ent = entities?.[entityId];
+                  if (!ent) return null;
+                  return (
+                    <GenericUtilityModal
+                      key={entityId}
+                      mode="timer"
+                      entityId={entityId}
+                      entity={ent}
+                      callService={callService}
+                      t={t}
+                      onShowHistory={showEntityHistory}
+                      embedded
+                      showCloseButton={false}
+                    />
+                  );
+                })}
+              </div>
+            </section>
+          )}
+          {selectOnly && (
+            <section className="rounded-2xl border p-3 md:p-4 space-y-3 popup-surface" style={{ borderColor: 'var(--glass-border)' }}>
+              <div className="flex items-center gap-3 min-w-0">
+                <div className="w-10 h-10 rounded-2xl border flex items-center justify-center bg-[var(--glass-bg)]" style={{ borderColor: 'var(--glass-border)' }}>
+                  <ListChecks className="w-5 h-5 text-[var(--text-secondary)]" />
+                </div>
+                <div className="min-w-0">
+                  <div className="text-sm md:text-base font-bold truncate">{tr('room.domain.select', 'Valg')}</div>
+                  <div className="text-[10px] uppercase tracking-widest text-[var(--text-secondary)]">{selectEntityIds.length} {tr('common.entities', 'entiteter')}</div>
+                </div>
+              </div>
+              <div className="space-y-3">
+                {selectEntityIds.map((entityId) => {
+                  const ent = entities?.[entityId];
+                  if (!ent) return null;
+                  return (
+                    <GenericUtilityModal
+                      key={entityId}
+                      mode="select"
+                      entityId={entityId}
+                      entity={ent}
+                      callService={callService}
+                      t={t}
+                      onShowHistory={showEntityHistory}
+                      embedded
+                      showCloseButton={false}
+                    />
+                  );
+                })}
+              </div>
+            </section>
+          )}
+          {buttonOnly && (
+            <section className="rounded-2xl border p-3 md:p-4 space-y-3 popup-surface" style={{ borderColor: 'var(--glass-border)' }}>
+              <div className="flex items-center gap-3 min-w-0">
+                <div className="w-10 h-10 rounded-2xl border flex items-center justify-center bg-[var(--glass-bg)]" style={{ borderColor: 'var(--glass-border)' }}>
+                  <Zap className="w-5 h-5 text-[var(--text-secondary)]" />
+                </div>
+                <div className="min-w-0">
+                  <div className="text-sm md:text-base font-bold truncate">{tr('room.domain.button', 'Knapp')}</div>
+                  <div className="text-[10px] uppercase tracking-widest text-[var(--text-secondary)]">{buttonEntityIds.length} {tr('common.entities', 'entiteter')}</div>
+                </div>
+              </div>
+              <div className="space-y-3">
+                {buttonEntityIds.map((entityId) => {
+                  const ent = entities?.[entityId];
+                  if (!ent) return null;
+                  return (
+                    <GenericUtilityModal
+                      key={entityId}
+                      mode="button"
+                      entityId={entityId}
+                      entity={ent}
+                      callService={callService}
+                      t={t}
+                      onShowHistory={showEntityHistory}
+                      embedded
+                      showCloseButton={false}
+                    />
+                  );
+                })}
+              </div>
+            </section>
+          )}
+          {scriptOnly && (
+            <section className="rounded-2xl border p-3 md:p-4 space-y-3 popup-surface" style={{ borderColor: 'var(--glass-border)' }}>
+              <div className="flex items-center gap-3 min-w-0">
+                <div className="w-10 h-10 rounded-2xl border flex items-center justify-center bg-[var(--glass-bg)]" style={{ borderColor: 'var(--glass-border)' }}>
+                  <Workflow className="w-5 h-5 text-[var(--text-secondary)]" />
+                </div>
+                <div className="min-w-0">
+                  <div className="text-sm md:text-base font-bold truncate">{tr('room.domain.script', 'Script/Scene')}</div>
+                  <div className="text-[10px] uppercase tracking-widest text-[var(--text-secondary)]">{scriptEntityIds.length} {tr('common.entities', 'entiteter')}</div>
+                </div>
+              </div>
+              <div className="space-y-3">
+                {scriptEntityIds.map((entityId) => {
+                  const ent = entities?.[entityId];
+                  if (!ent) return null;
+                  return (
+                    <GenericUtilityModal
+                      key={entityId}
+                      mode="script"
+                      entityId={entityId}
+                      entity={ent}
+                      callService={callService}
+                      t={t}
+                      onShowHistory={showEntityHistory}
+                      embedded
+                      showCloseButton={false}
+                    />
+                  );
+                })}
+              </div>
+            </section>
+          )}
 
           {sortedDomains.map((domain) => {
             if (fanOnly && (domain === 'fan' || domain === 'switch')) return null;
@@ -567,6 +802,12 @@ export default function SaunaFieldModal({
             if (lockOnly && domain === 'lock') return null;
             if (switchOnly && (domain === 'switch' || domain === 'input_boolean')) return null;
             if (numberOnly && (domain === 'input_number' || domain === 'number')) return null;
+            if (cameraOnly && domain === 'camera') return null;
+            if (alarmOnly && domain === 'alarm_control_panel') return null;
+            if (timerOnly && domain === 'timer') return null;
+            if (selectOnly && (domain === 'select' || domain === 'input_select')) return null;
+            if (buttonOnly && domain === 'button') return null;
+            if (scriptOnly && (domain === 'script' || domain === 'scene')) return null;
             const list = getVisibleList(domain);
             if (list.length === 0) return null;
             const DomainIcon = iconForDomain(domain);

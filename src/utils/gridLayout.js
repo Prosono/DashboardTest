@@ -33,6 +33,12 @@ const CARD_SPAN_RULES = [
   { prefix: 'lock_card_',     category: 'dualSize' },
   { prefix: 'switch_card_',   category: 'dualSize' },
   { prefix: 'number_card_',   category: 'dualSize' },
+  { prefix: 'camera_card_',   category: 'dualSize' },
+  { prefix: 'alarm_card_',    category: 'dualSize' },
+  { prefix: 'timer_card_',    category: 'dualSize' },
+  { prefix: 'select_card_',   category: 'dualSize' },
+  { prefix: 'button_card_',   category: 'dualSize' },
+  { prefix: 'script_card_',   category: 'dualSize' },
 ];
 
 export const getCardGridSpan = (cardId, getCardSettingsKey, cardSettings, activePage) => {

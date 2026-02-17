@@ -291,7 +291,7 @@ export default function CoverModal({
               <Icon className="w-8 h-8" />
             </div>
             <div className="min-w-0">
-              <h2 className="text-2xl font-light tracking-tight text-[var(--text-primary)] uppercase italic leading-none truncate">
+              <h2 className="text-lg sm:text-xl md:text-2xl font-light tracking-tight text-[var(--text-primary)] uppercase italic leading-tight break-words">
                 {name}
               </h2>
               <div

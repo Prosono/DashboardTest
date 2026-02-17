@@ -68,7 +68,7 @@ export default function GenericFanModal({
           <Fan className={`w-8 h-8 ${isOn ? 'animate-[fanSpin_1.25s_linear_infinite]' : ''}`} />
         </div>
         <div className="min-w-0">
-          <h3 className="text-2xl font-light tracking-tight text-[var(--text-primary)] uppercase italic leading-none truncate">
+          <h3 className="text-lg sm:text-xl md:text-2xl font-light tracking-tight text-[var(--text-primary)] uppercase italic leading-tight break-words">
             {getDisplayName(entity, tr('sauna.fans', 'Vifter'))}
           </h3>
           <div

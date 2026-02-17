@@ -1,5 +1,5 @@
 import React, { useMemo } from 'react';
-import { Fan, DoorOpen, Activity, Lock, ToggleRight, Hash } from '../../icons';
+import { Fan, DoorOpen, Activity, Lock, ToggleRight, Hash, Camera, Shield, AlarmClock, ListChecks, Zap, Workflow } from '../../icons';
 
 const norm = (v) => String(v ?? '').toLowerCase();
 const isOn = (state) => ['on', 'open', 'true', '1', 'unlocked', 'heat', 'heating'].includes(norm(state));
@@ -11,6 +11,12 @@ const iconByType = {
   lock: Lock,
   switch: ToggleRight,
   number: Hash,
+  camera: Camera,
+  alarm: Shield,
+  timer: AlarmClock,
+  select: ListChecks,
+  button: Zap,
+  script: Workflow,
 };
 
 const fallbackTitleByType = {
@@ -20,6 +26,12 @@ const fallbackTitleByType = {
   lock: 'Laser',
   switch: 'Brytere',
   number: 'Nummer',
+  camera: 'Kamera',
+  alarm: 'Alarm',
+  timer: 'Timer',
+  select: 'Valg',
+  button: 'Knapper',
+  script: 'Scener',
 };
 
 export default function EntityGroupControlCard({
@@ -40,8 +52,20 @@ export default function EntityGroupControlCard({
   const availableIds = ids.filter((id) => entities?.[id]);
 
   const activeCount = useMemo(() => {
-    if (fieldType === 'number') return availableIds.length;
+    if (fieldType === 'number' || fieldType === 'select' || fieldType === 'button' || fieldType === 'script') return availableIds.length;
     if (fieldType === 'lock') return availableIds.filter((id) => norm(entities?.[id]?.state) === 'unlocked').length;
+    if (fieldType === 'camera') return availableIds.filter((id) => {
+      const s = norm(entities?.[id]?.state);
+      return s && !['off', 'idle', 'unavailable', 'unknown'].includes(s);
+    }).length;
+    if (fieldType === 'alarm') return availableIds.filter((id) => {
+      const s = norm(entities?.[id]?.state);
+      return s.startsWith('armed') || s === 'triggered';
+    }).length;
+    if (fieldType === 'timer') return availableIds.filter((id) => {
+      const s = norm(entities?.[id]?.state);
+      return s === 'active' || s === 'paused';
+    }).length;
     return availableIds.filter((id) => isOn(entities?.[id]?.state)).length;
   }, [availableIds, entities, fieldType]);
 
@@ -50,13 +74,19 @@ export default function EntityGroupControlCard({
   const titleFallback = fallbackTitleByType[fieldType] || 'Gruppe';
   const title = customNames?.[cardId] || settings?.title || titleFallback;
 
-  const value = fieldType === 'number'
+  const value = fieldType === 'number' || fieldType === 'select' || fieldType === 'button' || fieldType === 'script'
     ? `${total}`
     : `${activeCount}/${total}`;
 
-  const badge = fieldType === 'number'
+  const badge = fieldType === 'number' || fieldType === 'select' || fieldType === 'button' || fieldType === 'script'
     ? (t?.('common.entities') || 'entiteter')
-    : (t?.('common.on') || 'på');
+    : fieldType === 'camera'
+      ? (t?.('common.active') || 'aktiv')
+      : fieldType === 'alarm'
+        ? (t?.('common.armed') || 'armert')
+        : fieldType === 'timer'
+          ? (t?.('common.running') || 'kjører')
+          : (t?.('common.on') || 'på');
 
   return (
     <button

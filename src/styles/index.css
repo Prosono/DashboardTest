@@ -10,6 +10,20 @@
   --card-border-radius: 16px;
 }
 
+html,
+body,
+#root {
+  min-height: 100%;
+}
+
+/* Keep native mobile bounce behavior. */
+@media (max-width: 768px) {
+  html,
+  body {
+    overscroll-behavior-y: auto;
+  }
+}
+
 /* When custom bg image is active, add overlay for readability */
 html.custom-bg-active body::before {
   content: '';

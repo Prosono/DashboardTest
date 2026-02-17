@@ -431,6 +431,7 @@ function AppContent({
   const [showProfileModal, setShowProfileModal] = useState(false);
   const [profileSaving, setProfileSaving] = useState(false);
   const [profileError, setProfileError] = useState('');
+  const mobileScrollLockRef = useRef({ locked: false, scrollY: 0 });
   const loadedAssignedDashboardRef = useRef('');
   const [profileState, setProfileState] = useState({
     username: '',
@@ -537,6 +538,52 @@ function AppContent({
     showAddPageModal, setShowAddPageModal,
     showAddCardModal, setShowAddCardModal, t,
   });
+
+  const restoreMobileScroll = useCallback(() => {
+    if (!mobileScrollLockRef.current.locked) return;
+    const { scrollY } = mobileScrollLockRef.current;
+    const body = document.body;
+    const html = document.documentElement;
+    body.style.position = '';
+    body.style.top = '';
+    body.style.left = '';
+    body.style.right = '';
+    body.style.width = '';
+    body.style.overflow = '';
+    body.style.touchAction = '';
+    html.style.overflow = '';
+    html.style.touchAction = '';
+    window.scrollTo(0, scrollY || 0);
+    mobileScrollLockRef.current = { locked: false, scrollY: 0 };
+  }, []);
+
+  const shouldLockMobileScroll = isMobile && (
+    hasOpenModal()
+    || showProfileModal
+    || Boolean(editingPage)
+    || showOnboarding
+  );
+
+  useEffect(() => {
+    if (!shouldLockMobileScroll) {
+      restoreMobileScroll();
+      return;
+    }
+    if (mobileScrollLockRef.current.locked) return;
+
+    const scrollY = window.scrollY || window.pageYOffset || 0;
+    const body = document.body;
+    mobileScrollLockRef.current = { locked: true, scrollY };
+
+    body.style.position = 'fixed';
+    body.style.top = `-${scrollY}px`;
+    body.style.left = '0';
+    body.style.right = '0';
+    body.style.width = '100%';
+    body.style.overflow = 'hidden';
+  }, [shouldLockMobileScroll, restoreMobileScroll]);
+
+  useEffect(() => () => restoreMobileScroll(), [restoreMobileScroll]);
 
   const getCardSettingsKey = useCallback((cardId, pageId = activePage) => `${pageId}::${cardId}`, [activePage]);
 
@@ -787,7 +834,7 @@ function AppContent({
 
   return (
     <div
-      className="min-h-screen font-sans selection:bg-blue-500/30 overflow-x-hidden transition-colors duration-500"
+      className="min-h-[100svh] font-sans selection:bg-blue-500/30 overflow-x-hidden transition-colors duration-500"
       style={{ backgroundColor: 'var(--bg-primary)', color: 'var(--text-primary)' }}
     >
       {bgMode === 'animated' ? (
@@ -984,18 +1031,19 @@ function AppContent({
               </button>
             )}
 
-            <button
-              onClick={() => {
-                if (!canEditDashboard) return;
-                const currentSettings = pageSettings[activePage];
-                if (currentSettings?.hidden) setActivePage('home');
-                setEditMode(!editMode);
-              }}
-              className={`p-2 rounded-full group ${editMode ? 'bg-blue-500/20 text-blue-400' : 'text-[var(--text-secondary)]'}`}
-              title={canEditDashboard ? (editMode ? t('nav.done') : t('menu.edit')) : 'Admin only'}
-            >
-              <Edit2 className="w-5 h-5" />
-            </button>
+            {canEditDashboard && (
+              <button
+                onClick={() => {
+                  const currentSettings = pageSettings[activePage];
+                  if (currentSettings?.hidden) setActivePage('home');
+                  setEditMode(!editMode);
+                }}
+                className={`p-2 rounded-full group ${editMode ? 'bg-blue-500/20 text-blue-400' : 'text-[var(--text-secondary)]'}`}
+                title={editMode ? t('nav.done') : t('menu.edit')}
+              >
+                <Edit2 className="w-5 h-5" />
+              </button>
+            )}
 
             {currentUser && (
               <button
@@ -1019,7 +1067,7 @@ function AppContent({
                 showConnection={isAdminUser}
                 t={t}
               />
-              {updateCount > 0 && (
+              {isAdminUser && updateCount > 0 && (
                 <div className="absolute -top-1 -right-1 w-5 h-5 bg-gray-600 rounded-full flex items-center justify-center border-2 border-[var(--card-bg)] pointer-events-none shadow-sm">
                   <span className="text-[11px] font-bold text-white leading-none pt-[1px]">{updateCount}</span>
                 </div>
@@ -1096,8 +1144,8 @@ function AppContent({
             className="grid font-sans page-transition items-start"
             data-dashboard-grid
             style={{
-              gap: isMobile ? '12px' : `${gridGapV}px ${gridGapH}px`,
-              gridAutoRows: isMobile ? '82px' : '100px',
+              gap: isMobile ? '20px' : `${gridGapV}px ${gridGapH}px`,
+              gridAutoRows: isMobile ? '88px' : '100px',
               gridTemplateColumns: `repeat(${gridColCount}, minmax(0, 1fr))`,
             }}
           >
@@ -1157,10 +1205,10 @@ function AppContent({
         )}
 
         {showProfileModal && (
-          <div className="fixed inset-0 z-[120] bg-black/60 backdrop-blur-md flex items-center justify-center p-4">
+          <div className="fixed inset-0 z-[120] bg-black/60 backdrop-blur-md flex items-start md:items-center justify-center p-4 overflow-y-auto overscroll-contain">
             <form
               onSubmit={saveProfile}
-              className="w-full max-w-2xl rounded-3xl border border-[var(--glass-border)] bg-[var(--modal-bg)] shadow-2xl overflow-hidden"
+              className="w-full max-w-2xl rounded-3xl border border-[var(--glass-border)] bg-[var(--modal-bg)] shadow-2xl overflow-hidden flex flex-col max-h-[92dvh] md:max-h-[90vh] my-auto"
               style={{ background: 'linear-gradient(140deg, var(--card-bg) 0%, var(--modal-bg) 100%)' }}
             >
               <div className="px-5 md:px-7 py-4 border-b border-[var(--glass-border)] flex items-center justify-between">
@@ -1174,7 +1222,10 @@ function AppContent({
                 </button>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-[250px_1fr] gap-0">
+              <div
+                className="grid grid-cols-1 md:grid-cols-[250px_1fr] gap-0 overflow-y-auto overscroll-contain"
+                style={{ WebkitOverflowScrolling: 'touch', touchAction: 'pan-y' }}
+              >
                 <div className="p-5 md:p-7 border-b md:border-b-0 md:border-r border-[var(--glass-border)] bg-[var(--glass-bg)]/60">
                   <div className="flex flex-col items-center text-center gap-3">
                     <div className="w-24 h-24 rounded-3xl overflow-hidden border border-[var(--glass-border)] bg-[var(--glass-bg)] flex items-center justify-center">

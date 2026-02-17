@@ -141,14 +141,15 @@
   width: 100%;
 }
 .mobile-grid .card-compact {
-  transform: scale(0.82);
+  transform: scale(0.92);
   transform-origin: top center;
-  width: 122%;
-  height: 122%;
-  margin-left: -11%;
+  width: 100%;
+  height: auto;
+  margin-left: 0;
 }
 .mobile-grid .card-compact > * {
   width: 100%;
+  height: auto;
 }
 .modal-close {
   width: 36px;
@@ -219,6 +220,16 @@ html[data-theme='light'] .rounded-full [class*="text-emerald-"],
 html[data-theme='light'] .rounded-xl [class*="text-emerald-"],
 html[data-theme='light'] .rounded-2xl [class*="text-emerald-"] {
   color: #14532d !important;
+}
+
+/* Mobile light-theme card elevation so cards separate from pale backgrounds. */
+@media (max-width: 768px) {
+  html[data-theme='light'] [data-grid-card] .touch-feedback {
+    box-shadow:
+      0 14px 30px rgba(15, 23, 42, 0.14),
+      0 3px 8px rgba(15, 23, 42, 0.08);
+    border-color: rgba(51, 65, 85, 0.2) !important;
+  }
 }
 
 /* Custom scrollbar for modal content */

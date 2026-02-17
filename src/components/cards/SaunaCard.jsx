@@ -257,7 +257,18 @@ export default function SaunaCard({
     label: autoModeOn ? tr('sauna.autoMode', 'Auto') : tr('sauna.manualMode', 'Manuell'),
     cls: autoModeOn ? 'bg-emerald-500/16 border-emerald-400/22 text-emerald-200' : 'bg-orange-500/18 border-orange-400/25 text-orange-200',
   };
-  const lightReadablePill = 'bg-white/70 border-slate-300 text-slate-800';
+  const lightModePillClass = autoModeOn
+    ? 'bg-emerald-100 border-emerald-500 text-emerald-900 shadow-[0_0_0_1px_rgba(16,185,129,0.2)]'
+    : 'bg-orange-100 border-orange-400 text-orange-900';
+  const lightTonePill = {
+    hot: 'bg-orange-100 border-orange-400 text-orange-900',
+    warm: 'bg-amber-100 border-amber-400 text-amber-900',
+    ok: 'bg-emerald-100 border-emerald-500 text-emerald-900 shadow-[0_0_0_1px_rgba(16,185,129,0.2)]',
+    info: 'bg-blue-100 border-blue-400 text-blue-900',
+    warn: 'bg-orange-100 border-orange-400 text-orange-900',
+    danger: 'bg-rose-100 border-rose-400 text-rose-900',
+    muted: 'bg-white/80 border-slate-300 text-slate-700',
+  };
 
   const primaryState = (() => {
     if (saunaIsActive && serviceYes) return { label: tr('sauna.service', 'Service'), desc: tr('sauna.serviceOngoing', 'Pågår nå'), tone: 'warn' };
@@ -426,7 +437,7 @@ export default function SaunaCard({
                 className={cx(
                   'px-4 py-2 rounded-full text-[12px] uppercase tracking-widest border',
                   modePill.cls,
-                  isLightTheme ? `font-semibold ${lightReadablePill}` : 'font-extrabold'
+                  isLightTheme ? `font-semibold ${lightModePillClass}` : 'font-extrabold'
                 )}
               >
                 {modePill.label}
@@ -437,7 +448,7 @@ export default function SaunaCard({
               <div className={cx(
                 'px-4 py-2 rounded-full text-[12px] uppercase tracking-widest border',
                 tone.pill,
-                isLightTheme ? `font-semibold ${lightReadablePill}` : 'font-extrabold'
+                isLightTheme ? `font-semibold ${lightTonePill[primaryState.tone] || lightTonePill.muted}` : 'font-extrabold'
               )}>
                 <span className="align-middle">{primaryState.label}</span>
               </div>

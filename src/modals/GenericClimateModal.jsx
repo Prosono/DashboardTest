@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { AirVent, ArrowUpDown, Fan, Flame, Minus, Plus, Snowflake, X } from '../icons';
 import M3Slider from '../components/ui/M3Slider';
 import ModernDropdown from '../components/ui/ModernDropdown';
@@ -17,6 +18,7 @@ export default function GenericClimateModal({
   showCloseButton = true,
 }) {
   if (!entityId || !entity) return null;
+  const [dropdownOpen, setDropdownOpen] = useState(false);
 
   const hvacAction = entity.attributes?.hvac_action || 'idle';
   const isCooling = hvacAction === 'cooling';
@@ -55,7 +57,10 @@ export default function GenericClimateModal({
           {isCooling ? <Snowflake className="w-8 h-8" /> : <AirVent className="w-8 h-8" />}
         </div>
         <div>
-          <h3 className="text-2xl font-light tracking-tight text-[var(--text-primary)] uppercase italic leading-none">{getDisplayName(entity, t('climate.title'))}</h3>
+          <h3 className="text-lg sm:text-xl md:text-2xl font-light tracking-tight text-[var(--text-primary)] uppercase italic leading-tight break-words">{getDisplayName(entity, t('climate.title'))}</h3>
+          <div className="mt-2 text-sm md:text-base font-semibold text-[var(--text-primary)]">
+            {typeof currentTemp === 'number' ? `${currentTemp}°C` : '--'}
+          </div>
           <div
             className="mt-2 px-3 py-1 rounded-full border inline-block transition-all duration-500"
             style={{
@@ -69,19 +74,19 @@ export default function GenericClimateModal({
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-5 gap-12 items-start font-sans">
+      <div className={`grid grid-cols-1 lg:grid-cols-5 gap-12 items-start font-sans ${dropdownOpen ? 'relative z-[220]' : ''}`}>
         {showTemp && (
           <div className="lg:col-span-3 space-y-10 p-6 md:p-10 rounded-3xl popup-surface">
             <div className="text-center font-sans">
               <div className="flex justify-between items-center mb-6 px-4 italic">
                 <p className="text-xs text-gray-400 uppercase font-bold" style={{ letterSpacing: '0.5em' }}>{t('climate.indoorTemp')}</p>
-                <span className="text-xs uppercase font-bold" style={{ letterSpacing: '0.3em', color: isCooling ? '#60a5fa' : isHeating ? '#fb923c' : '#9ca3af' }}>
+                <span className="hidden md:inline text-xs uppercase font-bold" style={{ letterSpacing: '0.3em', color: isCooling ? '#60a5fa' : isHeating ? '#fb923c' : '#9ca3af' }}>
                   {typeof currentTemp === 'number' ? `${currentTemp}°C` : '--'}
                 </span>
               </div>
-              <div className="flex items-center justify-center gap-4 mb-10">
+              <div className="flex items-center justify-center gap-3 md:gap-4 mb-8 md:mb-10">
                 <span
-                  className="text-6xl md:text-9xl font-light italic text-[var(--text-primary)] tracking-tighter leading-none select-none"
+                  className="text-5xl sm:text-6xl md:text-9xl font-light italic text-[var(--text-primary)] tracking-tighter leading-none select-none"
                   style={{
                     textShadow: '0 10px 25px rgba(0,0,0,0.1)',
                     color: isHeating
@@ -93,17 +98,17 @@ export default function GenericClimateModal({
                 >
                   {String(tempValue)}
                 </span>
-                <span className="text-5xl font-medium leading-none mt-10 italic text-gray-700">°C</span>
+                <span className="text-3xl sm:text-4xl md:text-5xl font-medium leading-none mt-6 md:mt-10 italic text-gray-700">°C</span>
               </div>
-              <div className="flex items-center gap-8 px-4">
-                <button onClick={() => callService('climate', 'set_temperature', { entity_id: entityId, temperature: tempValue - 0.5 })} className="p-6 rounded-full transition-all active:scale-90 shadow-lg border" style={{ backgroundColor: 'var(--glass-bg)', borderColor: 'var(--glass-border)' }}>
-                  <Minus className="w-8 h-8" style={{ strokeWidth: 3 }} />
+              <div className="flex items-center gap-3 md:gap-8 px-1 sm:px-4">
+                <button onClick={() => callService('climate', 'set_temperature', { entity_id: entityId, temperature: tempValue - 0.5 })} className="p-3 md:p-6 rounded-full transition-all active:scale-90 shadow-lg border" style={{ backgroundColor: 'var(--glass-bg)', borderColor: 'var(--glass-border)' }}>
+                  <Minus className="w-5 h-5 md:w-8 md:h-8" style={{ strokeWidth: 3 }} />
                 </button>
                 <div className="flex-grow font-sans">
                   <M3Slider min={minTemp} max={maxTemp} step={0.5} value={tempValue} onChange={(e) => callService('climate', 'set_temperature', { entity_id: entityId, temperature: parseFloat(e.target.value) })} colorClass={isCooling ? 'bg-blue-500' : isHeating ? 'bg-orange-500' : 'bg-white/20'} />
                 </div>
-                <button onClick={() => callService('climate', 'set_temperature', { entity_id: entityId, temperature: tempValue + 0.5 })} className="p-6 rounded-full transition-all active:scale-90 shadow-lg border" style={{ backgroundColor: 'var(--glass-bg)', borderColor: 'var(--glass-border)' }}>
-                  <Plus className="w-8 h-8" style={{ strokeWidth: 3 }} />
+                <button onClick={() => callService('climate', 'set_temperature', { entity_id: entityId, temperature: tempValue + 0.5 })} className="p-3 md:p-6 rounded-full transition-all active:scale-90 shadow-lg border" style={{ backgroundColor: 'var(--glass-bg)', borderColor: 'var(--glass-border)' }}>
+                  <Plus className="w-5 h-5 md:w-8 md:h-8" style={{ strokeWidth: 3 }} />
                 </button>
               </div>
             </div>
@@ -121,6 +126,7 @@ export default function GenericClimateModal({
                 onChange={(m) => callService('climate', 'set_hvac_mode', { entity_id: entityId, hvac_mode: m })}
                 map={hvacMap}
                 placeholder={t('dropdown.noneSelected')}
+                onOpenChange={setDropdownOpen}
               />
             )}
             {showFan && (
@@ -132,6 +138,7 @@ export default function GenericClimateModal({
                 onChange={(m) => callService('climate', 'set_fan_mode', { entity_id: entityId, fan_mode: m })}
                 map={fanMap}
                 placeholder={t('dropdown.noneSelected')}
+                onOpenChange={setDropdownOpen}
               />
             )}
             {showSwing && (
@@ -143,6 +150,7 @@ export default function GenericClimateModal({
                 onChange={(m) => callService('climate', 'set_swing_mode', { entity_id: entityId, swing_mode: m })}
                 map={swingMap}
                 placeholder={t('dropdown.noneSelected')}
+                onOpenChange={setDropdownOpen}
               />
             )}
           </div>
@@ -154,7 +162,7 @@ export default function GenericClimateModal({
   if (embedded) {
     return (
       <div
-        className="border w-full rounded-3xl md:rounded-[2.4rem] p-5 md:p-8 font-sans relative backdrop-blur-xl"
+        className={`border w-full rounded-3xl md:rounded-[2.4rem] p-5 md:p-8 font-sans relative backdrop-blur-xl ${dropdownOpen ? 'z-[220]' : ''}`}
         style={{ background: 'linear-gradient(135deg, var(--card-bg) 0%, var(--modal-bg) 100%)', borderColor: 'var(--glass-border)', color: 'var(--text-primary)' }}
       >
         {content}

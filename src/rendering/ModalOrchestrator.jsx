@@ -191,7 +191,16 @@ export default function ModalOrchestrator({
     const isEditSensor = !!editSettings?.type && editSettings.type === 'sensor';
     const isEditWeatherTemp = !!editId && editId.startsWith('weather_temp_');
     const canEditName = !!editId && !isEditWeatherTemp && editId !== 'media_player' && editId !== 'sonos';
-    const canEditIcon = !!editId && (isEditLight || isEditCalendar || isEditTodo || isEditRoom || isEditSauna || isEditCover || editId.startsWith('automation.') || editId.startsWith('vacuum.') || editId.startsWith('climate_card_') || editId.startsWith('cost_card_') || !!editEntity || editId === 'car' || editId.startsWith('car_card_'));
+    const canEditIcon = !!editId && (
+      isEditLight || isEditCalendar || isEditTodo || isEditRoom || isEditSauna || isEditCover
+      || editId.startsWith('automation.') || editId.startsWith('vacuum.')
+      || editId.startsWith('climate_card_') || editId.startsWith('cost_card_')
+      || editId.startsWith('fan_card_') || editId.startsWith('door_card_') || editId.startsWith('motion_card_')
+      || editId.startsWith('lock_card_') || editId.startsWith('switch_card_') || editId.startsWith('number_card_')
+      || editId.startsWith('camera_card_') || editId.startsWith('alarm_card_') || editId.startsWith('timer_card_')
+      || editId.startsWith('select_card_') || editId.startsWith('button_card_') || editId.startsWith('script_card_')
+      || !!editEntity || editId === 'car' || editId.startsWith('car_card_')
+    );
     const canEditStatus = !!editEntity && !!editSettingsKey && editSettingsKey.startsWith('settings::');
     return {
       canEditName, canEditIcon, canEditStatus,

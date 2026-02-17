@@ -100,7 +100,7 @@ export default function GenericAndroidTVModal({
              {isOn ? <Gamepad2 className="w-8 h-8" /> : <Tv className="w-8 h-8" />}
           </div>
           <div>
-            <h3 className="text-2xl font-light tracking-tight text-[var(--text-primary)] uppercase italic leading-none">{deviceName}</h3>
+            <h3 className="text-lg sm:text-xl md:text-2xl font-light tracking-tight text-[var(--text-primary)] uppercase italic leading-tight break-words">{deviceName}</h3>
             {!linkedActive && (
               <div className="mt-2 px-3 py-1 rounded-full inline-block transition-all duration-500" style={{ backgroundColor: statusBg, color: statusColor }}>
                 <p className="text-[10px] uppercase font-bold italic tracking-widest">{t('status.statusLabel')}: {state}</p>

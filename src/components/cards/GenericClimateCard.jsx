@@ -139,14 +139,14 @@ export default function GenericClimateCard({
           <span className="text-xs tracking-widest uppercase font-bold">{translate('climate.action.' + hvacAction)}</span>
         </div>
       </div>
-      <div>
-        <span className="text-4xl font-medium text-[var(--text-primary)] leading-none">{String(currentTemp)}°</span>
-      </div>
       <div className="mt-2">
-        <div className="flex items-center gap-2 mb-3">
+        <div className="flex items-center gap-2 mb-2">
           <p className="text-[var(--text-secondary)] text-xs uppercase font-bold opacity-60 leading-none" style={{ letterSpacing: '0.05em' }}>
             {name}
           </p>
+        </div>
+        <div className="mb-3">
+          <span className="text-3xl md:text-4xl font-medium text-[var(--text-primary)] leading-none">{String(currentTemp)}°</span>
         </div>
         <div className="flex items-stretch gap-3">
           <div className="flex items-center justify-between rounded-2xl p-1 border flex-1" style={{ backgroundColor: 'var(--glass-bg)', borderColor: 'var(--glass-border)' }}>
@@ -155,9 +155,9 @@ export default function GenericClimateCard({
                 e.stopPropagation();
                 stepTemp(-0.5);
               }}
-              className="w-6 h-8 flex items-center justify-center rounded-xl transition-colors text-[var(--text-secondary)] hover:text-[var(--text-primary)] active:scale-90 hover:bg-[var(--glass-bg-hover)]"
+              className="w-5 h-7 md:w-6 md:h-8 flex items-center justify-center rounded-xl transition-colors text-[var(--text-secondary)] hover:text-[var(--text-primary)] active:scale-90 hover:bg-[var(--glass-bg-hover)]"
             >
-              <Minus className="w-4 h-4" />
+              <Minus className="w-3.5 h-3.5 md:w-4 md:h-4" />
             </button>
             <div className="flex flex-col items-center">
               <span className="text-lg font-bold text-[var(--text-primary)] leading-none">{String(targetTemp)}°</span>
@@ -167,9 +167,9 @@ export default function GenericClimateCard({
                 e.stopPropagation();
                 stepTemp(0.5);
               }}
-              className="w-6 h-8 flex items-center justify-center rounded-xl transition-colors text-[var(--text-secondary)] hover:text-[var(--text-primary)] active:scale-90 hover:bg-[var(--glass-bg-hover)]"
+              className="w-5 h-7 md:w-6 md:h-8 flex items-center justify-center rounded-xl transition-colors text-[var(--text-secondary)] hover:text-[var(--text-primary)] active:scale-90 hover:bg-[var(--glass-bg-hover)]"
             >
-              <Plus className="w-4 h-4" />
+              <Plus className="w-3.5 h-3.5 md:w-4 md:h-4" />
             </button>
           </div>
           {showFan && (

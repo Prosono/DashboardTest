@@ -263,7 +263,7 @@ export default function CostModal({
             <HeaderIcon className="w-8 h-8" />
           </div>
           <div>
-            <h3 className="text-2xl font-light tracking-tight text-[var(--text-primary)] uppercase italic leading-none">{displayName}</h3>
+            <h3 className="text-lg sm:text-xl md:text-2xl font-light tracking-tight text-[var(--text-primary)] uppercase italic leading-tight break-words">{displayName}</h3>
             <div className="mt-2 px-3 py-1 rounded-full border inline-flex items-center gap-2" style={{ backgroundColor: 'var(--glass-bg)', borderColor: 'var(--glass-border)', color: 'var(--text-secondary)' }}>
               <span className="text-[10px] uppercase font-bold italic tracking-widest">
                 {source === 'month' ? translate('energyCost.thisMonth') : translate('energyCost.today')}

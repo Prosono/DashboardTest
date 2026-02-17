@@ -24,6 +24,17 @@ export default function StatusPill({
   isMobile
 }) {
   if (!pill) return null;
+  const isLightTheme = typeof document !== 'undefined' && document.documentElement?.dataset?.theme === 'light';
+  const entityId = String(pill?.entityId || '');
+  const isWarningAlertPill = entityId.includes('system_warning_details');
+  const isCriticalAlertPill = entityId.includes('system_critical_details');
+  const isAlertPill = isWarningAlertPill || isCriticalAlertPill;
+  const lightLabelStyle = isLightTheme && isAlertPill
+    ? { color: isCriticalAlertPill ? '#7f1d1d' : '#92400e' }
+    : undefined;
+  const lightSubLabelStyle = isLightTheme && isAlertPill
+    ? { color: isCriticalAlertPill ? '#991b1b' : '#b45309' }
+    : undefined;
   
   // Check visibility conditions (defined early to avoid hoisting issues)
   const checkCondition = (condition, checkEntity, getAttr) => {
@@ -146,11 +157,11 @@ export default function StatusPill({
           </div>
         )}
         <div className="flex flex-col items-start">
-          <span className={`${textSize} uppercase font-bold leading-tight ${labelColor}`}>
+          <span className={`${textSize} uppercase font-bold leading-tight ${labelColor}`} style={lightLabelStyle}>
             {label}
           </span>
           {sublabel && (
-            <span className={`${textSize} font-medium uppercase tracking-widest italic ${sublabelColor}`}>
+            <span className={`${textSize} font-medium uppercase tracking-widest italic ${sublabelColor}`} style={lightSubLabelStyle}>
               {sublabel}
             </span>
           )}
@@ -177,9 +188,15 @@ export default function StatusPill({
   const IconComponent = pill.icon ? (getIconComponent(pill.icon) || Activity) : Activity;
   
   // Get colors
-  const bgColor = pill.bgColor || 'rgba(255, 255, 255, 0.03)';
-  const iconBgColor = pill.iconBgColor || 'rgba(59, 130, 246, 0.1)';
-  const iconColor = pill.iconColor || 'text-blue-400';
+  const bgColor = (isLightTheme && isCriticalAlertPill)
+    ? 'rgba(153, 27, 27, 0.18)'
+    : (pill.bgColor || 'rgba(255, 255, 255, 0.03)');
+  const iconBgColor = (isLightTheme && isCriticalAlertPill)
+    ? 'rgba(239, 68, 68, 0.22)'
+    : (pill.iconBgColor || 'rgba(59, 130, 246, 0.1)');
+  const iconColor = (isLightTheme && isCriticalAlertPill)
+    ? 'text-red-800'
+    : (pill.iconColor || 'text-blue-400');
   const labelColor = pill.labelColor || 'text-[var(--text-secondary)]';
   const sublabelColor = pill.sublabelColor || 'text-[var(--text-muted)]';
   
@@ -197,10 +214,10 @@ export default function StatusPill({
   const Wrapper = onClick ? 'button' : 'div';
   const wrapperProps = onClick ? {
     onClick,
-    className: `flex items-center ${paddingClass} rounded-2xl transition-all hover:bg-[var(--glass-bg-hover)] active:scale-95 ${animated ? 'animate-pulse' : ''}`,
+    className: `flex items-center ${paddingClass} rounded-2xl transition-all hover:bg-[var(--glass-bg-hover)] active:scale-95 ${animated ? 'animate-pulse' : ''} ${isLightTheme && isCriticalAlertPill ? 'border border-red-800/30' : ''}`,
     style: { backgroundColor: bgColor }
   } : {
-    className: `flex items-center ${paddingClass} rounded-2xl ${animated ? 'animate-pulse' : ''}`,
+    className: `flex items-center ${paddingClass} rounded-2xl ${animated ? 'animate-pulse' : ''} ${isLightTheme && isCriticalAlertPill ? 'border border-red-800/30' : ''}`,
     style: { backgroundColor: bgColor }
   };
 
@@ -210,10 +227,10 @@ export default function StatusPill({
         <IconComponent className={`${isMobile ? 'w-3 h-3' : 'w-4 h-4'}`} />
       </div>
       <div className="flex flex-col items-start">
-        <span className={`${textSize} uppercase font-bold leading-tight ${labelColor}`}>
+        <span className={`${textSize} uppercase font-bold leading-tight ${labelColor}`} style={lightLabelStyle}>
           {label}
         </span>
-        <span className={`${textSize} font-medium uppercase tracking-widest italic ${sublabelColor}`}>
+        <span className={`${textSize} font-medium uppercase tracking-widest italic ${sublabelColor}`} style={lightSubLabelStyle}>
           {sublabel}
         </span>
       </div>

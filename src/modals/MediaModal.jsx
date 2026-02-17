@@ -224,7 +224,7 @@ export default function MediaModal({
               {isChannel ? <Tv className="w-8 h-8" /> : (isSonos ? <Speaker className="w-8 h-8" /> : <Music className="w-8 h-8" />)}
             </div>
             <div className="min-w-0">
-              <h3 className="text-2xl font-light tracking-tight text-[var(--text-primary)] uppercase italic leading-none truncate">
+              <h3 className="text-lg sm:text-xl md:text-2xl font-light tracking-tight text-[var(--text-primary)] uppercase italic leading-tight break-words">
                 {activeUser ? `${activeUser} - ${currentMp.attributes?.friendly_name || mpId}` : (currentMp.attributes?.friendly_name || mpId)}
               </h3>
               <div className="mt-2 px-3 py-1 rounded-full border inline-flex items-center gap-2" style={{ backgroundColor: 'var(--glass-bg)', borderColor: 'var(--glass-border)', color: 'var(--text-secondary)' }}>

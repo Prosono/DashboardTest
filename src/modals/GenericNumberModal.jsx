@@ -53,7 +53,7 @@ export default function GenericNumberModal({
           <Hash className="w-8 h-8" />
         </div>
         <div className="min-w-0">
-          <h3 className="text-2xl font-light tracking-tight text-[var(--text-primary)] uppercase italic leading-none truncate">
+          <h3 className="text-lg sm:text-xl md:text-2xl font-light tracking-tight text-[var(--text-primary)] uppercase italic leading-tight break-words">
             {getDisplayName(entity, tr('room.domain.number', 'Nummer'))}
           </h3>
           <div className="mt-2 px-3 py-1 rounded-full border inline-flex items-center gap-2 bg-[var(--glass-bg)] border-[var(--glass-border)] text-[var(--text-secondary)]">
@@ -73,13 +73,13 @@ export default function GenericNumberModal({
               {hasValue ? Number(value).toFixed(step < 1 ? 1 : 0) : '--'}
             </div>
           </div>
-          <div className="mt-6 flex items-center gap-6">
+          <div className="mt-6 flex items-center gap-3 md:gap-6">
             <button
               type="button"
               onClick={() => setValue(value - step)}
-              className="p-5 rounded-full transition-all active:scale-90 shadow-lg border bg-[var(--glass-bg)] border-[var(--glass-border)]"
+              className="p-3 md:p-5 rounded-full transition-all active:scale-90 shadow-lg border bg-[var(--glass-bg)] border-[var(--glass-border)]"
             >
-              <Minus className="w-7 h-7" style={{ strokeWidth: 3 }} />
+              <Minus className="w-5 h-5 md:w-7 md:h-7" style={{ strokeWidth: 3 }} />
             </button>
             <div className="flex-grow">
               <M3Slider
@@ -94,9 +94,9 @@ export default function GenericNumberModal({
             <button
               type="button"
               onClick={() => setValue(value + step)}
-              className="p-5 rounded-full transition-all active:scale-90 shadow-lg border bg-[var(--glass-bg)] border-[var(--glass-border)]"
+              className="p-3 md:p-5 rounded-full transition-all active:scale-90 shadow-lg border bg-[var(--glass-bg)] border-[var(--glass-border)]"
             >
-              <Plus className="w-7 h-7" style={{ strokeWidth: 3 }} />
+              <Plus className="w-5 h-5 md:w-7 md:h-7" style={{ strokeWidth: 3 }} />
             </button>
           </div>
         </div>

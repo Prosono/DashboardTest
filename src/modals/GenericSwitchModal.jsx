@@ -51,7 +51,7 @@ export default function GenericSwitchModal({
           <ToggleRight className={`w-8 h-8 ${isOn && !unavailable ? 'animate-pulse' : ''}`} />
         </div>
         <div className="min-w-0">
-          <h3 className="text-2xl font-light tracking-tight text-[var(--text-primary)] uppercase italic leading-none truncate">
+          <h3 className="text-lg sm:text-xl md:text-2xl font-light tracking-tight text-[var(--text-primary)] uppercase italic leading-tight break-words">
             {getDisplayName(entity, tr('common.switch', 'Bryter'))}
           </h3>
           <div

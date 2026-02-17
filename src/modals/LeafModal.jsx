@@ -90,7 +90,7 @@ export default function LeafModal({
              <Car className="w-8 h-8" />
           </div>
           <div>
-            <h3 className="text-2xl font-light tracking-tight text-[var(--text-primary)] uppercase italic leading-none">
+            <h3 className="text-lg sm:text-xl md:text-2xl font-light tracking-tight text-[var(--text-primary)] uppercase italic leading-tight break-words">
               {name || t('car.defaultName')}
             </h3>
             <div className="mt-2 flex flex-wrap items-center gap-2">

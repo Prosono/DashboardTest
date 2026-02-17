@@ -99,7 +99,20 @@ export function useAddCard({
     if (addCardType === 'cost') return t('addCard.available.costs');
     if (addCardType === 'media') return t('addCard.available.players');
     if (addCardType === 'car') return t('addCard.available.cars');
-    if (addCardType === 'fanCard' || addCardType === 'doorCard' || addCardType === 'motionCard' || addCardType === 'lockCard' || addCardType === 'switchCard' || addCardType === 'numberCard') return t('addCard.available.entities');
+    if (
+      addCardType === 'fanCard'
+      || addCardType === 'doorCard'
+      || addCardType === 'motionCard'
+      || addCardType === 'lockCard'
+      || addCardType === 'switchCard'
+      || addCardType === 'numberCard'
+      || addCardType === 'cameraCard'
+      || addCardType === 'alarmCard'
+      || addCardType === 'timerCard'
+      || addCardType === 'selectCard'
+      || addCardType === 'buttonCard'
+      || addCardType === 'scriptCard'
+    ) return t('addCard.available.entities');
     if (addCardType === 'toggle') return t('addCard.available.toggles');
     if (addCardType === 'entity') return t('addCard.available.entities');
     return t('addCard.available.lights');
@@ -122,7 +135,18 @@ export function useAddCard({
             ? 'addCard.item.players'
             : addCardType === 'car'
               ? 'addCard.item.cars'
-            : addCardType === 'fanCard' || addCardType === 'doorCard' || addCardType === 'motionCard' || addCardType === 'lockCard' || addCardType === 'switchCard' || addCardType === 'numberCard'
+            : addCardType === 'fanCard'
+              || addCardType === 'doorCard'
+              || addCardType === 'motionCard'
+              || addCardType === 'lockCard'
+              || addCardType === 'switchCard'
+              || addCardType === 'numberCard'
+              || addCardType === 'cameraCard'
+              || addCardType === 'alarmCard'
+              || addCardType === 'timerCard'
+              || addCardType === 'selectCard'
+              || addCardType === 'buttonCard'
+              || addCardType === 'scriptCard'
               ? 'addCard.item.entities'
             : addCardType === 'toggle'
               ? 'addCard.item.toggles'

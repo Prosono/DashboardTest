@@ -1,6 +1,8 @@
 import {
   Activity,
+  AlarmClock,
   ArrowUpDown,
+  Camera,
   DoorOpen,
   Bot,
   Calendar,
@@ -19,8 +21,10 @@ import {
   Music,
   Plus,
   Search,
+  Shield,
   ToggleRight,
   Thermometer,
+  Workflow,
   X,
   Zap
 } from '../icons';
@@ -241,6 +245,12 @@ export default function AddCardContent({
       if (addCardType === 'lockCard') return id.startsWith('lock.');
       if (addCardType === 'switchCard') return id.startsWith('switch.') || id.startsWith('input_boolean.');
       if (addCardType === 'numberCard') return id.startsWith('input_number.') || id.startsWith('number.');
+      if (addCardType === 'cameraCard') return id.startsWith('camera.');
+      if (addCardType === 'alarmCard') return id.startsWith('alarm_control_panel.');
+      if (addCardType === 'timerCard') return id.startsWith('timer.');
+      if (addCardType === 'selectCard') return id.startsWith('select.') || id.startsWith('input_select.');
+      if (addCardType === 'buttonCard') return id.startsWith('button.');
+      if (addCardType === 'scriptCard') return id.startsWith('script.') || id.startsWith('scene.');
       if (addCardType === 'androidtv') return id.startsWith('media_player.') || id.startsWith('remote.');
       if (addCardType === 'cost') return (id.startsWith('sensor.') || id.startsWith('input_number.'));
       if (addCardType === 'media') return id.startsWith('media_player.');
@@ -513,6 +523,12 @@ export default function AddCardContent({
                 <TypeButton type="lockCard" icon={Lock} label={getLabel('addCard.type.locks', 'Locks')} isActive={addCardType === 'lockCard'} onSelect={setAddCardType} />
                 <TypeButton type="switchCard" icon={ToggleRight} label={getLabel('addCard.type.switches', 'Switches')} isActive={addCardType === 'switchCard'} onSelect={setAddCardType} />
                 <TypeButton type="numberCard" icon={Hash} label={getLabel('addCard.type.numbers', 'Numbers')} isActive={addCardType === 'numberCard'} onSelect={setAddCardType} />
+                <TypeButton type="cameraCard" icon={Camera} label={getLabel('addCard.type.cameras', 'Cameras')} isActive={addCardType === 'cameraCard'} onSelect={setAddCardType} />
+                <TypeButton type="alarmCard" icon={Shield} label={getLabel('addCard.type.alarms', 'Alarms')} isActive={addCardType === 'alarmCard'} onSelect={setAddCardType} />
+                <TypeButton type="timerCard" icon={AlarmClock} label={getLabel('addCard.type.timers', 'Timers')} isActive={addCardType === 'timerCard'} onSelect={setAddCardType} />
+                <TypeButton type="selectCard" icon={ListChecks} label={getLabel('addCard.type.selects', 'Selects')} isActive={addCardType === 'selectCard'} onSelect={setAddCardType} />
+                <TypeButton type="buttonCard" icon={Zap} label={getLabel('addCard.type.buttons', 'Buttons')} isActive={addCardType === 'buttonCard'} onSelect={setAddCardType} />
+                <TypeButton type="scriptCard" icon={Workflow} label={getLabel('addCard.type.scripts', 'Scripts/Scenes')} isActive={addCardType === 'scriptCard'} onSelect={setAddCardType} />
               </div>
             </div>
           )}

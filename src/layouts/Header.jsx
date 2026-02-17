@@ -73,8 +73,8 @@ export default function Header({
       {/* Main flex: heading (left) & clock (right) aligned at same Y */}
       <div className={`flex justify-between items-start gap-10 leading-none ${isMobile ? 'flex-col items-center text-center' : ''}`}>
         {/* Left column: Heading and Date (same X) */}
-        <div className="flex flex-col gap-1">
-          <div className={`flex items-center gap-4 ${isMobile ? 'justify-center w-full' : ''}`}>
+        <div className={`flex flex-col gap-1 ${isMobile ? 'items-center w-full' : ''}`}>
+          <div className={`flex items-center gap-4 ${isMobile ? 'justify-center mx-auto' : ''}`}>
             {hasLogo && (
               <img
                 src={logoUrl}

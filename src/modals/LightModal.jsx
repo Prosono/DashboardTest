@@ -166,7 +166,7 @@ export default function LightModal({
         onClick={onClose}
       >
         <div
-          className="border w-full max-w-6xl rounded-3xl md:rounded-[3rem] overflow-hidden backdrop-blur-xl shadow-2xl popup-anim relative max-h-[92vh]"
+          className="border w-full max-w-6xl rounded-3xl md:rounded-[3rem] overflow-y-auto md:overflow-hidden backdrop-blur-xl shadow-2xl popup-anim relative max-h-[92dvh]"
           style={{ background: 'linear-gradient(135deg, var(--card-bg) 0%, var(--modal-bg) 100%)', borderColor: 'var(--glass-border)', color: 'var(--text-primary)' }}
           onClick={(e) => e.stopPropagation()}
         >
@@ -176,7 +176,10 @@ export default function LightModal({
             </button>
           </div>
 
-          <div className="overflow-y-auto custom-scrollbar pt-14 md:pt-16 px-3 pb-3 md:px-4 md:pb-4 lg:px-5 lg:pb-5 space-y-3 md:space-y-4">
+          <div
+            className="overflow-visible md:overflow-y-auto overscroll-contain custom-scrollbar pt-14 md:pt-16 px-3 pb-3 md:px-4 md:pb-4 lg:px-5 lg:pb-5 space-y-3 md:space-y-4"
+            style={{ WebkitOverflowScrolling: 'touch', touchAction: 'pan-y' }}
+          >
             {selectableLightIds.map((id) => {
               const meta = getLightMeta(id);
               const rowEntity = meta.entity;
@@ -193,7 +196,7 @@ export default function LightModal({
                       <RowIcon className="w-8 h-8" />
                     </div>
                     <div className="min-w-0">
-                      <h3 className="text-2xl font-light tracking-tight text-[var(--text-primary)] uppercase italic leading-none truncate">
+                      <h3 className="text-lg sm:text-xl md:text-2xl font-light tracking-tight text-[var(--text-primary)] uppercase italic leading-tight break-words">
                         {meta.name}
                       </h3>
                       <div className={`mt-2 px-3 py-1 rounded-full border inline-flex items-center gap-2 ${meta.unavailable ? 'bg-red-500/10 border-red-500/20 text-red-400' : 'bg-[var(--glass-bg)] border-[var(--glass-border)] text-[var(--text-secondary)]'}`}>
@@ -271,7 +274,7 @@ export default function LightModal({
       onClick={onClose}
     >
       <div 
-        className="border w-full max-w-5xl rounded-3xl md:rounded-[3rem] overflow-hidden flex flex-col lg:grid lg:grid-cols-5 backdrop-blur-xl shadow-2xl popup-anim relative max-h-[90vh] md:h-auto md:min-h-[550px]"
+        className="border w-full max-w-5xl rounded-3xl md:rounded-[3rem] overflow-y-auto lg:overflow-hidden flex flex-col lg:grid lg:grid-cols-5 backdrop-blur-xl shadow-2xl popup-anim relative max-h-[92dvh] md:h-auto md:min-h-[550px]"
         style={{ background: 'linear-gradient(135deg, var(--card-bg) 0%, var(--modal-bg) 100%)', borderColor: 'var(--glass-border)', color: 'var(--text-primary)' }}
         onClick={(e) => e.stopPropagation()}
       >
@@ -297,7 +300,7 @@ export default function LightModal({
                  <LightIcon className="w-8 h-8" />
                </div>
                <div className="min-w-0">
-                 <h2 className="text-2xl font-light tracking-tight text-[var(--text-primary)] uppercase italic leading-none truncate">
+                 <h2 className="text-lg sm:text-xl md:text-2xl font-light tracking-tight text-[var(--text-primary)] uppercase italic leading-tight break-words">
                    {getA(currentLightId, "friendly_name", t('common.light'))}
                  </h2>
                  <div className={`mt-2 px-3 py-1 rounded-full border inline-flex items-center gap-2 ${isUnavailable ? 'bg-red-500/10 border-red-500/20 text-red-400' : 'bg-[var(--glass-bg)] border-[var(--glass-border)] text-[var(--text-secondary)]'}`}>
@@ -374,8 +377,11 @@ export default function LightModal({
         </div>
 
         {/* RIGHT PANEL: Controls (2 cols) */}
-        <div className="lg:col-span-2 flex flex-col h-full">
-            <div className="flex-1 overflow-y-auto p-4 md:p-8 lg:pt-16 space-y-4 md:space-y-8 custom-scrollbar">
+        <div className="lg:col-span-2 flex flex-col lg:h-full">
+            <div
+              className="flex-1 overflow-visible lg:overflow-y-auto overscroll-contain p-4 md:p-8 lg:pt-16 space-y-4 md:space-y-8 custom-scrollbar"
+              style={{ WebkitOverflowScrolling: 'touch', touchAction: 'pan-y' }}
+            >
               
               {/* Dynamic Control Area - Simplified */}
               <div className="min-h-[100px] md:min-h-[140px] flex flex-col justify-center">

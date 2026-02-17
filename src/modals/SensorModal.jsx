@@ -424,7 +424,7 @@ export default function SensorModal({ isOpen, onClose, entityId, entity, customN
               <div className="p-3 rounded-xl bg-red-500/20 text-red-400">
                 <AlertTriangle className="w-5 h-5" />
               </div>
-              <h2 className="text-xl md:text-2xl font-light tracking-tight text-[var(--text-primary)] uppercase italic leading-none">
+              <h2 className="text-lg sm:text-xl md:text-2xl font-light tracking-tight text-[var(--text-primary)] uppercase italic leading-tight break-words">
                 {t('warnings.title') === 'warnings.title' ? title : t('warnings.title')}
               </h2>
             </div>
@@ -492,7 +492,7 @@ export default function SensorModal({ isOpen, onClose, entityId, entity, customN
                <Icon className="w-8 h-8" />
              </div>
              <div className="min-w-0">
-               <h2 className="text-2xl font-light tracking-tight text-[var(--text-primary)] uppercase italic leading-none truncate">
+               <h2 className="text-lg sm:text-xl md:text-2xl font-light tracking-tight text-[var(--text-primary)] uppercase italic leading-tight break-words">
                  {name}
                </h2>
                  <div className={`mt-2 px-3 py-1 rounded-full border inline-flex items-center gap-2 ${entity.state === 'unavailable' ? 'bg-red-500/10 border-red-500/20 text-red-500' : 'bg-[var(--glass-bg)] border-[var(--glass-border)] text-[var(--text-secondary)]'}`}>

@@ -49,7 +49,7 @@ export default function GenericDoorModal({
           <DoorOpen className={`w-8 h-8 ${open && !unavailable ? 'animate-pulse' : ''}`} />
         </div>
         <div className="min-w-0">
-          <h3 className="text-2xl font-light tracking-tight text-[var(--text-primary)] uppercase italic leading-none truncate">
+          <h3 className="text-lg sm:text-xl md:text-2xl font-light tracking-tight text-[var(--text-primary)] uppercase italic leading-tight break-words">
             {getDisplayName(entity, tr('sauna.doors', 'Dører'))}
           </h3>
           <div
