@@ -41,6 +41,11 @@ export default function Header({
   const dateScale = headerSettings?.dateScale ?? 1.0;
   const logoUrl = String(headerSettings?.logoUrl || '').trim();
   const hasLogo = logoUrl.length > 0;
+  const mobileTitleLength = String(headerTitle || '').trim().length;
+  const mobileFontSize = mobileTitleLength > 16
+    ? `calc(clamp(1.05rem, 4.7vw, 1.45rem) * ${headerScale})`
+    : `calc(clamp(1.5rem, 8vw, 2.2rem) * ${headerScale})`;
+  const mobileLetterSpacing = mobileTitleLength > 16 ? '0.08em' : lsMobile;
 
   const timeOptions = is12h
     ? { hour: 'numeric', minute: '2-digit', hour12: true }
@@ -89,11 +94,17 @@ export default function Header({
                   }`}
                   style={{
                     color: 'var(--text-muted)', 
-                    fontSize: `calc(clamp(3rem, 5vw, 3.75rem) * ${headerScale})`,
+                    fontSize: isMobile
+                      ? mobileFontSize
+                      : `calc(clamp(3rem, 5vw, 3.75rem) * ${headerScale})`,
                     fontWeight: fontWeight,
-                    letterSpacing: isMobile ? lsMobile : lsDesktop,
+                    letterSpacing: isMobile ? mobileLetterSpacing : lsDesktop,
                     fontStyle: fontStyleVal === 'italic' ? 'italic' : 'normal',
                     textTransform: fontStyleVal === 'uppercase' ? 'uppercase' : 'none',
+                    whiteSpace: 'nowrap',
+                    overflow: 'visible',
+                    textOverflow: 'clip',
+                    maxWidth: isMobile ? '100%' : '100%',
                     fontFamily: 
                       selectedFont === 'georgia' ? 'Georgia, serif' :
                       selectedFont === 'courier' ? '"Courier New", monospace' :

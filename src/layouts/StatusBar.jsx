@@ -89,7 +89,7 @@ export default function StatusBar({
   };
 
   return (
-    <div className="flex items-center justify-between w-full mt-0 font-sans">
+    <div className={`flex items-center w-full mt-0 font-sans ${isMobile ? 'justify-center' : 'justify-between'}`}>
       <div className={`flex flex-wrap items-center min-w-0 ${isMobile ? 'gap-1.5' : 'gap-2.5'}`}>
         {/* Edit button (only in edit mode) - at first position */}
         {editMode && (

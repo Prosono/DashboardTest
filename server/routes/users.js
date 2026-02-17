@@ -65,6 +65,7 @@ router.put('/:id', (req, res) => {
 
   const username = req.body?.username !== undefined ? String(req.body.username).trim() : existing.username;
   const role = parseRole(req.body?.role, existing.role);
+  const roleChanged = role !== existing.role;
   const assignedDashboardId = req.body?.assignedDashboardId !== undefined ? String(req.body.assignedDashboardId || '').trim() : existing.assigned_dashboard_id;
   const password = req.body?.password !== undefined ? String(req.body.password) : '';
   const parsedHa = parseHaFields(req.body, existing);
@@ -97,6 +98,12 @@ router.put('/:id', (req, res) => {
   if (password) {
     db.prepare('UPDATE users SET password_hash = ?, updated_at = ? WHERE id = ?')
       .run(hashPassword(password), now, id);
+  }
+
+  // Role changes should apply immediately across devices/sessions.
+  // Force re-auth so clients pick up the new authorization level.
+  if (roleChanged) {
+    db.prepare('DELETE FROM sessions WHERE user_id = ?').run(id);
   }
 
   const user = db.prepare('SELECT * FROM users WHERE id = ?').get(id);
