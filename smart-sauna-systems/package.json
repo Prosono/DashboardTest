@@ -1,0 +1,60 @@
+{
+  "name": "tunet-dashboard",
+  "private": true,
+  "version": "1.0.0-beta.7",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/oyvhov/tunet.git"
+  },
+  "license": "GPL-3.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite --force",
+    "build": "vite build",
+    "postbuild": "node scripts/postbuild.js",
+    "preview": "vite preview",
+    "lint": "eslint src",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "dev:server": "node scripts/run-server.mjs",
+    "dev:all": "sh -c 'npm run dev:server & npm run dev'",
+    "server": "node server/index.js",
+    "verify:dashboard-storage-source": "node scripts/verify-dashboard-storage-source.mjs",
+    "predev": "npm run verify:dashboard-storage-source",
+    "prebuild": "npm run verify:dashboard-storage-source"
+  },
+  "dependencies": {
+    "@fortawesome/fontawesome-free": "^7.1.0",
+    "@fortawesome/fontawesome-svg-core": "^7.1.0",
+    "@fortawesome/react-fontawesome": "^3.1.1",
+    "@mdi/js": "^7.4.47",
+    "@mdi/react": "^1.6.1",
+    "leaflet": "^1.9.4",
+    "lucide-react": "^0.263.1",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "react-icons": "^5.5.0",
+    "better-sqlite3": "^11.0.0",
+    "express": "^4.21.0",
+    "home-assistant-js-websocket": "^9.6.0"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.0.0",
+    "@tailwindcss/postcss": "^4.1.18",
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/react": "^16.3.2",
+    "@types/react": "^18.2.37",
+    "@types/react-dom": "^18.2.15",
+    "@vitejs/plugin-react": "^4.2.1",
+    "autoprefixer": "^10.4.24",
+    "eslint": "^9.39.2",
+    "eslint-plugin-react": "^7.37.5",
+    "eslint-plugin-react-hooks": "^7.0.1",
+    "jsdom": "^28.0.0",
+    "postcss": "^8.5.6",
+    "tailwindcss": "^4.1.18",
+    "vite": "^7.3.1",
+    "vitest": "^4.0.18",
+    "concurrently": "^9.0.0"
+  }
+}

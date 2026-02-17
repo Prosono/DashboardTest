@@ -1,4 +1,19 @@
 const TOKEN_KEY = 'tunet_app_auth_token';
+const API_BASE = (() => {
+  const fromEnv = import.meta.env?.VITE_API_BASE;
+  if (typeof fromEnv === 'string' && fromEnv.trim()) return fromEnv.trim().replace(/\/$/, '');
+  return './api';
+})();
+
+const resolveApiPath = (path) => {
+  const input = String(path || '').trim();
+  if (!input) return API_BASE;
+  if (/^https?:\/\//i.test(input)) return input;
+  if (input.startsWith('/api/')) return `${API_BASE}${input.slice(4)}`;
+  if (input.startsWith('api/')) return `${API_BASE}/${input.slice(4)}`;
+  if (input.startsWith('/')) return `${API_BASE}${input}`;
+  return `${API_BASE}/${input}`;
+};
 
 export const getAuthToken = () => {
   try {
@@ -27,7 +42,7 @@ export const apiRequest = async (path, options = {}) => {
   };
   if (token) headers.Authorization = `Bearer ${token}`;
 
-  const res = await fetch(path, {
+  const res = await fetch(resolveApiPath(path), {
     ...options,
     headers,
   });

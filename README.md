@@ -92,6 +92,17 @@ Alternatively, run with Docker:
    - Open `http://localhost:5173`
    - Go to Settings and add your Home Assistant URL and token
 
+### Home Assistant Add-on
+
+This repository includes a Home Assistant add-on package in `smart-sauna-systems/`.
+
+1. Go to **Settings → Add-ons → Add-on Store → Repositories**
+2. Add this repository URL
+3. Install **Smart Sauna Systems**
+4. Start the add-on and open it from the sidebar
+
+Ingress entry is configured as `/SmartSaunaSystems`, so the app is opened through your Home Assistant ingress URL path.
+
 ## Configuration
 
 1. Open dashboard settings

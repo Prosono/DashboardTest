@@ -1,0 +1,30 @@
+name: Smart Sauna Systems
+version: "1.0.0"
+slug: smart_sauna_systems
+description: Smart Sauna Systems dashboard with ingress support
+url: https://github.com/oyvhov/tunet
+arch:
+  - aarch64
+  - amd64
+  - armhf
+  - armv7
+  - i386
+startup: application
+boot: auto
+init: false
+ingress: true
+ingress_port: 8099
+ingress_entry: /SmartSaunaSystems
+panel_icon: mdi:sauna
+panel_title: Smart Sauna Systems
+panel_admin: false
+homeassistant_api: true
+hassio_api: false
+ports: {}
+ports_description: {}
+map:
+  - addon_config:rw
+options:
+  log_level: info
+schema:
+  log_level: list(trace|debug|info|notice|warning|error|fatal)
