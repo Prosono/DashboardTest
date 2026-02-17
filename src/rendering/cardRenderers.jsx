@@ -12,6 +12,7 @@ import {
   CalendarCard,
   CarCard,
   CoverCard,
+  EntityGroupControlCard,
   TodoCard,
   GenericAndroidTVCard,
   GenericClimateCard,
@@ -479,6 +480,39 @@ export function renderSaunaCard(cardId, dragProps, getControls, cardStyle, setti
   );
 }
 
+export function renderEntityGroupControlCard(cardId, dragProps, getControls, cardStyle, settingsKey, ctx) {
+  const {
+    entities, editMode, cardSettings, customNames, customIcons,
+    setActiveSaunaFieldModal, t,
+  } = ctx;
+  const settings = cardSettings[settingsKey] || cardSettings[cardId] || {};
+  const fieldType = settings?.fieldType || 'switch';
+  const entityIds = Array.isArray(settings?.entityIds) ? settings.entityIds.filter(Boolean) : [];
+  if (!entityIds.length) {
+    if (editMode) {
+      return <MissingEntityCard cardId={cardId} dragProps={dragProps} controls={getControls(cardId)} cardStyle={cardStyle} t={t} />;
+    }
+    return null;
+  }
+
+  return (
+    <EntityGroupControlCard
+      key={cardId}
+      cardId={cardId}
+      settings={settings}
+      entities={entities}
+      dragProps={dragProps}
+      controls={getControls(cardId)}
+      cardStyle={cardStyle}
+      editMode={editMode}
+      customNames={customNames}
+      customIcons={customIcons}
+      onOpen={() => setActiveSaunaFieldModal({ title: settings?.title, entityIds, cardId, fieldType })}
+      t={t}
+    />
+  );
+}
+
 // ─── Card Type Dispatch ──────────────────────────────────────────────────────
 
 /**
@@ -556,6 +590,17 @@ export function dispatchCardRender(cardId, dragProps, getControls, cardStyle, se
 
   if (cardId.startsWith('sauna_card_')) {
     return renderSaunaCard(cardId, dragProps, getControls, cardStyle, settingsKey, ctx);
+  }
+
+  if (
+    cardId.startsWith('fan_card_')
+    || cardId.startsWith('door_card_')
+    || cardId.startsWith('motion_card_')
+    || cardId.startsWith('lock_card_')
+    || cardId.startsWith('switch_card_')
+    || cardId.startsWith('number_card_')
+  ) {
+    return renderEntityGroupControlCard(cardId, dragProps, getControls, cardStyle, settingsKey, ctx);
   }
 
   // Generic entity/toggle/sensor type

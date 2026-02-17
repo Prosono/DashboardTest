@@ -251,6 +251,7 @@ export default function SaunaCard({
     label: autoModeOn ? tr('sauna.autoMode', 'Auto') : tr('sauna.manualMode', 'Manuell'),
     cls: autoModeOn ? 'bg-emerald-500/16 border-emerald-400/22 text-emerald-200' : 'bg-orange-500/18 border-orange-400/25 text-orange-200',
   };
+  const lightReadablePill = 'bg-white/70 border-slate-300 text-slate-800';
 
   const primaryState = (() => {
     if (saunaIsActive && serviceYes) return { label: tr('sauna.service', 'Service'), desc: tr('sauna.serviceOngoing', 'Pågår nå'), tone: 'warn' };
@@ -303,9 +304,9 @@ export default function SaunaCard({
     settings?.showFans !== false && { key: 'fans', icon: iconFor(settings?.fansIcon, Fan), title: tr('sauna.fans', 'Vifter'), value: fanIds.length ? `${activeFans}/${fanIds.length} ${tr('common.on', 'på')}` : '--', active: activeFans > 0, onClick: () => openFieldModal(tr('sauna.fans', 'Vifter'), fanIds, { fieldType: 'fan' }), clickable: fanIds.length > 0, category: 'control' },
     settings?.showThermostatOverview !== false && { key: 'thermostatGroup', icon: iconFor(settings?.thermostatsIcon, Shield), title: tr('sauna.thermostats', 'Termostater'), value: thermostatIds.length ? `${activeThermostats}/${thermostatIds.length} ${tr('common.on', 'på')}` : '--', active: activeThermostats > 0, onClick: () => openFieldModal(tr('sauna.thermostats', 'Termostater'), thermostatIds), clickable: thermostatIds.length > 0, category: 'control' },
     settings?.showActiveCodes !== false && { key: 'codes', icon: iconFor(settings?.codesIcon, Hash), title: tr('sauna.activeCodes', 'Aktive koder'), value: codeIds.length ? `${codeIds.length}` : '--', active: codeIds.length > 0, onClick: () => openFieldModal(tr('sauna.activeCodes', 'Aktive koder'), codeIds, { fieldType: 'number' }), clickable: codeIds.length > 0, category: 'safety' },
-    settings?.showAutoLock !== false && { key: 'autoLock', icon: iconFor(settings?.autoLockIcon, ToggleRight), title: tr('sauna.autoLock', 'Autolåsing'), value: autoLockOn ? tr('common.on', 'På') : tr('common.off', 'Av'), active: autoLockOn, onClick: () => openFieldModal(tr('sauna.autoLock', 'Autolåsing'), [settings?.autoLockEntityId]), clickable: Boolean(settings?.autoLockEntityId), category: 'safety' },
+    settings?.showAutoLock !== false && { key: 'autoLock', icon: iconFor(settings?.autoLockIcon, ToggleRight), title: tr('sauna.autoLock', 'Autolåsing'), value: autoLockOn ? tr('common.on', 'På') : tr('common.off', 'Av'), active: autoLockOn, onClick: () => openFieldModal(tr('sauna.autoLock', 'Autolåsing'), [settings?.autoLockEntityId], { fieldType: 'switch' }), clickable: Boolean(settings?.autoLockEntityId), category: 'safety' },
     settings?.showDoors !== false && { key: 'doors', icon: iconFor(settings?.doorsIcon, DoorOpen), title: tr('sauna.doors', 'Dør'), value: `${openDoors} ${openDoors === 1 ? tr('sauna.openShort', 'åpen') : tr('sauna.openShortPlural', 'åpne')}`, active: openDoors > 0, onClick: () => openFieldModal(tr('sauna.doors', 'Dører'), doorIds, { fieldType: 'door' }), clickable: doorIds.length > 0, category: 'safety' },
-    settings?.showLocks !== false && { key: 'locks', icon: iconFor(settings?.locksIcon, Lock), title: tr('sauna.locks', 'Lås'), value: `${unlockedDoors} ${unlockedDoors === 1 ? tr('sauna.unlockedShort', 'ulåst') : tr('sauna.unlockedShortPlural', 'ulåste')}`, active: unlockedDoors > 0, onClick: () => openFieldModal(tr('sauna.locks', 'Låser'), lockIds), clickable: lockIds.length > 0, category: 'safety' },
+    settings?.showLocks !== false && { key: 'locks', icon: iconFor(settings?.locksIcon, Lock), title: tr('sauna.locks', 'Lås'), value: `${unlockedDoors} ${unlockedDoors === 1 ? tr('sauna.unlockedShort', 'ulåst') : tr('sauna.unlockedShortPlural', 'ulåste')}`, active: unlockedDoors > 0, onClick: () => openFieldModal(tr('sauna.locks', 'Låser'), lockIds, { fieldType: 'lock' }), clickable: lockIds.length > 0, category: 'safety' },
     settings?.showMotion !== false && { key: 'motion', icon: iconFor(settings?.motionIcon, Activity), title: tr('sauna.motion', 'Bevegelse'), value: motionOn ? tr('sauna.motionDetected', 'Registrert') : tr('sauna.noMotion', 'Ingen'), active: motionOn, onClick: () => openFieldModal(tr('sauna.motion', 'Bevegelse'), [settings?.motionEntityId], { fieldType: 'motion' }), clickable: Boolean(settings?.motionEntityId), category: 'safety' },
   ].filter(Boolean);
 
@@ -338,7 +339,7 @@ export default function SaunaCard({
               <Icon className={cx('w-4 h-4', item.active ? 'text-emerald-600 dark:text-emerald-300' : 'text-[var(--text-secondary)]')} />
               <div className="min-w-0">
                 <div className="text-[10px] uppercase tracking-widest font-extrabold text-[var(--text-secondary)] truncate">{item.title}</div>
-                <div className="text-sm font-extrabold text-[var(--text-primary)] truncate">{item.value}</div>
+                <div className={cx('text-sm text-[var(--text-primary)] truncate', isLightTheme ? 'font-normal' : 'font-extrabold')}>{item.value}</div>
               </div>
             </button>
           );
@@ -379,7 +380,10 @@ export default function SaunaCard({
                   {peopleNow}
                 </button>
               )}
-              <div className="relative w-40 h-40 rounded-full overflow-hidden border border-[var(--glass-border)] bg-[var(--glass-bg-hover)] shadow-[0_16px_45px_rgba(0,0,0,0.45)]">
+              <div className={cx(
+                'relative w-40 h-40 rounded-full overflow-hidden border border-[var(--glass-border)] bg-[var(--glass-bg-hover)]',
+                isLightTheme ? 'shadow-[0_8px_24px_rgba(15,23,42,0.18)]' : 'shadow-[0_16px_45px_rgba(0,0,0,0.45)]'
+              )}>
                 {imageUrl ? <img src={imageUrl} alt={saunaName} className="w-full h-full object-cover" draggable={false} /> : <div className="w-full h-full bg-gradient-to-br from-white/10 to-black/20" />}
                 <div className="absolute inset-0 rounded-full ring-1 ring-white/10" />
                 {flameOn && (
@@ -402,11 +406,11 @@ export default function SaunaCard({
             {settings?.showManualMode !== false && settings?.manualModeEntityId && (
               <button
                 type="button"
-                onClick={() => openFieldModal(tr('sauna.manualMode', 'Modus'), [settings.manualModeEntityId])}
+                onClick={() => openFieldModal(tr('sauna.manualMode', 'Modus'), [settings.manualModeEntityId], { fieldType: 'switch' })}
                 className={cx(
                   'px-4 py-2 rounded-full text-[12px] uppercase tracking-widest border',
-                  isLightTheme ? 'font-medium text-white' : 'font-extrabold',
-                  modePill.cls
+                  modePill.cls,
+                  isLightTheme ? `font-semibold ${lightReadablePill}` : 'font-extrabold'
                 )}
               >
                 {modePill.label}
@@ -416,12 +420,12 @@ export default function SaunaCard({
             <>
               <div className={cx(
                 'px-4 py-2 rounded-full text-[12px] uppercase tracking-widest border',
-                isLightTheme ? 'font-medium text-white' : 'font-extrabold',
-                tone.pill
+                tone.pill,
+                isLightTheme ? `font-semibold ${lightReadablePill}` : 'font-extrabold'
               )}>
                 <span className="align-middle">{primaryState.label}</span>
               </div>
-              <div className="text-[12px] text-[var(--text-secondary)] font-normal text-right">{primaryState.desc}</div>
+              <div className={cx('text-[12px] font-normal text-right', isLightTheme ? 'text-slate-700' : 'text-[var(--text-secondary)]')}>{primaryState.desc}</div>
             </>
           </div>
         </div>
@@ -429,25 +433,27 @@ export default function SaunaCard({
         {(bookingLine || preheatOn) && (() => {
           const BookingIcon = statusVisual.icon;
           return (
-            <div className="mt-7 relative min-h-[5.8rem] flex items-center justify-center">
+            <div className="mt-6 relative min-h-[7.8rem] pb-5">
+              <div className="relative z-20 flex items-center justify-center mb-2">
+                <div className="flex items-center justify-center gap-2 min-w-0 text-center px-2 py-0.5 rounded-full bg-black/20 shadow-[0_2px_8px_rgba(0,0,0,0.35)]">
+                  <BookingIcon className={cx('w-4 h-4 shrink-0', statusVisual.color)} />
+                  <p className="text-sm font-normal text-[var(--text-primary)] truncate">{bookingLine || tr('sauna.preheat', 'Forvarmer')}</p>
+                </div>
+              </div>
               {statusHistory.length > 0 && (
-                <div className="absolute inset-x-2 top-0 h-[4.4rem] opacity-85 pointer-events-none">
+                <div className="absolute inset-x-2 top-8 h-[4.4rem] opacity-85 pointer-events-none">
                   <SparkLine data={statusHistory} height={72} currentIndex={statusHistory.length - 1} fade minValue={0} maxValue={100} />
                 </div>
               )}
-              <div className="absolute left-2 top-1.5 bottom-1.5 z-10 flex flex-col justify-between text-[10px] leading-none text-orange-200/80 pointer-events-none">
+              <div className={cx('absolute left-2 top-9 h-[4.0rem] z-10 flex flex-col justify-between text-[10px] leading-none pointer-events-none', isLightTheme ? 'text-slate-900/90' : 'text-orange-200/80')}>
                 <span>100°</span>
                 <span>0°</span>
               </div>
-              <div className="absolute right-2 top-1.5 bottom-1.5 z-10 flex items-center text-[10px] leading-none text-orange-200/80 pointer-events-none">
+              <div className={cx('absolute right-2 top-9 h-[4.0rem] z-10 flex items-center text-[10px] leading-none pointer-events-none', isLightTheme ? 'text-slate-900/90' : 'text-orange-200/80')}>
                 <span>{tempIsValid ? `${currentTemp.toFixed(1)}°` : '--'}</span>
               </div>
-              <div className="relative z-10 flex items-center justify-center gap-2 min-w-0 text-center px-2 py-0.5 rounded-full bg-black/20 shadow-[0_2px_8px_rgba(0,0,0,0.35)]">
-                <BookingIcon className={cx('w-4 h-4 shrink-0', statusVisual.color)} />
-                <p className="text-sm font-normal text-[var(--text-primary)] truncate">{bookingLine || tr('sauna.preheat', 'Forvarmer')}</p>
-              </div>
               {statusTimeLabels && (
-                <div className="absolute inset-x-2 bottom-0 z-10 flex items-center justify-between text-[10px] leading-none text-orange-200/80 pointer-events-none">
+                <div className={cx('absolute inset-x-2 bottom-0 z-10 flex items-center justify-between text-[10px] leading-none pointer-events-none', isLightTheme ? 'text-slate-900/90' : 'text-orange-200/80')}>
                   <span>{statusTimeLabels.left}</span>
                   <span>{statusTimeLabels.mid}</span>
                   <span>{statusTimeLabels.right}</span>

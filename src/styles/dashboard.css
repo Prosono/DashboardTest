@@ -208,6 +208,19 @@ html[data-theme='flat'] .popup-surface-hover {
   box-shadow: none !important;
 }
 
+/* Light theme readability: darken green text used in pill/badge UI. */
+html[data-theme='light'] .rounded-full[class*="text-emerald-"],
+html[data-theme='light'] .rounded-xl[class*="text-emerald-"],
+html[data-theme='light'] .rounded-2xl[class*="text-emerald-"] {
+  color: #14532d !important;
+}
+
+html[data-theme='light'] .rounded-full [class*="text-emerald-"],
+html[data-theme='light'] .rounded-xl [class*="text-emerald-"],
+html[data-theme='light'] .rounded-2xl [class*="text-emerald-"] {
+  color: #14532d !important;
+}
+
 /* Custom scrollbar for modal content */
 .custom-scrollbar::-webkit-scrollbar {
   width: 4px;

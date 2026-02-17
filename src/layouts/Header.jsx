@@ -39,6 +39,8 @@ export default function Header({
   const is12h = clockFormat === '12h';
   const clockScale = headerSettings?.clockScale ?? 1.0;
   const dateScale = headerSettings?.dateScale ?? 1.0;
+  const logoUrl = String(headerSettings?.logoUrl || '').trim();
+  const hasLogo = logoUrl.length > 0;
 
   const timeOptions = is12h
     ? { hour: 'numeric', minute: '2-digit', hour12: true }
@@ -68,6 +70,15 @@ export default function Header({
         {/* Left column: Heading and Date (same X) */}
         <div className="flex flex-col gap-1">
           <div className={`flex items-center gap-4 ${isMobile ? 'justify-center w-full' : ''}`}>
+            {hasLogo && (
+              <img
+                src={logoUrl}
+                alt="Header logo"
+                className="h-12 w-auto md:h-14 object-contain select-none"
+                loading="lazy"
+                referrerPolicy="no-referrer"
+              />
+            )}
             {headerSettings.showTitle && (
               <>
                 <h1 

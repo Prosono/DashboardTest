@@ -10,6 +10,7 @@ import StatusPill from '../components/cards/StatusPill';
  * @param {Function} props.setActiveMediaGroupKey - Set media group key
  * @param {Function} props.setActiveMediaModal - Set active media modal
  * @param {Function} props.setShowUpdateModal - Open update modal
+ * @param {Function} props.onOpenEntityPill - Open modal for a specific entity id
  * @param {Function} props.t - Translation function
  * @param {Function} props.isSonosActive - Check if Sonos is active
  * @param {Function} props.isMediaActive - Check if media is active
@@ -25,7 +26,8 @@ export default function StatusBar({
   setActiveMediaGroupIds,
   setActiveMediaSessionSensorIds,
   setActiveMediaModal,
-  _setShowUpdateModal,  
+  setShowUpdateModal,
+  onOpenEntityPill,
   setShowStatusPillsConfig,
   editMode,
   t, 
@@ -185,6 +187,14 @@ export default function StatusBar({
                 getA={getA}
                 t={t}
                 isMobile={isMobile}
+                onClick={pill.clickable ? () => {
+                  if (!pill.entityId) return;
+                  if (pill.entityId.startsWith('update.')) {
+                    setShowUpdateModal?.();
+                    return;
+                  }
+                  onOpenEntityPill?.(pill.entityId);
+                } : undefined}
               />
             );
           })

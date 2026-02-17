@@ -6,6 +6,8 @@ import GenericFanModal from './GenericFanModal';
 import GenericDoorModal from './GenericDoorModal';
 import GenericMotionModal from './GenericMotionModal';
 import GenericNumberModal from './GenericNumberModal';
+import GenericLockModal from './GenericLockModal';
+import GenericSwitchModal from './GenericSwitchModal';
 
 const domainFor = (entityId = '') => String(entityId).split('.')[0] || '';
 const getFriendlyName = (entityId, entities) => entities?.[entityId]?.attributes?.friendly_name || entityId;
@@ -94,6 +96,8 @@ export default function SaunaFieldModal({
   const [activeDoorEntityModal, setActiveDoorEntityModal] = React.useState(null);
   const [activeMotionEntityModal, setActiveMotionEntityModal] = React.useState(null);
   const [activeNumberEntityModal, setActiveNumberEntityModal] = React.useState(null);
+  const [activeLockEntityModal, setActiveLockEntityModal] = React.useState(null);
+  const [activeSwitchEntityModal, setActiveSwitchEntityModal] = React.useState(null);
 
   const grouped = {};
   ids.forEach((entityId) => {
@@ -130,18 +134,29 @@ export default function SaunaFieldModal({
       return domain === 'binary_sensor' && ['motion', 'occupancy', 'presence'].includes(deviceClass);
     })
     : [];
+  const lockEntityIds = fieldType === 'lock'
+    ? ids.filter((entityId) => domainFor(entityId) === 'lock')
+    : [];
   const numberEntityIds = fieldType === 'number'
     ? ids.filter((entityId) => {
       const domain = domainFor(entityId);
       return domain === 'input_number' || domain === 'number';
     })
     : [];
+  const switchEntityIds = fieldType === 'switch'
+    ? ids.filter((entityId) => {
+      const domain = domainFor(entityId);
+      return domain === 'switch' || domain === 'input_boolean';
+    })
+    : [];
   const fanOnly = fieldType === 'fan' && fanEntityIds.length > 0;
   const doorOnly = fieldType === 'door' && doorEntityIds.length > 0;
   const motionOnly = fieldType === 'motion' && motionEntityIds.length > 0;
+  const lockOnly = fieldType === 'lock' && lockEntityIds.length > 0;
   const numberOnly = fieldType === 'number' && numberEntityIds.length > 0;
+  const switchOnly = fieldType === 'switch' && switchEntityIds.length > 0;
   const thermostatOnly = sortedDomains.length === 1 && sortedDomains[0] === 'climate';
-  const focusedLayout = thermostatOnly || fanOnly || doorOnly || motionOnly || numberOnly;
+  const focusedLayout = thermostatOnly || fanOnly || doorOnly || motionOnly || lockOnly || numberOnly || switchOnly;
 
   const openEntityModal = (entityId) => {
     const domain = domainFor(entityId);
@@ -159,7 +174,7 @@ export default function SaunaFieldModal({
       onClose?.();
       return;
     }
-    if (domain === 'fan' || domain === 'switch') {
+    if (domain === 'fan' || (domain === 'switch' && fieldType === 'fan')) {
       setActiveFanEntityModal(entityId);
       return;
     }
@@ -171,8 +186,16 @@ export default function SaunaFieldModal({
       setActiveMotionEntityModal(entityId);
       return;
     }
+    if (domain === 'lock' && fieldType === 'lock') {
+      setActiveLockEntityModal(entityId);
+      return;
+    }
     if ((domain === 'input_number' || domain === 'number') && fieldType === 'number') {
       setActiveNumberEntityModal(entityId);
+      return;
+    }
+    if ((domain === 'switch' || domain === 'input_boolean') && fieldType === 'switch') {
+      setActiveSwitchEntityModal(entityId);
       return;
     }
     if (setShowSensorInfoModal) {
@@ -424,6 +447,85 @@ export default function SaunaFieldModal({
               </div>
             </section>
           )}
+          {lockOnly && (
+            <section className="rounded-2xl border p-3 md:p-4 space-y-3 popup-surface" style={{ borderColor: 'var(--glass-border)' }}>
+              <div className="flex items-center justify-between gap-3">
+                <div className="flex items-center gap-3 min-w-0">
+                  <div className="w-10 h-10 rounded-2xl border flex items-center justify-center bg-[var(--glass-bg)]" style={{ borderColor: 'var(--glass-border)' }}>
+                    <Lock className="w-5 h-5 text-[var(--text-secondary)]" />
+                  </div>
+                  <div className="min-w-0">
+                    <div className="text-sm md:text-base font-bold truncate">{tr('sauna.locks', 'Låser')}</div>
+                    <div className="text-[10px] uppercase tracking-widest text-[var(--text-secondary)]">{lockEntityIds.length} {tr('common.entities', 'entiteter')}</div>
+                  </div>
+                </div>
+              </div>
+              <div className="space-y-3">
+                {lockEntityIds
+                  .filter((entityId) => {
+                    if (activityFilter === 'all') return true;
+                    const active = isActiveState('lock', getEntityState(entityId, entities));
+                    return activityFilter === 'active' ? active : !active;
+                  })
+                  .map((entityId) => {
+                    const ent = entities?.[entityId];
+                    if (!ent) return null;
+                    return (
+                      <GenericLockModal
+                        key={entityId}
+                        entityId={entityId}
+                        entity={ent}
+                        callService={callService}
+                        t={t}
+                        onShowHistory={showEntityHistory}
+                        embedded
+                        showCloseButton={false}
+                      />
+                    );
+                  })}
+              </div>
+            </section>
+          )}
+          {switchOnly && (
+            <section className="rounded-2xl border p-3 md:p-4 space-y-3 popup-surface" style={{ borderColor: 'var(--glass-border)' }}>
+              <div className="flex items-center justify-between gap-3">
+                <div className="flex items-center gap-3 min-w-0">
+                  <div className="w-10 h-10 rounded-2xl border flex items-center justify-center bg-[var(--glass-bg)]" style={{ borderColor: 'var(--glass-border)' }}>
+                    <ToggleRight className="w-5 h-5 text-[var(--text-secondary)]" />
+                  </div>
+                  <div className="min-w-0">
+                    <div className="text-sm md:text-base font-bold truncate">{tr('common.switch', 'Bryter')}</div>
+                    <div className="text-[10px] uppercase tracking-widest text-[var(--text-secondary)]">{switchEntityIds.length} {tr('common.entities', 'entiteter')}</div>
+                  </div>
+                </div>
+              </div>
+              <div className="space-y-3">
+                {switchEntityIds
+                  .filter((entityId) => {
+                    if (activityFilter === 'all') return true;
+                    const domain = domainFor(entityId);
+                    const active = isActiveState(domain, getEntityState(entityId, entities));
+                    return activityFilter === 'active' ? active : !active;
+                  })
+                  .map((entityId) => {
+                    const ent = entities?.[entityId];
+                    if (!ent) return null;
+                    return (
+                      <GenericSwitchModal
+                        key={entityId}
+                        entityId={entityId}
+                        entity={ent}
+                        callService={callService}
+                        t={t}
+                        onShowHistory={showEntityHistory}
+                        embedded
+                        showCloseButton={false}
+                      />
+                    );
+                  })}
+              </div>
+            </section>
+          )}
           {numberOnly && (
             <section className="rounded-2xl border p-3 md:p-4 space-y-3 popup-surface" style={{ borderColor: 'var(--glass-border)' }}>
               <div className="flex items-center justify-between gap-3">
@@ -462,6 +564,8 @@ export default function SaunaFieldModal({
             if (fanOnly && (domain === 'fan' || domain === 'switch')) return null;
             if (doorOnly && domain === 'binary_sensor') return null;
             if (motionOnly && domain === 'binary_sensor') return null;
+            if (lockOnly && domain === 'lock') return null;
+            if (switchOnly && (domain === 'switch' || domain === 'input_boolean')) return null;
             if (numberOnly && (domain === 'input_number' || domain === 'number')) return null;
             const list = getVisibleList(domain);
             if (list.length === 0) return null;
@@ -732,6 +836,32 @@ export default function SaunaFieldModal({
             showEntityHistory(entityId);
           }}
           onClose={() => setActiveMotionEntityModal(null)}
+        />
+      )}
+      {activeLockEntityModal && entities?.[activeLockEntityModal] && (
+        <GenericLockModal
+          entityId={activeLockEntityModal}
+          entity={entities[activeLockEntityModal]}
+          callService={callService}
+          t={t}
+          onShowHistory={(entityId) => {
+            setActiveLockEntityModal(null);
+            showEntityHistory(entityId);
+          }}
+          onClose={() => setActiveLockEntityModal(null)}
+        />
+      )}
+      {activeSwitchEntityModal && entities?.[activeSwitchEntityModal] && (
+        <GenericSwitchModal
+          entityId={activeSwitchEntityModal}
+          entity={entities[activeSwitchEntityModal]}
+          callService={callService}
+          t={t}
+          onShowHistory={(entityId) => {
+            setActiveSwitchEntityModal(null);
+            showEntityHistory(entityId);
+          }}
+          onClose={() => setActiveSwitchEntityModal(null)}
         />
       )}
       {activeNumberEntityModal && entities?.[activeNumberEntityModal] && (

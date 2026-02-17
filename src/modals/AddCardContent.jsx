@@ -1,20 +1,25 @@
 import {
   Activity,
   ArrowUpDown,
+  DoorOpen,
   Bot,
   Calendar,
   Car,
   Check,
   CloudSun,
   Coins,
+  Fan,
   Flame,
   Gamepad2,
+  Hash,
   Home,
   Lightbulb,
+  Lock,
   ListChecks,
   Music,
   Plus,
   Search,
+  ToggleRight,
   Thermometer,
   X,
   Zap
@@ -222,6 +227,20 @@ export default function AddCardContent({
       if (addCardType === 'vacuum') return id.startsWith('vacuum.') && !(pagesConfig[addCardTargetPage] || []).includes(id);
       if (addCardType === 'cover') return id.startsWith('cover.');
       if (addCardType === 'climate') return id.startsWith('climate.');
+      if (addCardType === 'fanCard') return id.startsWith('fan.') || id.startsWith('switch.');
+      if (addCardType === 'doorCard') {
+        if (!id.startsWith('binary_sensor.')) return false;
+        const dc = String(entities[id]?.attributes?.device_class || '');
+        return ['door', 'window', 'opening'].includes(dc);
+      }
+      if (addCardType === 'motionCard') {
+        if (!id.startsWith('binary_sensor.')) return false;
+        const dc = String(entities[id]?.attributes?.device_class || '');
+        return ['motion', 'occupancy', 'presence'].includes(dc);
+      }
+      if (addCardType === 'lockCard') return id.startsWith('lock.');
+      if (addCardType === 'switchCard') return id.startsWith('switch.') || id.startsWith('input_boolean.');
+      if (addCardType === 'numberCard') return id.startsWith('input_number.') || id.startsWith('number.');
       if (addCardType === 'androidtv') return id.startsWith('media_player.') || id.startsWith('remote.');
       if (addCardType === 'cost') return (id.startsWith('sensor.') || id.startsWith('input_number.'));
       if (addCardType === 'media') return id.startsWith('media_player.');
@@ -488,6 +507,12 @@ export default function AddCardContent({
                 <TypeButton type="nordpool" icon={Zap} label={t('addCard.type.nordpool')} isActive={addCardType === 'nordpool'} onSelect={setAddCardType} />
                 <TypeButton type="room" icon={Home} label={getLabel('addCard.type.room', 'Room')} isActive={addCardType === 'room'} onSelect={setAddCardType} />
                 <TypeButton type="sauna" icon={Flame} label={getLabel('addCard.type.sauna', 'Sauna')} isActive={addCardType === 'sauna'} onSelect={setAddCardType} />
+                <TypeButton type="fanCard" icon={Fan} label={getLabel('addCard.type.fans', 'Fans')} isActive={addCardType === 'fanCard'} onSelect={setAddCardType} />
+                <TypeButton type="doorCard" icon={DoorOpen} label={getLabel('addCard.type.doors', 'Doors')} isActive={addCardType === 'doorCard'} onSelect={setAddCardType} />
+                <TypeButton type="motionCard" icon={Activity} label={getLabel('addCard.type.motion', 'Motion')} isActive={addCardType === 'motionCard'} onSelect={setAddCardType} />
+                <TypeButton type="lockCard" icon={Lock} label={getLabel('addCard.type.locks', 'Locks')} isActive={addCardType === 'lockCard'} onSelect={setAddCardType} />
+                <TypeButton type="switchCard" icon={ToggleRight} label={getLabel('addCard.type.switches', 'Switches')} isActive={addCardType === 'switchCard'} onSelect={setAddCardType} />
+                <TypeButton type="numberCard" icon={Hash} label={getLabel('addCard.type.numbers', 'Numbers')} isActive={addCardType === 'numberCard'} onSelect={setAddCardType} />
               </div>
             </div>
           )}

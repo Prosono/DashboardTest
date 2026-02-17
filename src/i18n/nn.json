@@ -498,6 +498,8 @@
   "header.showTitle": "Vis overskrift",
   "header.showClock": "Vis klokke",
   "header.showDate": "Vis dato",
+  "header.logoUrl": "Logo-URL",
+  "header.logoPlaceholder": "Lim inn URL til logobilete",
   "modal.editHeader.title": "Rediger Header",
   "common.optional": "Valfritt",
   "common.off": "AV",

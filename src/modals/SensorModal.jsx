@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { X, Activity } from 'lucide-react';
+import { X, Activity, AlertTriangle } from 'lucide-react';
 import { logger } from '../utils/logger';
 import { getHistory, getHistoryRest, getStatistics } from '../services/haClient';
 import SensorHistoryGraph from '../components/charts/SensorHistoryGraph';
@@ -17,6 +17,33 @@ export default function SensorModal({ isOpen, onClose, entityId, entity, customN
 
   // Keep track of window for the timeline
   const [timeWindow, setTimeWindow] = useState({ start: new Date(Date.now() - 24*60*60*1000), end: new Date() });
+  const isSystemWarningDetails = entityId === 'sensor.system_warning_details';
+  const isSystemCriticalDetails = entityId === 'sensor.system_critical_details';
+  const isSystemDetailsSensor = isSystemWarningDetails || isSystemCriticalDetails;
+
+  const parseWarningLines = (rawValue) => {
+    const raw = String(rawValue ?? '').replace(/\r\n/g, '\n').trim();
+    if (!raw) return [];
+    const low = raw.toLowerCase();
+    if (low === 'unknown' || low === 'unavailable' || low === 'none') return [];
+
+    let lines = raw
+      .split('\n')
+      .map((line) => line.trim())
+      .filter(Boolean);
+
+    // Some integrations return all warnings in one long line.
+    if (lines.length <= 1 && raw.includes('⚠️')) {
+      lines = raw
+        .split(/(?=⚠️)/g)
+        .map((line) => line.trim())
+        .filter(Boolean);
+    }
+
+    return lines
+      .map((line) => line.replace(/^text:\s*/i, '').replace(/^⚠️\s*/u, '').trim())
+      .filter(Boolean);
+  };
 
   const toDateSafe = (value) => {
     if (!value) return null;
@@ -75,6 +102,11 @@ export default function SensorModal({ isOpen, onClose, entityId, entity, customN
 
   useEffect(() => {
     if (isOpen && entity && conn) {
+      if (isSystemDetailsSensor) {
+        setHistory([]);
+        setHistoryEvents([]);
+        return;
+      }
       const fetchHistory = async () => {
         setLoading(true);
         setHistoryError(null);
@@ -256,7 +288,7 @@ export default function SensorModal({ isOpen, onClose, entityId, entity, customN
       setHistory([]);
       setHistoryEvents([]);
     }
-  }, [isOpen, entity, conn, haUrl, haToken, historyHours]);
+  }, [isOpen, entity, conn, haUrl, haToken, historyHours, isSystemDetailsSensor]);
 
   if (!isOpen || !entity) return null;
 
@@ -358,6 +390,70 @@ export default function SensorModal({ isOpen, onClose, entityId, entity, customN
 
   // Icon Logic
   const Icon = getIconComponent(attrs.icon) || Activity;
+  const warningSource = attrs?.text ?? attrs?.details ?? attrs?.warning_details ?? attrs?.warnings ?? state;
+  const warningLines = isSystemDetailsSensor ? parseWarningLines(warningSource) : [];
+
+  if (isSystemDetailsSensor) {
+    const title = isSystemCriticalDetails ? 'Kritiske varsler' : 'Systemvarsler';
+    const toneClass = isSystemCriticalDetails
+      ? 'border-red-400/30 bg-red-600/15'
+      : 'border-red-500/20 bg-red-500/10';
+    return (
+      <div
+        className="fixed inset-0 z-[150] flex items-center justify-center p-4 md:p-6"
+        style={{ backdropFilter: 'blur(20px)', backgroundColor: 'rgba(0,0,0,0.3)' }}
+        onClick={onClose}
+      >
+        <div
+          className="border w-full max-w-3xl rounded-3xl md:rounded-[2.5rem] overflow-hidden flex flex-col backdrop-blur-xl shadow-2xl popup-anim relative max-h-[88vh]"
+          style={{
+            background: 'linear-gradient(135deg, var(--card-bg) 0%, var(--modal-bg) 100%)',
+            borderColor: 'var(--glass-border)',
+            color: 'var(--text-primary)'
+          }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <div className="absolute top-4 right-4 md:top-6 md:right-6 z-50">
+            <button onClick={onClose} className="modal-close">
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+
+          <div className="p-6 md:p-8 border-b border-[var(--glass-border)]">
+            <div className="flex items-center gap-3 mb-2">
+              <div className="p-3 rounded-xl bg-red-500/20 text-red-400">
+                <AlertTriangle className="w-5 h-5" />
+              </div>
+              <h2 className="text-xl md:text-2xl font-light tracking-tight text-[var(--text-primary)] uppercase italic leading-none">
+                {t('warnings.title') === 'warnings.title' ? title : t('warnings.title')}
+              </h2>
+            </div>
+            <p className="text-xs uppercase tracking-widest font-bold text-[var(--text-secondary)]">
+              {warningLines.length} varsler
+            </p>
+          </div>
+
+          <div className="p-4 md:p-6 overflow-y-auto custom-scrollbar space-y-2">
+            {warningLines.length === 0 && (
+              <div className="rounded-2xl border border-emerald-500/25 bg-emerald-500/10 px-4 py-3 text-emerald-300 text-sm font-medium">
+                {t('warnings.none') === 'warnings.none' ? 'Ingen aktive varsler.' : t('warnings.none')}
+              </div>
+            )}
+            {warningLines.map((line, index) => (
+              <div key={`${index}_${line.slice(0, 20)}`} className={`rounded-2xl border px-4 py-3 flex items-start gap-3 ${toneClass}`}>
+                <span className="text-red-400 leading-none pt-0.5">⚠️</span>
+                <p className="text-sm text-[var(--text-primary)] leading-relaxed">{line}</p>
+              </div>
+            ))}
+          </div>
+
+          <div className="px-6 pb-5 pt-2 text-center text-[11px] text-[var(--text-secondary)] font-mono opacity-60">
+            {entityId}
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div

@@ -290,6 +290,8 @@
   "header.showClock": "Show clock",
   "header.showDate": "Show date",
   "header.showTitle": "Show title",
+  "header.logoUrl": "Logo URL",
+  "header.logoPlaceholder": "Paste logo image URL",
   "header.titleLabel": "Page title",
   "header.titlePlaceholder": "Edit header title",
   "header.visibility": "Visibility",

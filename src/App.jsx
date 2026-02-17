@@ -205,10 +205,74 @@ function AppContent({
 
   const [editMode, setEditMode] = useState(false);
   const canEditDashboard = currentUser?.role === 'admin';
+  const WARNING_SENSOR_ID = 'sensor.system_warning_details';
+  const CRITICAL_SENSOR_ID = 'sensor.system_critical_details';
 
   useEffect(() => {
     if (!canEditDashboard && editMode) setEditMode(false);
   }, [canEditDashboard, editMode]);
+
+  useEffect(() => {
+    if (!entities?.[WARNING_SENSOR_ID]) return;
+    const exists = Array.isArray(statusPillsConfig) && statusPillsConfig.some((pill) => pill?.entityId === WARNING_SENSOR_ID);
+    if (exists) return;
+
+    const warningPill = {
+      id: 'pill_system_warning_details',
+      type: 'conditional',
+      entityId: WARNING_SENSOR_ID,
+      label: 'Systemvarsel',
+      sublabel: 'Trykk for detaljer',
+      icon: 'AlertTriangle',
+      bgColor: 'rgba(239, 68, 68, 0.16)',
+      iconBgColor: 'rgba(239, 68, 68, 0.2)',
+      iconColor: 'text-red-400',
+      labelColor: 'text-red-300',
+      sublabelColor: 'text-red-200',
+      condition: { type: 'not_state', states: ['unknown', 'unavailable', 'none', 'ok', '0'] },
+      clickable: true,
+      animated: false,
+      visible: true,
+      mediaFilter: '',
+      mediaFilterMode: 'startsWith',
+      mediaSelectionMode: 'filter',
+      mediaEntityIds: [],
+      sessionSensorIds: [],
+    };
+
+    saveStatusPillsConfig([...(statusPillsConfig || []), warningPill]);
+  }, [entities, statusPillsConfig, saveStatusPillsConfig, WARNING_SENSOR_ID]);
+
+  useEffect(() => {
+    if (!entities?.[CRITICAL_SENSOR_ID]) return;
+    const exists = Array.isArray(statusPillsConfig) && statusPillsConfig.some((pill) => pill?.entityId === CRITICAL_SENSOR_ID);
+    if (exists) return;
+
+    const criticalPill = {
+      id: 'pill_system_critical_details',
+      type: 'conditional',
+      entityId: CRITICAL_SENSOR_ID,
+      label: 'Kritisk varsel',
+      sublabel: 'Trykk for detaljer',
+      icon: 'AlertTriangle',
+      bgColor: 'rgba(220, 38, 38, 0.2)',
+      iconBgColor: 'rgba(220, 38, 38, 0.25)',
+      iconColor: 'text-red-300',
+      labelColor: 'text-red-200',
+      sublabelColor: 'text-red-100',
+      condition: { type: 'not_state', states: ['unknown', 'unavailable', 'none', 'ok', '0'] },
+      clickable: true,
+      animated: false,
+      visible: true,
+      mediaFilter: '',
+      mediaFilterMode: 'startsWith',
+      mediaSelectionMode: 'filter',
+      mediaEntityIds: [],
+      sessionSensorIds: [],
+    };
+
+    saveStatusPillsConfig([...(statusPillsConfig || []), criticalPill]);
+  }, [entities, statusPillsConfig, saveStatusPillsConfig, CRITICAL_SENSOR_ID]);
 
   const [draggingId, setDraggingId] = useState(null);
   const [activePage, _setActivePage] = useState(() => {
@@ -743,6 +807,35 @@ function AppContent({
                 setActiveMediaSessionSensorIds={setActiveMediaSessionSensorIds}
                 setActiveMediaModal={setActiveMediaModal}
                 setShowUpdateModal={() => { setShowConfigModal(true); setConfigTab('updates'); }}
+                onOpenEntityPill={(entityId) => {
+                  if (!entityId) return;
+                  if (entityId.startsWith('person.')) {
+                    setShowPersonModal(entityId);
+                    return;
+                  }
+                  if (entityId.startsWith('light.')) {
+                    setShowLightModal(entityId);
+                    return;
+                  }
+                  if (entityId.startsWith('climate.')) {
+                    setActiveClimateEntityModal(entityId);
+                    return;
+                  }
+                  if (entityId.startsWith('media_player.')) {
+                    setActiveMediaId(entityId);
+                    setActiveMediaGroupKey(null);
+                    setActiveMediaGroupIds([entityId]);
+                    setActiveMediaSessionSensorIds(null);
+                    setActiveMediaModal('media');
+                    return;
+                  }
+                  if (entityId.startsWith('vacuum.')) {
+                    setActiveVacuumId(entityId);
+                    setShowVacuumModal(true);
+                    return;
+                  }
+                  setShowSensorInfoModal(entityId);
+                }}
                 setShowStatusPillsConfig={setShowStatusPillsConfig}
                 editMode={editMode}
                 t={t}
