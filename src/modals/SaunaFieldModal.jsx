@@ -1,8 +1,11 @@
 import React from 'react';
-import { X, Lightbulb, Lock, Fan, Shield, Hash, Thermometer, DoorOpen, ToggleRight } from '../icons';
+import { X, Lightbulb, Lock, Fan, Shield, Hash, Thermometer, DoorOpen, ToggleRight, Activity } from '../icons';
 import M3Slider from '../components/ui/M3Slider';
 import GenericClimateModal from './GenericClimateModal';
 import GenericFanModal from './GenericFanModal';
+import GenericDoorModal from './GenericDoorModal';
+import GenericMotionModal from './GenericMotionModal';
+import GenericNumberModal from './GenericNumberModal';
 
 const domainFor = (entityId = '') => String(entityId).split('.')[0] || '';
 const getFriendlyName = (entityId, entities) => entities?.[entityId]?.attributes?.friendly_name || entityId;
@@ -88,6 +91,9 @@ export default function SaunaFieldModal({
   const ids = Array.isArray(entityIds) ? entityIds.filter(Boolean) : [];
   const [activityFilter, setActivityFilter] = React.useState('all');
   const [activeFanEntityModal, setActiveFanEntityModal] = React.useState(null);
+  const [activeDoorEntityModal, setActiveDoorEntityModal] = React.useState(null);
+  const [activeMotionEntityModal, setActiveMotionEntityModal] = React.useState(null);
+  const [activeNumberEntityModal, setActiveNumberEntityModal] = React.useState(null);
 
   const grouped = {};
   ids.forEach((entityId) => {
@@ -110,9 +116,32 @@ export default function SaunaFieldModal({
       return domain === 'fan' || domain === 'switch';
     })
     : [];
+  const doorEntityIds = fieldType === 'door'
+    ? ids.filter((entityId) => {
+      const domain = domainFor(entityId);
+      const deviceClass = String(entities?.[entityId]?.attributes?.device_class || '');
+      return domain === 'binary_sensor' && ['door', 'window', 'opening'].includes(deviceClass);
+    })
+    : [];
+  const motionEntityIds = fieldType === 'motion'
+    ? ids.filter((entityId) => {
+      const domain = domainFor(entityId);
+      const deviceClass = String(entities?.[entityId]?.attributes?.device_class || '');
+      return domain === 'binary_sensor' && ['motion', 'occupancy', 'presence'].includes(deviceClass);
+    })
+    : [];
+  const numberEntityIds = fieldType === 'number'
+    ? ids.filter((entityId) => {
+      const domain = domainFor(entityId);
+      return domain === 'input_number' || domain === 'number';
+    })
+    : [];
   const fanOnly = fieldType === 'fan' && fanEntityIds.length > 0;
+  const doorOnly = fieldType === 'door' && doorEntityIds.length > 0;
+  const motionOnly = fieldType === 'motion' && motionEntityIds.length > 0;
+  const numberOnly = fieldType === 'number' && numberEntityIds.length > 0;
   const thermostatOnly = sortedDomains.length === 1 && sortedDomains[0] === 'climate';
-  const focusedLayout = thermostatOnly || fanOnly;
+  const focusedLayout = thermostatOnly || fanOnly || doorOnly || motionOnly || numberOnly;
 
   const openEntityModal = (entityId) => {
     const domain = domainFor(entityId);
@@ -132,6 +161,18 @@ export default function SaunaFieldModal({
     }
     if (domain === 'fan' || domain === 'switch') {
       setActiveFanEntityModal(entityId);
+      return;
+    }
+    if (domain === 'binary_sensor' && fieldType === 'door') {
+      setActiveDoorEntityModal(entityId);
+      return;
+    }
+    if (domain === 'binary_sensor' && fieldType === 'motion') {
+      setActiveMotionEntityModal(entityId);
+      return;
+    }
+    if ((domain === 'input_number' || domain === 'number') && fieldType === 'number') {
+      setActiveNumberEntityModal(entityId);
       return;
     }
     if (setShowSensorInfoModal) {
@@ -307,9 +348,121 @@ export default function SaunaFieldModal({
               </div>
             </section>
           )}
+          {doorOnly && (
+            <section className="rounded-2xl border p-3 md:p-4 space-y-3 popup-surface" style={{ borderColor: 'var(--glass-border)' }}>
+              <div className="flex items-center justify-between gap-3">
+                <div className="flex items-center gap-3 min-w-0">
+                  <div className="w-10 h-10 rounded-2xl border flex items-center justify-center bg-[var(--glass-bg)]" style={{ borderColor: 'var(--glass-border)' }}>
+                    <DoorOpen className="w-5 h-5 text-[var(--text-secondary)]" />
+                  </div>
+                  <div className="min-w-0">
+                    <div className="text-sm md:text-base font-bold truncate">{tr('sauna.doors', 'Dører')}</div>
+                    <div className="text-[10px] uppercase tracking-widest text-[var(--text-secondary)]">{doorEntityIds.length} {tr('common.entities', 'entiteter')}</div>
+                  </div>
+                </div>
+              </div>
+              <div className="space-y-3">
+                {doorEntityIds
+                  .filter((entityId) => {
+                    if (activityFilter === 'all') return true;
+                    const active = isActiveState('binary_sensor', getEntityState(entityId, entities));
+                    return activityFilter === 'active' ? active : !active;
+                  })
+                  .map((entityId) => {
+                    const ent = entities?.[entityId];
+                    if (!ent) return null;
+                    return (
+                      <GenericDoorModal
+                        key={entityId}
+                        entityId={entityId}
+                        entity={ent}
+                        t={t}
+                        onShowHistory={showEntityHistory}
+                        embedded
+                        showCloseButton={false}
+                      />
+                    );
+                  })}
+              </div>
+            </section>
+          )}
+          {motionOnly && (
+            <section className="rounded-2xl border p-3 md:p-4 space-y-3 popup-surface" style={{ borderColor: 'var(--glass-border)' }}>
+              <div className="flex items-center justify-between gap-3">
+                <div className="flex items-center gap-3 min-w-0">
+                  <div className="w-10 h-10 rounded-2xl border flex items-center justify-center bg-[var(--glass-bg)]" style={{ borderColor: 'var(--glass-border)' }}>
+                    <Activity className="w-5 h-5 text-[var(--text-secondary)]" />
+                  </div>
+                  <div className="min-w-0">
+                    <div className="text-sm md:text-base font-bold truncate">{tr('sauna.motion', 'Bevegelse')}</div>
+                    <div className="text-[10px] uppercase tracking-widest text-[var(--text-secondary)]">{motionEntityIds.length} {tr('common.entities', 'entiteter')}</div>
+                  </div>
+                </div>
+              </div>
+              <div className="space-y-3">
+                {motionEntityIds
+                  .filter((entityId) => {
+                    if (activityFilter === 'all') return true;
+                    const active = isActiveState('binary_sensor', getEntityState(entityId, entities));
+                    return activityFilter === 'active' ? active : !active;
+                  })
+                  .map((entityId) => {
+                    const ent = entities?.[entityId];
+                    if (!ent) return null;
+                    return (
+                      <GenericMotionModal
+                        key={entityId}
+                        entityId={entityId}
+                        entity={ent}
+                        t={t}
+                        onShowHistory={showEntityHistory}
+                        embedded
+                        showCloseButton={false}
+                      />
+                    );
+                  })}
+              </div>
+            </section>
+          )}
+          {numberOnly && (
+            <section className="rounded-2xl border p-3 md:p-4 space-y-3 popup-surface" style={{ borderColor: 'var(--glass-border)' }}>
+              <div className="flex items-center justify-between gap-3">
+                <div className="flex items-center gap-3 min-w-0">
+                  <div className="w-10 h-10 rounded-2xl border flex items-center justify-center bg-[var(--glass-bg)]" style={{ borderColor: 'var(--glass-border)' }}>
+                    <Hash className="w-5 h-5 text-[var(--text-secondary)]" />
+                  </div>
+                  <div className="min-w-0">
+                    <div className="text-sm md:text-base font-bold truncate">{tr('room.domain.number', 'Nummer')}</div>
+                    <div className="text-[10px] uppercase tracking-widest text-[var(--text-secondary)]">{numberEntityIds.length} {tr('common.entities', 'entiteter')}</div>
+                  </div>
+                </div>
+              </div>
+              <div className="space-y-3">
+                {numberEntityIds.map((entityId) => {
+                  const ent = entities?.[entityId];
+                  if (!ent) return null;
+                  return (
+                    <GenericNumberModal
+                      key={entityId}
+                      entityId={entityId}
+                      entity={ent}
+                      callService={callService}
+                      t={t}
+                      onShowHistory={showEntityHistory}
+                      embedded
+                      showCloseButton={false}
+                    />
+                  );
+                })}
+              </div>
+            </section>
+          )}
 
           {sortedDomains.map((domain) => {
             if (fanOnly && (domain === 'fan' || domain === 'switch')) return null;
+            if (doorOnly && domain === 'binary_sensor') return null;
+            if (motionOnly && domain === 'binary_sensor') return null;
+            if (numberOnly && (domain === 'input_number' || domain === 'number')) return null;
             const list = getVisibleList(domain);
             if (list.length === 0) return null;
             const DomainIcon = iconForDomain(domain);
@@ -555,6 +708,43 @@ export default function SaunaFieldModal({
             showEntityHistory(entityId);
           }}
           onClose={() => setActiveFanEntityModal(null)}
+        />
+      )}
+      {activeDoorEntityModal && entities?.[activeDoorEntityModal] && (
+        <GenericDoorModal
+          entityId={activeDoorEntityModal}
+          entity={entities[activeDoorEntityModal]}
+          t={t}
+          onShowHistory={(entityId) => {
+            setActiveDoorEntityModal(null);
+            showEntityHistory(entityId);
+          }}
+          onClose={() => setActiveDoorEntityModal(null)}
+        />
+      )}
+      {activeMotionEntityModal && entities?.[activeMotionEntityModal] && (
+        <GenericMotionModal
+          entityId={activeMotionEntityModal}
+          entity={entities[activeMotionEntityModal]}
+          t={t}
+          onShowHistory={(entityId) => {
+            setActiveMotionEntityModal(null);
+            showEntityHistory(entityId);
+          }}
+          onClose={() => setActiveMotionEntityModal(null)}
+        />
+      )}
+      {activeNumberEntityModal && entities?.[activeNumberEntityModal] && (
+        <GenericNumberModal
+          entityId={activeNumberEntityModal}
+          entity={entities[activeNumberEntityModal]}
+          callService={callService}
+          t={t}
+          onShowHistory={(entityId) => {
+            setActiveNumberEntityModal(null);
+            showEntityHistory(entityId);
+          }}
+          onClose={() => setActiveNumberEntityModal(null)}
         />
       )}
     </>
