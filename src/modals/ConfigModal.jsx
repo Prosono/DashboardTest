@@ -3,6 +3,7 @@ import ModernDropdown from '../components/ui/ModernDropdown';
 import M3Slider from '../components/ui/M3Slider';
 import { GRADIENT_PRESETS } from '../contexts/ConfigContext';
 import { hasOAuthTokens } from '../services/oauthStorage';
+import { fetchSharedDashboardProfile, saveSharedDashboardProfile, toProfileId } from '../services/dashboardStorage';
 import {
   X,
   Check,
@@ -120,6 +121,13 @@ export default function ConfigModal({
   const [savingUserIds, setSavingUserIds] = useState({});
   const [deletingUserIds, setDeletingUserIds] = useState({});
   const [expandedUserId, setExpandedUserId] = useState('');
+  const [importingDashboard, setImportingDashboard] = useState(false);
+  const [clients, setClients] = useState([]);
+  const [newClientId, setNewClientId] = useState('');
+  const [newClientName, setNewClientName] = useState('');
+  const [selectedClientId, setSelectedClientId] = useState('');
+  const [newClientAdminUsername, setNewClientAdminUsername] = useState('');
+  const [newClientAdminPassword, setNewClientAdminPassword] = useState('');
 
   const normalizeRole = (role) => {
     const value = String(role || '').trim();
@@ -191,6 +199,24 @@ export default function ConfigModal({
     });
     return () => { cancelled = true; };
   }, [configTab, canEditDashboard, userAdminApi]);
+
+  useEffect(() => {
+    if (configTab !== 'storage' || !canEditDashboard || !userAdminApi?.listClients) return;
+    let cancelled = false;
+    userAdminApi.listClients().then((list) => {
+      if (cancelled) return;
+      const nextClients = Array.isArray(list) ? list : [];
+      setClients(nextClients);
+      if (!nextClients.some((client) => client.id === selectedClientId)) {
+        setSelectedClientId(nextClients[0]?.id || '');
+      }
+    }).catch(() => {
+      if (!cancelled) {
+        setClients([]);
+      }
+    });
+    return () => { cancelled = true; };
+  }, [configTab, canEditDashboard, userAdminApi, selectedClientId]);
 
   if (!open) return null;
 
@@ -338,6 +364,29 @@ export default function ConfigModal({
       });
     };
 
+    const syncClients = (nextClients) => {
+      const normalized = Array.isArray(nextClients) ? nextClients : [];
+      setClients(normalized);
+      const existing = normalized.some((client) => client.id === selectedClientId);
+      if (!existing) {
+        setSelectedClientId(normalized[0]?.id || '');
+      }
+    };
+
+    const canManageClients = canEditDashboard && typeof userAdminApi?.listClients === 'function';
+
+    const refreshClients = async () => {
+      if (!canManageClients) return;
+      try {
+        const list = await userAdminApi.listClients();
+        syncClients(list);
+      } catch (error) {
+        if (error?.status !== 403) {
+          setGlobalActionMessage(error?.message || 'Failed to load clients');
+        }
+      }
+    };
+
     const handleRefresh = async () => {
       if (!refreshGlobalDashboards) return;
       const nextProfiles = await refreshGlobalDashboards();
@@ -347,6 +396,48 @@ export default function ConfigModal({
       if (canEditDashboard && userAdminApi?.listUsers) {
         const list = await userAdminApi.listUsers().catch(() => []);
         syncUsers(list);
+      }
+      await refreshClients();
+    };
+
+    const handleCreateClient = async () => {
+      if (!canManageClients || !userAdminApi?.createClient) return;
+      const clientId = String(newClientId || '').trim();
+      if (!clientId) {
+        setGlobalActionMessage('Client ID is required');
+        return;
+      }
+      try {
+        const created = await userAdminApi.createClient(clientId, String(newClientName || '').trim());
+        setNewClientId('');
+        setNewClientName('');
+        await refreshClients();
+        if (created?.id) {
+          setSelectedClientId(created.id);
+          setGlobalActionMessage(`Client ready: ${created.id}`);
+        }
+      } catch (error) {
+        setGlobalActionMessage(error?.message || 'Failed to create client');
+      }
+    };
+
+    const handleCreateClientAdmin = async () => {
+      if (!canManageClients || !userAdminApi?.createClientAdmin) return;
+      const clientId = String(selectedClientId || '').trim();
+      const username = String(newClientAdminUsername || '').trim();
+      const password = String(newClientAdminPassword || '').trim();
+      if (!clientId || !username || !password) {
+        setGlobalActionMessage('Client, username and password are required');
+        return;
+      }
+      try {
+        await userAdminApi.createClientAdmin(clientId, username, password);
+        setNewClientAdminUsername('');
+        setNewClientAdminPassword('');
+        await refreshClients();
+        setGlobalActionMessage(`Admin created for ${clientId}`);
+      } catch (error) {
+        setGlobalActionMessage(error?.message || 'Failed to create client admin');
       }
     };
 
@@ -371,6 +462,65 @@ export default function ConfigModal({
       const ok = await loadGlobalDashboard(target);
       if (ok) {
         setGlobalActionMessage(`${t('userMgmt.loadedDashboard')}: ${target}`);
+      }
+    };
+
+    const handleExportGlobal = async () => {
+      const target = toProfileId(selectedGlobalDashboard || 'default');
+      try {
+        const data = await fetchSharedDashboardProfile(target);
+        if (!data || typeof data !== 'object') {
+          setGlobalActionMessage(t('userMgmt.exportFailed'));
+          return;
+        }
+        const payload = {
+          profileId: target,
+          exportedAt: new Date().toISOString(),
+          schemaVersion: 1,
+          dashboard: data,
+        };
+        const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `${target}-dashboard-export.json`;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        URL.revokeObjectURL(url);
+        setGlobalActionMessage(`${t('userMgmt.exportedDashboard')}: ${target}`);
+      } catch {
+        setGlobalActionMessage(t('userMgmt.exportFailed'));
+      }
+    };
+
+    const handleImportGlobal = async (event) => {
+      const file = event?.target?.files?.[0];
+      event.target.value = '';
+      if (!file || importingDashboard) return;
+
+      const target = toProfileId(selectedGlobalDashboard || 'default');
+      setImportingDashboard(true);
+      try {
+        const text = await file.text();
+        const parsed = JSON.parse(text);
+        const importedDashboard = parsed?.dashboard && typeof parsed.dashboard === 'object'
+          ? parsed.dashboard
+          : (parsed && typeof parsed === 'object' ? parsed : null);
+
+        if (!importedDashboard || typeof importedDashboard !== 'object') {
+          setGlobalActionMessage(t('userMgmt.importInvalidFile'));
+          return;
+        }
+
+        await saveSharedDashboardProfile(target, importedDashboard);
+        await refreshGlobalDashboards?.();
+        await loadGlobalDashboard?.(target);
+        setGlobalActionMessage(`${t('userMgmt.importedDashboard')}: ${target}`);
+      } catch {
+        setGlobalActionMessage(t('userMgmt.importFailed'));
+      } finally {
+        setImportingDashboard(false);
       }
     };
 
@@ -491,6 +641,73 @@ export default function ConfigModal({
             </div>
           </div>
 
+          {canManageClients && (
+            <div className="space-y-3 pt-2 border-t border-[var(--glass-border)]">
+              <h4 className="text-xs uppercase font-bold tracking-wider text-[var(--text-secondary)]">{t('userMgmt.clientManagement')}</h4>
+
+              <div className="rounded-xl border border-[var(--glass-border)] bg-[var(--glass-bg)] p-3 space-y-3">
+                <p className="text-[11px] uppercase tracking-wider text-[var(--text-secondary)] font-bold">{t('userMgmt.createClient')}</p>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                  <input
+                    value={newClientId}
+                    onChange={(e) => setNewClientId(e.target.value)}
+                    placeholder={t('userMgmt.clientId')}
+                    className="px-3 py-2 rounded-lg bg-[var(--glass-bg-hover)] border border-[var(--glass-border)] text-sm"
+                  />
+                  <input
+                    value={newClientName}
+                    onChange={(e) => setNewClientName(e.target.value)}
+                    placeholder={t('userMgmt.clientNameOptional')}
+                    className="px-3 py-2 rounded-lg bg-[var(--glass-bg-hover)] border border-[var(--glass-border)] text-sm"
+                  />
+                </div>
+                <button
+                  onClick={handleCreateClient}
+                  className="w-full py-2.5 rounded-lg bg-indigo-500 hover:bg-indigo-600 text-white text-xs font-bold uppercase tracking-wider"
+                >
+                  {t('userMgmt.createClient')}
+                </button>
+              </div>
+
+              <div className="rounded-xl border border-[var(--glass-border)] bg-[var(--glass-bg)] p-3 space-y-3">
+                <p className="text-[11px] uppercase tracking-wider text-[var(--text-secondary)] font-bold">{t('userMgmt.createClientAdmin')}</p>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+                  <select
+                    value={selectedClientId}
+                    onChange={(e) => setSelectedClientId(e.target.value)}
+                    className="px-3 py-2 rounded-lg bg-[var(--glass-bg-hover)] border border-[var(--glass-border)] text-sm"
+                  >
+                    <option value="">{t('userMgmt.selectClient')}</option>
+                    {clients.map((client) => (
+                      <option key={client.id} value={client.id}>
+                        {client.id} ({client.userCount || 0} users)
+                      </option>
+                    ))}
+                  </select>
+                  <input
+                    value={newClientAdminUsername}
+                    onChange={(e) => setNewClientAdminUsername(e.target.value)}
+                    placeholder={t('profile.username')}
+                    className="px-3 py-2 rounded-lg bg-[var(--glass-bg-hover)] border border-[var(--glass-border)] text-sm"
+                  />
+                  <input
+                    value={newClientAdminPassword}
+                    onChange={(e) => setNewClientAdminPassword(e.target.value)}
+                    type="password"
+                    placeholder={t('userMgmt.password')}
+                    className="px-3 py-2 rounded-lg bg-[var(--glass-bg-hover)] border border-[var(--glass-border)] text-sm"
+                  />
+                </div>
+                <button
+                  onClick={handleCreateClientAdmin}
+                  className="w-full py-2.5 rounded-lg bg-green-500 hover:bg-green-600 text-white text-xs font-bold uppercase tracking-wider"
+                >
+                  {t('userMgmt.createClientAdmin')}
+                </button>
+              </div>
+            </div>
+          )}
+
           <div className="space-y-2">
             <label className="text-xs uppercase font-bold text-[var(--text-secondary)]">{t('userMgmt.loadDashboard')}</label>
             <select
@@ -511,6 +728,27 @@ export default function ConfigModal({
             >
               {globalStorageBusy ? t('common.loading') : t('userMgmt.loadDashboard')}
             </button>
+            {canEditDashboard && (
+              <div className="grid grid-cols-2 gap-2 pt-1">
+                <button
+                  onClick={handleExportGlobal}
+                  disabled={globalStorageBusy || importingDashboard}
+                  className="py-2.5 rounded-xl bg-[var(--glass-bg-hover)] hover:bg-[var(--glass-bg)] border border-[var(--glass-border)] text-[var(--text-primary)] text-xs font-bold uppercase tracking-wider disabled:opacity-50"
+                >
+                  {t('userMgmt.exportDashboard')}
+                </button>
+                <label className="py-2.5 rounded-xl bg-[var(--glass-bg-hover)] hover:bg-[var(--glass-bg)] border border-[var(--glass-border)] text-[var(--text-primary)] text-xs font-bold uppercase tracking-wider text-center cursor-pointer disabled:opacity-50">
+                  <input
+                    type="file"
+                    accept=".json,application/json"
+                    className="hidden"
+                    onChange={handleImportGlobal}
+                    disabled={globalStorageBusy || importingDashboard}
+                  />
+                  {importingDashboard ? t('common.loading') : t('userMgmt.importDashboard')}
+                </label>
+              </div>
+            )}
           </div>
 
           {canEditDashboard && (

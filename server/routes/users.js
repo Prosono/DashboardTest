@@ -24,11 +24,12 @@ const parseHaFields = (body = {}, fallback = {}) => {
 };
 
 router.get('/', (_req, res) => {
-  const users = db.prepare('SELECT * FROM users ORDER BY username ASC').all();
+  const users = db.prepare('SELECT * FROM users WHERE client_id = ? ORDER BY username ASC').all(_req.auth.user.clientId);
   res.json({ users: users.map(safeUser) });
 });
 
 router.post('/', (req, res) => {
+  const clientId = req.auth.user.clientId;
   const username = String(req.body?.username || '').trim();
   const password = String(req.body?.password || '').trim();
   const role = parseRole(req.body?.role, 'user');
@@ -40,27 +41,28 @@ router.post('/', (req, res) => {
   }
   if (parsedHa.error) return res.status(400).json({ error: parsedHa.error });
 
-  const existing = db.prepare('SELECT id FROM users WHERE username = ?').get(username);
+  const existing = db.prepare('SELECT id FROM users WHERE client_id = ? AND username = ?').get(clientId, username);
   if (existing) return res.status(409).json({ error: 'Username already exists' });
 
-  const dash = db.prepare('SELECT id FROM dashboards WHERE id = ?').get(assignedDashboardId);
+  const dash = db.prepare('SELECT id FROM dashboards WHERE client_id = ? AND id = ?').get(clientId, assignedDashboardId);
   if (!dash) return res.status(400).json({ error: 'Assigned dashboard does not exist' });
 
   const now = new Date().toISOString();
   const id = randomUUID();
 
   db.prepare(`
-    INSERT INTO users (id, username, password_hash, role, assigned_dashboard_id, ha_url, ha_token, created_at, updated_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `).run(id, username, hashPassword(password), role, assignedDashboardId, parsedHa.haUrl, parsedHa.haToken, now, now);
+    INSERT INTO users (id, client_id, username, password_hash, role, assigned_dashboard_id, ha_url, ha_token, created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(id, clientId, username, hashPassword(password), role, assignedDashboardId, parsedHa.haUrl, parsedHa.haToken, now, now);
 
-  const user = db.prepare('SELECT * FROM users WHERE id = ?').get(id);
+  const user = db.prepare('SELECT * FROM users WHERE id = ? AND client_id = ?').get(id, clientId);
   res.status(201).json({ user: safeUser(user) });
 });
 
 router.put('/:id', (req, res) => {
+  const clientId = req.auth.user.clientId;
   const id = String(req.params.id || '').trim();
-  const existing = db.prepare('SELECT * FROM users WHERE id = ?').get(id);
+  const existing = db.prepare('SELECT * FROM users WHERE id = ? AND client_id = ?').get(id, clientId);
   if (!existing) return res.status(404).json({ error: 'User not found' });
 
   const username = req.body?.username !== undefined ? String(req.body.username).trim() : existing.username;
@@ -76,14 +78,14 @@ router.put('/:id', (req, res) => {
 
   if (!username) return res.status(400).json({ error: 'Username cannot be empty' });
   if (parsedHa.error) return res.status(400).json({ error: parsedHa.error });
-  const duplicate = db.prepare('SELECT id FROM users WHERE username = ? AND id != ?').get(username, id);
+  const duplicate = db.prepare('SELECT id FROM users WHERE client_id = ? AND username = ? AND id != ?').get(clientId, username, id);
   if (duplicate) return res.status(409).json({ error: 'Username already exists' });
 
-  const dash = db.prepare('SELECT id FROM dashboards WHERE id = ?').get(assignedDashboardId);
+  const dash = db.prepare('SELECT id FROM dashboards WHERE client_id = ? AND id = ?').get(clientId, assignedDashboardId);
   if (!dash) return res.status(400).json({ error: 'Assigned dashboard does not exist' });
 
   if (existing.role === 'admin' && role !== 'admin') {
-    const adminCount = db.prepare("SELECT COUNT(*) AS total FROM users WHERE role = 'admin'").get()?.total || 0;
+    const adminCount = db.prepare("SELECT COUNT(*) AS total FROM users WHERE client_id = ? AND role = 'admin'").get(clientId)?.total || 0;
     if (adminCount <= 1) return res.status(400).json({ error: 'Cannot demote the last admin user' });
   }
 
@@ -92,12 +94,12 @@ router.put('/:id', (req, res) => {
   db.prepare(`
     UPDATE users
     SET username = ?, role = ?, assigned_dashboard_id = ?, ha_url = ?, ha_token = ?, full_name = ?, email = ?, phone = ?, avatar_url = ?, updated_at = ?
-    WHERE id = ?
-  `).run(username, role, assignedDashboardId, parsedHa.haUrl, parsedHa.haToken, fullName, email, phone, avatarUrl, now, id);
+    WHERE id = ? AND client_id = ?
+  `).run(username, role, assignedDashboardId, parsedHa.haUrl, parsedHa.haToken, fullName, email, phone, avatarUrl, now, id, clientId);
 
   if (password) {
-    db.prepare('UPDATE users SET password_hash = ?, updated_at = ? WHERE id = ?')
-      .run(hashPassword(password), now, id);
+    db.prepare('UPDATE users SET password_hash = ?, updated_at = ? WHERE id = ? AND client_id = ?')
+      .run(hashPassword(password), now, id, clientId);
   }
 
   // Role changes should apply immediately across devices/sessions.
@@ -106,22 +108,23 @@ router.put('/:id', (req, res) => {
     db.prepare('DELETE FROM sessions WHERE user_id = ?').run(id);
   }
 
-  const user = db.prepare('SELECT * FROM users WHERE id = ?').get(id);
+  const user = db.prepare('SELECT * FROM users WHERE id = ? AND client_id = ?').get(id, clientId);
   res.json({ user: safeUser(user) });
 });
 
 router.delete('/:id', (req, res) => {
+  const clientId = req.auth.user.clientId;
   const id = String(req.params.id || '').trim();
-  const existing = db.prepare('SELECT * FROM users WHERE id = ?').get(id);
+  const existing = db.prepare('SELECT * FROM users WHERE id = ? AND client_id = ?').get(id, clientId);
   if (!existing) return res.status(404).json({ error: 'User not found' });
   if (id === req.auth.user.id) return res.status(400).json({ error: 'Cannot delete your own user' });
 
   if (existing.role === 'admin') {
-    const adminCount = db.prepare("SELECT COUNT(*) AS total FROM users WHERE role = 'admin'").get()?.total || 0;
+    const adminCount = db.prepare("SELECT COUNT(*) AS total FROM users WHERE client_id = ? AND role = 'admin'").get(clientId)?.total || 0;
     if (adminCount <= 1) return res.status(400).json({ error: 'Cannot delete the last admin user' });
   }
 
-  db.prepare('DELETE FROM users WHERE id = ?').run(id);
+  db.prepare('DELETE FROM users WHERE id = ? AND client_id = ?').run(id, clientId);
   return res.json({ success: true });
 });
 

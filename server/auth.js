@@ -30,7 +30,7 @@ export const authRequired = (req, res, next) => {
   if (!token) return res.status(401).json({ error: 'Missing bearer token' });
 
   const session = db.prepare(`
-    SELECT s.token, s.user_id, s.expires_at, u.username, u.role, u.assigned_dashboard_id
+    SELECT s.token, s.user_id, s.expires_at, u.client_id, u.username, u.role, u.assigned_dashboard_id
     FROM sessions s
     JOIN users u ON u.id = s.user_id
     WHERE s.token = ?
@@ -46,6 +46,7 @@ export const authRequired = (req, res, next) => {
     token,
     user: {
       id: session.user_id,
+      clientId: session.client_id,
       username: session.username,
       role: session.role,
       assignedDashboardId: session.assigned_dashboard_id || 'default',
@@ -63,6 +64,7 @@ export const adminRequired = (req, res, next) => {
 
 export const safeUser = (userRow) => ({
   id: userRow.id,
+  clientId: userRow.client_id,
   username: userRow.username,
   role: userRow.role,
   assignedDashboardId: userRow.assigned_dashboard_id || 'default',

@@ -815,5 +815,18 @@
   "userMgmt.total": "Totalt",
   "userMgmt.role": "Rolle",
   "userMgmt.dashboard": "Dashboard",
-  "userMgmt.newPasswordOptional": "Nytt passord (valfritt)"
+  "userMgmt.newPasswordOptional": "Nytt passord (valfritt)",
+  "userMgmt.exportDashboard": "Eksporter",
+  "userMgmt.importDashboard": "Importer",
+  "userMgmt.exportedDashboard": "Eksporterte dashboard",
+  "userMgmt.importedDashboard": "Importerte dashboard",
+  "userMgmt.exportFailed": "Klarte ikkje eksportere dashboard",
+  "userMgmt.importFailed": "Klarte ikkje importere dashboard",
+  "userMgmt.importInvalidFile": "Ugyldig importfil",
+  "userMgmt.clientManagement": "Kundeadministrasjon",
+  "userMgmt.createClient": "Opprett kunde",
+  "userMgmt.clientId": "Kunde-ID",
+  "userMgmt.clientNameOptional": "Kundenamn (valfritt)",
+  "userMgmt.createClientAdmin": "Opprett kundeadministrator",
+  "userMgmt.selectClient": "Vel kunde"
 }

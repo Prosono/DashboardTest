@@ -42,6 +42,7 @@ import './styles/dashboard.css';
 import { clearOAuthTokens, loadTokens, saveTokens } from './services/oauthStorage';
 import {
   fetchCurrentUser,
+  getClientId,
   loginWithPassword,
   logoutUser,
   updateProfile as updateCurrentProfile,
@@ -49,6 +50,9 @@ import {
   createUser as createServerUser,
   updateUser as updateServerUser,
   deleteUser as deleteServerUser,
+  listClients as listServerClients,
+  createClient as createServerClient,
+  createClientAdmin as createServerClientAdmin,
   fetchSharedHaConfig,
   saveSharedHaConfig,
 } from './services/appAuth';
@@ -1382,6 +1386,7 @@ export default function App() {
   const [currentUser, setCurrentUser] = useState(null);
   const [authError, setAuthError] = useState('');
   const [loggingIn, setLoggingIn] = useState(false);
+  const [clientId, setClientId] = useState(() => getClientId());
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [haConfigHydrated, setHaConfigHydrated] = useState(false);
@@ -1447,7 +1452,7 @@ export default function App() {
     setLoggingIn(true);
     setAuthError('');
     try {
-      const result = await loginWithPassword(username, password);
+      const result = await loginWithPassword(String(clientId || '').trim(), username, password);
       const user = result?.user || null;
 
       const shared = await fetchSharedHaConfig().catch(() => null);
@@ -1531,6 +1536,17 @@ export default function App() {
           </div>
 
           <div className="space-y-1.5">
+            <label className="block text-[11px] uppercase tracking-[0.18em] text-[var(--text-secondary)]">Client ID</label>
+            <input
+              className="w-full px-4 py-3 rounded-xl border outline-none transition-colors"
+              style={{ backgroundColor: 'var(--glass-bg)', borderColor: 'var(--glass-border)' }}
+              value={clientId}
+              onChange={(e) => setClientId(e.target.value)}
+              autoComplete="organization"
+            />
+          </div>
+
+          <div className="space-y-1.5">
             <label className="block text-[11px] uppercase tracking-[0.18em] text-[var(--text-secondary)]">Username</label>
             <input
               className="w-full px-4 py-3 rounded-xl border outline-none transition-colors"
@@ -1588,6 +1604,9 @@ export default function App() {
       return updated;
     },
     deleteUser: deleteServerUser,
+    listClients: listServerClients,
+    createClient: createServerClient,
+    createClientAdmin: createServerClientAdmin,
   };
 
   return (

@@ -1,21 +1,23 @@
 import { Router } from 'express';
-import db from '../db.js';
+import db, { normalizeClientId } from '../db.js';
 import { adminRequired, authRequired, createSession, deleteSession, getTokenFromRequest, safeUser } from '../auth.js';
 import { verifyPassword } from '../password.js';
 
 const router = Router();
 
 router.post('/login', (req, res) => {
+  const clientIdRaw = String(req.body?.clientId || '').trim();
+  const clientId = normalizeClientId(clientIdRaw);
   const username = String(req.body?.username || '').trim();
   const password = String(req.body?.password || '');
 
-  if (!username || !password) {
-    return res.status(400).json({ error: 'Username and password are required' });
+  if (!clientId || !username || !password) {
+    return res.status(400).json({ error: 'Client ID, username and password are required' });
   }
 
-  const user = db.prepare('SELECT * FROM users WHERE username = ?').get(username);
+  const user = db.prepare('SELECT * FROM users WHERE client_id = ? AND username = ?').get(clientId, username);
   if (!user || !verifyPassword(password, user.password_hash)) {
-    return res.status(401).json({ error: 'Invalid username or password' });
+    return res.status(401).json({ error: 'Invalid client ID, username or password' });
   }
 
   const session = createSession(user.id);
@@ -29,13 +31,13 @@ router.post('/logout', authRequired, (req, res) => {
 });
 
 router.get('/me', authRequired, (req, res) => {
-  const user = db.prepare('SELECT * FROM users WHERE id = ?').get(req.auth.user.id);
+  const user = db.prepare('SELECT * FROM users WHERE id = ? AND client_id = ?').get(req.auth.user.id, req.auth.user.clientId);
   if (!user) return res.status(401).json({ error: 'User no longer exists' });
   return res.json({ user: safeUser(user) });
 });
 
 const saveProfile = (req, res) => {
-  const existing = db.prepare('SELECT * FROM users WHERE id = ?').get(req.auth.user.id);
+  const existing = db.prepare('SELECT * FROM users WHERE id = ? AND client_id = ?').get(req.auth.user.id, req.auth.user.clientId);
   if (!existing) return res.status(401).json({ error: 'User no longer exists' });
 
   const username = req.body?.username !== undefined ? String(req.body.username || '').trim() : existing.username;
@@ -45,17 +47,17 @@ const saveProfile = (req, res) => {
   const avatarUrl = req.body?.avatarUrl !== undefined ? String(req.body.avatarUrl || '').trim() : (existing.avatar_url || '');
   if (!username) return res.status(400).json({ error: 'Username cannot be empty' });
 
-  const duplicate = db.prepare('SELECT id FROM users WHERE username = ? AND id != ?').get(username, req.auth.user.id);
+  const duplicate = db.prepare('SELECT id FROM users WHERE client_id = ? AND username = ? AND id != ?').get(req.auth.user.clientId, username, req.auth.user.id);
   if (duplicate) return res.status(409).json({ error: 'Username already exists' });
 
   const now = new Date().toISOString();
   db.prepare(`
     UPDATE users
     SET username = ?, full_name = ?, email = ?, phone = ?, avatar_url = ?, updated_at = ?
-    WHERE id = ?
-  `).run(username, fullName, email, phone, avatarUrl, now, req.auth.user.id);
+    WHERE id = ? AND client_id = ?
+  `).run(username, fullName, email, phone, avatarUrl, now, req.auth.user.id, req.auth.user.clientId);
 
-  const user = db.prepare('SELECT * FROM users WHERE id = ?').get(req.auth.user.id);
+  const user = db.prepare('SELECT * FROM users WHERE id = ? AND client_id = ?').get(req.auth.user.id, req.auth.user.clientId);
   return res.json({ user: safeUser(user) });
 };
 
@@ -63,7 +65,7 @@ router.put('/profile', authRequired, saveProfile);
 router.post('/profile', authRequired, saveProfile);
 
 router.get('/ha-config', authRequired, (req, res) => {
-  const row = db.prepare('SELECT * FROM ha_config WHERE id = 1').get();
+  const row = db.prepare('SELECT * FROM ha_config WHERE client_id = ?').get(req.auth.user.clientId);
   const oauthTokens = row?.oauth_tokens
     ? (() => {
       try {
@@ -74,7 +76,7 @@ router.get('/ha-config', authRequired, (req, res) => {
     })()
     : null;
 
-  const user = db.prepare('SELECT * FROM users WHERE id = ?').get(req.auth.user.id);
+  const user = db.prepare('SELECT * FROM users WHERE id = ? AND client_id = ?').get(req.auth.user.id, req.auth.user.clientId);
   const hasUserTokenConfig = Boolean(user?.ha_url && user?.ha_token);
   if (req.auth.user.role !== 'admin' && hasUserTokenConfig) {
     return res.json({
@@ -102,7 +104,7 @@ router.get('/ha-config', authRequired, (req, res) => {
 });
 
 router.put('/ha-config', authRequired, adminRequired, (req, res) => {
-  const existing = db.prepare('SELECT * FROM ha_config WHERE id = 1').get();
+  const existing = db.prepare('SELECT * FROM ha_config WHERE client_id = ?').get(req.auth.user.clientId);
   const currentAuthMethod = existing?.auth_method === 'token' ? 'token' : 'oauth';
 
   const hasUrl = Object.prototype.hasOwnProperty.call(req.body || {}, 'url');
@@ -138,10 +140,17 @@ router.put('/ha-config', authRequired, adminRequired, (req, res) => {
   const oauthTokensJson = oauthTokens ? JSON.stringify(oauthTokens) : null;
 
   db.prepare(`
-    UPDATE ha_config
-    SET url = ?, fallback_url = ?, auth_method = ?, token = ?, oauth_tokens = ?, updated_by = ?, updated_at = ?
-    WHERE id = 1
-  `).run(url, fallbackUrl, authMethod, token, oauthTokensJson, req.auth.user.id, now);
+    INSERT INTO ha_config (client_id, url, fallback_url, auth_method, token, oauth_tokens, updated_by, created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(client_id) DO UPDATE SET
+      url = excluded.url,
+      fallback_url = excluded.fallback_url,
+      auth_method = excluded.auth_method,
+      token = excluded.token,
+      oauth_tokens = excluded.oauth_tokens,
+      updated_by = excluded.updated_by,
+      updated_at = excluded.updated_at
+  `).run(req.auth.user.clientId, url, fallbackUrl, authMethod, token, oauthTokensJson, req.auth.user.id, existing?.created_at || now, now);
 
   return res.json({
     config: {

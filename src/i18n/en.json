@@ -815,5 +815,18 @@
   "userMgmt.total": "Total",
   "userMgmt.role": "Role",
   "userMgmt.dashboard": "Dashboard",
-  "userMgmt.newPasswordOptional": "New password (optional)"
+  "userMgmt.newPasswordOptional": "New password (optional)",
+  "userMgmt.exportDashboard": "Export",
+  "userMgmt.importDashboard": "Import",
+  "userMgmt.exportedDashboard": "Exported dashboard",
+  "userMgmt.importedDashboard": "Imported dashboard",
+  "userMgmt.exportFailed": "Failed to export dashboard",
+  "userMgmt.importFailed": "Failed to import dashboard",
+  "userMgmt.importInvalidFile": "Invalid import file",
+  "userMgmt.clientManagement": "Client management",
+  "userMgmt.createClient": "Create client",
+  "userMgmt.clientId": "Client ID",
+  "userMgmt.clientNameOptional": "Client name (optional)",
+  "userMgmt.createClientAdmin": "Create client admin",
+  "userMgmt.selectClient": "Select client"
 }

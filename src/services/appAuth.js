@@ -1,4 +1,5 @@
 const TOKEN_KEY = 'tunet_app_auth_token';
+const CLIENT_KEY = 'tunet_client_id';
 const API_BASE = (() => {
   const fromEnv = import.meta.env?.VITE_API_BASE;
   if (typeof fromEnv === 'string' && fromEnv.trim()) return fromEnv.trim().replace(/\/$/, '');
@@ -34,6 +35,24 @@ export const setAuthToken = (token) => {
 
 export const clearAuthToken = () => setAuthToken('');
 
+export const getClientId = () => {
+  try {
+    return localStorage.getItem(CLIENT_KEY) || '';
+  } catch {
+    return '';
+  }
+};
+
+export const setClientId = (clientId) => {
+  const normalized = String(clientId || '').trim();
+  try {
+    if (!normalized) localStorage.removeItem(CLIENT_KEY);
+    else localStorage.setItem(CLIENT_KEY, normalized);
+  } catch {
+    // ignore
+  }
+};
+
 export const apiRequest = async (path, options = {}) => {
   const token = getAuthToken();
   const headers = {
@@ -57,12 +76,15 @@ export const apiRequest = async (path, options = {}) => {
   return res.json();
 };
 
-export const loginWithPassword = async (username, password) => {
+export const loginWithPassword = async (clientId, username, password) => {
   const payload = await apiRequest('/api/auth/login', {
     method: 'POST',
-    body: JSON.stringify({ username, password }),
+    body: JSON.stringify({ clientId, username, password }),
   });
-  if (payload?.token) setAuthToken(payload.token);
+  if (payload?.token) {
+    setAuthToken(payload.token);
+    setClientId(payload?.user?.clientId || clientId);
+  }
   return payload;
 };
 
@@ -133,6 +155,27 @@ export const deleteUser = async (id) => {
     method: 'DELETE',
   });
   return Boolean(payload?.success);
+};
+
+export const listClients = async () => {
+  const payload = await apiRequest('/api/clients', { method: 'GET' });
+  return Array.isArray(payload?.clients) ? payload.clients : [];
+};
+
+export const createClient = async (clientId, name = '') => {
+  const payload = await apiRequest('/api/clients', {
+    method: 'POST',
+    body: JSON.stringify({ clientId, name }),
+  });
+  return payload?.client || null;
+};
+
+export const createClientAdmin = async (clientId, username, password) => {
+  const payload = await apiRequest(`/api/clients/${encodeURIComponent(clientId)}/admin`, {
+    method: 'POST',
+    body: JSON.stringify({ username, password }),
+  });
+  return payload?.user || null;
 };
 
 export const fetchSharedHaConfig = async () => {
