@@ -17,6 +17,7 @@ const SPAN_TABLE = {
   // { small, medium, large } → column count
   triSize:  { small: 1, medium: 2, default: 4 },   // calendar, todo
   dualSize: { small: 1, default: 2 },               // light, car, room
+  single:   { default: 1 },
 };
 
 const CARD_SPAN_RULES = [
@@ -39,6 +40,8 @@ const CARD_SPAN_RULES = [
   { prefix: 'select_card_',   category: 'dualSize' },
   { prefix: 'button_card_',   category: 'dualSize' },
   { prefix: 'script_card_',   category: 'dualSize' },
+  { prefix: 'divider_card_',  category: 'triSize' },
+  { prefix: 'empty_card_',    category: 'single' },
 ];
 
 export const getCardGridSpan = (cardId, getCardSettingsKey, cardSettings, activePage) => {

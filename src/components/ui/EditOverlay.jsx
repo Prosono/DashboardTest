@@ -63,6 +63,7 @@ function EditOverlay({
   t,
 }) {
   const showResize = canResize(editId, settings);
+  const isDividerCard = String(editId || '').startsWith('divider_card_') || settings?.type === 'divider';
   const isSmall = currentSize === 'small';
   const isTriple = TRIPLE_SIZE_PREFIXES.some(p => editId.startsWith(p));
   const resizeDragRef = useRef(null);
@@ -252,7 +253,7 @@ function EditOverlay({
       </div>
 
       {showResize && (
-        <div className="absolute bottom-2 right-2 z-50">
+        <div className={`absolute bottom-2 z-50 ${isDividerCard ? 'right-14' : 'right-2'}`}>
           <button
             onPointerDown={startResizeDrag}
             className="p-2 rounded-full text-white border border-white/20 shadow-lg bg-purple-500/80 cursor-nwse-resize touch-none"

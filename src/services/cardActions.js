@@ -188,6 +188,29 @@ export const handleAddSelected = (ctx) => {
       return;
     }
 
+    case 'divider': {
+      const cardId = `divider_card_${Date.now()}`;
+      commitSingleCard(cardId, {
+        type: 'divider',
+        orientation: 'horizontal',
+        showHeader: false,
+        header: '',
+        gridColSpan: 4,
+        gridRowSpan: 1,
+      }, { openEdit: true });
+      return;
+    }
+
+    case 'empty': {
+      const cardId = `empty_card_${Date.now()}`;
+      commitSingleCard(cardId, {
+        type: 'empty',
+        gridColSpan: 1,
+        gridRowSpan: 1,
+      }, { openEdit: true });
+      return;
+    }
+
     case 'car': {
       const cardId = `car_card_${Date.now()}`;
       commitSingleCard(cardId, { type: 'car', size: 'large' }, { openEdit: true });

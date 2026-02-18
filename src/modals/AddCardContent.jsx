@@ -15,6 +15,7 @@ import {
   Gamepad2,
   Hash,
   Home,
+  Columns,
   Lightbulb,
   Lock,
   ListChecks,
@@ -25,6 +26,7 @@ import {
   ToggleRight,
   Thermometer,
   Workflow,
+  Minus,
   X,
   Zap
 } from '../icons';
@@ -517,6 +519,8 @@ export default function AddCardContent({
                 <TypeButton type="nordpool" icon={Zap} label={t('addCard.type.nordpool')} isActive={addCardType === 'nordpool'} onSelect={setAddCardType} />
                 <TypeButton type="room" icon={Home} label={getLabel('addCard.type.room', 'Room')} isActive={addCardType === 'room'} onSelect={setAddCardType} />
                 <TypeButton type="sauna" icon={Flame} label={getLabel('addCard.type.sauna', 'Sauna')} isActive={addCardType === 'sauna'} onSelect={setAddCardType} />
+                <TypeButton type="divider" icon={Minus} label={getLabel('addCard.type.divider', 'Divider')} isActive={addCardType === 'divider'} onSelect={setAddCardType} />
+                <TypeButton type="empty" icon={Columns} label={getLabel('addCard.type.empty', 'Empty')} isActive={addCardType === 'empty'} onSelect={setAddCardType} />
                 <TypeButton type="fanCard" icon={Fan} label={getLabel('addCard.type.fans', 'Fans')} isActive={addCardType === 'fanCard'} onSelect={setAddCardType} />
                 <TypeButton type="doorCard" icon={DoorOpen} label={getLabel('addCard.type.doors', 'Doors')} isActive={addCardType === 'doorCard'} onSelect={setAddCardType} />
                 <TypeButton type="motionCard" icon={Activity} label={getLabel('addCard.type.motion', 'Motion')} isActive={addCardType === 'motionCard'} onSelect={setAddCardType} />
@@ -541,6 +545,8 @@ export default function AddCardContent({
               : addCardType === 'car' ? renderSimpleAddSection(Car, t('addCard.carDescription'), t('addCard.carCard'))
               : addCardType === 'nordpool' ? renderNordpoolSection()
               : addCardType === 'sauna' ? renderSimpleAddSection(Flame, t('addCard.saunaDescription') || 'Add a sauna operator card and then configure all linked entities.', t('addCard.add'))
+              : addCardType === 'divider' ? renderSimpleAddSection(Minus, getLabel('addCard.dividerDescription', 'Add a divider card to separate sections in the dashboard.'), t('addCard.add'))
+              : addCardType === 'empty' ? renderSimpleAddSection(Columns, getLabel('addCard.emptyDescription', 'Add an empty spacer card that only takes up layout space.'), t('addCard.add'))
               : addCardType === 'room' ? (
                 <RoomSection 
                   conn={conn} 
@@ -581,6 +587,11 @@ export default function AddCardContent({
           {addCardType === 'sauna' && (
             <button onClick={onAddSelected} className="w-full py-4 rounded-2xl bg-blue-500 text-white font-bold uppercase tracking-widest hover:bg-blue-600 transition-colors shadow-lg shadow-blue-500/20 flex items-center justify-center gap-2">
               <Plus className="w-5 h-5" /> {t('addCard.saunaCard') || 'Sauna card'}
+            </button>
+          )}
+          {addCardType === 'empty' && (
+            <button onClick={onAddSelected} className="w-full py-4 rounded-2xl bg-blue-500 text-white font-bold uppercase tracking-widest hover:bg-blue-600 transition-colors shadow-lg shadow-blue-500/20 flex items-center justify-center gap-2">
+              <Plus className="w-5 h-5" /> {getLabel('addCard.emptyCard', 'Empty card')}
             </button>
           )}
           {addCardType === 'room' && selectedRoomArea && (

@@ -95,6 +95,7 @@ export default function EditCardModal({
   isEditCar,
   isEditRoom,
   isEditSauna,
+  isEditDivider,
   isEditAndroidTV,
   editSettingsKey,
   editSettings,
@@ -273,7 +274,7 @@ export default function EditCardModal({
                 </div>
               )}
 
-              {editSettingsKey && (
+              {editSettingsKey && !isEditDivider && (
                 <div className="space-y-2">
                   <label className="text-xs uppercase font-bold text-gray-500 ml-1">{t('form.heading')}</label>
                   <input
@@ -285,6 +286,62 @@ export default function EditCardModal({
                   />
                 </div>
               )}
+            </div>
+          )}
+
+          {isEditDivider && editSettingsKey && (
+            <div className="space-y-3">
+              <label className="text-xs uppercase font-bold text-gray-500 ml-1">{translateText('form.dividerOrientation', 'Divider orientation')}</label>
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => saveCardSetting(editSettingsKey, 'orientation', 'horizontal')}
+                  className={`px-3 py-2 rounded-xl border text-[11px] uppercase tracking-widest font-bold transition-all ${
+                    (editSettings.orientation || 'horizontal') === 'horizontal'
+                      ? 'bg-blue-500/15 border-blue-500/35 text-blue-400'
+                      : 'bg-[var(--glass-bg)] border-[var(--glass-border)] text-[var(--text-secondary)]'
+                  }`}
+                >
+                  {translateText('common.horizontal', 'Horizontal')}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => saveCardSetting(editSettingsKey, 'orientation', 'vertical')}
+                  className={`px-3 py-2 rounded-xl border text-[11px] uppercase tracking-widest font-bold transition-all ${
+                    editSettings.orientation === 'vertical'
+                      ? 'bg-blue-500/15 border-blue-500/35 text-blue-400'
+                      : 'bg-[var(--glass-bg)] border-[var(--glass-border)] text-[var(--text-secondary)]'
+                  }`}
+                >
+                  {translateText('common.vertical', 'Vertical')}
+                </button>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => saveCardSetting(editSettingsKey, 'showHeader', !(editSettings.showHeader === true))}
+                className={`w-full px-4 py-3 rounded-2xl border text-xs uppercase tracking-widest font-bold transition-all ${
+                  (editSettings.showHeader === true)
+                    ? 'bg-blue-500/15 border-blue-500/35 text-blue-400'
+                    : 'bg-[var(--glass-bg)] border-[var(--glass-border)] text-[var(--text-secondary)]'
+                }`}
+              >
+                {translateText('form.showHeader', 'Show header')}
+              </button>
+
+              <div className="space-y-2">
+                <label className="text-xs uppercase font-bold text-gray-500 ml-1">{translateText('form.dividerHeader', 'Divider header')}</label>
+                <input
+                  type="text"
+                  className="w-full px-4 py-3 text-[var(--text-primary)] rounded-2xl popup-surface focus:border-blue-500/50 outline-none transition-colors"
+                  defaultValue={editSettings.header || ''}
+                  onBlur={(e) => saveCardSetting(editSettingsKey, 'header', e.target.value.trim() || '')}
+                  placeholder={translateText('form.headingPlaceholder', 'Optional heading')}
+                />
+                <p className="text-[10px] text-[var(--text-secondary)]">
+                  {translateText('form.dividerHeaderHint', 'Header is shown only in horizontal mode.')}
+                </p>
+              </div>
             </div>
           )}
 

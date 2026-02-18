@@ -99,6 +99,8 @@ export function useAddCard({
     if (addCardType === 'cost') return t('addCard.available.costs');
     if (addCardType === 'media') return t('addCard.available.players');
     if (addCardType === 'car') return t('addCard.available.cars');
+    if (addCardType === 'empty') return t('addCard.available.entities');
+    if (addCardType === 'divider') return t('addCard.available.entities');
     if (
       addCardType === 'fanCard'
       || addCardType === 'doorCard'
@@ -135,6 +137,10 @@ export function useAddCard({
             ? 'addCard.item.players'
             : addCardType === 'car'
               ? 'addCard.item.cars'
+            : addCardType === 'empty'
+              ? 'addCard.item.entities'
+            : addCardType === 'divider'
+              ? 'addCard.item.entities'
             : addCardType === 'fanCard'
               || addCardType === 'doorCard'
               || addCardType === 'motionCard'
