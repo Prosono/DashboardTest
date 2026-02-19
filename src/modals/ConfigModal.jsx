@@ -499,7 +499,9 @@ export default function ConfigModal({
       ? activeClientProfilesRaw
       : [{ id: 'default', name: 'default', updatedAt: null }];
     const getDashboardOptionsForClient = (clientId) => {
-      const normalizedClientId = String(clientId || '').trim();
+      const normalizedClientId = String(
+        clientId || selectedClientId || currentUser?.clientId || ''
+      ).trim();
       const baseProfiles = canManageClients
         ? (Array.isArray(dashboardProfilesByClient[normalizedClientId]) && dashboardProfilesByClient[normalizedClientId].length
             ? dashboardProfilesByClient[normalizedClientId]
@@ -895,7 +897,9 @@ export default function ConfigModal({
     };
 
     const openEditUser = async (user) => {
-      const clientId = String(user?.clientId || currentUser?.clientId || '').trim();
+      const clientId = String(
+        user?.clientId || selectedClientId || currentUser?.clientId || ''
+      ).trim();
       if (canManageClients && clientId && userAdminApi?.listClientDashboards) {
         try {
           const dashboards = await userAdminApi.listClientDashboards(clientId);
@@ -1343,7 +1347,7 @@ export default function ConfigModal({
                             onChange={(e) => updateUserEdit(u.id, { assignedDashboardId: e.target.value })}
                             className="w-full px-3 py-2 rounded-lg bg-[var(--glass-bg-hover)] border border-[var(--glass-border)] text-sm"
                           >
-                            {getDashboardOptionsForClient(canManageClients ? u.clientId : currentUser?.clientId).map((profile) => (
+                            {getDashboardOptionsForClient(canManageClients ? (u.clientId || selectedClientId) : currentUser?.clientId).map((profile) => (
                               <option key={profile.id} value={profile.id}>{profile.name || profile.id}</option>
                             ))}
                           </select>
