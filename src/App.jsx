@@ -1190,6 +1190,7 @@ function AppContent({
                 const placement = gridLayout[id];
                 const settingsKey = getCardSettingsKey(id);
                 const settings = cardSettings[settingsKey] || cardSettings[id] || {};
+                const isCalendarCard = String(id || '').startsWith('calendar_card_');
                 const defaultLegacyRowSpan = placement?.rowSpan || 1;
                 const defaultLegacyColSpan = placement?.colSpan || 1;
                 const rowSpan = Number.isFinite(Number(settings.gridRowSpan))
@@ -1222,7 +1223,7 @@ function AppContent({
                         {heading}
                       </div>
                     )}
-                    <div className="h-full">
+                    <div className="h-full" style={{ height: isMobile && isCalendarCard ? 'calc(100% - 14px)' : '100%' }}>
                       <CardErrorBoundary cardId={id} t={t}>
                         {cardContent}
                       </CardErrorBoundary>
@@ -1417,7 +1418,8 @@ export default function App() {
   const [password, setPassword] = useState('');
   const [haConfigHydrated, setHaConfigHydrated] = useState(false);
 
-  const { config, setConfig } = useConfig();
+  const { config, setConfig, currentTheme } = useConfig();
+  const isLightTheme = currentTheme === 'light';
 
   const applySharedHaConfig = useCallback((sharedConfig) => {
     if (!sharedConfig) return;
@@ -1534,25 +1536,28 @@ export default function App() {
         className="min-h-screen flex items-center justify-center px-4 py-6 relative overflow-hidden"
         style={{
           color: 'var(--text-primary)',
-          background:
-            'radial-gradient(880px 320px at 50% -6%, color-mix(in srgb, var(--accent-color) 24%, transparent), transparent 62%), linear-gradient(145deg, var(--bg-gradient-from), var(--bg-primary), var(--bg-gradient-to))',
+          background: isLightTheme
+            ? 'linear-gradient(155deg, #f8fafc 0%, #ffffff 42%, #f1f5f9 100%)'
+            : 'radial-gradient(880px 320px at 50% -6%, color-mix(in srgb, var(--accent-color) 24%, transparent), transparent 62%), linear-gradient(145deg, var(--bg-gradient-from), var(--bg-primary), var(--bg-gradient-to))',
         }}
       >
         <div
           className="pointer-events-none absolute -top-24 -left-10 w-64 h-64 rounded-full blur-3xl opacity-35"
-          style={{ background: 'color-mix(in srgb, var(--accent-color) 42%, transparent)' }}
+          style={{ background: isLightTheme ? 'rgba(148, 163, 184, 0.20)' : 'color-mix(in srgb, var(--accent-color) 42%, transparent)' }}
         />
         <div
           className="pointer-events-none absolute -bottom-28 -right-8 w-72 h-72 rounded-full blur-3xl opacity-30"
-          style={{ background: 'color-mix(in srgb, var(--accent-color) 28%, transparent)' }}
+          style={{ background: isLightTheme ? 'rgba(148, 163, 184, 0.16)' : 'color-mix(in srgb, var(--accent-color) 28%, transparent)' }}
         />
         <form
           onSubmit={doLogin}
           className="relative w-full max-w-[28rem] rounded-[2rem] border p-7 md:p-8 space-y-5 shadow-2xl backdrop-blur-2xl overflow-hidden"
           style={{
-            background: 'linear-gradient(158deg, color-mix(in srgb, var(--card-bg) 95%, transparent), color-mix(in srgb, var(--modal-bg) 98%, transparent) 68%, color-mix(in srgb, var(--accent-color) 7%, var(--modal-bg)))',
+            background: isLightTheme
+              ? 'linear-gradient(160deg, rgba(255,255,255,0.98), rgba(248,250,252,0.96))'
+              : 'linear-gradient(158deg, color-mix(in srgb, var(--card-bg) 95%, transparent), color-mix(in srgb, var(--modal-bg) 98%, transparent) 68%, color-mix(in srgb, var(--accent-color) 7%, var(--modal-bg)))',
             borderColor: 'var(--glass-border)',
-            boxShadow: '0 32px 90px rgba(2, 6, 23, 0.34)',
+            boxShadow: isLightTheme ? '0 22px 60px rgba(15, 23, 42, 0.16)' : '0 32px 90px rgba(2, 6, 23, 0.34)',
           }}
         >
           <div
