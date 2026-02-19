@@ -124,6 +124,7 @@ export default function ConfigModal({
   const [deletingUserIds, setDeletingUserIds] = useState({});
   const [showEditUserModal, setShowEditUserModal] = useState(false);
   const [editingUserId, setEditingUserId] = useState('');
+  const [editUserDashboardOptions, setEditUserDashboardOptions] = useState([]);
   const [importingDashboard, setImportingDashboard] = useState(false);
   const [clients, setClients] = useState([]);
   const [newClientId, setNewClientId] = useState('');
@@ -908,9 +909,11 @@ export default function ConfigModal({
       const clientId = String(
         user?.clientId || selectedClientId || currentUser?.clientId || ''
       ).trim();
+      let fetchedOptions = [];
       if (canManageClients && clientId && userAdminApi?.listClientDashboards) {
         try {
           const dashboards = await userAdminApi.listClientDashboards(clientId);
+          fetchedOptions = Array.isArray(dashboards) ? dashboards : [];
           setDashboardProfilesByClient((prev) => ({
             ...prev,
             [clientId]: Array.isArray(dashboards)
@@ -923,6 +926,17 @@ export default function ConfigModal({
           // best-effort, keep existing options
         }
       }
+      const fallbackOptions = getDashboardOptionsForClient(clientId);
+      const currentAssigned = String(user?.assignedDashboardId || 'default').trim() || 'default';
+      const merged = (fetchedOptions.length ? fetchedOptions : fallbackOptions).map((entry) => ({
+        id: String(entry?.id || '').trim(),
+        name: String(entry?.name || entry?.id || '').trim(),
+        updatedAt: entry?.updatedAt || null,
+      })).filter((entry) => entry.id);
+      const hasAssigned = merged.some((entry) => entry.id === currentAssigned);
+      if (!hasAssigned) merged.push({ id: currentAssigned, name: currentAssigned, updatedAt: null });
+      if (!merged.length) merged.push({ id: 'default', name: 'default', updatedAt: null });
+      setEditUserDashboardOptions(merged);
       setEditingUserId(user?.id || '');
       setShowEditUserModal(true);
     };
@@ -1305,11 +1319,11 @@ export default function ConfigModal({
           )}
 
           {showEditUserModal && editingUserId && (
-            <div className="fixed inset-0 z-40 bg-black/45 backdrop-blur-sm flex items-center justify-center p-4" onClick={() => { setShowEditUserModal(false); setEditingUserId(''); }}>
+            <div className="fixed inset-0 z-40 bg-black/45 backdrop-blur-sm flex items-center justify-center p-4" onClick={() => { setShowEditUserModal(false); setEditingUserId(''); setEditUserDashboardOptions([]); }}>
               <div className="w-full max-w-2xl rounded-2xl border border-[var(--glass-border)] bg-[var(--card-bg)] p-5 space-y-4 shadow-2xl" onClick={(e) => e.stopPropagation()}>
                 <div className="flex items-center justify-between">
                   <h4 className="text-sm font-bold uppercase tracking-wider">{t('menu.edit')} {t('userMgmt.userAccounts')}</h4>
-                  <button onClick={() => { setShowEditUserModal(false); setEditingUserId(''); }} className="p-2 rounded-full hover:bg-[var(--glass-bg-hover)]"><X className="w-4 h-4" /></button>
+                  <button onClick={() => { setShowEditUserModal(false); setEditingUserId(''); setEditUserDashboardOptions([]); }} className="p-2 rounded-full hover:bg-[var(--glass-bg-hover)]"><X className="w-4 h-4" /></button>
                 </div>
                 {(() => {
                   const u = users.find((user) => user.id === editingUserId);
@@ -1359,7 +1373,7 @@ export default function ConfigModal({
                             onChange={(e) => updateUserEdit(u.id, { assignedDashboardId: e.target.value })}
                             className="w-full px-3 py-2 rounded-lg bg-[var(--glass-bg-hover)] border border-[var(--glass-border)] text-sm"
                           >
-                            {getDashboardOptionsForClient(canManageClients ? (u.clientId || selectedClientId) : currentUser?.clientId).map((profile) => (
+                            {(editUserDashboardOptions.length ? editUserDashboardOptions : getDashboardOptionsForClient(canManageClients ? (u.clientId || selectedClientId) : currentUser?.clientId)).map((profile) => (
                               <option key={profile.id} value={profile.id}>{profile.name || profile.id}</option>
                             ))}
                           </select>
@@ -1384,12 +1398,13 @@ export default function ConfigModal({
                         </div>
                       </div>
                       <div className="flex gap-2 justify-end">
-                        <button onClick={() => { setShowEditUserModal(false); setEditingUserId(''); }} className="px-4 py-2 rounded-lg border border-[var(--glass-border)] bg-[var(--glass-bg-hover)] text-xs font-bold uppercase tracking-wider">{t('common.cancel')}</button>
+                        <button onClick={() => { setShowEditUserModal(false); setEditingUserId(''); setEditUserDashboardOptions([]); }} className="px-4 py-2 rounded-lg border border-[var(--glass-border)] bg-[var(--glass-bg-hover)] text-xs font-bold uppercase tracking-wider">{t('common.cancel')}</button>
                         <button
                           onClick={async () => {
                             await handleSaveUser(u.id);
                             setShowEditUserModal(false);
                             setEditingUserId('');
+                            setEditUserDashboardOptions([]);
                           }}
                           disabled={!!savingUserIds[u.id]}
                           className="px-4 py-2 rounded-lg bg-indigo-500 hover:bg-indigo-600 text-white text-xs font-bold uppercase tracking-wider disabled:opacity-60"
