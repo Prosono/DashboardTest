@@ -159,6 +159,7 @@ export default function ModalOrchestrator({
     loadGlobalDashboard,
     currentUser,
     canEditDashboard,
+    canManageAdministration,
     onLogout,
     userAdminApi,
   } = cardConfig;
@@ -284,6 +285,7 @@ export default function ModalOrchestrator({
             loadGlobalDashboard={loadGlobalDashboard}
             currentUser={currentUser}
             canEditDashboard={canEditDashboard}
+            canManageAdministration={canManageAdministration}
             onLogout={onLogout}
             userAdminApi={userAdminApi}
             onClose={() => setShowConfigModal(false)}

@@ -53,6 +53,13 @@ import {
   listClients as listServerClients,
   createClient as createServerClient,
   createClientAdmin as createServerClientAdmin,
+  updateClient as updateServerClient,
+  deleteClient as deleteServerClient,
+  fetchClientHaConfig as fetchServerClientHaConfig,
+  saveClientHaConfig as saveServerClientHaConfig,
+  listClientDashboards as listServerClientDashboards,
+  fetchClientDashboard as fetchServerClientDashboard,
+  saveClientDashboard as saveServerClientDashboard,
   fetchSharedHaConfig,
   saveSharedHaConfig,
 } from './services/appAuth';
@@ -247,7 +254,9 @@ function AppContent({
   const [editCardSettingsKey, setEditCardSettingsKey] = useState(null);
 
   const [editMode, setEditMode] = useState(false);
-  const canEditDashboard = currentUser?.role === 'admin';
+  const isPlatformAdmin = currentUser?.isPlatformAdmin === true;
+  const canEditDashboard = currentUser?.role === 'admin' && !isPlatformAdmin;
+  const canManageUsersAndClients = currentUser?.role === 'admin' || isPlatformAdmin;
   const currentUserRole = normalizeRole(currentUser?.role);
   const WARNING_SENSOR_ID = 'sensor.system_warning_details';
   const CRITICAL_SENSOR_ID = 'sensor.system_critical_details';
@@ -421,8 +430,8 @@ function AppContent({
     hvacMap, fanMap, swingMap,
   } = useEntityHelpers({ entities, conn, activeUrl, language, now, t });
 
-  const canControlDevices = currentUser?.role !== 'inspector';
-  const isAdminUser = currentUser?.role === 'admin';
+  const canControlDevices = currentUser?.role !== 'inspector' && !isPlatformAdmin;
+  const isAdminUser = canManageUsersAndClients;
   const profileDisplayName = String(currentUser?.fullName || currentUser?.username || t('profile.userFallback')).trim();
   const [dashboardDirty, setDashboardDirty] = useState(false);
   const dashboardDirtyReadyRef = useRef(false);
@@ -1066,9 +1075,9 @@ function AppContent({
                 onOpenTheme={() => setShowThemeSidebar(true)}
                 onOpenLayout={() => setShowLayoutSidebar(true)}
                 onOpenHeader={() => setShowHeaderEditModal(true)}
-                showLayout={isAdminUser}
-                showHeader={isAdminUser}
-                showConnection={isAdminUser}
+                showLayout={canEditDashboard}
+                showHeader={canEditDashboard}
+                showConnection={canManageUsersAndClients}
                 t={t}
               />
               {isAdminUser && updateCount > 0 && (
@@ -1371,6 +1380,7 @@ function AppContent({
             loadGlobalDashboard,
             currentUser,
             canEditDashboard,
+            canManageAdministration: canManageUsersAndClients,
             onLogout,
             userAdminApi,
           }}
@@ -1607,6 +1617,13 @@ export default function App() {
     listClients: listServerClients,
     createClient: createServerClient,
     createClientAdmin: createServerClientAdmin,
+    updateClient: updateServerClient,
+    deleteClient: deleteServerClient,
+    fetchClientHaConfig: fetchServerClientHaConfig,
+    saveClientHaConfig: saveServerClientHaConfig,
+    listClientDashboards: listServerClientDashboards,
+    fetchClientDashboard: fetchServerClientDashboard,
+    saveClientDashboard: saveServerClientDashboard,
   };
 
   return (

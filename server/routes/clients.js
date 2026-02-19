@@ -7,12 +7,20 @@ import { hashPassword } from '../password.js';
 const router = Router();
 
 const PLATFORM_ADMIN_CLIENT_ID = normalizeClientId(process.env.PLATFORM_ADMIN_CLIENT_ID || DEFAULT_CLIENT_ID) || DEFAULT_CLIENT_ID;
+const normalizeDashboardId = (value) => String(value || 'default').trim().replace(/\s+/g, '_').toLowerCase();
+const toDashboardMeta = (row) => ({
+  id: row.id,
+  clientId: row.client_id,
+  name: row.name,
+  updatedAt: row.updated_at,
+  createdAt: row.created_at,
+});
 
 const platformAdminRequired = (req, res, next) => {
   if (!req.auth?.user || req.auth.user.role !== 'admin') {
     return res.status(403).json({ error: 'Admin only' });
   }
-  if (req.auth.user.clientId !== PLATFORM_ADMIN_CLIENT_ID) {
+  if (!req.auth.user.isPlatformAdmin) {
     return res.status(403).json({ error: 'Platform admin only' });
   }
   return next();
@@ -117,6 +125,201 @@ router.post('/:clientId/admin', (req, res) => {
       updatedAt: now,
     },
   });
+});
+
+router.get('/:clientId/ha-config', (req, res) => {
+  const clientId = normalizeClientId(req.params.clientId);
+  if (!clientId) return res.status(400).json({ error: 'Valid clientId is required' });
+
+  const client = db.prepare('SELECT id FROM clients WHERE id = ?').get(clientId);
+  if (!client) return res.status(404).json({ error: 'Client not found' });
+
+  const row = db.prepare('SELECT * FROM ha_config WHERE client_id = ?').get(clientId);
+  const oauthTokens = row?.oauth_tokens
+    ? (() => {
+      try { return JSON.parse(row.oauth_tokens); } catch { return null; }
+    })()
+    : null;
+
+  return res.json({
+    config: {
+      url: row?.url || '',
+      fallbackUrl: row?.fallback_url || '',
+      authMethod: row?.auth_method || 'oauth',
+      token: row?.token || '',
+      oauthTokens,
+      updatedAt: row?.updated_at || null,
+    },
+  });
+});
+
+router.put('/:clientId/ha-config', (req, res) => {
+  const clientId = normalizeClientId(req.params.clientId);
+  if (!clientId) return res.status(400).json({ error: 'Valid clientId is required' });
+
+  const client = db.prepare('SELECT id FROM clients WHERE id = ?').get(clientId);
+  if (!client) return res.status(404).json({ error: 'Client not found' });
+
+  const existing = db.prepare('SELECT * FROM ha_config WHERE client_id = ?').get(clientId);
+  const currentAuthMethod = existing?.auth_method === 'token' ? 'token' : 'oauth';
+
+  const hasUrl = Object.prototype.hasOwnProperty.call(req.body || {}, 'url');
+  const hasFallbackUrl = Object.prototype.hasOwnProperty.call(req.body || {}, 'fallbackUrl');
+  const hasAuthMethod = Object.prototype.hasOwnProperty.call(req.body || {}, 'authMethod');
+  const hasToken = Object.prototype.hasOwnProperty.call(req.body || {}, 'token');
+  const hasOauthTokens = Object.prototype.hasOwnProperty.call(req.body || {}, 'oauthTokens');
+
+  const url = hasUrl ? String(req.body?.url || '').trim() : (existing?.url || '');
+  const fallbackUrl = hasFallbackUrl ? String(req.body?.fallbackUrl || '').trim() : (existing?.fallback_url || '');
+  const authMethod = hasAuthMethod
+    ? (String(req.body?.authMethod || '').trim() === 'token' ? 'token' : 'oauth')
+    : currentAuthMethod;
+  const token = hasToken ? String(req.body?.token || '').trim() : (existing?.token || '');
+
+  let oauthTokens;
+  if (hasOauthTokens) {
+    oauthTokens = req.body?.oauthTokens ?? null;
+  } else {
+    oauthTokens = existing?.oauth_tokens
+      ? (() => {
+        try { return JSON.parse(existing.oauth_tokens); } catch { return null; }
+      })()
+      : null;
+  }
+
+  const now = new Date().toISOString();
+  const oauthTokensJson = oauthTokens ? JSON.stringify(oauthTokens) : null;
+
+  db.prepare(`
+    INSERT INTO ha_config (client_id, url, fallback_url, auth_method, token, oauth_tokens, updated_by, created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(client_id) DO UPDATE SET
+      url = excluded.url,
+      fallback_url = excluded.fallback_url,
+      auth_method = excluded.auth_method,
+      token = excluded.token,
+      oauth_tokens = excluded.oauth_tokens,
+      updated_by = excluded.updated_by,
+      updated_at = excluded.updated_at
+  `).run(clientId, url, fallbackUrl, authMethod, token, oauthTokensJson, req.auth.user.id, existing?.created_at || now, now);
+
+  return res.json({
+    config: {
+      url,
+      fallbackUrl,
+      authMethod,
+      token,
+      oauthTokens,
+      updatedAt: now,
+    },
+  });
+});
+
+router.get('/:clientId/dashboards', (req, res) => {
+  const clientId = normalizeClientId(req.params.clientId);
+  if (!clientId) return res.status(400).json({ error: 'Valid clientId is required' });
+  const client = db.prepare('SELECT id FROM clients WHERE id = ?').get(clientId);
+  if (!client) return res.status(404).json({ error: 'Client not found' });
+  const rows = db.prepare('SELECT client_id, id, name, created_at, updated_at FROM dashboards WHERE client_id = ? ORDER BY updated_at DESC').all(clientId);
+  return res.json({ dashboards: rows.map(toDashboardMeta) });
+});
+
+router.get('/:clientId/dashboards/:dashboardId', (req, res) => {
+  const clientId = normalizeClientId(req.params.clientId);
+  const dashboardId = normalizeDashboardId(req.params.dashboardId);
+  if (!clientId) return res.status(400).json({ error: 'Valid clientId is required' });
+  const client = db.prepare('SELECT id FROM clients WHERE id = ?').get(clientId);
+  if (!client) return res.status(404).json({ error: 'Client not found' });
+  const row = db.prepare('SELECT * FROM dashboards WHERE client_id = ? AND id = ?').get(clientId, dashboardId);
+  if (!row) return res.status(404).json({ error: 'Dashboard not found' });
+  return res.json({
+    ...toDashboardMeta(row),
+    data: JSON.parse(row.data),
+  });
+});
+
+router.put('/:clientId/dashboards/:dashboardId', (req, res) => {
+  const clientId = normalizeClientId(req.params.clientId);
+  const dashboardId = normalizeDashboardId(req.params.dashboardId);
+  const name = String(req.body?.name || dashboardId).trim() || dashboardId;
+  const data = req.body?.data;
+  if (!clientId) return res.status(400).json({ error: 'Valid clientId is required' });
+  const client = db.prepare('SELECT id FROM clients WHERE id = ?').get(clientId);
+  if (!client) return res.status(404).json({ error: 'Client not found' });
+  if (!data || typeof data !== 'object') {
+    return res.status(400).json({ error: 'Dashboard data is required' });
+  }
+
+  const existing = db.prepare('SELECT * FROM dashboards WHERE client_id = ? AND id = ?').get(clientId, dashboardId);
+  const now = new Date().toISOString();
+  if (!existing) {
+    db.prepare('INSERT INTO dashboards (client_id, id, name, data, created_by, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)')
+      .run(clientId, dashboardId, name, JSON.stringify(data), req.auth.user.id, now, now);
+  } else {
+    db.prepare('UPDATE dashboards SET name = ?, data = ?, updated_at = ? WHERE client_id = ? AND id = ?')
+      .run(name, JSON.stringify(data), now, clientId, dashboardId);
+  }
+
+  const row = db.prepare('SELECT client_id, id, name, created_at, updated_at FROM dashboards WHERE client_id = ? AND id = ?').get(clientId, dashboardId);
+  return res.json({ dashboard: toDashboardMeta(row) });
+});
+
+router.put('/:clientId', (req, res) => {
+  const clientId = normalizeClientId(req.params.clientId);
+  const name = String(req.body?.name || '').trim();
+
+  if (!clientId) return res.status(400).json({ error: 'Valid clientId is required' });
+  if (!name) return res.status(400).json({ error: 'Client name is required' });
+
+  const existing = db.prepare('SELECT id FROM clients WHERE id = ?').get(clientId);
+  if (!existing) return res.status(404).json({ error: 'Client not found' });
+
+  const now = new Date().toISOString();
+  db.prepare('UPDATE clients SET name = ?, updated_at = ? WHERE id = ?').run(name, now, clientId);
+
+  const updated = db.prepare('SELECT id, name, created_at, updated_at FROM clients WHERE id = ?').get(clientId);
+  return res.json({
+    client: {
+      id: updated.id,
+      name: updated.name,
+      createdAt: updated.created_at,
+      updatedAt: updated.updated_at,
+    },
+  });
+});
+
+router.delete('/:clientId', (req, res) => {
+  const clientId = normalizeClientId(req.params.clientId);
+  const confirmation = String(req.body?.confirmation || '').trim();
+
+  if (!clientId) return res.status(400).json({ error: 'Valid clientId is required' });
+  if (confirmation !== 'OK') {
+    return res.status(400).json({ error: 'Type OK in confirmation field to delete this client' });
+  }
+  if (clientId === PLATFORM_ADMIN_CLIENT_ID) {
+    return res.status(400).json({ error: 'Cannot delete platform admin client' });
+  }
+  if (req.auth?.user?.clientId === clientId) {
+    return res.status(400).json({ error: 'Cannot delete the currently active client' });
+  }
+
+  const existing = db.prepare('SELECT id FROM clients WHERE id = ?').get(clientId);
+  if (!existing) return res.status(404).json({ error: 'Client not found' });
+
+  db.exec('BEGIN');
+  try {
+    db.prepare('DELETE FROM sessions WHERE user_id IN (SELECT id FROM users WHERE client_id = ?)').run(clientId);
+    db.prepare('DELETE FROM users WHERE client_id = ?').run(clientId);
+    db.prepare('DELETE FROM dashboards WHERE client_id = ?').run(clientId);
+    db.prepare('DELETE FROM ha_config WHERE client_id = ?').run(clientId);
+    db.prepare('DELETE FROM clients WHERE id = ?').run(clientId);
+    db.exec('COMMIT');
+  } catch (error) {
+    db.exec('ROLLBACK');
+    throw error;
+  }
+
+  return res.json({ success: true });
 });
 
 export default router;

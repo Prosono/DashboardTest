@@ -208,6 +208,9 @@ const ensureSessionsTable = () => {
       user_id TEXT NOT NULL,
       expires_at TEXT NOT NULL,
       created_at TEXT NOT NULL,
+      scope_client_id TEXT,
+      is_super_admin INTEGER NOT NULL DEFAULT 0,
+      session_username TEXT,
       FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
     )
   `);
@@ -225,10 +228,13 @@ const ensureSessionsTable = () => {
           user_id TEXT NOT NULL,
           expires_at TEXT NOT NULL,
           created_at TEXT NOT NULL,
+          scope_client_id TEXT,
+          is_super_admin INTEGER NOT NULL DEFAULT 0,
+          session_username TEXT,
           FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
         );
-        INSERT INTO sessions (token, user_id, expires_at, created_at)
-        SELECT s.token, s.user_id, s.expires_at, s.created_at
+        INSERT INTO sessions (token, user_id, expires_at, created_at, scope_client_id, is_super_admin, session_username)
+        SELECT s.token, s.user_id, s.expires_at, s.created_at, NULL, 0, NULL
         FROM sessions_old s
         WHERE EXISTS (SELECT 1 FROM users u WHERE u.id = s.user_id);
         DROP TABLE sessions_old;
@@ -242,6 +248,11 @@ const ensureSessionsTable = () => {
       db.pragma('foreign_keys = ON');
     }
   }
+
+  const sessionColumns = db.prepare('PRAGMA table_info(sessions)').all().map((col) => col.name);
+  if (!sessionColumns.includes('scope_client_id')) db.prepare('ALTER TABLE sessions ADD COLUMN scope_client_id TEXT').run();
+  if (!sessionColumns.includes('is_super_admin')) db.prepare('ALTER TABLE sessions ADD COLUMN is_super_admin INTEGER NOT NULL DEFAULT 0').run();
+  if (!sessionColumns.includes('session_username')) db.prepare('ALTER TABLE sessions ADD COLUMN session_username TEXT').run();
 
   db.exec('CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions(user_id)');
 };
@@ -319,6 +330,16 @@ const ensureProfilesTable = () => {
   `);
 };
 
+const ensureSystemSettingsTable = () => {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS system_settings (
+      key TEXT PRIMARY KEY,
+      value TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    )
+  `);
+};
+
 const ensureClientRecord = (clientId, displayName = '') => {
   const normalized = normalizeClientId(clientId);
   if (!normalized) return null;
@@ -361,6 +382,7 @@ ensureUsersTable();
 ensureSessionsTable();
 ensureHaConfigTable();
 ensureProfilesTable();
+ensureSystemSettingsTable();
 
 const distinctClients = new Set();
 for (const row of db.prepare('SELECT DISTINCT client_id FROM users WHERE client_id IS NOT NULL AND client_id != ?').all('')) {

@@ -1,4 +1,4 @@
-import { randomUUID } from 'crypto';
+import { randomBytes, randomUUID } from 'crypto';
 import db, { normalizeClientId, provisionClientDefaults } from '../db.js';
 import { hashPassword } from '../password.js';
 
@@ -10,6 +10,7 @@ Usage:
   node server/cli/manage-users.js list-users <clientId>
   node server/cli/manage-users.js create-user <clientId> <username> <role>
   node server/cli/manage-users.js set-password <clientId> <username>
+  node server/cli/manage-users.js set-super-admin <username> [--generate]
 
 Roles:
   admin | user | inspector
@@ -146,6 +147,42 @@ const setPassword = async (clientId, username) => {
   console.log(`Password updated for "${normalizedUsername}" in client "${normalizedClientId}".`);
 };
 
+const setSuperAdmin = async (username, options = {}) => {
+  const normalizedUsername = String(username || '').trim();
+  if (!normalizedUsername) throw new Error('username is required');
+
+  let password = '';
+  if (options.generate) {
+    password = randomBytes(18).toString('base64url');
+  } else {
+    password = await promptHidden(`New super-admin password for ${normalizedUsername}: `);
+    const passwordConfirm = await promptHidden('Confirm password: ');
+    if (password !== passwordConfirm) throw new Error('Passwords do not match');
+  }
+
+  if (!password) throw new Error('Password cannot be empty');
+
+  provisionClientDefaults('AdministratorClient', 'AdministratorClient');
+  const now = new Date().toISOString();
+  const passwordHash = hashPassword(password);
+  db.prepare(`
+    INSERT INTO system_settings (key, value, updated_at) VALUES (?, ?, ?)
+    ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at
+  `).run('super_admin_username', normalizedUsername, now);
+  db.prepare(`
+    INSERT INTO system_settings (key, value, updated_at) VALUES (?, ?, ?)
+    ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at
+  `).run('super_admin_password_hash', passwordHash, now);
+
+  console.log(`Super-admin username set to "${normalizedUsername}".`);
+  if (options.generate) {
+    console.log(`Generated super-admin password: ${password}`);
+  } else {
+    console.log('Super-admin password updated.');
+  }
+  console.log('Super-admin client ID is fixed to: AdministratorClient');
+};
+
 const run = async () => {
   const [, , cmd, ...args] = process.argv;
 
@@ -177,6 +214,14 @@ const run = async () => {
         const [clientId, username] = args;
         if (!clientId || !username) throw new Error('clientId and username are required');
         await setPassword(clientId, username);
+        break;
+      }
+      case 'set-super-admin': {
+        const [username, ...flags] = args;
+        if (!username) throw new Error('username is required');
+        await setSuperAdmin(username, {
+          generate: flags.includes('--generate'),
+        });
         break;
       }
       default:

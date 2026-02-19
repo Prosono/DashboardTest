@@ -52,6 +52,9 @@ router.get('/:id', (req, res) => {
 });
 
 router.post('/', adminRequired, (req, res) => {
+  if (req.auth?.user?.isPlatformAdmin) {
+    return res.status(403).json({ error: 'Platform admin cannot edit tenant dashboards' });
+  }
   const clientId = req.auth.user.clientId;
   const rawId = req.body?.id || req.body?.name || 'dashboard';
   const id = normalizeDashboardId(rawId);
@@ -74,6 +77,9 @@ router.post('/', adminRequired, (req, res) => {
 });
 
 router.put('/:id', adminRequired, (req, res) => {
+  if (req.auth?.user?.isPlatformAdmin) {
+    return res.status(403).json({ error: 'Platform admin cannot edit tenant dashboards' });
+  }
   const clientId = req.auth.user.clientId;
   const id = normalizeDashboardId(req.params.id);
   const name = req.body?.name !== undefined ? String(req.body.name).trim() : null;

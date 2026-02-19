@@ -98,6 +98,7 @@ export default function ConfigModal({
   loadGlobalDashboard,
   currentUser,
   canEditDashboard,
+  canManageAdministration = false,
   onLogout,
   userAdminApi,
   onClose,
@@ -115,6 +116,7 @@ export default function ConfigModal({
   const [newPassword, setNewPassword] = useState('');
   const [newRole, setNewRole] = useState('user');
   const [newUserDashboard, setNewUserDashboard] = useState('default');
+  const [newUserClientId, setNewUserClientId] = useState('');
   const [newUserHaUrl, setNewUserHaUrl] = useState('');
   const [newUserHaToken, setNewUserHaToken] = useState('');
   const [userEdits, setUserEdits] = useState({});
@@ -128,6 +130,27 @@ export default function ConfigModal({
   const [selectedClientId, setSelectedClientId] = useState('');
   const [newClientAdminUsername, setNewClientAdminUsername] = useState('');
   const [newClientAdminPassword, setNewClientAdminPassword] = useState('');
+  const [storageSection, setStorageSection] = useState('users');
+  const [showCreateUserModal, setShowCreateUserModal] = useState(false);
+  const [showCreateClientModal, setShowCreateClientModal] = useState(false);
+  const [showCreateClientAdminModal, setShowCreateClientAdminModal] = useState(false);
+  const [showEditClientModal, setShowEditClientModal] = useState(false);
+  const [showDeleteClientModal, setShowDeleteClientModal] = useState(false);
+  const [editClientId, setEditClientId] = useState('');
+  const [editClientName, setEditClientName] = useState('');
+  const [deleteClientId, setDeleteClientId] = useState('');
+  const [deleteClientConfirmText, setDeleteClientConfirmText] = useState('');
+  const [connectionManageClientId, setConnectionManageClientId] = useState('');
+  const [managedConnectionConfig, setManagedConnectionConfig] = useState({
+    url: '',
+    fallbackUrl: '',
+    authMethod: 'oauth',
+    token: '',
+  });
+  const [managedConnectionLoading, setManagedConnectionLoading] = useState(false);
+  const [managedConnectionSaving, setManagedConnectionSaving] = useState(false);
+  const [assignTargetUserId, setAssignTargetUserId] = useState('');
+  const [dashboardProfilesByClient, setDashboardProfilesByClient] = useState({});
 
   const normalizeRole = (role) => {
     const value = String(role || '').trim();
@@ -159,12 +182,13 @@ export default function ConfigModal({
   }, [layoutPreview, configTab, setConfigTab]);
 
   useEffect(() => {
+    if (currentUser?.isPlatformAdmin === true) return;
     if (!Array.isArray(globalDashboardProfiles) || globalDashboardProfiles.length === 0) return;
     const exists = globalDashboardProfiles.some((profile) => profile.id === selectedGlobalDashboard);
     if (!exists) {
       setSelectedGlobalDashboard(globalDashboardProfiles[0].id || 'default');
     }
-  }, [globalDashboardProfiles, selectedGlobalDashboard]);
+  }, [globalDashboardProfiles, selectedGlobalDashboard, currentUser?.isPlatformAdmin]);
 
   useEffect(() => {
     if (configTab === 'storage' && refreshGlobalDashboards) {
@@ -173,7 +197,7 @@ export default function ConfigModal({
   }, [configTab, refreshGlobalDashboards]);
 
   useEffect(() => {
-    if (configTab !== 'storage' || !canEditDashboard || !userAdminApi?.listUsers) return;
+    if (configTab !== 'storage' || !canManageAdministration || !userAdminApi?.listUsers) return;
     let cancelled = false;
     userAdminApi.listUsers().then((list) => {
       if (!cancelled) {
@@ -198,17 +222,25 @@ export default function ConfigModal({
       }
     });
     return () => { cancelled = true; };
-  }, [configTab, canEditDashboard, userAdminApi]);
+  }, [configTab, canManageAdministration, userAdminApi]);
 
   useEffect(() => {
-    if (configTab !== 'storage' || !canEditDashboard || !userAdminApi?.listClients) return;
+    const canClientMgmtFromAuth = currentUser?.isPlatformAdmin === true;
+    if ((configTab !== 'storage' && configTab !== 'connection') || !canManageAdministration || !canClientMgmtFromAuth || !userAdminApi?.listClients) return;
     let cancelled = false;
     userAdminApi.listClients().then((list) => {
       if (cancelled) return;
       const nextClients = Array.isArray(list) ? list : [];
+      const canClientMgmt = canClientMgmtFromAuth && typeof userAdminApi?.listClients === 'function';
       setClients(nextClients);
       if (!nextClients.some((client) => client.id === selectedClientId)) {
         setSelectedClientId(nextClients[0]?.id || '');
+      }
+      if (!nextClients.some((client) => client.id === connectionManageClientId)) {
+        setConnectionManageClientId(nextClients[0]?.id || '');
+      }
+      if (canClientMgmt && (!newUserClientId || !nextClients.some((client) => client.id === newUserClientId))) {
+        setNewUserClientId(currentUser?.clientId || nextClients[0]?.id || '');
       }
     }).catch(() => {
       if (!cancelled) {
@@ -216,9 +248,15 @@ export default function ConfigModal({
       }
     });
     return () => { cancelled = true; };
-  }, [configTab, canEditDashboard, userAdminApi, selectedClientId]);
+  }, [configTab, canManageAdministration, userAdminApi, selectedClientId, connectionManageClientId, currentUser?.clientId, currentUser?.isPlatformAdmin, newUserClientId]);
 
-  if (!open) return null;
+  useEffect(() => {
+    if (configTab !== 'storage') return;
+    if (storageSection !== 'clients') return;
+    if (!canManageAdministration || !userAdminApi?.listClients) {
+      setStorageSection('users');
+    }
+  }, [configTab, storageSection, canManageAdministration, userAdminApi]);
 
   const handleClose = () => {
     if (!isOnboardingActive) onClose?.();
@@ -226,18 +264,99 @@ export default function ConfigModal({
 
   const isAdmin = currentUser?.role === 'admin';
   const isInspector = currentUser?.role === 'inspector';
-  const canManageConnection = !isInspector;
+  const canManageConnection = currentUser?.isPlatformAdmin === true;
+  const canAccessStorage = canManageAdministration;
+  const canAccessUpdates = isAdmin && !currentUser?.isPlatformAdmin;
 
   const TABS = [
     { key: 'connection', icon: Wifi, label: t('system.tabConnection') },
-    ...(isAdmin ? [{ key: 'storage', icon: Server, label: t('userMgmt.title') }] : []),
-    ...(isAdmin ? [{ key: 'updates', icon: Download, label: t('updates.title') }] : []),
+    ...(canAccessStorage ? [{ key: 'storage', icon: Server, label: t('userMgmt.menu') }] : []),
+    ...(canAccessUpdates ? [{ key: 'updates', icon: Download, label: t('updates.title') }] : []),
   ];
 
   const availableTabs = isLayoutPreview
     ? [{ key: 'layout', icon: LayoutGrid, label: t('system.tabLayout') }]
     : TABS;
   const activeConfigTab = availableTabs.some((tab) => tab.key === configTab) ? configTab : 'connection';
+  const canManageClients = currentUser?.isPlatformAdmin === true && typeof userAdminApi?.listClients === 'function';
+  const isPlatformAdmin = currentUser?.isPlatformAdmin === true;
+  const selectedManagedClient = clients.find((client) => client.id === connectionManageClientId) || null;
+
+  useEffect(() => {
+    if (!open || !canManageClients || !canManageAdministration || !userAdminApi?.listClientDashboards) return;
+    if (configTab !== 'storage') return;
+    const clientIds = Array.from(new Set([
+      ...users.map((user) => String(user?.clientId || '').trim()).filter(Boolean),
+      String(newUserClientId || '').trim(),
+      String(selectedClientId || '').trim(),
+    ].filter(Boolean)));
+    if (!clientIds.length) return;
+    let cancelled = false;
+    Promise.all(clientIds.map(async (clientId) => {
+      try {
+        const dashboards = await userAdminApi.listClientDashboards(clientId);
+        return [clientId, Array.isArray(dashboards) ? dashboards : []];
+      } catch {
+        return [clientId, []];
+      }
+    })).then((entries) => {
+      if (cancelled) return;
+      setDashboardProfilesByClient((prev) => {
+        const next = { ...prev };
+        entries.forEach(([clientId, dashboards]) => {
+          next[clientId] = dashboards;
+        });
+        return next;
+      });
+    });
+    return () => { cancelled = true; };
+  }, [
+    open,
+    canManageClients,
+    canManageAdministration,
+    configTab,
+    users,
+    newUserClientId,
+    selectedClientId,
+    userAdminApi,
+  ]);
+
+  useEffect(() => {
+    if (activeConfigTab !== 'connection' || !isPlatformAdmin || !connectionManageClientId || !userAdminApi?.fetchClientHaConfig) return;
+    let cancelled = false;
+    setManagedConnectionLoading(true);
+    userAdminApi.fetchClientHaConfig(connectionManageClientId)
+      .then((cfg) => {
+        if (cancelled) return;
+        setManagedConnectionConfig({
+          url: cfg?.url || '',
+          fallbackUrl: cfg?.fallbackUrl || '',
+          authMethod: cfg?.authMethod === 'token' ? 'token' : 'oauth',
+          token: cfg?.token || '',
+        });
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setManagedConnectionConfig({ url: '', fallbackUrl: '', authMethod: 'oauth', token: '' });
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setManagedConnectionLoading(false);
+      });
+    return () => { cancelled = true; };
+  }, [activeConfigTab, isPlatformAdmin, connectionManageClientId, userAdminApi]);
+
+  useEffect(() => {
+    if (!canManageClients) return;
+    const options = Array.isArray(dashboardProfilesByClient[selectedClientId]) ? dashboardProfilesByClient[selectedClientId] : [];
+    if (!options.length) return;
+    const hasCurrent = options.some((profile) => String(profile?.id || '').trim() === String(selectedGlobalDashboard || '').trim());
+    if (!hasCurrent) {
+      setSelectedGlobalDashboard(String(options[0]?.id || 'default').trim() || 'default');
+    }
+  }, [canManageClients, dashboardProfilesByClient, selectedClientId, selectedGlobalDashboard]);
+
+  if (!open) return null;
 
   const handleInstallUpdate = (entityId) => {
     setInstallingIds(prev => ({ ...prev, [entityId]: true }));
@@ -341,12 +460,67 @@ export default function ConfigModal({
     );
   };
 
+  const handleSaveManagedConnection = async () => {
+    if (!isPlatformAdmin || !connectionManageClientId || !userAdminApi?.saveClientHaConfig) return;
+    setManagedConnectionSaving(true);
+    try {
+      await userAdminApi.saveClientHaConfig(connectionManageClientId, {
+        url: String(managedConnectionConfig.url || '').trim(),
+        fallbackUrl: String(managedConnectionConfig.fallbackUrl || '').trim(),
+        authMethod: managedConnectionConfig.authMethod === 'token' ? 'token' : 'oauth',
+        token: managedConnectionConfig.authMethod === 'token'
+          ? String(managedConnectionConfig.token || '').trim()
+          : '',
+      });
+      setGlobalActionMessage(`${t('connection.clientConfigSaved')}: ${connectionManageClientId}`);
+    } catch (error) {
+      setGlobalActionMessage(error?.message || t('connection.clientConfigSaveFailed'));
+    } finally {
+      setManagedConnectionSaving(false);
+    }
+  };
+
   const renderStorageTab = () => {
     const profiles = Array.isArray(globalDashboardProfiles) && globalDashboardProfiles.length > 0
       ? globalDashboardProfiles
       : [{ id: 'default', name: 'default', updatedAt: null }];
+    const activeDashboardClientId = canManageClients
+      ? String(selectedClientId || '').trim()
+      : String(currentUser?.clientId || '').trim();
+    const activeClientProfilesRaw = canManageClients
+      ? (Array.isArray(dashboardProfilesByClient[activeDashboardClientId]) ? dashboardProfilesByClient[activeDashboardClientId] : [])
+      : profiles;
+    const activeClientProfiles = activeClientProfilesRaw.length > 0
+      ? activeClientProfilesRaw
+      : [{ id: 'default', name: 'default', updatedAt: null }];
+    const getDashboardOptionsForClient = (clientId) => {
+      const normalizedClientId = String(clientId || '').trim();
+      const baseProfiles = canManageClients
+        ? (Array.isArray(dashboardProfilesByClient[normalizedClientId]) && dashboardProfilesByClient[normalizedClientId].length
+            ? dashboardProfilesByClient[normalizedClientId]
+            : [{ id: 'default', name: 'default', updatedAt: null }])
+        : activeClientProfiles;
+      const idSet = new Set([
+        ...baseProfiles.map((profile) => String(profile?.id || '').trim()).filter(Boolean),
+        ...users
+          .filter((user) => (canManageClients ? String(user?.clientId || '').trim() === normalizedClientId : true))
+          .map((user) => String(user?.assignedDashboardId || '').trim())
+          .filter(Boolean),
+      ]);
+      if (!idSet.size) idSet.add('default');
+      return Array.from(idSet).map((id) => {
+        const existing = baseProfiles.find((profile) => String(profile?.id || '').trim() === id);
+        return existing || { id, name: id, updatedAt: null };
+      });
+    };
+    const dashboardOptions = getDashboardOptionsForClient(activeDashboardClientId || currentUser?.clientId);
 
     const roleLabel = (role) => t(`role.${role}`) || role;
+    const i18nOrFallback = (key, fallback) => {
+      const value = t(key);
+      return value === key ? fallback : value;
+    };
+    const canImportExportDashboards = canManageAdministration;
 
     const syncUsers = (nextUsers) => {
       const normalized = Array.isArray(nextUsers) ? nextUsers : [];
@@ -373,7 +547,11 @@ export default function ConfigModal({
       }
     };
 
-    const canManageClients = canEditDashboard && typeof userAdminApi?.listClients === 'function';
+    const storageTabs = [
+      { key: 'users', label: t('userMgmt.tabUsers') },
+      { key: 'dashboards', label: t('userMgmt.tabDashboards') },
+      ...(canManageClients ? [{ key: 'clients', label: t('userMgmt.tabClients') }] : []),
+    ];
 
     const refreshClients = async () => {
       if (!canManageClients) return;
@@ -388,12 +566,20 @@ export default function ConfigModal({
     };
 
     const handleRefresh = async () => {
-      if (!refreshGlobalDashboards) return;
-      const nextProfiles = await refreshGlobalDashboards();
-      if (Array.isArray(nextProfiles)) {
-        setGlobalActionMessage(`${t('userMgmt.refreshedDashboards')}: ${nextProfiles.length}`);
+      if (canManageClients && userAdminApi?.listClientDashboards) {
+        const clientId = String(activeDashboardClientId || '').trim();
+        if (clientId) {
+          const list = await userAdminApi.listClientDashboards(clientId).catch(() => []);
+          setDashboardProfilesByClient((prev) => ({ ...prev, [clientId]: Array.isArray(list) ? list : [] }));
+          setGlobalActionMessage(`${t('userMgmt.refreshedDashboards')}: ${Array.isArray(list) ? list.length : 0}`);
+        }
+      } else if (refreshGlobalDashboards) {
+        const nextProfiles = await refreshGlobalDashboards();
+        if (Array.isArray(nextProfiles)) {
+          setGlobalActionMessage(`${t('userMgmt.refreshedDashboards')}: ${nextProfiles.length}`);
+        }
       }
-      if (canEditDashboard && userAdminApi?.listUsers) {
+      if (canManageAdministration && userAdminApi?.listUsers) {
         const list = await userAdminApi.listUsers().catch(() => []);
         syncUsers(list);
       }
@@ -404,20 +590,21 @@ export default function ConfigModal({
       if (!canManageClients || !userAdminApi?.createClient) return;
       const clientId = String(newClientId || '').trim();
       if (!clientId) {
-        setGlobalActionMessage('Client ID is required');
+        setGlobalActionMessage(t('userMgmt.clientIdRequired'));
         return;
       }
       try {
         const created = await userAdminApi.createClient(clientId, String(newClientName || '').trim());
         setNewClientId('');
         setNewClientName('');
+        setShowCreateClientModal(false);
         await refreshClients();
         if (created?.id) {
           setSelectedClientId(created.id);
-          setGlobalActionMessage(`Client ready: ${created.id}`);
+          setGlobalActionMessage(`${t('userMgmt.clientReady')}: ${created.id}`);
         }
       } catch (error) {
-        setGlobalActionMessage(error?.message || 'Failed to create client');
+        setGlobalActionMessage(error?.message || t('userMgmt.createClientFailed'));
       }
     };
 
@@ -427,17 +614,68 @@ export default function ConfigModal({
       const username = String(newClientAdminUsername || '').trim();
       const password = String(newClientAdminPassword || '').trim();
       if (!clientId || !username || !password) {
-        setGlobalActionMessage('Client, username and password are required');
+        setGlobalActionMessage(t('userMgmt.clientAdminRequired'));
         return;
       }
       try {
         await userAdminApi.createClientAdmin(clientId, username, password);
         setNewClientAdminUsername('');
         setNewClientAdminPassword('');
+        setShowCreateClientAdminModal(false);
         await refreshClients();
-        setGlobalActionMessage(`Admin created for ${clientId}`);
+        setGlobalActionMessage(`${t('userMgmt.clientAdminCreated')}: ${clientId}`);
       } catch (error) {
-        setGlobalActionMessage(error?.message || 'Failed to create client admin');
+        setGlobalActionMessage(error?.message || t('userMgmt.createClientAdminFailed'));
+      }
+    };
+
+    const openEditClient = (client) => {
+      setEditClientId(client?.id || '');
+      setEditClientName(client?.name || '');
+      setShowEditClientModal(true);
+    };
+
+    const handleUpdateClient = async () => {
+      if (!canManageClients || !userAdminApi?.updateClient) return;
+      const clientId = String(editClientId || '').trim();
+      const name = String(editClientName || '').trim();
+      if (!clientId || !name) {
+        setGlobalActionMessage(t('userMgmt.clientNameRequired'));
+        return;
+      }
+      try {
+        await userAdminApi.updateClient(clientId, name);
+        setShowEditClientModal(false);
+        await refreshClients();
+        setGlobalActionMessage(`${t('userMgmt.clientUpdated')}: ${clientId}`);
+      } catch (error) {
+        setGlobalActionMessage(error?.message || t('userMgmt.updateClientFailed'));
+      }
+    };
+
+    const openDeleteClient = (client) => {
+      setDeleteClientId(client?.id || '');
+      setDeleteClientConfirmText('');
+      setShowDeleteClientModal(true);
+    };
+
+    const handleDeleteClient = async () => {
+      if (!canManageClients || !userAdminApi?.deleteClient) return;
+      const clientId = String(deleteClientId || '').trim();
+      if (!clientId) return;
+      if (deleteClientConfirmText.trim() !== 'OK') {
+        setGlobalActionMessage(t('userMgmt.typeOkToDelete'));
+        return;
+      }
+      try {
+        await userAdminApi.deleteClient(clientId, 'OK');
+        setShowDeleteClientModal(false);
+        setDeleteClientId('');
+        setDeleteClientConfirmText('');
+        await refreshClients();
+        setGlobalActionMessage(`${t('userMgmt.clientDeleted')}: ${clientId}`);
+      } catch (error) {
+        setGlobalActionMessage(error?.message || t('userMgmt.deleteClientFailed'));
       }
     };
 
@@ -458,6 +696,17 @@ export default function ConfigModal({
 
     const handleLoadGlobal = async () => {
       const target = selectedGlobalDashboard || 'default';
+      if (canManageClients && userAdminApi?.fetchClientDashboard) {
+        const clientId = String(activeDashboardClientId || '').trim();
+        if (!clientId) return;
+        const data = await userAdminApi.fetchClientDashboard(clientId, target).catch(() => null);
+        if (data && typeof data === 'object') {
+          setGlobalActionMessage(`${t('userMgmt.loadedDashboard')}: ${target}`);
+        } else {
+          setGlobalActionMessage(t('userMgmt.loadDashboardFailed') || 'Could not load dashboard');
+        }
+        return;
+      }
       if (!loadGlobalDashboard) return;
       const ok = await loadGlobalDashboard(target);
       if (ok) {
@@ -468,7 +717,9 @@ export default function ConfigModal({
     const handleExportGlobal = async () => {
       const target = toProfileId(selectedGlobalDashboard || 'default');
       try {
-        const data = await fetchSharedDashboardProfile(target);
+        const data = canManageClients && userAdminApi?.fetchClientDashboard
+          ? await userAdminApi.fetchClientDashboard(activeDashboardClientId, target)
+          : await fetchSharedDashboardProfile(target);
         if (!data || typeof data !== 'object') {
           setGlobalActionMessage(t('userMgmt.exportFailed'));
           return;
@@ -513,9 +764,20 @@ export default function ConfigModal({
           return;
         }
 
-        await saveSharedDashboardProfile(target, importedDashboard);
-        await refreshGlobalDashboards?.();
-        await loadGlobalDashboard?.(target);
+        if (canManageClients && userAdminApi?.saveClientDashboard) {
+          const clientId = String(activeDashboardClientId || '').trim();
+          if (!clientId) {
+            setGlobalActionMessage(t('userMgmt.clientIdRequired'));
+            return;
+          }
+          await userAdminApi.saveClientDashboard(clientId, target, target, importedDashboard);
+          const next = await userAdminApi.listClientDashboards(clientId).catch(() => []);
+          setDashboardProfilesByClient((prev) => ({ ...prev, [clientId]: Array.isArray(next) ? next : [] }));
+        } else {
+          await saveSharedDashboardProfile(target, importedDashboard);
+          await refreshGlobalDashboards?.();
+          await loadGlobalDashboard?.(target);
+        }
         setGlobalActionMessage(`${t('userMgmt.importedDashboard')}: ${target}`);
       } catch {
         setGlobalActionMessage(t('userMgmt.importFailed'));
@@ -524,16 +786,56 @@ export default function ConfigModal({
       }
     };
 
+    const handleAssignSelectedDashboard = async () => {
+      if (!canManageAdministration || !userAdminApi?.updateUser) return;
+      const userId = String(assignTargetUserId || '').trim();
+      const dashboardId = String(selectedGlobalDashboard || '').trim();
+      if (!userId || !dashboardId) {
+        setGlobalActionMessage(i18nOrFallback('userMgmt.assignTargetRequired', 'Select both dashboard and user'));
+        return;
+      }
+      const targetUser = users.find((user) => user.id === userId);
+      const targetClientId = String(targetUser?.clientId || currentUser?.clientId || '').trim();
+      const validOptions = getDashboardOptionsForClient(targetClientId).map((entry) => String(entry?.id || '').trim());
+      if (!validOptions.includes(dashboardId)) {
+        setGlobalActionMessage(i18nOrFallback('userMgmt.dashboardNotAvailableForClient', 'Selected dashboard is not available for that client'));
+        return;
+      }
+      try {
+        const updated = await userAdminApi.updateUser(userId, { assignedDashboardId: dashboardId });
+        if (updated?.id) {
+          setUsers((prev) => prev.map((user) => (user.id === updated.id ? updated : user)));
+          setUserEdits((prev) => ({
+            ...prev,
+            [updated.id]: {
+              ...(prev[updated.id] || {}),
+              ...buildUserEditState(updated),
+              password: '',
+            },
+          }));
+        }
+        setGlobalActionMessage(`${i18nOrFallback('userMgmt.assignedDashboard', 'Assigned dashboard')}: ${dashboardId}`);
+      } catch (error) {
+        setGlobalActionMessage(error?.message || i18nOrFallback('userMgmt.assignDashboardFailed', 'Failed to assign dashboard'));
+      }
+    };
+
     const handleCreateUser = async () => {
-      if (!canEditDashboard || !userAdminApi?.createUser) return;
+      if (!canManageAdministration || !userAdminApi?.createUser) return;
       const username = newUsername.trim();
       const password = newPassword.trim();
+      const targetClientId = canManageClients ? String(newUserClientId || '').trim() : (currentUser?.clientId || '');
       if (!username || !password) {
         setGlobalActionMessage(t('userMgmt.usernamePasswordRequired'));
         return;
       }
+      if (!targetClientId) {
+        setGlobalActionMessage(t('userMgmt.clientIdRequired'));
+        return;
+      }
       try {
         const createdUser = await userAdminApi.createUser({
+          clientId: targetClientId,
           username,
           password,
           role: newRole,
@@ -543,9 +845,13 @@ export default function ConfigModal({
         });
         setNewUsername('');
         setNewPassword('');
+        setNewUserClientId(currentUser?.clientId || clients[0]?.id || '');
         setNewUserHaUrl('');
         setNewUserHaToken('');
-        const list = await userAdminApi.listUsers().catch(() => null);
+        setShowCreateUserModal(false);
+        const list = targetClientId === (currentUser?.clientId || '')
+          ? await userAdminApi.listUsers().catch(() => null)
+          : null;
         if (Array.isArray(list)) {
           syncUsers(list);
         } else if (createdUser) {
@@ -558,7 +864,7 @@ export default function ConfigModal({
           })(users);
           syncUsers(nextUsers);
         }
-        setGlobalActionMessage(`${t('userMgmt.createdUser')}: ${username}`);
+        setGlobalActionMessage(`${t('userMgmt.createdUser')}: ${username} (${targetClientId})`);
       } catch (error) {
         setGlobalActionMessage(error?.message || t('userMgmt.createUserFailed'));
       }
@@ -613,7 +919,7 @@ export default function ConfigModal({
 
     return (
       <div className="space-y-5 font-sans animate-in fade-in slide-in-from-right-4 duration-300">
-        <div className="rounded-2xl p-5 bg-[var(--glass-bg)] border border-[var(--glass-border)] space-y-4">
+        <div className="rounded-2xl p-5 bg-[var(--glass-bg)] border border-[var(--glass-border)] space-y-5 shadow-[0_20px_60px_-40px_rgba(0,0,0,0.55)]">
           <div className="flex items-center justify-between gap-3">
             <div>
               <h3 className="text-sm font-bold uppercase tracking-wider text-[var(--text-primary)]">
@@ -641,158 +947,205 @@ export default function ConfigModal({
             </div>
           </div>
 
-          {canManageClients && (
+          <div className="rounded-xl border border-[var(--glass-border)] bg-[var(--glass-bg-hover)] p-1 flex gap-1">
+            {storageTabs.map((tab) => {
+              const active = storageSection === tab.key;
+              return (
+                <button
+                  key={tab.key}
+                  type="button"
+                  onClick={() => setStorageSection(tab.key)}
+                  className={`flex-1 px-3 py-2 rounded-lg text-[11px] font-bold uppercase tracking-wider transition-all ${
+                    active
+                      ? 'bg-blue-500 text-white shadow-lg shadow-blue-500/20'
+                      : 'text-[var(--text-secondary)] hover:bg-[var(--glass-bg)] hover:text-[var(--text-primary)]'
+                  }`}
+                >
+                  {tab.label}
+                </button>
+              );
+            })}
+          </div>
+
+          {storageSection === 'clients' && canManageClients && (
             <div className="space-y-3 pt-2 border-t border-[var(--glass-border)]">
               <h4 className="text-xs uppercase font-bold tracking-wider text-[var(--text-secondary)]">{t('userMgmt.clientManagement')}</h4>
 
-              <div className="rounded-xl border border-[var(--glass-border)] bg-[var(--glass-bg)] p-3 space-y-3">
-                <p className="text-[11px] uppercase tracking-wider text-[var(--text-secondary)] font-bold">{t('userMgmt.createClient')}</p>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                  <input
-                    value={newClientId}
-                    onChange={(e) => setNewClientId(e.target.value)}
-                    placeholder={t('userMgmt.clientId')}
-                    className="px-3 py-2 rounded-lg bg-[var(--glass-bg-hover)] border border-[var(--glass-border)] text-sm"
-                  />
-                  <input
-                    value={newClientName}
-                    onChange={(e) => setNewClientName(e.target.value)}
-                    placeholder={t('userMgmt.clientNameOptional')}
-                    className="px-3 py-2 rounded-lg bg-[var(--glass-bg-hover)] border border-[var(--glass-border)] text-sm"
-                  />
-                </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                 <button
-                  onClick={handleCreateClient}
-                  className="w-full py-2.5 rounded-lg bg-indigo-500 hover:bg-indigo-600 text-white text-xs font-bold uppercase tracking-wider"
+                  onClick={() => setShowCreateClientModal(true)}
+                  className="w-full py-4 rounded-xl bg-indigo-500 hover:bg-indigo-600 text-white text-sm font-bold uppercase tracking-wider shadow-lg shadow-indigo-500/20"
                 >
-                  {t('userMgmt.createClient')}
+                  {t('userMgmt.createNewClient')}
                 </button>
-              </div>
-
-              <div className="rounded-xl border border-[var(--glass-border)] bg-[var(--glass-bg)] p-3 space-y-3">
-                <p className="text-[11px] uppercase tracking-wider text-[var(--text-secondary)] font-bold">{t('userMgmt.createClientAdmin')}</p>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
-                  <select
-                    value={selectedClientId}
-                    onChange={(e) => setSelectedClientId(e.target.value)}
-                    className="px-3 py-2 rounded-lg bg-[var(--glass-bg-hover)] border border-[var(--glass-border)] text-sm"
-                  >
-                    <option value="">{t('userMgmt.selectClient')}</option>
-                    {clients.map((client) => (
-                      <option key={client.id} value={client.id}>
-                        {client.id} ({client.userCount || 0} users)
-                      </option>
-                    ))}
-                  </select>
-                  <input
-                    value={newClientAdminUsername}
-                    onChange={(e) => setNewClientAdminUsername(e.target.value)}
-                    placeholder={t('profile.username')}
-                    className="px-3 py-2 rounded-lg bg-[var(--glass-bg-hover)] border border-[var(--glass-border)] text-sm"
-                  />
-                  <input
-                    value={newClientAdminPassword}
-                    onChange={(e) => setNewClientAdminPassword(e.target.value)}
-                    type="password"
-                    placeholder={t('userMgmt.password')}
-                    className="px-3 py-2 rounded-lg bg-[var(--glass-bg-hover)] border border-[var(--glass-border)] text-sm"
-                  />
-                </div>
                 <button
-                  onClick={handleCreateClientAdmin}
-                  className="w-full py-2.5 rounded-lg bg-green-500 hover:bg-green-600 text-white text-xs font-bold uppercase tracking-wider"
+                  onClick={() => setShowCreateClientAdminModal(true)}
+                  className="w-full py-4 rounded-xl bg-green-500 hover:bg-green-600 text-white text-sm font-bold uppercase tracking-wider shadow-lg shadow-green-500/20"
                 >
                   {t('userMgmt.createClientAdmin')}
                 </button>
               </div>
-            </div>
-          )}
 
-          <div className="space-y-2">
-            <label className="text-xs uppercase font-bold text-[var(--text-secondary)]">{t('userMgmt.loadDashboard')}</label>
-            <select
-              value={selectedGlobalDashboard}
-              onChange={(e) => setSelectedGlobalDashboard(e.target.value)}
-              className="w-full px-3 py-2.5 rounded-xl bg-[var(--glass-bg)] border border-[var(--glass-border)] text-sm text-[var(--text-primary)]"
-            >
-              {profiles.map((profile) => (
-                <option key={profile.id} value={profile.id}>
-                  {profile.name || profile.id}{profile.updatedAt ? ` (${new Date(profile.updatedAt).toLocaleString()})` : ''}
-                </option>
-              ))}
-            </select>
-            <button
-              onClick={handleLoadGlobal}
-              disabled={globalStorageBusy}
-              className="w-full py-2.5 rounded-xl bg-blue-500 hover:bg-blue-600 text-white text-xs font-bold uppercase tracking-wider disabled:opacity-50"
-            >
-              {globalStorageBusy ? t('common.loading') : t('userMgmt.loadDashboard')}
-            </button>
-            {canEditDashboard && (
-              <div className="grid grid-cols-2 gap-2 pt-1">
-                <button
-                  onClick={handleExportGlobal}
-                  disabled={globalStorageBusy || importingDashboard}
-                  className="py-2.5 rounded-xl bg-[var(--glass-bg-hover)] hover:bg-[var(--glass-bg)] border border-[var(--glass-border)] text-[var(--text-primary)] text-xs font-bold uppercase tracking-wider disabled:opacity-50"
-                >
-                  {t('userMgmt.exportDashboard')}
-                </button>
-                <label className="py-2.5 rounded-xl bg-[var(--glass-bg-hover)] hover:bg-[var(--glass-bg)] border border-[var(--glass-border)] text-[var(--text-primary)] text-xs font-bold uppercase tracking-wider text-center cursor-pointer disabled:opacity-50">
-                  <input
-                    type="file"
-                    accept=".json,application/json"
-                    className="hidden"
-                    onChange={handleImportGlobal}
-                    disabled={globalStorageBusy || importingDashboard}
-                  />
-                  {importingDashboard ? t('common.loading') : t('userMgmt.importDashboard')}
-                </label>
+              <div className="rounded-xl border border-[var(--glass-border)] bg-[var(--glass-bg)] p-3 space-y-2">
+                <div className="flex items-center justify-between">
+                  <p className="text-[11px] uppercase tracking-wider text-[var(--text-secondary)] font-bold">{t('userMgmt.existingClients')}</p>
+                  <span className="text-[10px] text-[var(--text-secondary)]">{clients.length} {t('userMgmt.total')}</span>
+                </div>
+                <div className="space-y-2 max-h-[26rem] overflow-auto pr-1">
+                  {clients.map((client) => (
+                    <div key={client.id} className="rounded-lg border border-[var(--glass-border)] bg-[var(--glass-bg-hover)] px-3 py-2 space-y-2">
+                      <div>
+                        <p className="text-sm font-semibold truncate">{client.name || client.id}</p>
+                        <p className="text-[11px] text-[var(--text-secondary)] truncate">
+                          ID: {client.id} • {t('userMgmt.usersCount')}: {client.userCount || 0} • {t('role.admin')}: {client.adminCount || 0}
+                        </p>
+                      </div>
+                      <div className="flex items-center justify-end gap-2">
+                        <button
+                          type="button"
+                          onClick={() => openEditClient(client)}
+                          className="px-3 py-1.5 rounded-lg bg-[var(--glass-bg)] border border-[var(--glass-border)] text-[11px] font-bold uppercase tracking-wider hover:bg-[var(--glass-bg-hover)]"
+                        >
+                          {t('menu.edit')}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => openDeleteClient(client)}
+                          className="px-3 py-1.5 rounded-lg bg-red-500/15 border border-red-500/30 text-red-300 text-[11px] font-bold uppercase tracking-wider hover:bg-red-500/20"
+                        >
+                          {t('common.delete')}
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
               </div>
-            )}
-          </div>
-
-          {canEditDashboard && (
-            <div className="space-y-2">
-              <label className="text-xs uppercase font-bold text-[var(--text-secondary)]">{t('userMgmt.saveGlobally')}</label>
-              <input
-                type="text"
-                value={newGlobalDashboardName}
-                onChange={(e) => setNewGlobalDashboardName(e.target.value)}
-                placeholder="default"
-                className="w-full px-3 py-2.5 rounded-xl bg-[var(--glass-bg)] border border-[var(--glass-border)] text-sm text-[var(--text-primary)]"
-              />
-              <button
-                onClick={handleSaveGlobal}
-                disabled={globalStorageBusy}
-                className="w-full py-2.5 rounded-xl bg-green-500 hover:bg-green-600 text-white text-xs font-bold uppercase tracking-wider disabled:opacity-50"
-              >
-                {globalStorageBusy ? t('common.saving') : t('userMgmt.saveGlobally')}
-              </button>
             </div>
           )}
 
-          {canEditDashboard && (
+          {storageSection === 'dashboards' && (
+            <>
+              {canManageClients && (
+                <div className="space-y-2">
+                  <label className="text-xs uppercase font-bold text-[var(--text-secondary)]">{t('userMgmt.selectClient')}</label>
+                  <select
+                    value={selectedClientId}
+                    onChange={(e) => setSelectedClientId(e.target.value)}
+                    className="w-full px-3 py-2.5 rounded-xl bg-[var(--glass-bg)] border border-[var(--glass-border)] text-sm text-[var(--text-primary)]"
+                  >
+                    <option value="">{t('userMgmt.selectClient')}</option>
+                    {clients.map((client) => (
+                      <option key={client.id} value={client.id}>
+                        {client.name || client.id} ({client.id})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+              <div className="space-y-2">
+                <label className="text-xs uppercase font-bold text-[var(--text-secondary)]">{t('userMgmt.loadDashboard')}</label>
+                <select
+                  value={selectedGlobalDashboard}
+                  onChange={(e) => setSelectedGlobalDashboard(e.target.value)}
+                  className="w-full px-3 py-2.5 rounded-xl bg-[var(--glass-bg)] border border-[var(--glass-border)] text-sm text-[var(--text-primary)]"
+                >
+                  {dashboardOptions.map((profile) => (
+                    <option key={profile.id} value={profile.id}>
+                      {profile.name || profile.id}{profile.updatedAt ? ` (${new Date(profile.updatedAt).toLocaleString()})` : ''}
+                    </option>
+                  ))}
+                </select>
+                <button
+                  onClick={handleLoadGlobal}
+                  disabled={globalStorageBusy}
+                  className="w-full py-2.5 rounded-xl bg-blue-500 hover:bg-blue-600 text-white text-xs font-bold uppercase tracking-wider disabled:opacity-50"
+                >
+                  {globalStorageBusy ? t('common.loading') : t('userMgmt.loadDashboard')}
+                </button>
+                {canImportExportDashboards && (
+                  <div className="grid grid-cols-2 gap-2 pt-1">
+                    <button
+                      onClick={handleExportGlobal}
+                      disabled={globalStorageBusy || importingDashboard}
+                      className="py-2.5 rounded-xl bg-[var(--glass-bg-hover)] hover:bg-[var(--glass-bg)] border border-[var(--glass-border)] text-[var(--text-primary)] text-xs font-bold uppercase tracking-wider disabled:opacity-50"
+                    >
+                      {t('userMgmt.exportDashboard')}
+                    </button>
+                    <label className="py-2.5 rounded-xl bg-[var(--glass-bg-hover)] hover:bg-[var(--glass-bg)] border border-[var(--glass-border)] text-[var(--text-primary)] text-xs font-bold uppercase tracking-wider text-center cursor-pointer disabled:opacity-50">
+                      <input
+                        type="file"
+                        accept=".json,application/json"
+                        className="hidden"
+                        onChange={handleImportGlobal}
+                        disabled={globalStorageBusy || importingDashboard}
+                      />
+                      {importingDashboard ? t('common.loading') : t('userMgmt.importDashboard')}
+                    </label>
+                  </div>
+                )}
+              </div>
+
+              {canManageAdministration && (
+                <div className="space-y-2">
+                  <label className="text-xs uppercase font-bold text-[var(--text-secondary)]">
+                    {i18nOrFallback('userMgmt.assignDashboardToUser', 'Assign selected dashboard to user')}
+                  </label>
+                  <div className="grid grid-cols-1 md:grid-cols-[1fr_auto] gap-2">
+                    <select
+                      value={assignTargetUserId}
+                      onChange={(e) => setAssignTargetUserId(e.target.value)}
+                      className="w-full px-3 py-2.5 rounded-xl bg-[var(--glass-bg)] border border-[var(--glass-border)] text-sm text-[var(--text-primary)]"
+                    >
+                      <option value="">{i18nOrFallback('userMgmt.selectUser', 'Select user')}</option>
+                      {users.map((user) => (
+                        <option key={user.id} value={user.id}>
+                          {user.username} ({user.clientId || currentUser?.clientId || '-'})
+                        </option>
+                      ))}
+                    </select>
+                    <button
+                      onClick={handleAssignSelectedDashboard}
+                      disabled={!assignTargetUserId || !selectedGlobalDashboard}
+                      className="px-4 py-2.5 rounded-xl bg-indigo-500 hover:bg-indigo-600 text-white text-xs font-bold uppercase tracking-wider disabled:opacity-50"
+                    >
+                      {i18nOrFallback('userMgmt.assignNow', 'Assign now')}
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {canEditDashboard && (
+                <div className="space-y-2">
+                  <label className="text-xs uppercase font-bold text-[var(--text-secondary)]">{t('userMgmt.saveGlobally')}</label>
+                  <input
+                    type="text"
+                    value={newGlobalDashboardName}
+                    onChange={(e) => setNewGlobalDashboardName(e.target.value)}
+                    placeholder="default"
+                    className="w-full px-3 py-2.5 rounded-xl bg-[var(--glass-bg)] border border-[var(--glass-border)] text-sm text-[var(--text-primary)]"
+                  />
+                  <button
+                    onClick={handleSaveGlobal}
+                    disabled={globalStorageBusy}
+                    className="w-full py-2.5 rounded-xl bg-green-500 hover:bg-green-600 text-white text-xs font-bold uppercase tracking-wider disabled:opacity-50"
+                  >
+                    {globalStorageBusy ? t('common.saving') : t('userMgmt.saveGlobally')}
+                  </button>
+                </div>
+              )}
+            </>
+          )}
+
+          {storageSection === 'users' && canManageAdministration && (
             <div className="space-y-3 pt-2 border-t border-[var(--glass-border)]">
               <h4 className="text-xs uppercase font-bold tracking-wider text-[var(--text-secondary)]">{t('userMgmt.userAccounts')}</h4>
 
-              <div className="rounded-xl border border-[var(--glass-border)] bg-[var(--glass-bg)] p-3 space-y-3">
-                <p className="text-[11px] uppercase tracking-wider text-[var(--text-secondary)] font-bold">{t('userMgmt.createUser')}</p>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                  <input value={newUsername} onChange={(e) => setNewUsername(e.target.value)} placeholder={t('profile.username')} className="px-3 py-2 rounded-lg bg-[var(--glass-bg-hover)] border border-[var(--glass-border)] text-sm" />
-                  <input value={newPassword} onChange={(e) => setNewPassword(e.target.value)} type="password" placeholder={t('userMgmt.password')} className="px-3 py-2 rounded-lg bg-[var(--glass-bg-hover)] border border-[var(--glass-border)] text-sm" />
-                  <select value={newRole} onChange={(e) => setNewRole(e.target.value)} className="px-3 py-2 rounded-lg bg-[var(--glass-bg-hover)] border border-[var(--glass-border)] text-sm">
-                    <option value="user">{roleLabel('user')}</option>
-                    <option value="admin">{roleLabel('admin')}</option>
-                    <option value="inspector">{roleLabel('inspector')}</option>
-                  </select>
-                  <select value={newUserDashboard} onChange={(e) => setNewUserDashboard(e.target.value)} className="px-3 py-2 rounded-lg bg-[var(--glass-bg-hover)] border border-[var(--glass-border)] text-sm">
-                    {profiles.map((profile) => <option key={profile.id} value={profile.id}>{profile.name || profile.id}</option>)}
-                  </select>
-                  <input value={newUserHaUrl} onChange={(e) => setNewUserHaUrl(e.target.value)} placeholder={t('userMgmt.haUrlOptional')} className="px-3 py-2 rounded-lg bg-[var(--glass-bg-hover)] border border-[var(--glass-border)] text-sm md:col-span-2" />
-                  <input value={newUserHaToken} onChange={(e) => setNewUserHaToken(e.target.value)} placeholder={t('userMgmt.haTokenOptional')} className="px-3 py-2 rounded-lg bg-[var(--glass-bg-hover)] border border-[var(--glass-border)] text-sm md:col-span-2" />
-                </div>
-                <button onClick={handleCreateUser} className="w-full py-2.5 rounded-lg bg-indigo-500 hover:bg-indigo-600 text-white text-xs font-bold uppercase tracking-wider">{t('userMgmt.createUser')}</button>
-              </div>
+              <button
+                onClick={() => setShowCreateUserModal(true)}
+                className="w-full py-4 rounded-xl bg-indigo-500 hover:bg-indigo-600 text-white text-sm font-bold uppercase tracking-wider shadow-lg shadow-indigo-500/20"
+              >
+                {t('userMgmt.createNewUser')}
+              </button>
 
               <div className="rounded-xl border border-[var(--glass-border)] bg-[var(--glass-bg)] p-3 space-y-2">
                 <div className="flex items-center justify-between">
@@ -811,7 +1164,7 @@ export default function ConfigModal({
                         >
                           <div className="min-w-0">
                             <p className="text-sm font-semibold truncate">{u.username}</p>
-                            <p className="text-[11px] text-[var(--text-secondary)] truncate">{t('userMgmt.role')}: {roleLabel(u.role)} • {t('userMgmt.dashboard')}: {u.assignedDashboardId || 'default'}</p>
+                            <p className="text-[11px] text-[var(--text-secondary)] truncate">{t('userMgmt.role')}: {roleLabel(u.role)} • {t('userMgmt.dashboard')}: {u.assignedDashboardId || 'default'} • {t('userMgmt.client')}: {u.clientId || currentUser?.clientId || '-'}</p>
                           </div>
                           <span className="text-[10px] uppercase tracking-wider text-[var(--text-secondary)]">{expanded ? t('common.hide') : t('menu.edit')}</span>
                         </button>
@@ -846,7 +1199,9 @@ export default function ConfigModal({
                                 onChange={(e) => updateUserEdit(u.id, { assignedDashboardId: e.target.value })}
                                 className="px-3 py-2 rounded-lg bg-[var(--glass-bg)] border border-[var(--glass-border)] text-sm"
                               >
-                                {profiles.map((profile) => <option key={profile.id} value={profile.id}>{profile.name || profile.id}</option>)}
+                                {getDashboardOptionsForClient(canManageClients ? u.clientId : currentUser?.clientId).map((profile) => (
+                                  <option key={profile.id} value={profile.id}>{profile.name || profile.id}</option>
+                                ))}
                               </select>
                               <input
                                 value={userEdits[u.id]?.haUrl ?? ''}
@@ -890,6 +1245,184 @@ export default function ConfigModal({
             </div>
           )}
 
+          {showCreateUserModal && (
+            <div className="fixed inset-0 z-40 bg-black/45 backdrop-blur-sm flex items-center justify-center p-4" onClick={() => setShowCreateUserModal(false)}>
+              <div className="w-full max-w-2xl rounded-2xl border border-[var(--glass-border)] bg-[var(--card-bg)] p-5 space-y-4 shadow-2xl" onClick={(e) => e.stopPropagation()}>
+                <div className="flex items-center justify-between">
+                  <h4 className="text-sm font-bold uppercase tracking-wider">{t('userMgmt.createNewUser')}</h4>
+                  <button onClick={() => setShowCreateUserModal(false)} className="p-2 rounded-full hover:bg-[var(--glass-bg-hover)]"><X className="w-4 h-4" /></button>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <div className="space-y-1">
+                    <label className="text-[10px] uppercase tracking-wider text-[var(--text-secondary)] font-bold">{t('userMgmt.client')}</label>
+                    {canManageClients ? (
+                      <select
+                        value={newUserClientId}
+                        onChange={(e) => setNewUserClientId(e.target.value)}
+                        className="w-full px-3 py-2 rounded-lg bg-[var(--glass-bg-hover)] border border-[var(--glass-border)] text-sm"
+                      >
+                        {clients.map((client) => (
+                          <option key={client.id} value={client.id}>{client.name || client.id} ({client.id})</option>
+                        ))}
+                      </select>
+                    ) : (
+                      <input value={currentUser?.clientId || '-'} readOnly className="w-full px-3 py-2 rounded-lg bg-[var(--glass-bg)] border border-[var(--glass-border)] text-sm opacity-80" />
+                    )}
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[10px] uppercase tracking-wider text-[var(--text-secondary)] font-bold">{t('profile.username')}</label>
+                    <input value={newUsername} onChange={(e) => setNewUsername(e.target.value)} placeholder={t('profile.username')} className="w-full px-3 py-2 rounded-lg bg-[var(--glass-bg-hover)] border border-[var(--glass-border)] text-sm" />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[10px] uppercase tracking-wider text-[var(--text-secondary)] font-bold">{t('userMgmt.password')}</label>
+                    <input value={newPassword} onChange={(e) => setNewPassword(e.target.value)} type="password" placeholder={t('userMgmt.password')} className="w-full px-3 py-2 rounded-lg bg-[var(--glass-bg-hover)] border border-[var(--glass-border)] text-sm" />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[10px] uppercase tracking-wider text-[var(--text-secondary)] font-bold">{t('userMgmt.role')}</label>
+                    <select value={newRole} onChange={(e) => setNewRole(e.target.value)} className="w-full px-3 py-2 rounded-lg bg-[var(--glass-bg-hover)] border border-[var(--glass-border)] text-sm">
+                      <option value="user">{roleLabel('user')}</option>
+                      <option value="admin">{roleLabel('admin')}</option>
+                      <option value="inspector">{roleLabel('inspector')}</option>
+                    </select>
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[10px] uppercase tracking-wider text-[var(--text-secondary)] font-bold">{t('userMgmt.dashboard')}</label>
+                    <select value={newUserDashboard} onChange={(e) => setNewUserDashboard(e.target.value)} className="w-full px-3 py-2 rounded-lg bg-[var(--glass-bg-hover)] border border-[var(--glass-border)] text-sm">
+                      {getDashboardOptionsForClient(canManageClients ? newUserClientId : currentUser?.clientId).map((profile) => (
+                        <option key={profile.id} value={profile.id}>{profile.name || profile.id}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="space-y-1 md:col-span-2">
+                    <label className="text-[10px] uppercase tracking-wider text-[var(--text-secondary)] font-bold">{t('userMgmt.haUrlOptional')}</label>
+                    <input value={newUserHaUrl} onChange={(e) => setNewUserHaUrl(e.target.value)} placeholder={t('userMgmt.haUrlOptional')} className="w-full px-3 py-2 rounded-lg bg-[var(--glass-bg-hover)] border border-[var(--glass-border)] text-sm" />
+                  </div>
+                  <div className="space-y-1 md:col-span-2">
+                    <label className="text-[10px] uppercase tracking-wider text-[var(--text-secondary)] font-bold">{t('userMgmt.haTokenOptional')}</label>
+                    <input value={newUserHaToken} onChange={(e) => setNewUserHaToken(e.target.value)} placeholder={t('userMgmt.haTokenOptional')} className="w-full px-3 py-2 rounded-lg bg-[var(--glass-bg-hover)] border border-[var(--glass-border)] text-sm" />
+                  </div>
+                </div>
+                <div className="flex gap-2 justify-end">
+                  <button onClick={() => setShowCreateUserModal(false)} className="px-4 py-2 rounded-lg border border-[var(--glass-border)] bg-[var(--glass-bg-hover)] text-xs font-bold uppercase tracking-wider">{t('common.cancel')}</button>
+                  <button onClick={handleCreateUser} className="px-4 py-2 rounded-lg bg-indigo-500 hover:bg-indigo-600 text-white text-xs font-bold uppercase tracking-wider">{t('common.save')}</button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {showCreateClientModal && (
+            <div className="fixed inset-0 z-40 bg-black/45 backdrop-blur-sm flex items-center justify-center p-4" onClick={() => setShowCreateClientModal(false)}>
+              <div className="w-full max-w-lg rounded-2xl border border-[var(--glass-border)] bg-[var(--card-bg)] p-5 space-y-4 shadow-2xl" onClick={(e) => e.stopPropagation()}>
+                <div className="flex items-center justify-between">
+                  <h4 className="text-sm font-bold uppercase tracking-wider">{t('userMgmt.createNewClient')}</h4>
+                  <button onClick={() => setShowCreateClientModal(false)} className="p-2 rounded-full hover:bg-[var(--glass-bg-hover)]"><X className="w-4 h-4" /></button>
+                </div>
+                <div className="space-y-3">
+                  <div className="space-y-1">
+                    <label className="text-[10px] uppercase tracking-wider text-[var(--text-secondary)] font-bold">{t('userMgmt.clientId')}</label>
+                    <input value={newClientId} onChange={(e) => setNewClientId(e.target.value)} placeholder={t('userMgmt.clientId')} className="w-full px-3 py-2 rounded-lg bg-[var(--glass-bg-hover)] border border-[var(--glass-border)] text-sm" />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[10px] uppercase tracking-wider text-[var(--text-secondary)] font-bold">{t('userMgmt.clientNameOptional')}</label>
+                    <input value={newClientName} onChange={(e) => setNewClientName(e.target.value)} placeholder={t('userMgmt.clientNameOptional')} className="w-full px-3 py-2 rounded-lg bg-[var(--glass-bg-hover)] border border-[var(--glass-border)] text-sm" />
+                  </div>
+                </div>
+                <div className="flex gap-2 justify-end">
+                  <button onClick={() => setShowCreateClientModal(false)} className="px-4 py-2 rounded-lg border border-[var(--glass-border)] bg-[var(--glass-bg-hover)] text-xs font-bold uppercase tracking-wider">{t('common.cancel')}</button>
+                  <button onClick={handleCreateClient} className="px-4 py-2 rounded-lg bg-indigo-500 hover:bg-indigo-600 text-white text-xs font-bold uppercase tracking-wider">{t('common.save')}</button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {showCreateClientAdminModal && (
+            <div className="fixed inset-0 z-40 bg-black/45 backdrop-blur-sm flex items-center justify-center p-4" onClick={() => setShowCreateClientAdminModal(false)}>
+              <div className="w-full max-w-2xl rounded-2xl border border-[var(--glass-border)] bg-[var(--card-bg)] p-5 space-y-4 shadow-2xl" onClick={(e) => e.stopPropagation()}>
+                <div className="flex items-center justify-between">
+                  <h4 className="text-sm font-bold uppercase tracking-wider">{t('userMgmt.createClientAdmin')}</h4>
+                  <button onClick={() => setShowCreateClientAdminModal(false)} className="p-2 rounded-full hover:bg-[var(--glass-bg-hover)]"><X className="w-4 h-4" /></button>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                  <div className="space-y-1">
+                    <label className="text-[10px] uppercase tracking-wider text-[var(--text-secondary)] font-bold">{t('userMgmt.selectClient')}</label>
+                    <select value={selectedClientId} onChange={(e) => setSelectedClientId(e.target.value)} className="w-full px-3 py-2 rounded-lg bg-[var(--glass-bg-hover)] border border-[var(--glass-border)] text-sm">
+                      <option value="">{t('userMgmt.selectClient')}</option>
+                      {clients.map((client) => (
+                        <option key={client.id} value={client.id}>
+                          {client.id} ({client.userCount || 0} users)
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[10px] uppercase tracking-wider text-[var(--text-secondary)] font-bold">{t('profile.username')}</label>
+                    <input value={newClientAdminUsername} onChange={(e) => setNewClientAdminUsername(e.target.value)} placeholder={t('profile.username')} className="w-full px-3 py-2 rounded-lg bg-[var(--glass-bg-hover)] border border-[var(--glass-border)] text-sm" />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[10px] uppercase tracking-wider text-[var(--text-secondary)] font-bold">{t('userMgmt.password')}</label>
+                    <input value={newClientAdminPassword} onChange={(e) => setNewClientAdminPassword(e.target.value)} type="password" placeholder={t('userMgmt.password')} className="w-full px-3 py-2 rounded-lg bg-[var(--glass-bg-hover)] border border-[var(--glass-border)] text-sm" />
+                  </div>
+                </div>
+                <div className="flex gap-2 justify-end">
+                  <button onClick={() => setShowCreateClientAdminModal(false)} className="px-4 py-2 rounded-lg border border-[var(--glass-border)] bg-[var(--glass-bg-hover)] text-xs font-bold uppercase tracking-wider">{t('common.cancel')}</button>
+                  <button onClick={handleCreateClientAdmin} className="px-4 py-2 rounded-lg bg-green-500 hover:bg-green-600 text-white text-xs font-bold uppercase tracking-wider">{t('common.save')}</button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {showEditClientModal && (
+            <div className="fixed inset-0 z-40 bg-black/45 backdrop-blur-sm flex items-center justify-center p-4" onClick={() => setShowEditClientModal(false)}>
+              <div className="w-full max-w-lg rounded-2xl border border-[var(--glass-border)] bg-[var(--card-bg)] p-5 space-y-4 shadow-2xl" onClick={(e) => e.stopPropagation()}>
+                <div className="flex items-center justify-between">
+                  <h4 className="text-sm font-bold uppercase tracking-wider">{t('userMgmt.editClient')}</h4>
+                  <button onClick={() => setShowEditClientModal(false)} className="p-2 rounded-full hover:bg-[var(--glass-bg-hover)]"><X className="w-4 h-4" /></button>
+                </div>
+                <div className="space-y-3">
+                  <div className="space-y-1">
+                    <label className="text-[10px] uppercase tracking-wider text-[var(--text-secondary)] font-bold">{t('userMgmt.clientId')}</label>
+                    <input value={editClientId} readOnly className="w-full px-3 py-2 rounded-lg bg-[var(--glass-bg)] border border-[var(--glass-border)] text-sm opacity-80" />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[10px] uppercase tracking-wider text-[var(--text-secondary)] font-bold">{t('userMgmt.clientNameOptional')}</label>
+                    <input value={editClientName} onChange={(e) => setEditClientName(e.target.value)} placeholder={t('userMgmt.clientNameOptional')} className="w-full px-3 py-2 rounded-lg bg-[var(--glass-bg-hover)] border border-[var(--glass-border)] text-sm" />
+                  </div>
+                </div>
+                <div className="flex gap-2 justify-end">
+                  <button onClick={() => setShowEditClientModal(false)} className="px-4 py-2 rounded-lg border border-[var(--glass-border)] bg-[var(--glass-bg-hover)] text-xs font-bold uppercase tracking-wider">{t('common.cancel')}</button>
+                  <button onClick={handleUpdateClient} className="px-4 py-2 rounded-lg bg-indigo-500 hover:bg-indigo-600 text-white text-xs font-bold uppercase tracking-wider">{t('common.save')}</button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {showDeleteClientModal && (
+            <div className="fixed inset-0 z-40 bg-black/45 backdrop-blur-sm flex items-center justify-center p-4" onClick={() => setShowDeleteClientModal(false)}>
+              <div className="w-full max-w-lg rounded-2xl border border-[var(--glass-border)] bg-[var(--card-bg)] p-5 space-y-4 shadow-2xl" onClick={(e) => e.stopPropagation()}>
+                <div className="flex items-center justify-between">
+                  <h4 className="text-sm font-bold uppercase tracking-wider text-red-300">{t('userMgmt.deleteClient')}</h4>
+                  <button onClick={() => setShowDeleteClientModal(false)} className="p-2 rounded-full hover:bg-[var(--glass-bg-hover)]"><X className="w-4 h-4" /></button>
+                </div>
+                <p className="text-sm text-[var(--text-secondary)]">
+                  {t('userMgmt.deleteClientWarning')} <span className="font-semibold text-[var(--text-primary)]">{deleteClientId}</span>
+                </p>
+                <div className="space-y-1">
+                  <label className="text-[10px] uppercase tracking-wider text-[var(--text-secondary)] font-bold">{t('userMgmt.typeOkPrompt')}</label>
+                  <input
+                    value={deleteClientConfirmText}
+                    onChange={(e) => setDeleteClientConfirmText(e.target.value)}
+                    placeholder="OK"
+                    className="w-full px-3 py-2 rounded-lg bg-[var(--glass-bg-hover)] border border-[var(--glass-border)] text-sm"
+                  />
+                </div>
+                <div className="flex gap-2 justify-end">
+                  <button onClick={() => setShowDeleteClientModal(false)} className="px-4 py-2 rounded-lg border border-[var(--glass-border)] bg-[var(--glass-bg-hover)] text-xs font-bold uppercase tracking-wider">{t('common.cancel')}</button>
+                  <button onClick={handleDeleteClient} className="px-4 py-2 rounded-lg bg-red-600 hover:bg-red-700 text-white text-xs font-bold uppercase tracking-wider">{t('common.delete')}</button>
+                </div>
+              </div>
+            </div>
+          )}
+
           {(globalStorageError || globalActionMessage) && (
             <div className={`rounded-xl p-3 text-xs font-semibold ${globalStorageError ? 'bg-red-500/10 text-red-400 border border-red-500/20' : 'bg-green-500/10 text-green-400 border border-green-500/20'}`}>
               {globalStorageError || globalActionMessage}
@@ -903,59 +1436,117 @@ export default function ConfigModal({
   // ─── Connection Tab ───
   const renderConnectionTab = () => (
     <div className="space-y-6 font-sans animate-in fade-in slide-in-from-right-4 duration-300">
-      {/* Auth Method Toggle */}
-      {renderAuthMethodToggle()}
-
-      {/* URL — always shown */}
-      <div className="space-y-3">
-        <label className="text-xs uppercase font-bold text-gray-500 ml-1 flex items-center gap-2">
-          <Wifi className="w-4 h-4" />
-          {t('system.haUrlPrimary')}
-          {connected && activeUrl === config.url && <span className="text-green-400 bg-green-500/10 px-2 py-0.5 rounded text-[10px] tracking-widest">{t('system.connected')}</span>}
-        </label>
-        <div className="relative group">
-          <input
-            type="text"
-            className="w-full px-4 py-3 rounded-xl bg-[var(--glass-bg)] border border-[var(--glass-border)] text-[var(--text-primary)] focus:bg-[var(--glass-bg-hover)] focus:border-blue-500/50 outline-none transition-all placeholder:text-[var(--text-muted)]"
-            value={config.url}
-            disabled={!canManageConnection}
-            onChange={(e) => setConfig({ ...config, url: e.target.value.trim() })}
-            placeholder="https://homeassistant.local:8123"
-          />
-          <div className="absolute inset-0 rounded-xl bg-blue-500/5 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none" />
-        </div>
-        {config.url && config.url.endsWith('/') && (
-          <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-yellow-500/10 text-yellow-400 text-xs font-bold border border-yellow-500/20">
-            <AlertCircle className="w-3 h-3" />
-            {t('onboarding.urlTrailingSlash')}
+      {isPlatformAdmin && (
+        <div className="rounded-2xl border border-[var(--glass-border)] bg-[var(--glass-bg)] p-4 space-y-3">
+          <div className="flex items-center justify-between gap-3">
+            <h4 className="text-xs uppercase tracking-wider font-bold text-[var(--text-secondary)]">{t('connection.clientManager')}</h4>
+            <span className="text-[11px] text-[var(--text-secondary)]">
+              {t('connection.editingClient')}: <strong className="text-[var(--text-primary)]">{selectedManagedClient?.name || connectionManageClientId || '-'}</strong>
+            </span>
           </div>
-        )}
+          <div className="rounded-xl border border-[var(--glass-border)] bg-[var(--glass-bg-hover)] px-3 py-2 text-[11px] text-[var(--text-secondary)]">
+            <span className="font-semibold text-[var(--text-primary)]">{selectedManagedClient?.name || '-'}</span>
+            <span className="mx-2 text-[var(--text-muted)]">•</span>
+            <span>{selectedManagedClient?.id || '-'}</span>
+            <span className="mx-2 text-[var(--text-muted)]">•</span>
+            <span>{t('connection.selectedClientOnly')}</span>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <div className="space-y-1">
+              <label className="text-[10px] uppercase tracking-wider font-bold text-[var(--text-secondary)]">{t('userMgmt.selectClient')}</label>
+              <select
+                value={connectionManageClientId}
+                onChange={(e) => setConnectionManageClientId(e.target.value)}
+                className="w-full px-3 py-2 rounded-lg bg-[var(--glass-bg-hover)] border border-[var(--glass-border)] text-sm"
+              >
+                {clients.map((client) => (
+                  <option key={client.id} value={client.id}>{client.name || client.id} ({client.id})</option>
+                ))}
+              </select>
+            </div>
+            <div className="space-y-1">
+              <label className="text-[10px] uppercase tracking-wider font-bold text-[var(--text-secondary)]">{t('system.authMethod')}</label>
+              <select
+                value={managedConnectionConfig.authMethod}
+                onChange={(e) => setManagedConnectionConfig((prev) => ({ ...prev, authMethod: e.target.value === 'token' ? 'token' : 'oauth' }))}
+                className="w-full px-3 py-2 rounded-lg bg-[var(--glass-bg-hover)] border border-[var(--glass-border)] text-sm"
+              >
+                <option value="oauth">OAuth2</option>
+                <option value="token">Token</option>
+              </select>
+            </div>
+            <div className="space-y-1 md:col-span-2">
+              <label className="text-[10px] uppercase tracking-wider font-bold text-[var(--text-secondary)]">{t('system.haUrlPrimary')}</label>
+              <input
+                value={managedConnectionConfig.url}
+                onChange={(e) => setManagedConnectionConfig((prev) => ({ ...prev, url: e.target.value }))}
+                className="w-full px-3 py-2 rounded-lg bg-[var(--glass-bg-hover)] border border-[var(--glass-border)] text-sm"
+                placeholder="https://homeassistant.local:8123"
+              />
+            </div>
+            <div className="space-y-1 md:col-span-2">
+              <label className="text-[10px] uppercase tracking-wider font-bold text-[var(--text-secondary)]">{t('system.haUrlFallback')}</label>
+              <input
+                value={managedConnectionConfig.fallbackUrl}
+                onChange={(e) => setManagedConnectionConfig((prev) => ({ ...prev, fallbackUrl: e.target.value }))}
+                className="w-full px-3 py-2 rounded-lg bg-[var(--glass-bg-hover)] border border-[var(--glass-border)] text-sm"
+                placeholder={t('common.optional')}
+              />
+            </div>
+            {managedConnectionConfig.authMethod === 'token' && (
+              <div className="space-y-1 md:col-span-2">
+                <label className="text-[10px] uppercase tracking-wider font-bold text-[var(--text-secondary)]">{t('system.token')}</label>
+                <textarea
+                  value={managedConnectionConfig.token}
+                  onChange={(e) => setManagedConnectionConfig((prev) => ({ ...prev, token: e.target.value }))}
+                  className="w-full px-3 py-2 rounded-lg bg-[var(--glass-bg-hover)] border border-[var(--glass-border)] text-sm h-24 resize-none font-mono"
+                  placeholder="ey..."
+                />
+              </div>
+            )}
+          </div>
+          <div className="flex justify-end">
+            <button
+              onClick={handleSaveManagedConnection}
+              disabled={managedConnectionLoading || managedConnectionSaving || !connectionManageClientId}
+              className="px-4 py-2 rounded-lg bg-indigo-500 hover:bg-indigo-600 text-white text-xs font-bold uppercase tracking-wider disabled:opacity-50"
+            >
+              {managedConnectionSaving ? t('common.saving') : t('connection.saveClientConfig')}
+            </button>
+          </div>
+        </div>
+      )}
+
+      <div className="rounded-xl border border-[var(--glass-border)] bg-[var(--glass-bg)] p-3">
+        <p className="text-[11px] uppercase tracking-wider text-[var(--text-secondary)] font-bold">
+          {t('connection.sessionInfo')}: <span className="text-[var(--text-primary)]">{currentUser?.clientId || '-'}</span>
+        </p>
       </div>
 
-      {/* OAuth2 mode — login button */}
-      {isOAuth && renderOAuthSection()}
-
-      {/* Token mode — fallback URL + token */}
-      {!isOAuth && (
+      {!isPlatformAdmin && (
         <>
+          {/* Auth Method Toggle */}
+          {renderAuthMethodToggle()}
+
+          {/* URL — always shown */}
           <div className="space-y-3">
             <label className="text-xs uppercase font-bold text-gray-500 ml-1 flex items-center gap-2">
-              <Server className="w-4 h-4" />
-              {t('system.haUrlFallback')}
-              {connected && activeUrl === config.fallbackUrl && <span className="text-green-400 bg-green-500/10 px-2 py-0.5 rounded text-[10px] tracking-widest">{t('system.connected')}</span>}
+              <Wifi className="w-4 h-4" />
+              {t('system.haUrlPrimary')}
+              {connected && activeUrl === config.url && <span className="text-green-400 bg-green-500/10 px-2 py-0.5 rounded text-[10px] tracking-widest">{t('system.connected')}</span>}
             </label>
             <div className="relative group">
               <input
                 type="text"
                 className="w-full px-4 py-3 rounded-xl bg-[var(--glass-bg)] border border-[var(--glass-border)] text-[var(--text-primary)] focus:bg-[var(--glass-bg-hover)] focus:border-blue-500/50 outline-none transition-all placeholder:text-[var(--text-muted)]"
-                value={config.fallbackUrl}
+                value={config.url}
                 disabled={!canManageConnection}
-                onChange={(e) => setConfig({ ...config, fallbackUrl: e.target.value.trim() })}
-                placeholder={t('common.optional')}
+                onChange={(e) => setConfig({ ...config, url: e.target.value.trim() })}
+                placeholder="https://homeassistant.local:8123"
               />
               <div className="absolute inset-0 rounded-xl bg-blue-500/5 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none" />
             </div>
-            {config.fallbackUrl && config.fallbackUrl.endsWith('/') && (
+            {config.url && config.url.endsWith('/') && (
               <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-yellow-500/10 text-yellow-400 text-xs font-bold border border-yellow-500/20">
                 <AlertCircle className="w-3 h-3" />
                 {t('onboarding.urlTrailingSlash')}
@@ -963,22 +1554,55 @@ export default function ConfigModal({
             )}
           </div>
 
-          <div className="space-y-3">
-            <label className="text-xs uppercase font-bold text-gray-500 ml-1 flex items-center gap-2">
-              <Lock className="w-4 h-4" />
-              {t('system.token')}
-            </label>
-            <div className="relative group">
-              <textarea
-                className="w-full px-4 py-3 h-32 rounded-xl bg-[var(--glass-bg)] border border-[var(--glass-border)] text-[var(--text-primary)] focus:bg-[var(--glass-bg-hover)] focus:border-blue-500/50 outline-none transition-all font-mono text-xs leading-relaxed resize-none"
-                value={config.token}
-                disabled={!canManageConnection}
-                onChange={(e) => setConfig({ ...config, token: e.target.value.trim() })}
-                placeholder="ey..."
-              />
-              <div className="absolute inset-0 rounded-xl bg-blue-500/5 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none" />
-            </div>
-          </div>
+          {/* OAuth2 mode — login button */}
+          {isOAuth && renderOAuthSection()}
+
+          {/* Token mode — fallback URL + token */}
+          {!isOAuth && (
+            <>
+              <div className="space-y-3">
+                <label className="text-xs uppercase font-bold text-gray-500 ml-1 flex items-center gap-2">
+                  <Server className="w-4 h-4" />
+                  {t('system.haUrlFallback')}
+                  {connected && activeUrl === config.fallbackUrl && <span className="text-green-400 bg-green-500/10 px-2 py-0.5 rounded text-[10px] tracking-widest">{t('system.connected')}</span>}
+                </label>
+                <div className="relative group">
+                  <input
+                    type="text"
+                    className="w-full px-4 py-3 rounded-xl bg-[var(--glass-bg)] border border-[var(--glass-border)] text-[var(--text-primary)] focus:bg-[var(--glass-bg-hover)] focus:border-blue-500/50 outline-none transition-all placeholder:text-[var(--text-muted)]"
+                    value={config.fallbackUrl}
+                    disabled={!canManageConnection}
+                    onChange={(e) => setConfig({ ...config, fallbackUrl: e.target.value.trim() })}
+                    placeholder={t('common.optional')}
+                  />
+                  <div className="absolute inset-0 rounded-xl bg-blue-500/5 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none" />
+                </div>
+                {config.fallbackUrl && config.fallbackUrl.endsWith('/') && (
+                  <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-yellow-500/10 text-yellow-400 text-xs font-bold border border-yellow-500/20">
+                    <AlertCircle className="w-3 h-3" />
+                    {t('onboarding.urlTrailingSlash')}
+                  </div>
+                )}
+              </div>
+
+              <div className="space-y-3">
+                <label className="text-xs uppercase font-bold text-gray-500 ml-1 flex items-center gap-2">
+                  <Lock className="w-4 h-4" />
+                  {t('system.token')}
+                </label>
+                <div className="relative group">
+                  <textarea
+                    className="w-full px-4 py-3 h-32 rounded-xl bg-[var(--glass-bg)] border border-[var(--glass-border)] text-[var(--text-primary)] focus:bg-[var(--glass-bg-hover)] focus:border-blue-500/50 outline-none transition-all font-mono text-xs leading-relaxed resize-none"
+                    value={config.token}
+                    disabled={!canManageConnection}
+                    onChange={(e) => setConfig({ ...config, token: e.target.value.trim() })}
+                    placeholder="ey..."
+                  />
+                  <div className="absolute inset-0 rounded-xl bg-blue-500/5 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none" />
+                </div>
+              </div>
+            </>
+          )}
         </>
       )}
     </div>
@@ -1604,7 +2228,7 @@ export default function ConfigModal({
         className={`border w-full relative font-sans flex flex-col overflow-hidden popup-anim text-[var(--text-primary)] ${
           isLayoutPreview
             ? 'max-w-[18rem] sm:max-w-[21rem] md:max-w-[23rem] h-full rounded-none md:rounded-l-[2.5rem] shadow-2xl origin-right scale-[0.94] sm:scale-[0.97] md:scale-100 animate-in slide-in-from-right-8 fade-in zoom-in-95 duration-300'
-            : 'max-w-5xl h-[75vh] max-h-[700px] rounded-3xl md:rounded-[3rem] shadow-2xl'
+            : 'max-w-[96vw] xl:max-w-[1420px] h-[84vh] max-h-[920px] rounded-3xl md:rounded-[3rem] shadow-2xl'
         }`}
         style={{
           background: 'linear-gradient(160deg, var(--card-bg) 0%, var(--modal-bg) 70%)',
@@ -1613,6 +2237,15 @@ export default function ConfigModal({
         }}
         onClick={(e) => e.stopPropagation()}
       >
+        {!isOnboardingActive && (
+          <button
+            onClick={handleClose}
+            className="absolute top-3 right-3 z-30 p-2 rounded-full border border-[var(--glass-border)] bg-[var(--card-bg)]/90 hover:bg-[var(--glass-bg-hover)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors backdrop-blur-md shadow-lg"
+            aria-label={t('common.close')}
+          >
+            <X className="w-4 h-4" />
+          </button>
+        )}
         {isOnboardingActive ? (
           <div className="flex flex-col md:flex-row h-full">
             {/* Onboarding Sidebar */}
@@ -1837,7 +2470,7 @@ export default function ConfigModal({
                       }`}
                     >
                       <TabIcon className="w-4 h-4 flex-shrink-0" />
-                      <span className="hidden md:inline text-xs">{tab.label}</span>
+                      <span className="hidden md:inline text-xs truncate">{tab.label}</span>
                     </button>
                   );
                 })}
@@ -1873,7 +2506,7 @@ export default function ConfigModal({
                 <button onClick={onClose} className="modal-close relative"><X className="w-4 h-4" /></button>
               </div>
 
-              <div className={`flex-1 overflow-y-auto custom-scrollbar ${isLayoutPreview ? 'p-5 md:p-6' : 'p-5 md:p-8'}`}>
+              <div className={`flex-1 overflow-y-auto custom-scrollbar ${isLayoutPreview ? 'p-5 md:p-6' : 'p-5 md:p-8 xl:p-10'}`}>
                 {/* Desktop Header */}
                 {!isLayoutPreview && (
                   <div className="hidden md:flex items-center justify-between mb-8">
@@ -1887,10 +2520,10 @@ export default function ConfigModal({
                 )}
 
                 {activeConfigTab === 'connection' && renderConnectionTab()}
-                {isAdmin && activeConfigTab === 'storage' && renderStorageTab()}
+                {canAccessStorage && activeConfigTab === 'storage' && renderStorageTab()}
                 {/* {configTab === 'appearance' && renderAppearanceTab()} */}
                 {/* {configTab === 'layout' && renderLayoutTab()} */}
-                {isAdmin && activeConfigTab === 'updates' && renderUpdatesTab()}
+                {canAccessUpdates && activeConfigTab === 'updates' && renderUpdatesTab()}
               </div>
 
               {/* Mobile Footer */}

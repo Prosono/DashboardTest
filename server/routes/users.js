@@ -23,13 +23,21 @@ const parseHaFields = (body = {}, fallback = {}) => {
   return { haUrl, haToken };
 };
 
+const resolveTargetClientId = (req) => {
+  if (!req.auth?.user?.isPlatformAdmin) return req.auth.user.clientId;
+  const requested = String(req.body?.clientId || '').trim();
+  return requested || req.auth.user.clientId;
+};
+
 router.get('/', (_req, res) => {
-  const users = db.prepare('SELECT * FROM users WHERE client_id = ? ORDER BY username ASC').all(_req.auth.user.clientId);
+  const users = _req.auth.user.isPlatformAdmin
+    ? db.prepare('SELECT * FROM users ORDER BY client_id ASC, username ASC').all()
+    : db.prepare('SELECT * FROM users WHERE client_id = ? ORDER BY username ASC').all(_req.auth.user.clientId);
   res.json({ users: users.map(safeUser) });
 });
 
 router.post('/', (req, res) => {
-  const clientId = req.auth.user.clientId;
+  const clientId = resolveTargetClientId(req);
   const username = String(req.body?.username || '').trim();
   const password = String(req.body?.password || '').trim();
   const role = parseRole(req.body?.role, 'user');
@@ -39,6 +47,8 @@ router.post('/', (req, res) => {
   if (!username || !password) {
     return res.status(400).json({ error: 'Username and password are required' });
   }
+  const client = db.prepare('SELECT id FROM clients WHERE id = ?').get(clientId);
+  if (!client) return res.status(400).json({ error: 'Invalid client ID' });
   if (parsedHa.error) return res.status(400).json({ error: parsedHa.error });
 
   const existing = db.prepare('SELECT id FROM users WHERE client_id = ? AND username = ?').get(clientId, username);
@@ -60,10 +70,12 @@ router.post('/', (req, res) => {
 });
 
 router.put('/:id', (req, res) => {
-  const clientId = req.auth.user.clientId;
   const id = String(req.params.id || '').trim();
-  const existing = db.prepare('SELECT * FROM users WHERE id = ? AND client_id = ?').get(id, clientId);
+  const existing = req.auth.user.isPlatformAdmin
+    ? db.prepare('SELECT * FROM users WHERE id = ?').get(id)
+    : db.prepare('SELECT * FROM users WHERE id = ? AND client_id = ?').get(id, req.auth.user.clientId);
   if (!existing) return res.status(404).json({ error: 'User not found' });
+  const clientId = existing.client_id;
 
   const username = req.body?.username !== undefined ? String(req.body.username).trim() : existing.username;
   const role = parseRole(req.body?.role, existing.role);
@@ -113,10 +125,12 @@ router.put('/:id', (req, res) => {
 });
 
 router.delete('/:id', (req, res) => {
-  const clientId = req.auth.user.clientId;
   const id = String(req.params.id || '').trim();
-  const existing = db.prepare('SELECT * FROM users WHERE id = ? AND client_id = ?').get(id, clientId);
+  const existing = req.auth.user.isPlatformAdmin
+    ? db.prepare('SELECT * FROM users WHERE id = ?').get(id)
+    : db.prepare('SELECT * FROM users WHERE id = ? AND client_id = ?').get(id, req.auth.user.clientId);
   if (!existing) return res.status(404).json({ error: 'User not found' });
+  const clientId = existing.client_id;
   if (id === req.auth.user.id) return res.status(400).json({ error: 'Cannot delete your own user' });
 
   if (existing.role === 'admin') {

@@ -178,6 +178,55 @@ export const createClientAdmin = async (clientId, username, password) => {
   return payload?.user || null;
 };
 
+export const updateClient = async (clientId, name) => {
+  const payload = await apiRequest(`/api/clients/${encodeURIComponent(clientId)}`, {
+    method: 'PUT',
+    body: JSON.stringify({ name }),
+  });
+  return payload?.client || null;
+};
+
+export const deleteClient = async (clientId, confirmation) => {
+  const payload = await apiRequest(`/api/clients/${encodeURIComponent(clientId)}`, {
+    method: 'DELETE',
+    body: JSON.stringify({ confirmation }),
+  });
+  return Boolean(payload?.success);
+};
+
+export const fetchClientHaConfig = async (clientId) => {
+  const payload = await apiRequest(`/api/clients/${encodeURIComponent(clientId)}/ha-config`, { method: 'GET' });
+  return payload?.config || null;
+};
+
+export const saveClientHaConfig = async (clientId, config) => {
+  const payload = await apiRequest(`/api/clients/${encodeURIComponent(clientId)}/ha-config`, {
+    method: 'PUT',
+    body: JSON.stringify(config || {}),
+  });
+  return payload?.config || null;
+};
+
+export const listClientDashboards = async (clientId) => {
+  const payload = await apiRequest(`/api/clients/${encodeURIComponent(clientId)}/dashboards`, { method: 'GET' });
+  return Array.isArray(payload?.dashboards) ? payload.dashboards : [];
+};
+
+export const fetchClientDashboard = async (clientId, dashboardId) => {
+  const payload = await apiRequest(`/api/clients/${encodeURIComponent(clientId)}/dashboards/${encodeURIComponent(dashboardId)}`, {
+    method: 'GET',
+  });
+  return payload?.data || null;
+};
+
+export const saveClientDashboard = async (clientId, dashboardId, name, data) => {
+  const payload = await apiRequest(`/api/clients/${encodeURIComponent(clientId)}/dashboards/${encodeURIComponent(dashboardId)}`, {
+    method: 'PUT',
+    body: JSON.stringify({ name, data }),
+  });
+  return payload?.dashboard || null;
+};
+
 export const fetchSharedHaConfig = async () => {
   const payload = await apiRequest('/api/auth/ha-config', { method: 'GET' });
   return payload?.config || null;
