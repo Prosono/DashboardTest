@@ -122,7 +122,8 @@ export default function ConfigModal({
   const [userEdits, setUserEdits] = useState({});
   const [savingUserIds, setSavingUserIds] = useState({});
   const [deletingUserIds, setDeletingUserIds] = useState({});
-  const [expandedUserId, setExpandedUserId] = useState('');
+  const [showEditUserModal, setShowEditUserModal] = useState(false);
+  const [editingUserId, setEditingUserId] = useState('');
   const [importingDashboard, setImportingDashboard] = useState(false);
   const [clients, setClients] = useState([]);
   const [newClientId, setNewClientId] = useState('');
@@ -287,6 +288,7 @@ export default function ConfigModal({
     if (configTab !== 'storage') return;
     const clientIds = Array.from(new Set([
       ...users.map((user) => String(user?.clientId || '').trim()).filter(Boolean),
+      ...clients.map((client) => String(client?.id || '').trim()).filter(Boolean),
       String(newUserClientId || '').trim(),
       String(selectedClientId || '').trim(),
     ].filter(Boolean)));
@@ -297,14 +299,16 @@ export default function ConfigModal({
         const dashboards = await userAdminApi.listClientDashboards(clientId);
         return [clientId, Array.isArray(dashboards) ? dashboards : []];
       } catch {
-        return [clientId, []];
+        return [clientId, null];
       }
     })).then((entries) => {
       if (cancelled) return;
       setDashboardProfilesByClient((prev) => {
         const next = { ...prev };
         entries.forEach(([clientId, dashboards]) => {
-          next[clientId] = dashboards;
+          if (Array.isArray(dashboards)) {
+            next[clientId] = dashboards;
+          }
         });
         return next;
       });
@@ -316,6 +320,7 @@ export default function ConfigModal({
     canManageAdministration,
     configTab,
     users,
+    clients,
     newUserClientId,
     selectedClientId,
     userAdminApi,
@@ -874,6 +879,23 @@ export default function ConfigModal({
       setUserEdits((prev) => ({ ...prev, [id]: { ...(prev[id] || {}), ...patch } }));
     };
 
+    const openEditUser = async (user) => {
+      const clientId = String(user?.clientId || currentUser?.clientId || '').trim();
+      if (canManageClients && clientId && userAdminApi?.listClientDashboards) {
+        try {
+          const dashboards = await userAdminApi.listClientDashboards(clientId);
+          setDashboardProfilesByClient((prev) => ({
+            ...prev,
+            [clientId]: Array.isArray(dashboards) ? dashboards : (prev[clientId] || []),
+          }));
+        } catch {
+          // best-effort, keep existing options
+        }
+      }
+      setEditingUserId(user?.id || '');
+      setShowEditUserModal(true);
+    };
+
     const handleSaveUser = async (userId) => {
       if (!userAdminApi?.updateUser) return;
       const draft = userEdits[userId];
@@ -1154,89 +1176,30 @@ export default function ConfigModal({
                 </div>
                 <div className="space-y-2 max-h-[26rem] overflow-auto pr-1">
                   {users.map((u) => {
-                    const expanded = expandedUserId === u.id;
                     return (
-                      <div key={u.id} className="rounded-lg border border-[var(--glass-border)] bg-[var(--glass-bg-hover)]">
-                        <button
-                          type="button"
-                          onClick={() => setExpandedUserId(expanded ? '' : u.id)}
-                          className="w-full px-3 py-2 flex items-center justify-between text-left"
-                        >
-                          <div className="min-w-0">
-                            <p className="text-sm font-semibold truncate">{u.username}</p>
-                            <p className="text-[11px] text-[var(--text-secondary)] truncate">{t('userMgmt.role')}: {roleLabel(u.role)} • {t('userMgmt.dashboard')}: {u.assignedDashboardId || 'default'} • {t('userMgmt.client')}: {u.clientId || currentUser?.clientId || '-'}</p>
+                      <div key={u.id} className="rounded-lg border border-[var(--glass-border)] bg-[var(--glass-bg-hover)] px-3 py-2 space-y-2">
+                        <div className="min-w-0">
+                          <p className="text-sm font-semibold truncate">{u.username}</p>
+                          <p className="text-[11px] text-[var(--text-secondary)] truncate">{t('userMgmt.role')}: {roleLabel(u.role)} • {t('userMgmt.dashboard')}: {u.assignedDashboardId || 'default'} • {t('userMgmt.client')}: {u.clientId || currentUser?.clientId || '-'}</p>
+                        </div>
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="text-[10px] uppercase tracking-wider text-[var(--text-secondary)] truncate">ID: {u.id}</span>
+                          <div className="flex gap-2">
+                            <button
+                              onClick={() => openEditUser(u)}
+                              className="px-3 py-1.5 rounded-lg bg-[var(--glass-bg)] border border-[var(--glass-border)] text-[11px] font-bold uppercase tracking-wider hover:bg-[var(--glass-bg-hover)]"
+                            >
+                              {t('menu.edit')}
+                            </button>
+                            <button
+                              onClick={() => handleDeleteUser(u.id)}
+                              disabled={!!deletingUserIds[u.id] || u.id === currentUser?.id}
+                              className="px-3 py-1.5 rounded-lg bg-red-500/15 border border-red-500/30 text-red-300 text-[11px] font-bold uppercase tracking-wider disabled:opacity-40"
+                            >
+                              {deletingUserIds[u.id] ? t('common.deleting') : t('common.delete')}
+                            </button>
                           </div>
-                          <span className="text-[10px] uppercase tracking-wider text-[var(--text-secondary)]">{expanded ? t('common.hide') : t('menu.edit')}</span>
-                        </button>
-
-                        {expanded && (
-                          <div className="px-3 pb-3 space-y-2 border-t border-[var(--glass-border)]">
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-2 pt-2">
-                              <input
-                                value={userEdits[u.id]?.username ?? ''}
-                                onChange={(e) => updateUserEdit(u.id, { username: e.target.value })}
-                                className="px-3 py-2 rounded-lg bg-[var(--glass-bg)] border border-[var(--glass-border)] text-sm"
-                                placeholder={t('profile.username')}
-                              />
-                              <input
-                                value={userEdits[u.id]?.password ?? ''}
-                                onChange={(e) => updateUserEdit(u.id, { password: e.target.value })}
-                                className="px-3 py-2 rounded-lg bg-[var(--glass-bg)] border border-[var(--glass-border)] text-sm"
-                                type="password"
-                                placeholder={t('userMgmt.newPasswordOptional')}
-                              />
-                              <select
-                                value={userEdits[u.id]?.role ?? 'user'}
-                                onChange={(e) => updateUserEdit(u.id, { role: e.target.value })}
-                                className="px-3 py-2 rounded-lg bg-[var(--glass-bg)] border border-[var(--glass-border)] text-sm"
-                              >
-                                <option value="user">{roleLabel('user')}</option>
-                                <option value="admin">{roleLabel('admin')}</option>
-                                <option value="inspector">{roleLabel('inspector')}</option>
-                              </select>
-                              <select
-                                value={userEdits[u.id]?.assignedDashboardId ?? 'default'}
-                                onChange={(e) => updateUserEdit(u.id, { assignedDashboardId: e.target.value })}
-                                className="px-3 py-2 rounded-lg bg-[var(--glass-bg)] border border-[var(--glass-border)] text-sm"
-                              >
-                                {getDashboardOptionsForClient(canManageClients ? u.clientId : currentUser?.clientId).map((profile) => (
-                                  <option key={profile.id} value={profile.id}>{profile.name || profile.id}</option>
-                                ))}
-                              </select>
-                              <input
-                                value={userEdits[u.id]?.haUrl ?? ''}
-                                onChange={(e) => updateUserEdit(u.id, { haUrl: e.target.value })}
-                                className="px-3 py-2 rounded-lg bg-[var(--glass-bg)] border border-[var(--glass-border)] text-sm md:col-span-2"
-                                placeholder={t('userMgmt.haUrlOptional')}
-                              />
-                              <input
-                                value={userEdits[u.id]?.haToken ?? ''}
-                                onChange={(e) => updateUserEdit(u.id, { haToken: e.target.value })}
-                                className="px-3 py-2 rounded-lg bg-[var(--glass-bg)] border border-[var(--glass-border)] text-sm md:col-span-2"
-                                placeholder={t('userMgmt.haTokenOptional')}
-                              />
-                            </div>
-                            <div className="flex items-center justify-between gap-2">
-                              <span className="text-[10px] uppercase tracking-wider text-[var(--text-secondary)] truncate">ID: {u.id}</span>
-                              <div className="flex gap-2">
-                                <button
-                                  onClick={() => handleSaveUser(u.id)}
-                                  disabled={!!savingUserIds[u.id]}
-                                  className="px-3 py-1.5 rounded-lg bg-green-500/90 hover:bg-green-500 text-white font-bold uppercase tracking-wider disabled:opacity-60"
-                                >
-                                  {savingUserIds[u.id] ? t('common.saving') : t('common.save')}
-                                </button>
-                                <button
-                                  onClick={() => handleDeleteUser(u.id)}
-                                  disabled={!!deletingUserIds[u.id] || u.id === currentUser?.id}
-                                  className="px-3 py-1.5 rounded-lg bg-red-500/15 border border-red-500/30 text-red-300 font-bold uppercase tracking-wider disabled:opacity-40"
-                                >
-                                  {deletingUserIds[u.id] ? t('common.deleting') : t('common.delete')}
-                                </button>
-                              </div>
-                            </div>
-                          </div>
-                        )}
+                        </div>
                       </div>
                     );
                   })}
@@ -1306,6 +1269,106 @@ export default function ConfigModal({
                   <button onClick={() => setShowCreateUserModal(false)} className="px-4 py-2 rounded-lg border border-[var(--glass-border)] bg-[var(--glass-bg-hover)] text-xs font-bold uppercase tracking-wider">{t('common.cancel')}</button>
                   <button onClick={handleCreateUser} className="px-4 py-2 rounded-lg bg-indigo-500 hover:bg-indigo-600 text-white text-xs font-bold uppercase tracking-wider">{t('common.save')}</button>
                 </div>
+              </div>
+            </div>
+          )}
+
+          {showEditUserModal && editingUserId && (
+            <div className="fixed inset-0 z-40 bg-black/45 backdrop-blur-sm flex items-center justify-center p-4" onClick={() => { setShowEditUserModal(false); setEditingUserId(''); }}>
+              <div className="w-full max-w-2xl rounded-2xl border border-[var(--glass-border)] bg-[var(--card-bg)] p-5 space-y-4 shadow-2xl" onClick={(e) => e.stopPropagation()}>
+                <div className="flex items-center justify-between">
+                  <h4 className="text-sm font-bold uppercase tracking-wider">{t('menu.edit')} {t('userMgmt.userAccounts')}</h4>
+                  <button onClick={() => { setShowEditUserModal(false); setEditingUserId(''); }} className="p-2 rounded-full hover:bg-[var(--glass-bg-hover)]"><X className="w-4 h-4" /></button>
+                </div>
+                {(() => {
+                  const u = users.find((user) => user.id === editingUserId);
+                  if (!u) return <p className="text-sm text-[var(--text-secondary)]">User not found.</p>;
+                  return (
+                    <>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                        <div className="space-y-1">
+                          <label className="text-[10px] uppercase tracking-wider text-[var(--text-secondary)] font-bold">{t('userMgmt.client')}</label>
+                          <input value={u.clientId || currentUser?.clientId || '-'} readOnly className="w-full px-3 py-2 rounded-lg bg-[var(--glass-bg)] border border-[var(--glass-border)] text-sm opacity-80" />
+                        </div>
+                        <div className="space-y-1">
+                          <label className="text-[10px] uppercase tracking-wider text-[var(--text-secondary)] font-bold">{t('profile.username')}</label>
+                          <input
+                            value={userEdits[u.id]?.username ?? ''}
+                            onChange={(e) => updateUserEdit(u.id, { username: e.target.value })}
+                            className="w-full px-3 py-2 rounded-lg bg-[var(--glass-bg-hover)] border border-[var(--glass-border)] text-sm"
+                            placeholder={t('profile.username')}
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <label className="text-[10px] uppercase tracking-wider text-[var(--text-secondary)] font-bold">{t('userMgmt.newPasswordOptional')}</label>
+                          <input
+                            value={userEdits[u.id]?.password ?? ''}
+                            onChange={(e) => updateUserEdit(u.id, { password: e.target.value })}
+                            className="w-full px-3 py-2 rounded-lg bg-[var(--glass-bg-hover)] border border-[var(--glass-border)] text-sm"
+                            type="password"
+                            placeholder={t('userMgmt.newPasswordOptional')}
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <label className="text-[10px] uppercase tracking-wider text-[var(--text-secondary)] font-bold">{t('userMgmt.role')}</label>
+                          <select
+                            value={userEdits[u.id]?.role ?? 'user'}
+                            onChange={(e) => updateUserEdit(u.id, { role: e.target.value })}
+                            className="w-full px-3 py-2 rounded-lg bg-[var(--glass-bg-hover)] border border-[var(--glass-border)] text-sm"
+                          >
+                            <option value="user">{roleLabel('user')}</option>
+                            <option value="admin">{roleLabel('admin')}</option>
+                            <option value="inspector">{roleLabel('inspector')}</option>
+                          </select>
+                        </div>
+                        <div className="space-y-1 md:col-span-2">
+                          <label className="text-[10px] uppercase tracking-wider text-[var(--text-secondary)] font-bold">{t('userMgmt.dashboard')}</label>
+                          <select
+                            value={userEdits[u.id]?.assignedDashboardId ?? 'default'}
+                            onChange={(e) => updateUserEdit(u.id, { assignedDashboardId: e.target.value })}
+                            className="w-full px-3 py-2 rounded-lg bg-[var(--glass-bg-hover)] border border-[var(--glass-border)] text-sm"
+                          >
+                            {getDashboardOptionsForClient(canManageClients ? u.clientId : currentUser?.clientId).map((profile) => (
+                              <option key={profile.id} value={profile.id}>{profile.name || profile.id}</option>
+                            ))}
+                          </select>
+                        </div>
+                        <div className="space-y-1 md:col-span-2">
+                          <label className="text-[10px] uppercase tracking-wider text-[var(--text-secondary)] font-bold">{t('userMgmt.haUrlOptional')}</label>
+                          <input
+                            value={userEdits[u.id]?.haUrl ?? ''}
+                            onChange={(e) => updateUserEdit(u.id, { haUrl: e.target.value })}
+                            className="w-full px-3 py-2 rounded-lg bg-[var(--glass-bg-hover)] border border-[var(--glass-border)] text-sm"
+                            placeholder={t('userMgmt.haUrlOptional')}
+                          />
+                        </div>
+                        <div className="space-y-1 md:col-span-2">
+                          <label className="text-[10px] uppercase tracking-wider text-[var(--text-secondary)] font-bold">{t('userMgmt.haTokenOptional')}</label>
+                          <input
+                            value={userEdits[u.id]?.haToken ?? ''}
+                            onChange={(e) => updateUserEdit(u.id, { haToken: e.target.value })}
+                            className="w-full px-3 py-2 rounded-lg bg-[var(--glass-bg-hover)] border border-[var(--glass-border)] text-sm"
+                            placeholder={t('userMgmt.haTokenOptional')}
+                          />
+                        </div>
+                      </div>
+                      <div className="flex gap-2 justify-end">
+                        <button onClick={() => { setShowEditUserModal(false); setEditingUserId(''); }} className="px-4 py-2 rounded-lg border border-[var(--glass-border)] bg-[var(--glass-bg-hover)] text-xs font-bold uppercase tracking-wider">{t('common.cancel')}</button>
+                        <button
+                          onClick={async () => {
+                            await handleSaveUser(u.id);
+                            setShowEditUserModal(false);
+                            setEditingUserId('');
+                          }}
+                          disabled={!!savingUserIds[u.id]}
+                          className="px-4 py-2 rounded-lg bg-indigo-500 hover:bg-indigo-600 text-white text-xs font-bold uppercase tracking-wider disabled:opacity-60"
+                        >
+                          {savingUserIds[u.id] ? t('common.saving') : t('common.save')}
+                        </button>
+                      </div>
+                    </>
+                  );
+                })()}
               </div>
             </div>
           )}
