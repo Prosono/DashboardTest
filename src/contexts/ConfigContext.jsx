@@ -123,6 +123,7 @@ export const ConfigProvider = ({ children }) => {
     }
     document.documentElement.dataset.theme = themeKey;
     document.documentElement.style.colorScheme = themeKey === 'light' ? 'light' : 'dark';
+    document.documentElement.style.setProperty('--safe-area-bg', themeKey === 'light' ? '#ffffff' : theme['--bg-primary']);
     
     let metaThemeColor = document.querySelector("meta[name='theme-color']");
     if (!metaThemeColor) {

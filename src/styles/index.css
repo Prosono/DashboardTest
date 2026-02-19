@@ -8,13 +8,32 @@
 /* Card border radius — controlled from settings */
 :root {
   --card-border-radius: 16px;
+  --safe-area-bg: var(--bg-primary, #0f172a);
 }
 
 html,
 body,
 #root {
   min-height: 100%;
-  background-color: var(--bg-primary, #0f172a);
+  background-color: var(--safe-area-bg);
+}
+
+body {
+  margin: 0;
+}
+
+/* Keep iOS safe areas readable and theme-correct inside native webviews. */
+@supports (padding-top: env(safe-area-inset-top)) {
+  body {
+    padding-top: env(safe-area-inset-top);
+    padding-bottom: env(safe-area-inset-bottom);
+    background-color: var(--safe-area-bg);
+  }
+
+  #root {
+    min-height: calc(100dvh - env(safe-area-inset-top) - env(safe-area-inset-bottom));
+    background-color: var(--safe-area-bg);
+  }
 }
 
 /* Keep native mobile bounce behavior. */

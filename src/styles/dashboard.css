@@ -232,9 +232,13 @@ html[data-theme='light'] .rounded-2xl [class*="text-emerald-"] {
   }
 
   /* Keep visible vertical air between stacked calendar cards on mobile. */
+  [data-grid-card].mobile-calendar-grid-item {
+    padding-bottom: 34px !important;
+  }
+
   [data-grid-card] .mobile-calendar-card {
-    height: calc(100% - 20px) !important;
-    margin-bottom: 20px !important;
+    height: calc(100% - 34px) !important;
+    margin-bottom: 34px !important;
   }
 }
 

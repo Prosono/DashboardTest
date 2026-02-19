@@ -1176,7 +1176,7 @@ function AppContent({
             className="grid font-sans page-transition items-start"
             data-dashboard-grid
             style={{
-              gap: isMobile ? '28px' : `${gridGapV}px ${gridGapH}px`,
+              gap: isMobile ? '34px' : `${gridGapV}px ${gridGapH}px`,
               gridAutoRows: isMobile ? '88px' : '100px',
               gridTemplateColumns: `repeat(${gridColCount}, minmax(0, 1fr))`,
             }}
@@ -1212,14 +1212,14 @@ function AppContent({
                 return (
                   <div
                     key={id}
-                    className={`h-full relative ${(isCompactCards || isMobile) ? 'card-compact' : ''}`}
+                    className={`h-full relative ${(isCompactCards || isMobile) ? 'card-compact' : ''} ${isCalendarCard && isMobile ? 'mobile-calendar-grid-item' : ''}`}
                     data-grid-card
                     style={{
                       gridRowStart: placement.row,
                       gridColumnStart: placement.col,
                       gridColumnEnd: `span ${colSpan}`,
                       gridRowEnd: `span ${rowSpan}`,
-                      ...(isMobile && isCalendarCard ? { paddingBottom: '18px' } : {}),
+                      ...(isMobile && isCalendarCard ? { paddingBottom: '34px' } : {}),
                     }}
                   >
                     {heading && (
