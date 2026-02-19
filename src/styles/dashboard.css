@@ -223,7 +223,7 @@ html[data-theme='light'] .rounded-2xl [class*="text-emerald-"] {
 }
 
 /* Mobile light-theme card elevation so cards separate from pale backgrounds. */
-@media (max-width: 768px) {
+@media (max-width: 1024px) {
   html[data-theme='light'] [data-grid-card] .touch-feedback {
     box-shadow:
       0 14px 30px rgba(15, 23, 42, 0.14),
@@ -233,8 +233,8 @@ html[data-theme='light'] .rounded-2xl [class*="text-emerald-"] {
 
   /* Keep visible vertical air between stacked calendar cards on mobile. */
   [data-grid-card] .mobile-calendar-card {
-    height: calc(100% - 10px);
-    margin-bottom: 10px;
+    height: calc(100% - 20px) !important;
+    margin-bottom: 20px !important;
   }
 }
 

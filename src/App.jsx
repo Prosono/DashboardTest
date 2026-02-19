@@ -104,6 +104,7 @@ function AppContent({
     config,
     setConfig
   } = useConfig();
+  const isLightTheme = currentTheme === 'light';
 
   const {
     pagesConfig,
@@ -883,23 +884,25 @@ function AppContent({
       className="min-h-[100svh] font-sans selection:bg-blue-500/30 overflow-x-hidden transition-colors duration-500"
       style={{ backgroundColor: 'var(--bg-primary)', color: 'var(--text-primary)' }}
     >
-      {bgMode === 'animated' ? (
+      {bgMode === 'animated' && !isLightTheme ? (
         <AuroraBackground />
       ) : (
         <div className="fixed inset-0 pointer-events-none z-0">
           <div
             className="absolute inset-0"
             style={{
-              background: 'linear-gradient(to bottom right, var(--bg-gradient-from), var(--bg-primary), var(--bg-gradient-to))',
+              background: (isLightTheme && bgMode !== 'custom')
+                ? 'linear-gradient(to bottom right, #f8fafc, #ffffff, #f1f5f9)'
+                : 'linear-gradient(to bottom right, var(--bg-gradient-from), var(--bg-primary), var(--bg-gradient-to))',
             }}
           />
           <div
             className="absolute top-[-15%] right-[-10%] w-[70%] h-[70%] rounded-full pointer-events-none"
-            style={{ background: 'rgba(59, 130, 246, 0.08)', filter: 'blur(150px)' }}
+            style={{ background: isLightTheme ? 'rgba(148, 163, 184, 0.14)' : 'rgba(59, 130, 246, 0.08)', filter: 'blur(150px)' }}
           />
           <div
             className="absolute bottom-[-15%] left-[-10%] w-[70%] h-[70%] rounded-full pointer-events-none"
-            style={{ background: 'rgba(30, 58, 138, 0.1)', filter: 'blur(150px)' }}
+            style={{ background: isLightTheme ? 'rgba(226, 232, 240, 0.26)' : 'rgba(30, 58, 138, 0.1)', filter: 'blur(150px)' }}
           />
         </div>
       )}
@@ -1173,7 +1176,7 @@ function AppContent({
             className="grid font-sans page-transition items-start"
             data-dashboard-grid
             style={{
-              gap: isMobile ? '20px' : `${gridGapV}px ${gridGapH}px`,
+              gap: isMobile ? '28px' : `${gridGapV}px ${gridGapH}px`,
               gridAutoRows: isMobile ? '88px' : '100px',
               gridTemplateColumns: `repeat(${gridColCount}, minmax(0, 1fr))`,
             }}
@@ -1216,6 +1219,7 @@ function AppContent({
                       gridColumnStart: placement.col,
                       gridColumnEnd: `span ${colSpan}`,
                       gridRowEnd: `span ${rowSpan}`,
+                      ...(isMobile && isCalendarCard ? { paddingBottom: '18px' } : {}),
                     }}
                   >
                     {heading && (
@@ -1223,7 +1227,7 @@ function AppContent({
                         {heading}
                       </div>
                     )}
-                    <div className="h-full" style={{ height: isMobile && isCalendarCard ? 'calc(100% - 14px)' : '100%' }}>
+                    <div className="h-full">
                       <CardErrorBoundary cardId={id} t={t}>
                         {cardContent}
                       </CardErrorBoundary>
