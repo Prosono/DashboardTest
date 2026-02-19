@@ -571,6 +571,11 @@ function AppContent({
     </div>
   );
 
+  const mobilePriorityPillIds = useMemo(
+    () => [WARNING_SENSOR_ID, CRITICAL_SENSOR_ID],
+    [WARNING_SENSOR_ID, CRITICAL_SENSOR_ID]
+  );
+
   // ── Page management ────────────────────────────────────────────────────
   const {
     newPageLabel, setNewPageLabel,
@@ -953,56 +958,58 @@ function AppContent({
               {(pagesConfig.header || []).length > 0 && !isMobile && <div className="w-px h-8 bg-[var(--glass-border)] mx-2"></div>}
             </div>
 
-            <div className={`min-w-0 ${isMobile ? 'w-full flex justify-center' : 'flex-1'}`}>
-              <StatusBar
-                entities={entities}
-                now={now}
-                setActiveMediaId={setActiveMediaId}
-                setActiveMediaGroupKey={setActiveMediaGroupKey}
-                setActiveMediaGroupIds={setActiveMediaGroupIds}
-                setActiveMediaSessionSensorIds={setActiveMediaSessionSensorIds}
-                setActiveMediaModal={setActiveMediaModal}
-                setShowUpdateModal={() => { setShowConfigModal(true); setConfigTab('updates'); }}
-                onOpenEntityPill={(entityId) => {
-                  if (!entityId) return;
-                  if (entityId.startsWith('person.')) {
-                    setShowPersonModal(entityId);
-                    return;
-                  }
-                  if (entityId.startsWith('light.')) {
-                    setShowLightModal(entityId);
-                    return;
-                  }
-                  if (entityId.startsWith('climate.')) {
-                    setActiveClimateEntityModal(entityId);
-                    return;
-                  }
-                  if (entityId.startsWith('media_player.')) {
-                    setActiveMediaId(entityId);
-                    setActiveMediaGroupKey(null);
-                    setActiveMediaGroupIds([entityId]);
-                    setActiveMediaSessionSensorIds(null);
-                    setActiveMediaModal('media');
-                    return;
-                  }
-                  if (entityId.startsWith('vacuum.')) {
-                    setActiveVacuumId(entityId);
-                    setShowVacuumModal(true);
-                    return;
-                  }
-                  setShowSensorInfoModal(entityId);
-                }}
-                setShowStatusPillsConfig={setShowStatusPillsConfig}
-                editMode={editMode}
-                t={t}
-                isSonosActive={isSonosActive}
-                isMediaActive={isMediaActive}
-                getA={getA}
-                getEntityImageUrl={getEntityImageUrl}
-                statusPillsConfig={statusPillsConfig}
-                isMobile={isMobile}
-              />
-            </div>
+            {!isMobile && (
+              <div className="min-w-0 flex-1">
+                <StatusBar
+                  entities={entities}
+                  now={now}
+                  setActiveMediaId={setActiveMediaId}
+                  setActiveMediaGroupKey={setActiveMediaGroupKey}
+                  setActiveMediaGroupIds={setActiveMediaGroupIds}
+                  setActiveMediaSessionSensorIds={setActiveMediaSessionSensorIds}
+                  setActiveMediaModal={setActiveMediaModal}
+                  setShowUpdateModal={() => { setShowConfigModal(true); setConfigTab('updates'); }}
+                  onOpenEntityPill={(entityId) => {
+                    if (!entityId) return;
+                    if (entityId.startsWith('person.')) {
+                      setShowPersonModal(entityId);
+                      return;
+                    }
+                    if (entityId.startsWith('light.')) {
+                      setShowLightModal(entityId);
+                      return;
+                    }
+                    if (entityId.startsWith('climate.')) {
+                      setActiveClimateEntityModal(entityId);
+                      return;
+                    }
+                    if (entityId.startsWith('media_player.')) {
+                      setActiveMediaId(entityId);
+                      setActiveMediaGroupKey(null);
+                      setActiveMediaGroupIds([entityId]);
+                      setActiveMediaSessionSensorIds(null);
+                      setActiveMediaModal('media');
+                      return;
+                    }
+                    if (entityId.startsWith('vacuum.')) {
+                      setActiveVacuumId(entityId);
+                      setShowVacuumModal(true);
+                      return;
+                    }
+                    setShowSensorInfoModal(entityId);
+                  }}
+                  setShowStatusPillsConfig={setShowStatusPillsConfig}
+                  editMode={editMode}
+                  t={t}
+                  isSonosActive={isSonosActive}
+                  isMediaActive={isMediaActive}
+                  getA={getA}
+                  getEntityImageUrl={getEntityImageUrl}
+                  statusPillsConfig={statusPillsConfig}
+                  isMobile={isMobile}
+                />
+              </div>
+            )}
           </div>
         </Header>
 
@@ -1024,10 +1031,55 @@ function AppContent({
         )}
 
         {isMobile && (
-          <div className="flex items-center justify-between mb-2 px-0.5">
-            {renderUserChip('max-w-[58%] truncate')}
-            <div className="flex items-center gap-2">
-              {renderSettingsControl()}
+          <div
+            className="sticky z-[80] rounded-2xl border border-[var(--glass-border)] bg-[var(--card-bg)]/90 backdrop-blur-xl px-2 py-2 mb-2"
+            style={{ top: 'calc(env(safe-area-inset-top, 0px) + 4px)' }}
+          >
+            <div className="flex items-center gap-2 overflow-x-auto no-scrollbar whitespace-nowrap">
+              {renderUserChip('max-w-[46vw] truncate flex-shrink-0')}
+              <div className="flex-shrink-0">{renderSettingsControl()}</div>
+              <div className="h-6 w-px bg-[var(--glass-border)] flex-shrink-0" />
+              <StatusBar
+                entities={entities}
+                now={now}
+                setActiveMediaId={setActiveMediaId}
+                setActiveMediaGroupKey={setActiveMediaGroupKey}
+                setActiveMediaGroupIds={setActiveMediaGroupIds}
+                setActiveMediaSessionSensorIds={setActiveMediaSessionSensorIds}
+                setActiveMediaModal={setActiveMediaModal}
+                setShowUpdateModal={() => { setShowConfigModal(true); setConfigTab('updates'); }}
+                onOpenEntityPill={(entityId) => {
+                  if (!entityId) return;
+                  setShowSensorInfoModal(entityId);
+                }}
+                setShowStatusPillsConfig={setShowStatusPillsConfig}
+                editMode={false}
+                t={t}
+                isSonosActive={isSonosActive}
+                isMediaActive={isMediaActive}
+                getA={getA}
+                getEntityImageUrl={getEntityImageUrl}
+                statusPillsConfig={statusPillsConfig}
+                isMobile
+                onlyEntityIds={mobilePriorityPillIds}
+                forceSingleRow
+                className="w-auto flex-shrink-0"
+              />
+            </div>
+
+            <div className="mt-2">
+              <PageNavigation
+                pages={pages}
+                pagesConfig={pagesConfig}
+                persistConfig={persistConfig}
+                pageSettings={pageSettings}
+                activePage={activePage}
+                setActivePage={setActivePage}
+                editMode={editMode}
+                setEditingPage={setEditingPage}
+                setShowAddPageModal={setShowAddPageModal}
+                t={t}
+              />
             </div>
           </div>
         )}
@@ -1036,20 +1088,22 @@ function AppContent({
           className={`${isMobile ? 'flex flex-col items-center gap-1.5' : 'flex flex-nowrap items-center justify-between gap-4'}`}
           style={{ marginBottom: `${isMobile ? Math.min(14, sectionSpacing?.navToGrid ?? 24) : (sectionSpacing?.navToGrid ?? 24)}px` }}
         >
-          <div className={`${isMobile ? 'w-full' : 'flex-1 min-w-0'}`}>
-            <PageNavigation
-              pages={pages}
-              pagesConfig={pagesConfig}
-              persistConfig={persistConfig}
-              pageSettings={pageSettings}
-              activePage={activePage}
-              setActivePage={setActivePage}
-              editMode={editMode}
-              setEditingPage={setEditingPage}
-              setShowAddPageModal={setShowAddPageModal}
-              t={t}
-            />
-          </div>
+          {!isMobile && (
+            <div className="flex-1 min-w-0">
+              <PageNavigation
+                pages={pages}
+                pagesConfig={pagesConfig}
+                persistConfig={persistConfig}
+                pageSettings={pageSettings}
+                activePage={activePage}
+                setActivePage={setActivePage}
+                editMode={editMode}
+                setEditingPage={setEditingPage}
+                setShowAddPageModal={setShowAddPageModal}
+                t={t}
+              />
+            </div>
+          )}
 
           <div className={`relative flex items-center flex-shrink-0 overflow-visible ${isMobile ? 'justify-center gap-3 w-full pb-0' : 'gap-6 justify-end pb-2'}`}>
             {editMode && canEditDashboard && (

@@ -36,7 +36,10 @@ export default function StatusBar({
   getA, 
   getEntityImageUrl, 
   statusPillsConfig = [],
-  isMobile = false
+  isMobile = false,
+  onlyEntityIds = null,
+  forceSingleRow = false,
+  className = '',
 }) {
   const isSonosEntity = (entity) => {
     if (!entity) return false;
@@ -88,9 +91,13 @@ export default function StatusBar({
     });
   };
 
+  const filteredStatusPills = Array.isArray(onlyEntityIds) && onlyEntityIds.length > 0
+    ? statusPillsConfig.filter((pill) => onlyEntityIds.includes(pill?.entityId))
+    : statusPillsConfig;
+
   return (
-    <div className={`flex items-center w-full mt-0 font-sans ${isMobile ? 'justify-center' : 'justify-between'}`}>
-      <div className={`flex flex-wrap items-center min-w-0 ${isMobile ? 'gap-1.5' : 'gap-2.5'}`}>
+    <div className={`flex items-center w-full mt-0 font-sans ${isMobile ? 'justify-center' : 'justify-between'} ${className}`}>
+      <div className={`flex items-center min-w-0 ${forceSingleRow ? 'flex-nowrap overflow-x-auto whitespace-nowrap no-scrollbar' : 'flex-wrap'} ${isMobile ? 'gap-1.5' : 'gap-2.5'}`}>
         {/* Edit button (only in edit mode) - at first position */}
         {editMode && (
           <button
@@ -104,7 +111,7 @@ export default function StatusBar({
         )}
         
         {/* Configurable status pills */}
-        {statusPillsConfig
+        {filteredStatusPills
           .filter(pill => pill.visible !== false)
           .map(pill => {
             // Handle different pill types

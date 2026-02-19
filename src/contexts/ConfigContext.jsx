@@ -131,6 +131,14 @@ export const ConfigProvider = ({ children }) => {
       document.head.appendChild(metaThemeColor);
     }
     metaThemeColor.content = theme['--bg-primary'];
+
+    let appleStatusBar = document.querySelector("meta[name='apple-mobile-web-app-status-bar-style']");
+    if (!appleStatusBar) {
+      appleStatusBar = document.createElement('meta');
+      appleStatusBar.name = 'apple-mobile-web-app-status-bar-style';
+      document.head.appendChild(appleStatusBar);
+    }
+    appleStatusBar.content = themeKey === 'light' ? 'default' : 'black';
     
     try {
       localStorage.setItem('tunet_theme', themeKey);
