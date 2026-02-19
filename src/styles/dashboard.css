@@ -231,14 +231,9 @@ html[data-theme='light'] .rounded-2xl [class*="text-emerald-"] {
     border-color: rgba(51, 65, 85, 0.2) !important;
   }
 
-  /* Keep visible vertical air between stacked calendar cards on mobile. */
-  [data-grid-card].mobile-calendar-grid-item {
-    padding-bottom: 34px !important;
-  }
-
+  /* Keep calendar cards consistent with other cards on mobile. */
   [data-grid-card] .mobile-calendar-card {
-    height: calc(100% - 34px) !important;
-    margin-bottom: 34px !important;
+    margin-bottom: 0 !important;
   }
 }
 

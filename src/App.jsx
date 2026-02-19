@@ -881,8 +881,14 @@ function AppContent({
 
   return (
     <div
-      className="min-h-[100svh] font-sans selection:bg-blue-500/30 overflow-x-hidden transition-colors duration-500"
-      style={{ backgroundColor: 'var(--bg-primary)', color: 'var(--text-primary)' }}
+      className="font-sans selection:bg-blue-500/30 overflow-x-hidden transition-colors duration-500"
+      style={{
+        minHeight: 'calc(100svh - var(--safe-area-top, 0px) - var(--safe-area-bottom, 0px))',
+        paddingTop: 'var(--safe-area-top, 0px)',
+        paddingBottom: 'var(--safe-area-bottom, 0px)',
+        backgroundColor: 'var(--bg-primary)',
+        color: 'var(--text-primary)',
+      }}
     >
       {bgMode === 'animated' && !isLightTheme ? (
         <AuroraBackground />
@@ -1176,7 +1182,7 @@ function AppContent({
             className="grid font-sans page-transition items-start"
             data-dashboard-grid
             style={{
-              gap: isMobile ? '34px' : `${gridGapV}px ${gridGapH}px`,
+              gap: isMobile ? '40px' : `${gridGapV}px ${gridGapH}px`,
               gridAutoRows: isMobile ? '88px' : '100px',
               gridTemplateColumns: `repeat(${gridColCount}, minmax(0, 1fr))`,
             }}
@@ -1193,7 +1199,6 @@ function AppContent({
                 const placement = gridLayout[id];
                 const settingsKey = getCardSettingsKey(id);
                 const settings = cardSettings[settingsKey] || cardSettings[id] || {};
-                const isCalendarCard = String(id || '').startsWith('calendar_card_');
                 const defaultLegacyRowSpan = placement?.rowSpan || 1;
                 const defaultLegacyColSpan = placement?.colSpan || 1;
                 const rowSpan = Number.isFinite(Number(settings.gridRowSpan))
@@ -1212,14 +1217,13 @@ function AppContent({
                 return (
                   <div
                     key={id}
-                    className={`h-full relative ${(isCompactCards || isMobile) ? 'card-compact' : ''} ${isCalendarCard && isMobile ? 'mobile-calendar-grid-item' : ''}`}
+                    className={`h-full relative ${(isCompactCards || isMobile) ? 'card-compact' : ''}`}
                     data-grid-card
                     style={{
                       gridRowStart: placement.row,
                       gridColumnStart: placement.col,
                       gridColumnEnd: `span ${colSpan}`,
                       gridRowEnd: `span ${rowSpan}`,
-                      ...(isMobile && isCalendarCard ? { paddingBottom: '34px' } : {}),
                     }}
                   >
                     {heading && (
