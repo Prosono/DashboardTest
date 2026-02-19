@@ -750,12 +750,22 @@ export default function ConfigModal({
       }
     };
 
+    const buildImportedDashboardMeta = (fileName, parsed) => {
+      const rawName = String(parsed?.name || parsed?.profileId || fileName || 'dashboard').trim();
+      const base = toProfileId(rawName.replace(/\.[^.]+$/, '') || 'dashboard');
+      const now = new Date();
+      const pad = (v) => String(v).padStart(2, '0');
+      const stamp = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())} ${pad(now.getHours())}:${pad(now.getMinutes())}`;
+      const stampId = `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}_${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`;
+      const id = toProfileId(`${base}_import_${stampId}`);
+      const name = `${rawName.replace(/\.[^.]+$/, '')} import ${stamp}`;
+      return { id, name };
+    };
+
     const handleImportGlobal = async (event) => {
       const file = event?.target?.files?.[0];
       event.target.value = '';
       if (!file || importingDashboard) return;
-
-      const target = toProfileId(selectedGlobalDashboard || 'default');
       setImportingDashboard(true);
       try {
         const text = await file.text();
@@ -769,13 +779,17 @@ export default function ConfigModal({
           return;
         }
 
+        const importedMeta = buildImportedDashboardMeta(file?.name, parsed);
+        const target = importedMeta.id;
+        const targetName = importedMeta.name;
+
         if (canManageClients && userAdminApi?.saveClientDashboard) {
           const clientId = String(activeDashboardClientId || '').trim();
           if (!clientId) {
             setGlobalActionMessage(t('userMgmt.clientIdRequired'));
             return;
           }
-          await userAdminApi.saveClientDashboard(clientId, target, target, importedDashboard);
+          await userAdminApi.saveClientDashboard(clientId, target, targetName, importedDashboard);
           const next = await userAdminApi.listClientDashboards(clientId).catch(() => []);
           setDashboardProfilesByClient((prev) => ({ ...prev, [clientId]: Array.isArray(next) ? next : [] }));
         } else {
@@ -783,7 +797,8 @@ export default function ConfigModal({
           await refreshGlobalDashboards?.();
           await loadGlobalDashboard?.(target);
         }
-        setGlobalActionMessage(`${t('userMgmt.importedDashboard')}: ${target}`);
+        setSelectedGlobalDashboard(target);
+        setGlobalActionMessage(`${t('userMgmt.importedDashboard')}: ${targetName}`);
       } catch {
         setGlobalActionMessage(t('userMgmt.importFailed'));
       } finally {
