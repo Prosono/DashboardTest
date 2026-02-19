@@ -538,6 +538,39 @@ function AppContent({
     }
   }, [isAdminUser, currentUser?.assignedDashboardId, saveGlobalDashboard]);
 
+  const renderUserChip = (extraClassName = '') => (
+    currentUser ? (
+      <button
+        onClick={() => setShowProfileModal(true)}
+        className={`px-2 py-1 rounded-full border border-[var(--glass-border)] text-[10px] uppercase tracking-wider text-[var(--text-secondary)] hover:text-[var(--text-primary)] ${extraClassName}`}
+        title={t('profile.title')}
+      >
+        <User className="w-3 h-3 inline mr-1" />
+        {profileDisplayName} ({currentUser.role})
+      </button>
+    ) : null
+  );
+
+  const renderSettingsControl = () => (
+    <div className="relative">
+      <SettingsDropdown
+        onOpenSettings={() => { setShowConfigModal(true); setConfigTab('connection'); }}
+        onOpenTheme={() => setShowThemeSidebar(true)}
+        onOpenLayout={() => setShowLayoutSidebar(true)}
+        onOpenHeader={() => setShowHeaderEditModal(true)}
+        showLayout={canEditDashboard}
+        showHeader={canEditDashboard}
+        showConnection={canManageUsersAndClients}
+        t={t}
+      />
+      {isAdminUser && updateCount > 0 && (
+        <div className="absolute -top-1 -right-1 w-5 h-5 bg-gray-600 rounded-full flex items-center justify-center border-2 border-[var(--card-bg)] pointer-events-none shadow-sm">
+          <span className="text-[11px] font-bold text-white leading-none pt-[1px]">{updateCount}</span>
+        </div>
+      )}
+    </div>
+  );
+
   // ── Page management ────────────────────────────────────────────────────
   const {
     newPageLabel, setNewPageLabel,
@@ -990,6 +1023,15 @@ function AppContent({
           </div>
         )}
 
+        {isMobile && (
+          <div className="flex items-center justify-between mb-2 px-0.5">
+            {renderUserChip('max-w-[58%] truncate')}
+            <div className="flex items-center gap-2">
+              {renderSettingsControl()}
+            </div>
+          </div>
+        )}
+
         <div
           className={`${isMobile ? 'flex flex-col items-center gap-1.5' : 'flex flex-nowrap items-center justify-between gap-4'}`}
           style={{ marginBottom: `${isMobile ? Math.min(14, sectionSpacing?.navToGrid ?? 24) : (sectionSpacing?.navToGrid ?? 24)}px` }}
@@ -1058,34 +1100,8 @@ function AppContent({
               </button>
             )}
 
-            {currentUser && (
-              <button
-                onClick={() => setShowProfileModal(true)}
-                className="px-2 py-1 rounded-full border border-[var(--glass-border)] text-[10px] uppercase tracking-wider text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
-                title={t('profile.title')}
-              >
-                <User className="w-3 h-3 inline mr-1" />
-                {profileDisplayName} ({currentUser.role})
-              </button>
-            )}
-
-            <div className="relative">
-              <SettingsDropdown
-                onOpenSettings={() => { setShowConfigModal(true); setConfigTab('connection'); }}
-                onOpenTheme={() => setShowThemeSidebar(true)}
-                onOpenLayout={() => setShowLayoutSidebar(true)}
-                onOpenHeader={() => setShowHeaderEditModal(true)}
-                showLayout={canEditDashboard}
-                showHeader={canEditDashboard}
-                showConnection={canManageUsersAndClients}
-                t={t}
-              />
-              {isAdminUser && updateCount > 0 && (
-                <div className="absolute -top-1 -right-1 w-5 h-5 bg-gray-600 rounded-full flex items-center justify-center border-2 border-[var(--card-bg)] pointer-events-none shadow-sm">
-                  <span className="text-[11px] font-bold text-white leading-none pt-[1px]">{updateCount}</span>
-                </div>
-              )}
-            </div>
+            {!isMobile && renderUserChip()}
+            {!isMobile && renderSettingsControl()}
 
             {!connected && (
               <div

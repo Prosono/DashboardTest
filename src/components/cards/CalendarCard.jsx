@@ -243,7 +243,7 @@ function CalendarCard({
         {...dragProps} 
         data-haptic={isEditMode ? undefined : 'card'}
         onClick={onClick}
-        className={`touch-feedback relative overflow-hidden font-sans h-full rounded-3xl flex items-center p-4 pl-5 gap-4 bg-[var(--card-bg)] border border-[var(--card-border)] backdrop-blur-xl transition-all duration-300 ${className}`}
+        className={`touch-feedback mobile-calendar-card relative overflow-hidden font-sans h-full rounded-3xl flex items-center p-4 pl-5 gap-4 bg-[var(--card-bg)] border border-[var(--card-border)] backdrop-blur-xl transition-all duration-300 ${className}`}
         style={style}
       >
         {getControls && getControls(cardId)}
@@ -288,7 +288,7 @@ function CalendarCard({
       {...dragProps} 
       data-haptic={isEditMode ? undefined : 'card'}
       onClick={onClick}
-      className={`touch-feedback relative overflow-hidden font-sans h-full rounded-3xl flex flex-col bg-[var(--card-bg)] border border-[var(--card-border)] backdrop-blur-xl transition-all duration-300 ${isEditMode ? 'cursor-move' : 'cursor-pointer'} ${className}`}
+      className={`touch-feedback mobile-calendar-card relative overflow-hidden font-sans h-full rounded-3xl flex flex-col bg-[var(--card-bg)] border border-[var(--card-border)] backdrop-blur-xl transition-all duration-300 ${isEditMode ? 'cursor-move' : 'cursor-pointer'} ${className}`}
       style={style}
     >
       {getControls && getControls(cardId)}

@@ -230,6 +230,12 @@ html[data-theme='light'] .rounded-2xl [class*="text-emerald-"] {
       0 3px 8px rgba(15, 23, 42, 0.08);
     border-color: rgba(51, 65, 85, 0.2) !important;
   }
+
+  /* Keep visible vertical air between stacked calendar cards on mobile. */
+  [data-grid-card] .mobile-calendar-card {
+    height: calc(100% - 10px);
+    margin-bottom: 10px;
+  }
 }
 
 /* Custom scrollbar for modal content */
