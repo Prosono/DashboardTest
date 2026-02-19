@@ -307,7 +307,10 @@ export default function ConfigModal({
         const next = { ...prev };
         entries.forEach(([clientId, dashboards]) => {
           if (Array.isArray(dashboards)) {
-            next[clientId] = dashboards;
+            const prevList = Array.isArray(prev[clientId]) ? prev[clientId] : [];
+            if (dashboards.length > 0 || prevList.length === 0) {
+              next[clientId] = dashboards;
+            }
           }
         });
         return next;
@@ -793,7 +796,12 @@ export default function ConfigModal({
           }
           await userAdminApi.saveClientDashboard(clientId, target, targetName, importedDashboard);
           const next = await userAdminApi.listClientDashboards(clientId).catch(() => []);
-          setDashboardProfilesByClient((prev) => ({ ...prev, [clientId]: Array.isArray(next) ? next : [] }));
+          setDashboardProfilesByClient((prev) => {
+            const current = Array.isArray(prev[clientId]) ? prev[clientId] : [];
+            if (!Array.isArray(next)) return prev;
+            if (next.length === 0 && current.length > 0) return prev;
+            return { ...prev, [clientId]: next };
+          });
         } else {
           await saveSharedDashboardProfile(target, importedDashboard);
           await refreshGlobalDashboards?.();
@@ -905,7 +913,11 @@ export default function ConfigModal({
           const dashboards = await userAdminApi.listClientDashboards(clientId);
           setDashboardProfilesByClient((prev) => ({
             ...prev,
-            [clientId]: Array.isArray(dashboards) ? dashboards : (prev[clientId] || []),
+            [clientId]: Array.isArray(dashboards)
+              ? ((dashboards.length === 0 && Array.isArray(prev[clientId]) && prev[clientId].length > 0)
+                  ? prev[clientId]
+                  : dashboards)
+              : (prev[clientId] || []),
           }));
         } catch {
           // best-effort, keep existing options
