@@ -55,8 +55,8 @@ export default function Header({
 
   return (
     <header
-      className="relative pt-4 md:pt-0 font-sans"
-      style={{ marginBottom: `${headerBottom}px` }}
+      className={`relative font-sans ${isMobile ? 'pt-1' : 'pt-4 md:pt-0'}`}
+      style={{ marginBottom: `${isMobile ? Math.min(headerBottom, 10) : headerBottom}px` }}
     >
       {editMode && !headerSettings.showTitle && setShowHeaderEditModal && (
         <div className="absolute top-0 left-1/2 -translate-x-1/2 z-50 edit-controls-anim">
@@ -71,10 +71,10 @@ export default function Header({
       )}
 
       {/* Main flex: heading (left) & clock (right) aligned at same Y */}
-      <div className={`flex justify-between items-start gap-10 leading-none ${isMobile ? 'flex-col items-center text-center' : ''}`}>
+      <div className={`flex justify-between items-start gap-10 leading-none ${isMobile ? 'flex-col items-center text-center gap-2' : ''}`}>
         {/* Left column: Heading and Date (same X) */}
         <div className={`flex flex-col gap-1 ${isMobile ? 'items-center w-full' : ''}`}>
-          <div className={`flex items-center gap-4 ${isMobile ? 'justify-center mx-auto' : ''}`}>
+          <div className={`flex items-center gap-4 ${isMobile ? 'justify-center mx-auto gap-3' : ''}`}>
             {hasLogo && (
               <img
                 src={logoUrl}
@@ -153,7 +153,7 @@ export default function Header({
       </div>
 
       {/* Children (content below heading & clock) */}
-      <div className="flex flex-col gap-6 md:gap-3 w-full pt-6 md:pt-3">
+      <div className={`flex flex-col w-full ${isMobile ? 'gap-2 pt-2' : 'gap-6 md:gap-3 pt-6 md:pt-3'}`}>
         {children}
       </div>
     </header>

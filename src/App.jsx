@@ -904,8 +904,8 @@ function AppContent({
           sectionSpacing={sectionSpacing}
         >
           <div
-            className={`w-full mt-0 font-sans ${isMobile ? 'flex flex-col items-center gap-3' : 'flex items-center justify-between'}`}
-            style={{ marginTop: `${sectionSpacing?.headerToStatus ?? 0}px` }}
+            className={`w-full mt-0 font-sans ${isMobile ? 'flex flex-col items-center gap-1.5' : 'flex items-center justify-between'}`}
+            style={{ marginTop: `${isMobile ? Math.min(8, sectionSpacing?.headerToStatus ?? 0) : (sectionSpacing?.headerToStatus ?? 0)}px` }}
           >
             <div className={`flex flex-wrap gap-2.5 items-center min-w-0 ${isMobile ? 'justify-center w-full' : ''}`}>
               {(pagesConfig.header || []).map(id => personStatus(id))}
@@ -991,8 +991,8 @@ function AppContent({
         )}
 
         <div
-          className={`${isMobile ? 'flex flex-col items-center gap-3' : 'flex flex-nowrap items-center justify-between gap-4'}`}
-          style={{ marginBottom: `${sectionSpacing?.navToGrid ?? 24}px` }}
+          className={`${isMobile ? 'flex flex-col items-center gap-1.5' : 'flex flex-nowrap items-center justify-between gap-4'}`}
+          style={{ marginBottom: `${isMobile ? Math.min(14, sectionSpacing?.navToGrid ?? 24) : (sectionSpacing?.navToGrid ?? 24)}px` }}
         >
           <div className={`${isMobile ? 'w-full' : 'flex-1 min-w-0'}`}>
             <PageNavigation
@@ -1009,7 +1009,7 @@ function AppContent({
             />
           </div>
 
-          <div className={`relative flex items-center flex-shrink-0 overflow-visible pb-2 ${isMobile ? 'justify-center gap-4 w-full' : 'gap-6 justify-end'}`}>
+          <div className={`relative flex items-center flex-shrink-0 overflow-visible ${isMobile ? 'justify-center gap-3 w-full pb-0' : 'gap-6 justify-end pb-2'}`}>
             {editMode && canEditDashboard && (
               <button
                 onClick={() => setShowAddCardModal(true)}
@@ -1515,41 +1515,77 @@ export default function App() {
   if (!currentUser) {
     return (
       <div
-        className="min-h-screen flex items-center justify-center px-4"
+        className="min-h-screen flex items-center justify-center px-4 py-6 relative overflow-hidden"
         style={{
           color: 'var(--text-primary)',
           background:
-            'radial-gradient(1000px 420px at 50% -10%, color-mix(in srgb, var(--accent-color) 18%, transparent), transparent 60%), linear-gradient(145deg, var(--bg-gradient-from), var(--bg-primary), var(--bg-gradient-to))',
+            'radial-gradient(880px 320px at 50% -6%, color-mix(in srgb, var(--accent-color) 24%, transparent), transparent 62%), linear-gradient(145deg, var(--bg-gradient-from), var(--bg-primary), var(--bg-gradient-to))',
         }}
       >
+        <div
+          className="pointer-events-none absolute -top-24 -left-10 w-64 h-64 rounded-full blur-3xl opacity-35"
+          style={{ background: 'color-mix(in srgb, var(--accent-color) 42%, transparent)' }}
+        />
+        <div
+          className="pointer-events-none absolute -bottom-28 -right-8 w-72 h-72 rounded-full blur-3xl opacity-30"
+          style={{ background: 'color-mix(in srgb, var(--accent-color) 28%, transparent)' }}
+        />
         <form
           onSubmit={doLogin}
-          className="w-full max-w-md rounded-3xl border p-8 space-y-5 shadow-2xl backdrop-blur-xl"
+          className="relative w-full max-w-[28rem] rounded-[2rem] border p-7 md:p-8 space-y-5 shadow-2xl backdrop-blur-2xl overflow-hidden"
           style={{
-            background: 'linear-gradient(145deg, color-mix(in srgb, var(--card-bg) 92%, transparent), color-mix(in srgb, var(--modal-bg) 94%, transparent))',
+            background: 'linear-gradient(158deg, color-mix(in srgb, var(--card-bg) 95%, transparent), color-mix(in srgb, var(--modal-bg) 98%, transparent) 68%, color-mix(in srgb, var(--accent-color) 7%, var(--modal-bg)))',
             borderColor: 'var(--glass-border)',
-            boxShadow: '0 22px 48px rgba(2, 6, 23, 0.28)',
+            boxShadow: '0 32px 90px rgba(2, 6, 23, 0.34)',
           }}
         >
-          <div className="flex flex-col items-center gap-3 pb-2">
+          <div
+            className="pointer-events-none absolute top-0 inset-x-0 h-14"
+            style={{ background: 'linear-gradient(180deg, color-mix(in srgb, var(--accent-color) 20%, transparent), transparent)' }}
+          />
+          <div
+            className="absolute inset-0 rounded-3xl pointer-events-none"
+            style={{
+              border: '1px solid color-mix(in srgb, var(--accent-color) 24%, transparent)',
+              maskImage: 'linear-gradient(to bottom, rgba(0,0,0,0.9), rgba(0,0,0,0.3) 55%, transparent)',
+            }}
+          />
+          <div className="relative flex flex-col items-center gap-4 pb-1">
             <div
-              className="w-14 h-14 rounded-2xl flex items-center justify-center border"
+              className="w-16 h-16 rounded-[1.15rem] flex items-center justify-center border relative overflow-hidden"
               style={{
-                background: 'color-mix(in srgb, var(--accent-color) 14%, transparent)',
+                background: 'linear-gradient(145deg, color-mix(in srgb, var(--accent-color) 18%, transparent), color-mix(in srgb, var(--accent-color) 8%, transparent))',
                 borderColor: 'color-mix(in srgb, var(--accent-color) 35%, transparent)',
               }}
             >
-              <Flame className="w-8 h-8" style={{ color: 'var(--accent-color)' }} />
+              <div
+                className="absolute inset-0 m-2 rounded-lg"
+                style={{
+                  backgroundImage: 'url(/logo.png)',
+                  backgroundSize: 'contain',
+                  backgroundPosition: 'center',
+                  backgroundRepeat: 'no-repeat',
+                }}
+              />
+              <Flame className="w-7 h-7 opacity-30" style={{ color: 'var(--accent-color)' }} />
             </div>
-            <h1 className="text-lg font-black uppercase tracking-[0.24em] text-center">SMART SAUNA SYSTEMS</h1>
-            <p className="text-xs uppercase tracking-[0.2em] text-[var(--text-secondary)]">Secure Dashboard Access</p>
+            <h1
+              className="text-[1.2rem] md:text-[1.38rem] font-light text-center tracking-[0.22em] uppercase"
+              style={{ fontFamily: "'Roboto', 'Helvetica Neue', Arial, sans-serif", lineHeight: 1.2 }}
+            >
+              Smart Sauna Systems
+            </h1>
+            <div className="w-24 h-px opacity-60" style={{ background: 'color-mix(in srgb, var(--accent-color) 36%, var(--glass-border))' }} />
           </div>
 
-          <div className="space-y-1.5">
+          <div className="space-y-1.5 pt-1">
             <label className="block text-[11px] uppercase tracking-[0.18em] text-[var(--text-secondary)]">Client ID</label>
             <input
-              className="w-full px-4 py-3 rounded-xl border outline-none transition-colors"
-              style={{ backgroundColor: 'var(--glass-bg)', borderColor: 'var(--glass-border)' }}
+              className="w-full px-4 py-3 rounded-xl border outline-none transition-colors focus:ring-2"
+              style={{
+                background: 'linear-gradient(145deg, color-mix(in srgb, var(--glass-bg) 90%, transparent), color-mix(in srgb, var(--glass-bg) 72%, transparent))',
+                borderColor: 'var(--glass-border)',
+              }}
               value={clientId}
               onChange={(e) => setClientId(e.target.value)}
               autoComplete="organization"
@@ -1559,8 +1595,11 @@ export default function App() {
           <div className="space-y-1.5">
             <label className="block text-[11px] uppercase tracking-[0.18em] text-[var(--text-secondary)]">Username</label>
             <input
-              className="w-full px-4 py-3 rounded-xl border outline-none transition-colors"
-              style={{ backgroundColor: 'var(--glass-bg)', borderColor: 'var(--glass-border)' }}
+              className="w-full px-4 py-3 rounded-xl border outline-none transition-colors focus:ring-2"
+              style={{
+                background: 'linear-gradient(145deg, color-mix(in srgb, var(--glass-bg) 90%, transparent), color-mix(in srgb, var(--glass-bg) 72%, transparent))',
+                borderColor: 'var(--glass-border)',
+              }}
               value={username}
               onChange={(e) => setUsername(e.target.value)}
               autoComplete="username"
@@ -1571,8 +1610,11 @@ export default function App() {
             <label className="block text-[11px] uppercase tracking-[0.18em] text-[var(--text-secondary)]">Password</label>
             <input
               type="password"
-              className="w-full px-4 py-3 rounded-xl border outline-none transition-colors"
-              style={{ backgroundColor: 'var(--glass-bg)', borderColor: 'var(--glass-border)' }}
+              className="w-full px-4 py-3 rounded-xl border outline-none transition-colors focus:ring-2"
+              style={{
+                background: 'linear-gradient(145deg, color-mix(in srgb, var(--glass-bg) 90%, transparent), color-mix(in srgb, var(--glass-bg) 72%, transparent))',
+                borderColor: 'var(--glass-border)',
+              }}
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               autoComplete="current-password"
@@ -1583,8 +1625,11 @@ export default function App() {
 
           <button
             disabled={loggingIn}
-            className="w-full py-3 rounded-xl text-white font-bold uppercase tracking-[0.16em] disabled:opacity-60 transition-colors"
-            style={{ backgroundColor: 'var(--accent-color)' }}
+            className="w-full py-3.5 rounded-xl text-white font-medium uppercase tracking-[0.18em] disabled:opacity-60 transition-colors shadow-lg"
+            style={{
+              background: 'linear-gradient(135deg, color-mix(in srgb, var(--accent-color) 92%, #1d4ed8), var(--accent-color))',
+              boxShadow: '0 10px 28px color-mix(in srgb, var(--accent-color) 40%, transparent)',
+            }}
           >
             {loggingIn ? <span className="inline-block w-4 h-4 mr-2 border-2 border-white/30 border-t-white rounded-full animate-spin align-[-2px]" /> : <Lock className="w-4 h-4 inline mr-2" />}
             {loggingIn ? 'Signing in…' : 'Sign in'}
