@@ -100,6 +100,7 @@ export default function ModalOrchestrator({
     sectionSpacing, updateSectionSpacing,
     headerTitle, headerScale, headerSettings,
     updateHeaderTitle, updateHeaderScale, updateHeaderSettings,
+    saveHeaderLogos,
   } = layout;
 
   const {
@@ -354,6 +355,7 @@ export default function ModalOrchestrator({
           updateHeaderTitle={updateHeaderTitle}
           updateHeaderScale={updateHeaderScale}
           updateHeaderSettings={updateHeaderSettings}
+          onSaveLogos={saveHeaderLogos}
           onSwitchToTheme={() => { setShowHeaderEditModal(false); setShowThemeSidebar(true); }}
           onSwitchToLayout={() => { setShowHeaderEditModal(false); setShowLayoutSidebar(true); }}
           t={t}

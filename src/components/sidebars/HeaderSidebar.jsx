@@ -119,6 +119,7 @@ export default function HeaderSidebar({
   updateHeaderTitle,
   updateHeaderScale,
   updateHeaderSettings,
+  onSaveLogos,
   onSwitchToTheme,
   onSwitchToLayout,
   t
@@ -129,6 +130,7 @@ export default function HeaderSidebar({
   const [logoDraftDark, setLogoDraftDark] = useState(String(headerSettings?.logoUrlDark || ''));
   const [logoPreviewFailed, setLogoPreviewFailed] = useState(false);
   const [logoSavedAt, setLogoSavedAt] = useState(0);
+  const [logoSaveState, setLogoSaveState] = useState('idle');
   const toggleSection = (key) => setSections(prev => ({ ...prev, [key]: !prev[key] }));
 
   const setting = (key, fallback) => headerSettings?.[key] ?? fallback;
@@ -142,20 +144,45 @@ export default function HeaderSidebar({
     setLogoDraftLight(String(headerSettings?.logoUrlLight || ''));
     setLogoDraftDark(String(headerSettings?.logoUrlDark || ''));
     setLogoPreviewFailed(false);
+    setLogoSaveState((prev) => (prev === 'error' ? 'idle' : prev));
   }, [headerSettings?.logoUrl, headerSettings?.logoUrlLight, headerSettings?.logoUrlDark]);
 
-  const saveLogos = () => {
+  const saveLogos = async () => {
     const nextDefault = String(logoDraftDefault || '').trim();
     const nextLight = String(logoDraftLight || '').trim();
     const nextDark = String(logoDraftDark || '').trim();
+    setLogoSaveState('saving');
     updateHeaderSettings((prev) => ({
       ...(prev || {}),
       logoUrl: nextDefault,
       logoUrlLight: nextLight,
       logoUrlDark: nextDark,
     }));
+    let persisted = false;
+    let saveOk = true;
+    if (typeof onSaveLogos === 'function') {
+      try {
+        const result = await onSaveLogos({
+          logoUrl: nextDefault,
+          logoUrlLight: nextLight,
+          logoUrlDark: nextDark,
+        });
+        if (typeof result === 'boolean') {
+          saveOk = result;
+          persisted = true;
+        } else if (result && typeof result === 'object') {
+          saveOk = result.ok !== false;
+          persisted = result.persisted !== false;
+        } else {
+          persisted = true;
+        }
+      } catch {
+        saveOk = false;
+      }
+    }
     setLogoPreviewFailed(false);
     setLogoSavedAt(Date.now());
+    setLogoSaveState(saveOk ? 'saved' : (persisted ? 'error' : 'saved'));
   };
 
   const fontWeight = setting('fontWeight', '300');
@@ -307,6 +334,7 @@ export default function HeaderSidebar({
               <button
                 type="button"
                 onClick={saveLogos}
+                disabled={logoSaveState === 'saving'}
                 className="px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-wider border transition-all text-white"
                 style={{
                   backgroundColor: 'var(--accent-color)',
@@ -317,7 +345,11 @@ export default function HeaderSidebar({
               </button>
               {(!!resolvedPreviewDefault || !!resolvedPreviewLight || !!resolvedPreviewDark || !!logoSavedAt) && (
                 <span className="text-[10px] uppercase tracking-wider" style={{ color: logoPreviewFailed ? '#f87171' : 'var(--text-secondary)' }}>
-                  {logoPreviewFailed
+                  {logoSaveState === 'saving'
+                    ? (t('common.saving') !== 'common.saving' ? t('common.saving') : 'Saving...')
+                    : logoSaveState === 'error'
+                      ? (t('header.logoSaveFailed') !== 'header.logoSaveFailed' ? t('header.logoSaveFailed') : 'Save failed')
+                      : logoPreviewFailed
                     ? (t('header.logoInvalid') !== 'header.logoInvalid' ? t('header.logoInvalid') : 'Image failed to load')
                     : (Date.now() - logoSavedAt < 2000
                       ? (t('header.logoSaved') !== 'header.logoSaved' ? t('header.logoSaved') : 'Saved')

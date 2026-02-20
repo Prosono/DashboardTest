@@ -143,6 +143,7 @@ function AppContent({
     globalDashboardProfiles,
     globalStorageBusy,
     globalStorageError,
+    activeGlobalDashboardId,
     refreshGlobalDashboards,
     saveGlobalDashboard,
     loadGlobalDashboard,
@@ -327,6 +328,21 @@ function AppContent({
 
     saveStatusPillsConfig([...(statusPillsConfig || []), criticalPill]);
   }, [entities, statusPillsConfig, saveStatusPillsConfig, CRITICAL_SENSOR_ID]);
+
+  const saveHeaderLogos = useCallback(async ({ logoUrl, logoUrlLight, logoUrlDark }) => {
+    if (!canEditDashboard || !saveGlobalDashboard) {
+      return { ok: true, persisted: false };
+    }
+    const nextHeaderSettings = {
+      ...(headerSettings || {}),
+      logoUrl: String(logoUrl || '').trim(),
+      logoUrlLight: String(logoUrlLight || '').trim(),
+      logoUrlDark: String(logoUrlDark || '').trim(),
+    };
+    const targetProfile = String(activeGlobalDashboardId || 'default').trim() || 'default';
+    const ok = await saveGlobalDashboard(targetProfile, { headerSettings: nextHeaderSettings });
+    return { ok, persisted: true };
+  }, [canEditDashboard, saveGlobalDashboard, headerSettings, activeGlobalDashboardId]);
 
   const [draggingId, setDraggingId] = useState(null);
   const [activePage, _setActivePage] = useState(() => {
@@ -1356,6 +1372,7 @@ function AppContent({
             sectionSpacing, updateSectionSpacing,
             headerTitle, headerScale, headerSettings,
             updateHeaderTitle, updateHeaderScale, updateHeaderSettings,
+            saveHeaderLogos,
           }}
           onboarding={{
             showOnboarding, setShowOnboarding, isOnboardingActive,

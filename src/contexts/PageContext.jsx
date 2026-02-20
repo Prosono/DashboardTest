@@ -220,11 +220,13 @@ export const PageProvider = ({ children }) => {
     profiles: [{ id: 'default', name: 'default', updatedAt: null }],
     busy: false,
     error: '',
+    activeProfileId: 'default',
   });
 
   const setGlobalBusy = (busy) => setGlobalDashboardState((prev) => ({ ...prev, busy }));
   const setGlobalError = (error) => setGlobalDashboardState((prev) => ({ ...prev, error }));
   const setGlobalProfiles = (profiles) => setGlobalDashboardState((prev) => ({ ...prev, profiles }));
+  const setGlobalActiveProfile = (profileId) => setGlobalDashboardState((prev) => ({ ...prev, activeProfileId: toProfileId(profileId) }));
 
   const getDashboardStateSnapshot = useCallback(() => ({
     pagesConfig,
@@ -293,18 +295,22 @@ export const PageProvider = ({ children }) => {
     }
   }, []);
 
-  const saveGlobalDashboard = useCallback(async (profileId = 'default') => {
-    const profile = toProfileId(profileId);
+  const saveGlobalDashboard = useCallback(async (profileId = 'default', snapshotOverride = null) => {
+    const profile = toProfileId(profileId || globalDashboardState.activeProfileId || 'default');
     setGlobalBusy(true);
     setGlobalError('');
     try {
-      const snapshot = getDashboardStateSnapshot();
+      const baseSnapshot = getDashboardStateSnapshot();
+      const snapshot = snapshotOverride && typeof snapshotOverride === 'object'
+        ? { ...baseSnapshot, ...snapshotOverride }
+        : baseSnapshot;
       if (profile === 'default') {
         await saveSharedDashboard(snapshot);
       } else {
         await saveSharedDashboardProfile(profile, snapshot);
       }
       await refreshGlobalDashboards();
+      setGlobalActiveProfile(profile);
       return true;
     } catch (error) {
       console.warn('Failed to save global dashboard.', error);
@@ -313,10 +319,10 @@ export const PageProvider = ({ children }) => {
     } finally {
       setGlobalBusy(false);
     }
-  }, [refreshGlobalDashboards, getDashboardStateSnapshot]);
+  }, [refreshGlobalDashboards, getDashboardStateSnapshot, globalDashboardState.activeProfileId]);
 
   const loadGlobalDashboard = useCallback(async (profileId = 'default') => {
-    const profile = toProfileId(profileId);
+    const profile = toProfileId(profileId || globalDashboardState.activeProfileId || 'default');
     setGlobalBusy(true);
     setGlobalError('');
     try {
@@ -328,6 +334,7 @@ export const PageProvider = ({ children }) => {
         return false;
       }
       applyDashboardState(data);
+      setGlobalActiveProfile(profile);
       return true;
     } catch (error) {
       console.warn('Failed to load global dashboard.', error);
@@ -336,7 +343,7 @@ export const PageProvider = ({ children }) => {
     } finally {
       setGlobalBusy(false);
     }
-  }, [applyDashboardState]);
+  }, [applyDashboardState, globalDashboardState.activeProfileId]);
 
   useEffect(() => {
     let cancelled = false;
@@ -469,6 +476,9 @@ export const PageProvider = ({ children }) => {
   const safeGlobalStorageError = typeof globalDashboardState?.error === 'string'
     ? globalDashboardState.error
     : '';
+  const safeGlobalActiveDashboardId = typeof globalDashboardState?.activeProfileId === 'string' && globalDashboardState.activeProfileId
+    ? globalDashboardState.activeProfileId
+    : 'default';
 
   const value = {
     pagesConfig,
@@ -512,6 +522,7 @@ export const PageProvider = ({ children }) => {
     globalDashboardProfiles: safeGlobalDashboardProfiles,
     globalStorageBusy: safeGlobalStorageBusy,
     globalStorageError: safeGlobalStorageError,
+    activeGlobalDashboardId: safeGlobalActiveDashboardId,
     refreshGlobalDashboards,
     saveGlobalDashboard,
     loadGlobalDashboard,
