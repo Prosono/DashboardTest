@@ -757,7 +757,7 @@ function AppContent({
         setNavStickyOnScrollDown((prev) => {
           if (!pastAnchor) return false;
           if (delta > 0) return true;
-          if (delta < 0) return false;
+          if (delta < 0) return prev;
           return prev;
         });
 
@@ -1215,7 +1215,7 @@ function AppContent({
               ...(navStickyOnScrollDown
                 ? {
                   position: 'fixed',
-                  top: isMobile ? '0px' : '8px',
+                  top: isMobile ? 'calc(env(safe-area-inset-top, 0px) + 44px)' : '8px',
                   left: `${navPinnedMetrics.left}px`,
                   width: `${navPinnedMetrics.width}px`,
                   border: '1px solid var(--glass-border)',
