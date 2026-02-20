@@ -1,4 +1,5 @@
 import { Edit2 } from '../icons';
+import { resolveLogoUrl } from '../utils/branding';
 
 /**
  * Header component with title, time and edit controls
@@ -39,8 +40,8 @@ export default function Header({
   const is12h = clockFormat === '12h';
   const clockScale = headerSettings?.clockScale ?? 1.0;
   const dateScale = headerSettings?.dateScale ?? 1.0;
-  const logoUrl = String(headerSettings?.logoUrl || '').trim();
-  const hasLogo = logoUrl.length > 0;
+  const logoUrl = resolveLogoUrl(headerSettings?.logoUrl);
+  const hasLogo = Boolean(logoUrl);
   const mobileTitleLength = String(headerTitle || '').trim().length;
   const mobileFontSize = mobileTitleLength > 16
     ? `calc(clamp(1.05rem, 4.7vw, 1.45rem) * ${headerScale})`
@@ -77,11 +78,11 @@ export default function Header({
           <div className={`flex items-center gap-4 ${isMobile ? 'justify-center mx-auto gap-3' : ''}`}>
             {hasLogo && (
               <img
+                key={logoUrl}
                 src={logoUrl}
                 alt="Header logo"
                 className="h-12 w-auto md:h-14 object-contain select-none"
                 loading="lazy"
-                referrerPolicy="no-referrer"
               />
             )}
             {headerSettings.showTitle && (

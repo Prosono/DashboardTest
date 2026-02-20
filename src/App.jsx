@@ -6,7 +6,6 @@ import {
   AlertTriangle,
   Check,
   Edit2,
-  Flame,
   LayoutGrid,
   Plus,
   Lock,
@@ -72,6 +71,7 @@ import ModalOrchestrator from './rendering/ModalOrchestrator';
 import CardErrorBoundary from './components/ui/CardErrorBoundary';
 import EditOverlay from './components/ui/EditOverlay';
 import AuroraBackground from './components/effects/AuroraBackground';
+import { getStoredHeaderLogoUrl, resolveLogoUrl } from './utils/branding';
 
 function AppContent({
   showOnboarding,
@@ -1434,6 +1434,10 @@ export default function App() {
 
   const { config, setConfig, currentTheme } = useConfig();
   const isLightTheme = currentTheme === 'light';
+  const loginLogoUrl = useMemo(() => {
+    const configured = resolveLogoUrl(getStoredHeaderLogoUrl());
+    return configured || '/logo.png';
+  }, [currentUser]);
 
   const applySharedHaConfig = useCallback((sharedConfig) => {
     if (!sharedConfig) return;
@@ -1593,16 +1597,14 @@ export default function App() {
                 borderColor: 'color-mix(in srgb, var(--accent-color) 35%, transparent)',
               }}
             >
-              <div
-                className="absolute inset-0 m-2 rounded-lg"
-                style={{
-                  backgroundImage: 'url(/logo.png)',
-                  backgroundSize: 'contain',
-                  backgroundPosition: 'center',
-                  backgroundRepeat: 'no-repeat',
-                }}
+              <img
+                key={loginLogoUrl}
+                src={loginLogoUrl}
+                alt="App logo"
+                className="w-11 h-11 object-contain select-none"
+                loading="eager"
+                decoding="async"
               />
-              <Flame className="w-7 h-7 opacity-30" style={{ color: 'var(--accent-color)' }} />
             </div>
             <h1
               className="text-[1.2rem] md:text-[1.38rem] font-light text-center tracking-[0.22em] uppercase"
