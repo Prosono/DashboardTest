@@ -152,6 +152,8 @@ function AppContent({
   const {
     entities,
     connected,
+    haUnavailableVisible,
+    oauthExpired,
     conn,
     activeUrl,
     authRef
