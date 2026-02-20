@@ -71,7 +71,7 @@ import ModalOrchestrator from './rendering/ModalOrchestrator';
 import CardErrorBoundary from './components/ui/CardErrorBoundary';
 import EditOverlay from './components/ui/EditOverlay';
 import AuroraBackground from './components/effects/AuroraBackground';
-import { getStoredHeaderLogoUrl, resolveLogoUrl } from './utils/branding';
+import { getStoredHeaderLogoUrl, resolveLogoUrl, saveStoredLogoOverrides } from './utils/branding';
 
 function AppContent({
   showOnboarding,
@@ -330,19 +330,29 @@ function AppContent({
   }, [entities, statusPillsConfig, saveStatusPillsConfig, CRITICAL_SENSOR_ID]);
 
   const saveHeaderLogos = useCallback(async ({ logoUrl, logoUrlLight, logoUrlDark }) => {
+    const nextDefault = String(logoUrl || '').trim();
+    const nextLight = String(logoUrlLight || '').trim();
+    const nextDark = String(logoUrlDark || '').trim();
+
+    saveStoredLogoOverrides({
+      logoUrl: nextDefault,
+      logoUrlLight: nextLight,
+      logoUrlDark: nextDark,
+    });
+
     if (!canEditDashboard || !saveGlobalDashboard) {
       return { ok: true, persisted: false };
     }
     const nextHeaderSettings = {
       ...(headerSettings || {}),
-      logoUrl: String(logoUrl || '').trim(),
-      logoUrlLight: String(logoUrlLight || '').trim(),
-      logoUrlDark: String(logoUrlDark || '').trim(),
+      logoUrl: nextDefault,
+      logoUrlLight: nextLight,
+      logoUrlDark: nextDark,
     };
-    const targetProfile = String(activeGlobalDashboardId || 'default').trim() || 'default';
+    const targetProfile = String(currentUser?.assignedDashboardId || activeGlobalDashboardId || 'default').trim() || 'default';
     const ok = await saveGlobalDashboard(targetProfile, { headerSettings: nextHeaderSettings });
     return { ok, persisted: true };
-  }, [canEditDashboard, saveGlobalDashboard, headerSettings, activeGlobalDashboardId]);
+  }, [canEditDashboard, saveGlobalDashboard, headerSettings, activeGlobalDashboardId, currentUser?.assignedDashboardId]);
 
   const [draggingId, setDraggingId] = useState(null);
   const [activePage, _setActivePage] = useState(() => {

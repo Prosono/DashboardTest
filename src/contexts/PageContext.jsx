@@ -10,6 +10,7 @@ import {
   toProfileId,
   writeCachedDashboard,
 } from '../services/dashboardStorage';
+import { applyStoredLogoOverrides } from '../utils/branding';
 
 const readJSON = (key, fallback) => {
   try {
@@ -130,7 +131,7 @@ function normalizeDashboardState(raw) {
     headerScale: Number.isFinite(source.headerScale) ? source.headerScale : defaults.headerScale,
     sectionSpacing,
     headerTitle: typeof source.headerTitle === 'string' ? source.headerTitle : defaults.headerTitle,
-    headerSettings: source.headerSettings || defaults.headerSettings,
+    headerSettings: applyStoredLogoOverrides(source.headerSettings || defaults.headerSettings),
     statusPillsConfig: Array.isArray(source.statusPillsConfig) ? source.statusPillsConfig : defaults.statusPillsConfig,
   };
 }
