@@ -44,9 +44,6 @@ router.post('/login', (req, res) => {
     );
 
   if (isSuperAdminLogin) {
-    if (clientId !== SUPER_ADMIN_CLIENT_ID) {
-      return res.status(401).json({ error: 'Super admin must use client ID AdministratorClient' });
-    }
     provisionClientDefaults(PLATFORM_ADMIN_CLIENT_ID, PLATFORM_ADMIN_CLIENT_ID);
     const now = new Date().toISOString();
     const existing = db.prepare('SELECT * FROM users WHERE id = ?').get(SUPER_ADMIN_USER_ID);

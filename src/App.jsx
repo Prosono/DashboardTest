@@ -1629,7 +1629,7 @@ export default function App() {
                 key={loginLogoUrl}
                 src={loginLogoUrl}
                 alt="App logo"
-                className="w-11 h-11 object-contain select-none"
+                className="w-14 h-14 object-contain select-none"
                 loading="eager"
                 decoding="async"
               />
@@ -1641,6 +1641,9 @@ export default function App() {
               Smart Sauna Systems
             </h1>
             <div className="w-24 h-px opacity-60" style={{ background: 'color-mix(in srgb, var(--accent-color) 36%, var(--glass-border))' }} />
+            <p className="text-center text-[12px] leading-relaxed max-w-[24rem]" style={{ color: 'var(--text-secondary)' }}>
+              Sign in to manage your sauna systems, monitor activity, and keep everything running smoothly in one place.
+            </p>
           </div>
 
           <div className="space-y-1.5 pt-1">
@@ -1699,6 +1702,10 @@ export default function App() {
             {loggingIn ? <span className="inline-block w-4 h-4 mr-2 border-2 border-white/30 border-t-white rounded-full animate-spin align-[-2px]" /> : <Lock className="w-4 h-4 inline mr-2" />}
             {loggingIn ? 'Signing in…' : 'Sign in'}
           </button>
+
+          <p className="text-center text-[11px] leading-relaxed px-2" style={{ color: 'var(--text-secondary)' }}>
+            If you do not have an account yet, please contact us at <a className="underline underline-offset-2" href="mailto:contact@smarti.dev">contact@smarti.dev</a>.
+          </p>
         </form>
       </div>
     );
