@@ -514,6 +514,11 @@ function AppContent({
   const [profileError, setProfileError] = useState('');
   const mobileScrollLockRef = useRef({ locked: false, scrollY: 0 });
   const loadedAssignedDashboardRef = useRef('');
+  const navRowRef = useRef(null);
+  const navStickyAnchorRef = useRef(0);
+  const navScrollLastRef = useRef(0);
+  const navScrollRafRef = useRef(0);
+  const [navStickyOnScrollDown, setNavStickyOnScrollDown] = useState(false);
   const [profileState, setProfileState] = useState({
     username: '',
     fullName: '',
@@ -698,6 +703,67 @@ function AppContent({
   }, [shouldLockMobileScroll, restoreMobileScroll]);
 
   useEffect(() => () => restoreMobileScroll(), [restoreMobileScroll]);
+
+  const measureNavStickyAnchor = useCallback(() => {
+    if (typeof window === 'undefined') return;
+    if (navStickyOnScrollDown) return;
+    const element = navRowRef.current;
+    if (!element) return;
+    const rect = element.getBoundingClientRect();
+    navStickyAnchorRef.current = Math.max(0, (window.scrollY || 0) + rect.top - 8);
+  }, [navStickyOnScrollDown]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return undefined;
+    const rafId = window.requestAnimationFrame(() => {
+      measureNavStickyAnchor();
+    });
+    return () => window.cancelAnimationFrame(rafId);
+  }, [measureNavStickyAnchor, isMobile, activePage, editMode, haUnavailableVisible, sectionSpacing?.navToGrid]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return undefined;
+
+    navScrollLastRef.current = window.scrollY || 0;
+
+    const onScroll = () => {
+      if (navScrollRafRef.current) return;
+      navScrollRafRef.current = window.requestAnimationFrame(() => {
+        navScrollRafRef.current = 0;
+        const currentY = window.scrollY || 0;
+        const delta = currentY - navScrollLastRef.current;
+        const pastAnchor = currentY > navStickyAnchorRef.current;
+
+        setNavStickyOnScrollDown((prev) => {
+          if (!pastAnchor) return false;
+          if (delta > 0) return true;
+          if (delta < 0) return false;
+          return prev;
+        });
+
+        navScrollLastRef.current = currentY;
+      });
+    };
+
+    const onResize = () => {
+      measureNavStickyAnchor();
+      if ((window.scrollY || 0) <= navStickyAnchorRef.current) {
+        setNavStickyOnScrollDown(false);
+      }
+    };
+
+    window.addEventListener('scroll', onScroll, { passive: true });
+    window.addEventListener('resize', onResize);
+
+    return () => {
+      window.removeEventListener('scroll', onScroll);
+      window.removeEventListener('resize', onResize);
+      if (navScrollRafRef.current) {
+        window.cancelAnimationFrame(navScrollRafRef.current);
+        navScrollRafRef.current = 0;
+      }
+    };
+  }, [measureNavStickyAnchor]);
 
   const getCardSettingsKey = useCallback((cardId, pageId = activePage) => `${pageId}::${cardId}`, [activePage]);
 
@@ -1116,8 +1182,21 @@ function AppContent({
         )}
 
         <div
-          className={`${isMobile ? 'flex flex-col items-center gap-1.5' : 'flex flex-nowrap items-center justify-between gap-4'}`}
-          style={{ marginBottom: `${isMobile ? Math.min(14, sectionSpacing?.navToGrid ?? 24) : (sectionSpacing?.navToGrid ?? 24)}px` }}
+          ref={navRowRef}
+          className={`${isMobile ? 'flex flex-col items-center gap-1.5' : 'flex flex-nowrap items-center justify-between gap-4'} ${navStickyOnScrollDown ? 'sticky z-30 transition-all duration-200' : ''}`}
+          style={{
+            marginBottom: `${isMobile ? Math.min(14, sectionSpacing?.navToGrid ?? 24) : (sectionSpacing?.navToGrid ?? 24)}px`,
+            ...(navStickyOnScrollDown
+              ? {
+                top: isMobile ? 'calc(env(safe-area-inset-top, 0px) + 6px)' : '10px',
+                border: '1px solid var(--glass-border)',
+                borderRadius: isMobile ? '1rem' : '1.2rem',
+                backgroundColor: 'color-mix(in srgb, var(--card-bg) 88%, transparent)',
+                backdropFilter: 'blur(10px)',
+                padding: isMobile ? '0.3rem 0.4rem 0.2rem' : '0.35rem 0.6rem',
+              }
+              : {}),
+          }}
         >
           <div className={`${isMobile ? 'w-full' : 'flex-1 min-w-0'}`}>
             <PageNavigation
