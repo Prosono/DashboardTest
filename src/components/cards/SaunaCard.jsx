@@ -302,7 +302,7 @@ export default function SaunaCard({
 
     if (serviceYes) return tr('sauna.service', 'Service');
     if (serviceNo) return tr('sauna.normalBooking', 'Vanlig booking');
-    if (next >= 0) return `${tr('sauna.nextBookingIn', 'Neste booking om')} ${next} min`;
+    if (next >= 0) return `${tr('sauna.nextBookingIn', 'Neste booking om')} ${next} ${minutesShort}`;
     return tr('sauna.noUpcomingBookingsToday', 'Ingen kommende bookinger i dag');
   })();
 
@@ -338,6 +338,12 @@ export default function SaunaCard({
   const tempMin = tempValues.length ? Math.min(...tempValues) : null;
   const tempMax = tempValues.length ? Math.max(...tempValues) : null;
   const tempAvg = tempValues.length ? (tempValues.reduce((a, b) => a + b, 0) / tempValues.length) : null;
+  const tempStatLabels = {
+    min: tr('sauna.minLabel', 'min'),
+    avg: tr('sauna.avgLabel', 'avg'),
+    max: tr('sauna.maxLabel', 'max'),
+  };
+  const minutesShort = tr('sauna.minutesShort', 'min');
 
   const renderStatSection = (title, items) => items.length > 0 && (
     <div className="space-y-2">
@@ -508,7 +514,7 @@ export default function SaunaCard({
           >
             <div className="mt-8 text-[10px] uppercase tracking-widest font-bold text-[var(--text-secondary)]">{tr('sauna.preheatTime', 'Oppvarmingstid')}</div>
             <div className="text-3xl font-bold text-[var(--text-primary)] leading-tight">{preheatMinutes != null ? `${Math.round(preheatMinutes)}` : '--'}</div>
-            <div className="text-base font-bold text-[var(--text-secondary)]">min</div>
+            <div className="text-base font-bold text-[var(--text-secondary)]">{minutesShort}</div>
           </button>
         </div>
 
@@ -522,9 +528,9 @@ export default function SaunaCard({
               <div className="flex items-center justify-between gap-2 mb-2 px-1">
                 <div className="text-[10px] uppercase tracking-[0.24em] font-extrabold text-[var(--text-secondary)]">{tr('sauna.tempOverview', 'Temperaturoversikt')}</div>
                 <div className="flex items-center gap-1.5 text-[10px]">
-                  <span className="px-2 py-0.5 rounded-full border border-cyan-400/20 bg-cyan-500/10 text-cyan-200">min {tempMin != null ? tempMin.toFixed(1) : '--'}°</span>
-                  <span className="px-2 py-0.5 rounded-full border border-violet-400/20 bg-violet-500/10 text-violet-200">snitt {tempAvg != null ? tempAvg.toFixed(1) : '--'}°</span>
-                  <span className="px-2 py-0.5 rounded-full border border-rose-400/20 bg-rose-500/10 text-rose-200">max {tempMax != null ? tempMax.toFixed(1) : '--'}°</span>
+                  <span className="px-2 py-0.5 rounded-full border border-cyan-400/20 bg-cyan-500/10 text-cyan-200">{tempStatLabels.min} {tempMin != null ? tempMin.toFixed(1) : '--'}°</span>
+                  <span className="px-2 py-0.5 rounded-full border border-violet-400/20 bg-violet-500/10 text-violet-200">{tempStatLabels.avg} {tempAvg != null ? tempAvg.toFixed(1) : '--'}°</span>
+                  <span className="px-2 py-0.5 rounded-full border border-rose-400/20 bg-rose-500/10 text-rose-200">{tempStatLabels.max} {tempMax != null ? tempMax.toFixed(1) : '--'}°</span>
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-2">
@@ -552,7 +558,7 @@ export default function SaunaCard({
 
         {settings?.showThresholdHint && (
           <div className="mt-3 text-[11px] text-[var(--text-secondary)]">
-            {tr('sauna.thresholdHint', `I bruk ≥ ${inUseTempC}°C · Varm ≥ ${warmTempC}°C`)}
+            {`${tr('sauna.inUse', 'I bruk')} ≥ ${inUseTempC}°C · ${tr('sauna.warm', 'Varm')} ≥ ${warmTempC}°C`}
           </div>
         )}
       </div>
