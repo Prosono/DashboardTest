@@ -521,6 +521,7 @@ function AppContent({
   const navScrollRafRef = useRef(0);
   const [navStickyOnScrollDown, setNavStickyOnScrollDown] = useState(false);
   const [navPinnedMetrics, setNavPinnedMetrics] = useState({ left: 0, width: 0, height: 0 });
+  const [mobileTopFadeActive, setMobileTopFadeActive] = useState(false);
   const [profileState, setProfileState] = useState({
     username: '',
     fullName: '',
@@ -765,6 +766,7 @@ function AppContent({
     if (typeof window === 'undefined') return undefined;
 
     navScrollLastRef.current = window.scrollY || 0;
+    setMobileTopFadeActive(isMobile && (window.scrollY || 0) > 2);
 
     const onScroll = () => {
       if (navScrollRafRef.current) return;
@@ -776,6 +778,10 @@ function AppContent({
         if (pastAnchor && delta > 0) {
           measureNavRowMetrics();
         }
+        setMobileTopFadeActive((prev) => {
+          const next = isMobile && currentY > 2;
+          return prev === next ? prev : next;
+        });
 
         setNavStickyOnScrollDown((prev) => {
           if (!pastAnchor) return false;
@@ -807,7 +813,7 @@ function AppContent({
         navScrollRafRef.current = 0;
       }
     };
-  }, [measureNavStickyAnchor, measureNavRowMetrics]);
+  }, [measureNavStickyAnchor, measureNavRowMetrics, isMobile]);
 
   const getCardSettingsKey = useCallback((cardId, pageId = activePage) => `${pageId}::${cardId}`, [activePage]);
 
@@ -1094,6 +1100,20 @@ function AppContent({
             style={{ background: isLightTheme ? 'rgba(226, 232, 240, 0.26)' : 'rgba(30, 58, 138, 0.1)', filter: 'blur(150px)' }}
           />
         </div>
+      )}
+
+      {isMobile && (
+        <div
+          className="fixed left-0 right-0 pointer-events-none z-20 transition-opacity duration-200"
+          style={{
+            top: 0,
+            height: `calc(${safeAreaTop} + 40px)`,
+            opacity: mobileTopFadeActive ? 1 : 0,
+            background: isLightTheme
+              ? 'linear-gradient(to bottom, rgba(248, 250, 252, 0.94) 0%, rgba(248, 250, 252, 0.76) 50%, rgba(248, 250, 252, 0) 100%)'
+              : 'linear-gradient(to bottom, rgba(2, 6, 23, 0.9) 0%, rgba(2, 6, 23, 0.62) 50%, rgba(2, 6, 23, 0) 100%)',
+          }}
+        />
       )}
 
       {editMode && draggingId && touchPath && (
