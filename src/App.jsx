@@ -754,7 +754,7 @@ function AppContent({
 
   const getNavPinTopPx = useCallback(() => {
     if (!isMobile) return 8;
-    return Math.round(readSafeAreaTopPx() + 20);
+    return Math.round(readSafeAreaTopPx() + 14);
   }, [isMobile, readSafeAreaTopPx]);
 
   const syncNavPinTop = useCallback(() => {
@@ -770,9 +770,9 @@ function AppContent({
     if (!element) return null;
     const rect = element.getBoundingClientRect();
     const next = {
-      left: Math.round(rect.left),
-      width: Math.round(rect.width),
-      height: Math.round(rect.height),
+      left: rect.left,
+      width: rect.width,
+      height: rect.height,
     };
     setNavPinnedMetrics((prev) => {
       if (prev.left === next.left && prev.width === next.width && prev.height === next.height) return prev;
@@ -784,10 +784,7 @@ function AppContent({
   const measureNavStickyAnchor = useCallback(() => {
     if (typeof window === 'undefined') return;
     const pinTop = syncNavPinTop();
-    if (navStickyOnScrollDown) {
-      measureNavRowMetrics();
-      return;
-    }
+    if (navStickyOnScrollDown) return;
     const rect = measureNavRowMetrics();
     if (!rect) return;
     navStickyAnchorRef.current = Math.max(0, (window.scrollY || 0) + rect.top - pinTop);
@@ -815,9 +812,6 @@ function AppContent({
         const delta = currentY - navScrollLastRef.current;
         const pastAnchor = currentY > navStickyAnchorRef.current;
         if (isMobile) syncNavPinTop();
-        if (pastAnchor && delta > 0) {
-          measureNavRowMetrics();
-        }
         setMobileTopFadeActive((prev) => {
           const next = isMobile && currentY > 2;
           return prev === next ? prev : next;
