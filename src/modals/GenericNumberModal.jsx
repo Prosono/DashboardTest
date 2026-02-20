@@ -20,6 +20,7 @@ export default function GenericNumberModal({
   t,
   embedded = false,
   showCloseButton = true,
+  overlayOpacity = 0.3,
 }) {
   if (!entityId || !entity) return null;
   const tr = makeTr(t);
@@ -140,7 +141,7 @@ export default function GenericNumberModal({
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center p-4 md:p-6"
-      style={{ backdropFilter: 'blur(20px)', backgroundColor: 'rgba(0,0,0,0.3)' }}
+      style={{ backdropFilter: 'blur(20px)', backgroundColor: 'rgba(0,0,0,' + overlayOpacity + ')' }}
       onClick={onClose}
     >
       <div

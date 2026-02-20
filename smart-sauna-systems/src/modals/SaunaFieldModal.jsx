@@ -1047,6 +1047,7 @@ export default function SaunaFieldModal({
           entity={entities[activeFanEntityModal]}
           callService={callService}
           t={t}
+          overlayOpacity={0}
           onShowHistory={(entityId) => {
             setActiveFanEntityModal(null);
             showEntityHistory(entityId);
@@ -1059,6 +1060,7 @@ export default function SaunaFieldModal({
           entityId={activeDoorEntityModal}
           entity={entities[activeDoorEntityModal]}
           t={t}
+          overlayOpacity={0}
           onShowHistory={(entityId) => {
             setActiveDoorEntityModal(null);
             showEntityHistory(entityId);
@@ -1071,6 +1073,7 @@ export default function SaunaFieldModal({
           entityId={activeMotionEntityModal}
           entity={entities[activeMotionEntityModal]}
           t={t}
+          overlayOpacity={0}
           onShowHistory={(entityId) => {
             setActiveMotionEntityModal(null);
             showEntityHistory(entityId);
@@ -1084,6 +1087,7 @@ export default function SaunaFieldModal({
           entity={entities[activeLockEntityModal]}
           callService={callService}
           t={t}
+          overlayOpacity={0}
           onShowHistory={(entityId) => {
             setActiveLockEntityModal(null);
             showEntityHistory(entityId);
@@ -1097,6 +1101,7 @@ export default function SaunaFieldModal({
           entity={entities[activeSwitchEntityModal]}
           callService={callService}
           t={t}
+          overlayOpacity={0}
           onShowHistory={(entityId) => {
             setActiveSwitchEntityModal(null);
             showEntityHistory(entityId);
@@ -1110,6 +1115,7 @@ export default function SaunaFieldModal({
           entity={entities[activeNumberEntityModal]}
           callService={callService}
           t={t}
+          overlayOpacity={0}
           onShowHistory={(entityId) => {
             setActiveNumberEntityModal(null);
             showEntityHistory(entityId);
