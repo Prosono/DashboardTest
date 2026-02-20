@@ -1,13 +1,9 @@
 #!/bin/sh
 set -e
 
-echo "Installing Node dependencies..."
-npm ci
-
-echo "Building web assets..."
-npm run build
-
-echo "Syncing Capacitor iOS project..."
-npx cap sync ios
+echo "Installing CocoaPods dependencies..."
+cd ios/App
+pod install --repo-update
+cd ../..
 
 echo "Xcode Cloud post-clone setup complete."

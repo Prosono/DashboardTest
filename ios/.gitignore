@@ -11,3 +11,10 @@ capacitor-cordova-ios-plugins
 # Generated Config files
 App/App/capacitor.config.json
 App/App/config.xml
+
+# Keep minimal Capacitor runtime files for Xcode Cloud builds.
+!App/App/capacitor.config.json
+!App/App/config.xml
+!App/App/public/
+App/App/public/*
+!App/App/public/.keep
