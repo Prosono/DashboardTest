@@ -152,8 +152,8 @@
   height: auto;
 }
 .modal-close {
-  width: 36px;
-  height: 36px;
+  width: 44px;
+  height: 44px;
   border-radius: 9999px;
   display: inline-flex;
   align-items: center;
@@ -163,6 +163,12 @@
   border: none;
   box-shadow: 0 8px 20px rgba(0, 0, 0, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.05);
   transition: transform 150ms ease, background 150ms ease, color 150ms ease;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+.modal-close svg {
+  width: 18px;
+  height: 18px;
 }
 .modal-close:hover {
   background: color-mix(in srgb, var(--glass-bg-hover) 90%, transparent);
@@ -185,6 +191,10 @@
   right: 1rem;
 }
 @media (min-width: 768px) {
+  .modal-close {
+    width: 40px;
+    height: 40px;
+  }
   .light-modal-close-anchor--single {
     top: 2.5rem;
     right: 2.5rem;
