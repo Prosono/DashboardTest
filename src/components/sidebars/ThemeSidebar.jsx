@@ -25,6 +25,7 @@ export default function ThemeSidebar({
   onClose,
   onSwitchToLayout,
   onSwitchToHeader,
+  canAccessHeader = false,
   t,
   themes,
   currentTheme,
@@ -87,15 +88,18 @@ export default function ThemeSidebar({
                 <LayoutGrid className="w-5 h-5" />
              </button>
 
-             <div className="w-px my-1 mx-1" style={{ backgroundColor: 'var(--glass-border)' }} />
-
-             <button
-                className="w-12 h-9 rounded-xl flex items-center justify-center transition-all text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-white/5"
-                onClick={onSwitchToHeader}
-                title={t('system.tabHeader')}
-             >
-                <Type className="w-5 h-5" />
-             </button>
+             {canAccessHeader && (
+               <>
+                 <div className="w-px my-1 mx-1" style={{ backgroundColor: 'var(--glass-border)' }} />
+                 <button
+                    className="w-12 h-9 rounded-xl flex items-center justify-center transition-all text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-white/5"
+                    onClick={onSwitchToHeader}
+                    title={t('system.tabHeader')}
+                 >
+                    <Type className="w-5 h-5" />
+                 </button>
+               </>
+             )}
           </div>
         </div>
 

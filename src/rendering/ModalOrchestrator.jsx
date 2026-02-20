@@ -104,6 +104,7 @@ export default function ModalOrchestrator({
     canEditGlobalBranding,
     canEditClientSubtitle,
   } = layout;
+  const canAccessHeaderSettings = Boolean(canEditGlobalBranding || canEditClientSubtitle);
 
   const {
     showOnboarding, setShowOnboarding, isOnboardingActive,
@@ -304,6 +305,7 @@ export default function ModalOrchestrator({
           onClose={() => setShowThemeSidebar(false)}
           onSwitchToLayout={() => { setShowThemeSidebar(false); setShowLayoutSidebar(true); }}
           onSwitchToHeader={() => { setShowThemeSidebar(false); setShowHeaderEditModal(true); }}
+          canAccessHeader={canAccessHeaderSettings}
           t={t}
           themes={themes}
           currentTheme={currentTheme}
@@ -329,6 +331,7 @@ export default function ModalOrchestrator({
           onClose={() => setShowLayoutSidebar(false)}
           onSwitchToTheme={() => { setShowLayoutSidebar(false); setShowThemeSidebar(true); }}
           onSwitchToHeader={() => { setShowLayoutSidebar(false); setShowHeaderEditModal(true); }}
+          canAccessHeader={canAccessHeaderSettings}
           t={t}
           gridGapH={gridGapH}
           setGridGapH={setGridGapH}

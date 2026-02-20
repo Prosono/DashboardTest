@@ -560,11 +560,13 @@ export default function HeaderSidebar({
           toggle={toggleSection}
         >
           <div className="space-y-1">
-             <Toggle
-               label={t('header.showTitle')}
-               value={setting('showTitle', true)}
-               onChange={(v) => update('showTitle', v)}
-             />
+             {canEditGlobalBranding && (
+               <Toggle
+                 label={t('header.showTitle')}
+                 value={setting('showTitle', true)}
+                 onChange={(v) => update('showTitle', v)}
+               />
+             )}
              <Toggle
                label={t('header.showClock')}
                value={setting('showClock', true)}
