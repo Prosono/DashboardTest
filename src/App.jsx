@@ -519,6 +519,7 @@ function AppContent({
   const navScrollLastRef = useRef(0);
   const navScrollRafRef = useRef(0);
   const [navStickyOnScrollDown, setNavStickyOnScrollDown] = useState(false);
+  const [navPinnedMetrics, setNavPinnedMetrics] = useState({ left: 0, width: 0, height: 0 });
   const [profileState, setProfileState] = useState({
     username: '',
     fullName: '',
@@ -704,14 +705,30 @@ function AppContent({
 
   useEffect(() => () => restoreMobileScroll(), [restoreMobileScroll]);
 
+  const measureNavRowMetrics = useCallback(() => {
+    if (typeof window === 'undefined') return null;
+    const element = navRowRef.current;
+    if (!element) return null;
+    const rect = element.getBoundingClientRect();
+    const next = {
+      left: Math.round(rect.left),
+      width: Math.round(rect.width),
+      height: Math.round(rect.height),
+    };
+    setNavPinnedMetrics((prev) => {
+      if (prev.left === next.left && prev.width === next.width && prev.height === next.height) return prev;
+      return next;
+    });
+    return rect;
+  }, []);
+
   const measureNavStickyAnchor = useCallback(() => {
     if (typeof window === 'undefined') return;
     if (navStickyOnScrollDown) return;
-    const element = navRowRef.current;
-    if (!element) return;
-    const rect = element.getBoundingClientRect();
+    const rect = measureNavRowMetrics();
+    if (!rect) return;
     navStickyAnchorRef.current = Math.max(0, (window.scrollY || 0) + rect.top - 8);
-  }, [navStickyOnScrollDown]);
+  }, [navStickyOnScrollDown, measureNavRowMetrics]);
 
   useEffect(() => {
     if (typeof window === 'undefined') return undefined;
@@ -733,6 +750,9 @@ function AppContent({
         const currentY = window.scrollY || 0;
         const delta = currentY - navScrollLastRef.current;
         const pastAnchor = currentY > navStickyAnchorRef.current;
+        if (pastAnchor && delta > 0) {
+          measureNavRowMetrics();
+        }
 
         setNavStickyOnScrollDown((prev) => {
           if (!pastAnchor) return false;
@@ -746,6 +766,7 @@ function AppContent({
     };
 
     const onResize = () => {
+      measureNavRowMetrics();
       measureNavStickyAnchor();
       if ((window.scrollY || 0) <= navStickyAnchorRef.current) {
         setNavStickyOnScrollDown(false);
@@ -763,7 +784,7 @@ function AppContent({
         navScrollRafRef.current = 0;
       }
     };
-  }, [measureNavStickyAnchor]);
+  }, [measureNavStickyAnchor, measureNavRowMetrics]);
 
   const getCardSettingsKey = useCallback((cardId, pageId = activePage) => `${pageId}::${cardId}`, [activePage]);
 
@@ -1182,97 +1203,106 @@ function AppContent({
         )}
 
         <div
-          ref={navRowRef}
-          className={`${isMobile ? 'flex flex-col items-center gap-1.5' : 'flex flex-nowrap items-center justify-between gap-4'} ${navStickyOnScrollDown ? 'sticky z-30 transition-all duration-200' : ''}`}
           style={{
             marginBottom: `${isMobile ? Math.min(14, sectionSpacing?.navToGrid ?? 24) : (sectionSpacing?.navToGrid ?? 24)}px`,
-            ...(navStickyOnScrollDown
-              ? {
-                top: isMobile ? 'calc(env(safe-area-inset-top, 0px) + 6px)' : '10px',
-                border: '1px solid var(--glass-border)',
-                borderRadius: isMobile ? '1rem' : '1.2rem',
-                backgroundColor: 'color-mix(in srgb, var(--card-bg) 88%, transparent)',
-                backdropFilter: 'blur(10px)',
-                padding: isMobile ? '0.3rem 0.4rem 0.2rem' : '0.35rem 0.6rem',
-              }
-              : {}),
+            minHeight: navStickyOnScrollDown && navPinnedMetrics.height > 0 ? `${navPinnedMetrics.height}px` : undefined,
           }}
         >
-          <div className={`${isMobile ? 'w-full' : 'flex-1 min-w-0'}`}>
-            <PageNavigation
-              pages={pages}
-              pagesConfig={pagesConfig}
-              persistConfig={persistConfig}
-              pageSettings={pageSettings}
-              activePage={activePage}
-              setActivePage={setActivePage}
-              editMode={editMode}
-              setEditingPage={setEditingPage}
-              setShowAddPageModal={setShowAddPageModal}
-              t={t}
-            />
-          </div>
+          <div
+            ref={navRowRef}
+            className={`${isMobile ? 'flex flex-col items-center gap-1.5' : 'flex flex-nowrap items-center justify-between gap-4'} ${navStickyOnScrollDown ? 'z-30 transition-all duration-200' : ''}`}
+            style={{
+              ...(navStickyOnScrollDown
+                ? {
+                  position: 'fixed',
+                  top: isMobile ? '0px' : '8px',
+                  left: `${navPinnedMetrics.left}px`,
+                  width: `${navPinnedMetrics.width}px`,
+                  border: '1px solid var(--glass-border)',
+                  borderRadius: isMobile ? '1rem' : '1.2rem',
+                  backgroundColor: 'color-mix(in srgb, var(--card-bg) 88%, transparent)',
+                  backdropFilter: 'blur(10px)',
+                  padding: isMobile ? '0.3rem 0.4rem 0.2rem' : '0.35rem 0.6rem',
+                }
+                : {}),
+            }}
+          >
+            <div className={`${isMobile ? 'w-full' : 'flex-1 min-w-0'}`}>
+              <PageNavigation
+                pages={pages}
+                pagesConfig={pagesConfig}
+                persistConfig={persistConfig}
+                pageSettings={pageSettings}
+                activePage={activePage}
+                setActivePage={setActivePage}
+                editMode={editMode}
+                setEditingPage={setEditingPage}
+                setShowAddPageModal={setShowAddPageModal}
+                t={t}
+              />
+            </div>
 
-          <div className={`relative flex items-center flex-shrink-0 overflow-visible ${isMobile ? 'justify-center gap-3 w-full pb-0' : 'gap-6 justify-end pb-2'}`}>
-            {editMode && canEditDashboard && (
-              <button
-                onClick={() => setShowAddCardModal(true)}
-                className="group flex items-center gap-2 text-xs font-bold uppercase text-blue-400 hover:text-white transition-all whitespace-nowrap"
-              >
-                <Plus className="w-4 h-4" /> {t('nav.addCard')}
-              </button>
-            )}
+            <div className={`relative flex items-center flex-shrink-0 overflow-visible ${isMobile ? 'justify-center gap-3 w-full pb-0' : 'gap-6 justify-end pb-2'}`}>
+              {editMode && canEditDashboard && (
+                <button
+                  onClick={() => setShowAddCardModal(true)}
+                  className="group flex items-center gap-2 text-xs font-bold uppercase text-blue-400 hover:text-white transition-all whitespace-nowrap"
+                >
+                  <Plus className="w-4 h-4" /> {t('nav.addCard')}
+                </button>
+              )}
 
-            {editMode && canEditDashboard && (
-              <button
-                onClick={() => {
-                  const currentSettings = pageSettings[activePage];
-                  if (currentSettings?.hidden) setActivePage('home');
-                  setEditMode(false);
-                }}
-                className="group flex items-center gap-2 text-xs font-bold uppercase text-green-400 hover:text-white transition-all whitespace-nowrap"
-              >
-                <Check className="w-4 h-4" /> {t('nav.done')}
-              </button>
-            )}
+              {editMode && canEditDashboard && (
+                <button
+                  onClick={() => {
+                    const currentSettings = pageSettings[activePage];
+                    if (currentSettings?.hidden) setActivePage('home');
+                    setEditMode(false);
+                  }}
+                  className="group flex items-center gap-2 text-xs font-bold uppercase text-green-400 hover:text-white transition-all whitespace-nowrap"
+                >
+                  <Check className="w-4 h-4" /> {t('nav.done')}
+                </button>
+              )}
 
-            {canEditDashboard && dashboardDirty && (
-              <button
-                onClick={quickSaveDashboard}
-                disabled={globalStorageBusy}
-                className="group flex items-center gap-2 text-xs font-bold uppercase text-amber-300 hover:text-white transition-all whitespace-nowrap disabled:opacity-60 disabled:cursor-not-allowed"
-                title="Save dashboard changes"
-              >
-                <Check className={`w-4 h-4 ${globalStorageBusy ? 'animate-pulse' : ''}`} />
-                {globalStorageBusy ? 'Saving...' : 'Save'}
-              </button>
-            )}
+              {canEditDashboard && dashboardDirty && (
+                <button
+                  onClick={quickSaveDashboard}
+                  disabled={globalStorageBusy}
+                  className="group flex items-center gap-2 text-xs font-bold uppercase text-amber-300 hover:text-white transition-all whitespace-nowrap disabled:opacity-60 disabled:cursor-not-allowed"
+                  title="Save dashboard changes"
+                >
+                  <Check className={`w-4 h-4 ${globalStorageBusy ? 'animate-pulse' : ''}`} />
+                  {globalStorageBusy ? 'Saving...' : 'Save'}
+                </button>
+              )}
 
-            {canEditDashboard && (
-              <button
-                onClick={() => {
-                  const currentSettings = pageSettings[activePage];
-                  if (currentSettings?.hidden) setActivePage('home');
-                  setEditMode(!editMode);
-                }}
-                className={`p-2 rounded-full group ${editMode ? 'bg-blue-500/20 text-blue-400' : 'text-[var(--text-secondary)]'}`}
-                title={editMode ? t('nav.done') : t('menu.edit')}
-              >
-                <Edit2 className="w-5 h-5" />
-              </button>
-            )}
+              {canEditDashboard && (
+                <button
+                  onClick={() => {
+                    const currentSettings = pageSettings[activePage];
+                    if (currentSettings?.hidden) setActivePage('home');
+                    setEditMode(!editMode);
+                  }}
+                  className={`p-2 rounded-full group ${editMode ? 'bg-blue-500/20 text-blue-400' : 'text-[var(--text-secondary)]'}`}
+                  title={editMode ? t('nav.done') : t('menu.edit')}
+                >
+                  <Edit2 className="w-5 h-5" />
+                </button>
+              )}
 
-            {!isMobile && renderUserChip()}
-            {!isMobile && renderSettingsControl()}
+              {!isMobile && renderUserChip()}
+              {!isMobile && renderSettingsControl()}
 
-            {!connected && (
-              <div
-                className="flex items-center justify-center h-8 w-8 rounded-full transition-all border flex-shrink-0"
-                style={{ backgroundColor: 'rgba(255,255,255,0.01)', borderColor: 'rgba(239, 68, 68, 0.2)' }}
-              >
-                <div className="h-2 w-2 rounded-full" style={{ backgroundColor: '#ef4444' }} />
-              </div>
-            )}
+              {!connected && (
+                <div
+                  className="flex items-center justify-center h-8 w-8 rounded-full transition-all border flex-shrink-0"
+                  style={{ backgroundColor: 'rgba(255,255,255,0.01)', borderColor: 'rgba(239, 68, 68, 0.2)' }}
+                >
+                  <div className="h-2 w-2 rounded-full" style={{ backgroundColor: '#ef4444' }} />
+                </div>
+              )}
+            </div>
           </div>
         </div>
 
