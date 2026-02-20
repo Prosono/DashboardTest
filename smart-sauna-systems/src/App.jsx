@@ -1050,7 +1050,7 @@ function AppContent({
 
   return (
     <div
-      className="min-h-[100svh] font-sans selection:bg-blue-500/30 overflow-x-hidden transition-colors duration-500"
+      className="min-h-[100svh] font-sans selection:bg-blue-500/30 overflow-x-clip transition-colors duration-500"
       style={{ backgroundColor: 'var(--bg-primary)', color: 'var(--text-primary)' }}
     >
       {bgMode === 'animated' ? (
