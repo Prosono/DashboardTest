@@ -247,176 +247,177 @@ export default function HeaderSidebar({
           isOpen={sections.typography}
           toggle={toggleSection}
         >
-          {/* Title Input */}
-          <div className="space-y-2">
-            <label className="text-[11px] font-bold uppercase tracking-wider" style={{ color: 'var(--text-secondary)' }}>{t('header.titleLabel')}</label>
-            <input
-              type="text"
-              value={titleDraft}
-              onChange={(e) => setTitleDraft(e.target.value)}
-              disabled={!canEditGlobalBranding}
-              placeholder={t('header.titlePlaceholder')}
-              className="w-full px-3 py-2 rounded-xl text-sm focus:outline-none transition-colors border"
-              style={{ 
-                  backgroundColor: 'var(--glass-bg)', 
+          {canEditClientSubtitle && (
+            <div className="space-y-2">
+              <label className="text-[11px] font-bold uppercase tracking-wider" style={{ color: 'var(--text-secondary)' }}>
+                {t('statusPills.subtitle') !== 'statusPills.subtitle' ? t('statusPills.subtitle') : 'Subtitle'}
+              </label>
+              <input
+                type="text"
+                value={setting('clientSubtitle', '')}
+                onChange={(e) => update('clientSubtitle', e.target.value)}
+                placeholder="Client subtitle"
+                className="w-full px-3 py-2 rounded-xl text-sm focus:outline-none transition-colors border"
+                style={{
+                  backgroundColor: 'var(--glass-bg)',
                   borderColor: 'var(--glass-border)',
                   color: 'var(--text-primary)'
-              }}
-            />
-          </div>
-
-          <div className="space-y-2">
-            <label className="text-[11px] font-bold uppercase tracking-wider" style={{ color: 'var(--text-secondary)' }}>
-              {t('statusPills.subtitle') !== 'statusPills.subtitle' ? t('statusPills.subtitle') : 'Subtitle'}
-            </label>
-            <input
-              type="text"
-              value={setting('clientSubtitle', '')}
-              onChange={(e) => update('clientSubtitle', e.target.value)}
-              disabled={!canEditClientSubtitle}
-              placeholder="Client subtitle"
-              className="w-full px-3 py-2 rounded-xl text-sm focus:outline-none transition-colors border"
-              style={{
-                backgroundColor: 'var(--glass-bg)',
-                borderColor: 'var(--glass-border)',
-                color: 'var(--text-primary)'
-              }}
-            />
-          </div>
-
-          {/* Logo URL */}
-          <div className="space-y-2">
-            <label className="text-[11px] font-bold uppercase tracking-wider" style={{ color: 'var(--text-secondary)' }}>
-              {t('header.logoUrl') !== 'header.logoUrl' ? t('header.logoUrl') : 'Logo URL'}
-            </label>
-            <input
-              type="url"
-              value={logoDraftDefault}
-              onChange={(e) => {
-                setLogoDraftDefault(e.target.value);
-                setLogoPreviewFailed(false);
-              }}
-              disabled={!canEditGlobalBranding}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') {
-                  e.preventDefault();
-                  saveLogos();
-                }
-              }}
-              placeholder={t('header.logoPlaceholder') !== 'header.logoPlaceholder' ? t('header.logoPlaceholder') : 'Fallback logo (all themes)'}
-              className="w-full px-3 py-2 rounded-xl text-sm focus:outline-none transition-colors border"
-              style={{
-                backgroundColor: 'var(--glass-bg)',
-                borderColor: 'var(--glass-border)',
-                color: 'var(--text-primary)'
-              }}
-            />
-            <input
-              type="url"
-              value={logoDraftLight}
-              onChange={(e) => {
-                setLogoDraftLight(e.target.value);
-                setLogoPreviewFailed(false);
-              }}
-              disabled={!canEditGlobalBranding}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') {
-                  e.preventDefault();
-                  saveLogos();
-                }
-              }}
-              placeholder={t('header.logoLightPlaceholder') !== 'header.logoLightPlaceholder' ? t('header.logoLightPlaceholder') : 'Light theme logo URL'}
-              className="w-full px-3 py-2 rounded-xl text-sm focus:outline-none transition-colors border"
-              style={{
-                backgroundColor: 'var(--glass-bg)',
-                borderColor: 'var(--glass-border)',
-                color: 'var(--text-primary)'
-              }}
-            />
-            <input
-              type="url"
-              value={logoDraftDark}
-              onChange={(e) => {
-                setLogoDraftDark(e.target.value);
-                setLogoPreviewFailed(false);
-              }}
-              disabled={!canEditGlobalBranding}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') {
-                  e.preventDefault();
-                  saveLogos();
-                }
-              }}
-              placeholder={t('header.logoDarkPlaceholder') !== 'header.logoDarkPlaceholder' ? t('header.logoDarkPlaceholder') : 'Dark theme logo URL'}
-              className="w-full px-3 py-2 rounded-xl text-sm focus:outline-none transition-colors border"
-              style={{
-                backgroundColor: 'var(--glass-bg)',
-                borderColor: 'var(--glass-border)',
-                color: 'var(--text-primary)'
-              }}
-            />
-            <div className="flex items-center justify-between gap-2">
-              <button
-                type="button"
-                onClick={saveLogos}
-                disabled={!canEditGlobalBranding || logoSaveState === 'saving'}
-                className="px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-wider border transition-all text-white"
-                style={{
-                  backgroundColor: 'var(--accent-color)',
-                  borderColor: 'var(--accent-color)',
                 }}
-              >
-                {t('header.saveLogo') !== 'header.saveLogo' ? t('header.saveLogo') : 'Save Branding'}
-              </button>
-              {(!!resolvedPreviewDefault || !!resolvedPreviewLight || !!resolvedPreviewDark || !!logoSavedAt) && (
-                <span className="text-[10px] uppercase tracking-wider" style={{ color: logoPreviewFailed ? '#f87171' : 'var(--text-secondary)' }}>
-                  {logoSaveState === 'saving'
-                    ? (t('common.saving') !== 'common.saving' ? t('common.saving') : 'Saving...')
-                    : logoSaveState === 'error'
-                      ? (t('header.logoSaveFailed') !== 'header.logoSaveFailed' ? t('header.logoSaveFailed') : 'Save failed')
-                      : logoPreviewFailed
-                    ? (t('header.logoInvalid') !== 'header.logoInvalid' ? t('header.logoInvalid') : 'Image failed to load')
-                    : (Date.now() - logoSavedAt < 2000
-                      ? (t('header.logoSaved') !== 'header.logoSaved' ? t('header.logoSaved') : 'Saved')
-                      : (t('header.logoPreview') !== 'header.logoPreview' ? t('header.logoPreview') : 'Preview'))}
-                </span>
-              )}
+              />
             </div>
-            {(!!resolvedPreviewDefault || !!resolvedPreviewLight || !!resolvedPreviewDark) && !logoPreviewFailed && (
+          )}
+
+          {canEditGlobalBranding && (
+            <>
+              {/* Title Input */}
               <div className="space-y-2">
-                {!!resolvedPreviewLight && (
-                  <div className="w-full h-14 rounded-xl border flex items-center justify-center p-2" style={{ borderColor: 'var(--glass-border)', backgroundColor: '#ffffff' }}>
-                    <img
-                      src={resolvedPreviewLight}
-                      alt="Light logo preview"
-                      className="max-h-full max-w-full object-contain"
-                      onError={() => setLogoPreviewFailed(true)}
-                    />
-                  </div>
-                )}
-                {!!resolvedPreviewDark && (
-                  <div className="w-full h-14 rounded-xl border flex items-center justify-center p-2" style={{ borderColor: 'var(--glass-border)', backgroundColor: '#0b1220' }}>
-                    <img
-                      src={resolvedPreviewDark}
-                      alt="Dark logo preview"
-                      className="max-h-full max-w-full object-contain"
-                      onError={() => setLogoPreviewFailed(true)}
-                    />
-                  </div>
-                )}
-                {!resolvedPreviewLight && !resolvedPreviewDark && !!resolvedPreviewDefault && (
-                  <div className="w-full h-16 rounded-xl border flex items-center justify-center p-2" style={{ borderColor: 'var(--glass-border)', backgroundColor: 'var(--glass-bg)' }}>
-                    <img
-                      src={resolvedPreviewDefault}
-                      alt="Logo preview"
-                      className="max-h-full max-w-full object-contain"
-                      onError={() => setLogoPreviewFailed(true)}
-                    />
+                <label className="text-[11px] font-bold uppercase tracking-wider" style={{ color: 'var(--text-secondary)' }}>{t('header.titleLabel')}</label>
+                <input
+                  type="text"
+                  value={titleDraft}
+                  onChange={(e) => setTitleDraft(e.target.value)}
+                  placeholder={t('header.titlePlaceholder')}
+                  className="w-full px-3 py-2 rounded-xl text-sm focus:outline-none transition-colors border"
+                  style={{
+                    backgroundColor: 'var(--glass-bg)',
+                    borderColor: 'var(--glass-border)',
+                    color: 'var(--text-primary)'
+                  }}
+                />
+              </div>
+
+              {/* Logo URL */}
+              <div className="space-y-2">
+                <label className="text-[11px] font-bold uppercase tracking-wider" style={{ color: 'var(--text-secondary)' }}>
+                  {t('header.logoUrl') !== 'header.logoUrl' ? t('header.logoUrl') : 'Logo URL'}
+                </label>
+                <input
+                  type="url"
+                  value={logoDraftDefault}
+                  onChange={(e) => {
+                    setLogoDraftDefault(e.target.value);
+                    setLogoPreviewFailed(false);
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      saveLogos();
+                    }
+                  }}
+                  placeholder={t('header.logoPlaceholder') !== 'header.logoPlaceholder' ? t('header.logoPlaceholder') : 'Fallback logo (all themes)'}
+                  className="w-full px-3 py-2 rounded-xl text-sm focus:outline-none transition-colors border"
+                  style={{
+                    backgroundColor: 'var(--glass-bg)',
+                    borderColor: 'var(--glass-border)',
+                    color: 'var(--text-primary)'
+                  }}
+                />
+                <input
+                  type="url"
+                  value={logoDraftLight}
+                  onChange={(e) => {
+                    setLogoDraftLight(e.target.value);
+                    setLogoPreviewFailed(false);
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      saveLogos();
+                    }
+                  }}
+                  placeholder={t('header.logoLightPlaceholder') !== 'header.logoLightPlaceholder' ? t('header.logoLightPlaceholder') : 'Light theme logo URL'}
+                  className="w-full px-3 py-2 rounded-xl text-sm focus:outline-none transition-colors border"
+                  style={{
+                    backgroundColor: 'var(--glass-bg)',
+                    borderColor: 'var(--glass-border)',
+                    color: 'var(--text-primary)'
+                  }}
+                />
+                <input
+                  type="url"
+                  value={logoDraftDark}
+                  onChange={(e) => {
+                    setLogoDraftDark(e.target.value);
+                    setLogoPreviewFailed(false);
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      saveLogos();
+                    }
+                  }}
+                  placeholder={t('header.logoDarkPlaceholder') !== 'header.logoDarkPlaceholder' ? t('header.logoDarkPlaceholder') : 'Dark theme logo URL'}
+                  className="w-full px-3 py-2 rounded-xl text-sm focus:outline-none transition-colors border"
+                  style={{
+                    backgroundColor: 'var(--glass-bg)',
+                    borderColor: 'var(--glass-border)',
+                    color: 'var(--text-primary)'
+                  }}
+                />
+                <div className="flex items-center justify-between gap-2">
+                  <button
+                    type="button"
+                    onClick={saveLogos}
+                    disabled={logoSaveState === 'saving'}
+                    className="px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-wider border transition-all text-white"
+                    style={{
+                      backgroundColor: 'var(--accent-color)',
+                      borderColor: 'var(--accent-color)',
+                    }}
+                  >
+                    {t('header.saveLogo') !== 'header.saveLogo' ? t('header.saveLogo') : 'Save Branding'}
+                  </button>
+                  {(!!resolvedPreviewDefault || !!resolvedPreviewLight || !!resolvedPreviewDark || !!logoSavedAt) && (
+                    <span className="text-[10px] uppercase tracking-wider" style={{ color: logoPreviewFailed ? '#f87171' : 'var(--text-secondary)' }}>
+                      {logoSaveState === 'saving'
+                        ? (t('common.saving') !== 'common.saving' ? t('common.saving') : 'Saving...')
+                        : logoSaveState === 'error'
+                          ? (t('header.logoSaveFailed') !== 'header.logoSaveFailed' ? t('header.logoSaveFailed') : 'Save failed')
+                          : logoPreviewFailed
+                        ? (t('header.logoInvalid') !== 'header.logoInvalid' ? t('header.logoInvalid') : 'Image failed to load')
+                        : (Date.now() - logoSavedAt < 2000
+                          ? (t('header.logoSaved') !== 'header.logoSaved' ? t('header.logoSaved') : 'Saved')
+                          : (t('header.logoPreview') !== 'header.logoPreview' ? t('header.logoPreview') : 'Preview'))}
+                    </span>
+                  )}
+                </div>
+                {(!!resolvedPreviewDefault || !!resolvedPreviewLight || !!resolvedPreviewDark) && !logoPreviewFailed && (
+                  <div className="space-y-2">
+                    {!!resolvedPreviewLight && (
+                      <div className="w-full h-14 rounded-xl border flex items-center justify-center p-2" style={{ borderColor: 'var(--glass-border)', backgroundColor: '#ffffff' }}>
+                        <img
+                          src={resolvedPreviewLight}
+                          alt="Light logo preview"
+                          className="max-h-full max-w-full object-contain"
+                          onError={() => setLogoPreviewFailed(true)}
+                        />
+                      </div>
+                    )}
+                    {!!resolvedPreviewDark && (
+                      <div className="w-full h-14 rounded-xl border flex items-center justify-center p-2" style={{ borderColor: 'var(--glass-border)', backgroundColor: '#0b1220' }}>
+                        <img
+                          src={resolvedPreviewDark}
+                          alt="Dark logo preview"
+                          className="max-h-full max-w-full object-contain"
+                          onError={() => setLogoPreviewFailed(true)}
+                        />
+                      </div>
+                    )}
+                    {!resolvedPreviewLight && !resolvedPreviewDark && !!resolvedPreviewDefault && (
+                      <div className="w-full h-16 rounded-xl border flex items-center justify-center p-2" style={{ borderColor: 'var(--glass-border)', backgroundColor: 'var(--glass-bg)' }}>
+                        <img
+                          src={resolvedPreviewDefault}
+                          alt="Logo preview"
+                          className="max-h-full max-w-full object-contain"
+                          onError={() => setLogoPreviewFailed(true)}
+                        />
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
-            )}
-          </div>
+            </>
+          )}
 
           {/* Font Family */}
           <div className="space-y-2">

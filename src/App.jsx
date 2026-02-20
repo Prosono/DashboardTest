@@ -289,11 +289,11 @@ function AppContent({
 
   const [editMode, setEditMode] = useState(false);
   const isPlatformAdmin = currentUser?.isPlatformAdmin === true;
-  const canEditDashboard = currentUser?.role === 'admin' && !isPlatformAdmin;
+  const currentUserRole = normalizeRole(currentUser?.role);
+  const canEditDashboard = currentUserRole === 'admin' && !isPlatformAdmin;
   const canEditGlobalBranding = isPlatformAdmin;
   const canEditClientSubtitle = canEditDashboard;
-  const canManageUsersAndClients = currentUser?.role === 'admin' || isPlatformAdmin;
-  const currentUserRole = normalizeRole(currentUser?.role);
+  const canManageUsersAndClients = currentUserRole === 'admin' || isPlatformAdmin;
   const WARNING_SENSOR_ID = 'sensor.system_warning_details';
   const CRITICAL_SENSOR_ID = 'sensor.system_critical_details';
 
