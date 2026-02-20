@@ -22,16 +22,23 @@ export const resolveLogoUrl = (value) => {
 export const getLogoForTheme = (settings = {}, theme = '') => {
   const source = settings && typeof settings === 'object' ? settings : {};
   const themeKey = normalizeThemeKey(theme);
+  const fallback = String(source.logoUrl || '').trim();
+  const light = String(source.logoUrlLight || '').trim();
+  const dark = String(source.logoUrlDark || '').trim();
 
   if (themeKey === 'light') {
-    const light = String(source.logoUrlLight || '').trim();
     if (light) return light;
-  } else if (themeKey) {
-    const dark = String(source.logoUrlDark || '').trim();
+    if (fallback) return fallback;
     if (dark) return dark;
+    return '';
   }
-
-  return String(source.logoUrl || '').trim();
+  if (themeKey) {
+    if (dark) return dark;
+    if (fallback) return fallback;
+    if (light) return light;
+    return '';
+  }
+  return fallback || light || dark;
 };
 
 const parseJSON = (value) => {
@@ -56,12 +63,13 @@ const readStoredLogoOverrides = () => {
   }
 };
 
-export const saveStoredLogoOverrides = ({ logoUrl = '', logoUrlLight = '', logoUrlDark = '' } = {}) => {
+export const saveStoredLogoOverrides = ({ logoUrl = '', logoUrlLight = '', logoUrlDark = '', updatedAt = Date.now() } = {}) => {
   if (typeof window === 'undefined') return;
   const payload = {
     logoUrl: String(logoUrl || '').trim(),
     logoUrlLight: String(logoUrlLight || '').trim(),
     logoUrlDark: String(logoUrlDark || '').trim(),
+    updatedAt: Number.isFinite(Number(updatedAt)) ? Number(updatedAt) : Date.now(),
   };
   try {
     localStorage.setItem(LOGO_OVERRIDES_KEY, JSON.stringify(payload));
@@ -85,7 +93,52 @@ export const applyStoredLogoOverrides = (headerSettings = {}) => {
   if (Object.prototype.hasOwnProperty.call(overrides, 'logoUrlDark')) {
     next.logoUrlDark = String(overrides.logoUrlDark || '').trim();
   }
+  if (Object.prototype.hasOwnProperty.call(overrides, 'updatedAt')) {
+    const version = Number(overrides.updatedAt);
+    if (Number.isFinite(version) && version > 0) next.logoUpdatedAt = version;
+  }
   return next;
+};
+
+const withQueryParam = (url, key, value) => {
+  const raw = String(url || '').trim();
+  if (!raw || !String(value || '').trim()) return raw;
+  const [base, hash = ''] = raw.split('#');
+  const sep = base.includes('?') ? '&' : '?';
+  return `${base}${sep}${encodeURIComponent(key)}=${encodeURIComponent(String(value))}${hash ? `#${hash}` : ''}`;
+};
+
+export const appendLogoVersion = (url, version) => {
+  const stamp = Number(version);
+  if (!Number.isFinite(stamp) || stamp <= 0) return String(url || '').trim();
+  return withQueryParam(url, 'logo_v', Math.trunc(stamp));
+};
+
+const getVersionFromSettings = (settings) => {
+  const candidate = Number(settings?.logoUpdatedAt);
+  return Number.isFinite(candidate) && candidate > 0 ? Math.trunc(candidate) : 0;
+};
+
+export const getStoredHeaderLogoVersion = () => {
+  if (typeof window === 'undefined') return 0;
+  try {
+    const overrides = readStoredLogoOverrides();
+    const fromOverrides = getVersionFromSettings(overrides);
+    if (fromOverrides > 0) return fromOverrides;
+
+    const cachedRaw = localStorage.getItem('tunet_shared_dashboard_cache');
+    const cached = cachedRaw ? parseJSON(cachedRaw) : null;
+    const fromCache = getVersionFromSettings(cached?.headerSettings);
+    if (fromCache > 0) return fromCache;
+
+    const legacyRaw = localStorage.getItem('tunet_header_settings');
+    const legacy = legacyRaw ? parseJSON(legacyRaw) : null;
+    const fromLegacy = getVersionFromSettings(legacy);
+    if (fromLegacy > 0) return fromLegacy;
+  } catch {
+    // best effort lookup only
+  }
+  return 0;
 };
 
 export const getStoredHeaderLogoUrl = (theme = '') => {

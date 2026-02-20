@@ -151,12 +151,14 @@ export default function HeaderSidebar({
     const nextDefault = String(logoDraftDefault || '').trim();
     const nextLight = String(logoDraftLight || '').trim();
     const nextDark = String(logoDraftDark || '').trim();
+    const updatedAt = Date.now();
     setLogoSaveState('saving');
     updateHeaderSettings((prev) => ({
       ...(prev || {}),
       logoUrl: nextDefault,
       logoUrlLight: nextLight,
       logoUrlDark: nextDark,
+      logoUpdatedAt: updatedAt,
     }));
     let persisted = false;
     let saveOk = true;
@@ -166,6 +168,7 @@ export default function HeaderSidebar({
           logoUrl: nextDefault,
           logoUrlLight: nextLight,
           logoUrlDark: nextDark,
+          updatedAt,
         });
         if (typeof result === 'boolean') {
           saveOk = result;

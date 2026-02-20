@@ -10,6 +10,8 @@ import {
   Plus,
   Lock,
   User,
+  Eye,
+  EyeOff,
 } from './icons';
 
 import SettingsDropdown from './components/ui/SettingsDropdown';
@@ -71,7 +73,13 @@ import ModalOrchestrator from './rendering/ModalOrchestrator';
 import CardErrorBoundary from './components/ui/CardErrorBoundary';
 import EditOverlay from './components/ui/EditOverlay';
 import AuroraBackground from './components/effects/AuroraBackground';
-import { getStoredHeaderLogoUrl, resolveLogoUrl, saveStoredLogoOverrides } from './utils/branding';
+import {
+  appendLogoVersion,
+  getStoredHeaderLogoUrl,
+  getStoredHeaderLogoVersion,
+  resolveLogoUrl,
+  saveStoredLogoOverrides,
+} from './utils/branding';
 
 function AppContent({
   showOnboarding,
@@ -329,15 +337,17 @@ function AppContent({
     saveStatusPillsConfig([...(statusPillsConfig || []), criticalPill]);
   }, [entities, statusPillsConfig, saveStatusPillsConfig, CRITICAL_SENSOR_ID]);
 
-  const saveHeaderLogos = useCallback(async ({ logoUrl, logoUrlLight, logoUrlDark }) => {
+  const saveHeaderLogos = useCallback(async ({ logoUrl, logoUrlLight, logoUrlDark, updatedAt: updatedAtInput }) => {
     const nextDefault = String(logoUrl || '').trim();
     const nextLight = String(logoUrlLight || '').trim();
     const nextDark = String(logoUrlDark || '').trim();
+    const updatedAt = Number.isFinite(Number(updatedAtInput)) ? Number(updatedAtInput) : Date.now();
 
     saveStoredLogoOverrides({
       logoUrl: nextDefault,
       logoUrlLight: nextLight,
       logoUrlDark: nextDark,
+      updatedAt,
     });
 
     if (!canEditDashboard || !saveGlobalDashboard) {
@@ -348,6 +358,7 @@ function AppContent({
       logoUrl: nextDefault,
       logoUrlLight: nextLight,
       logoUrlDark: nextDark,
+      logoUpdatedAt: updatedAt,
     };
     const targetProfile = String(currentUser?.assignedDashboardId || activeGlobalDashboardId || 'default').trim() || 'default';
     const ok = await saveGlobalDashboard(targetProfile, { headerSettings: nextHeaderSettings });
@@ -1447,13 +1458,15 @@ export default function App() {
   const [clientId, setClientId] = useState(() => getClientId());
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [haConfigHydrated, setHaConfigHydrated] = useState(false);
 
   const { config, setConfig, currentTheme } = useConfig();
   const isLightTheme = currentTheme === 'light';
   const loginLogoUrl = useMemo(() => {
     const configured = resolveLogoUrl(getStoredHeaderLogoUrl(currentTheme));
-    return configured || '/logo.png';
+    const withVersion = appendLogoVersion(configured, getStoredHeaderLogoVersion());
+    return withVersion || '/logo.png';
   }, [currentUser, currentTheme]);
 
   const applySharedHaConfig = useCallback((sharedConfig) => {
@@ -1523,6 +1536,7 @@ export default function App() {
 
       setCurrentUser(user);
       setHaConfigHydrated(true);
+      setShowPassword(false);
     } catch (error) {
       setAuthError(error?.message || 'Login failed');
     } finally {
@@ -1665,17 +1679,28 @@ export default function App() {
 
           <div className="space-y-1.5">
             <label className="block text-[11px] uppercase tracking-[0.18em] text-[var(--text-secondary)]">Password</label>
-            <input
-              type="password"
-              className="w-full px-4 py-3 rounded-xl border outline-none transition-colors focus:ring-2"
-              style={{
-                background: 'linear-gradient(145deg, color-mix(in srgb, var(--glass-bg) 90%, transparent), color-mix(in srgb, var(--glass-bg) 72%, transparent))',
-                borderColor: 'var(--glass-border)',
-              }}
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              autoComplete="current-password"
-            />
+            <div className="relative">
+              <input
+                type={showPassword ? 'text' : 'password'}
+                className="w-full px-4 pr-12 py-3 rounded-xl border outline-none transition-colors focus:ring-2"
+                style={{
+                  background: 'linear-gradient(145deg, color-mix(in srgb, var(--glass-bg) 90%, transparent), color-mix(in srgb, var(--glass-bg) 72%, transparent))',
+                  borderColor: 'var(--glass-border)',
+                }}
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                autoComplete="current-password"
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword((prev) => !prev)}
+                className="absolute inset-y-0 right-0 px-3 rounded-r-xl flex items-center justify-center text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors"
+                title={showPassword ? 'Hide password' : 'Show password'}
+                aria-label={showPassword ? 'Hide password' : 'Show password'}
+              >
+                {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+              </button>
+            </div>
           </div>
 
           {authError && <div className="text-sm text-red-300 bg-red-500/15 border border-red-500/30 rounded-xl px-3 py-2">{authError}</div>}
