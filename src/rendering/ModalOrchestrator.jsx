@@ -99,8 +99,10 @@ export default function ModalOrchestrator({
     cardBorderRadius, setCardBorderRadius,
     sectionSpacing, updateSectionSpacing,
     headerTitle, headerScale, headerSettings,
-    updateHeaderTitle, updateHeaderScale, updateHeaderSettings,
+    updateHeaderScale, updateHeaderSettings,
     saveHeaderLogos,
+    canEditGlobalBranding,
+    canEditClientSubtitle,
   } = layout;
 
   const {
@@ -352,10 +354,11 @@ export default function ModalOrchestrator({
           headerTitle={headerTitle}
           headerScale={headerScale}
           headerSettings={headerSettings}
-          updateHeaderTitle={updateHeaderTitle}
           updateHeaderScale={updateHeaderScale}
           updateHeaderSettings={updateHeaderSettings}
           onSaveLogos={saveHeaderLogos}
+          canEditGlobalBranding={canEditGlobalBranding}
+          canEditClientSubtitle={canEditClientSubtitle}
           onSwitchToTheme={() => { setShowHeaderEditModal(false); setShowThemeSidebar(true); }}
           onSwitchToLayout={() => { setShowHeaderEditModal(false); setShowLayoutSidebar(true); }}
           t={t}

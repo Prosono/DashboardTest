@@ -116,15 +116,17 @@ export default function HeaderSidebar({
   headerTitle,
   headerScale,
   headerSettings,
-  updateHeaderTitle,
   updateHeaderScale,
   updateHeaderSettings,
   onSaveLogos,
+  canEditGlobalBranding = false,
+  canEditClientSubtitle = false,
   onSwitchToTheme,
   onSwitchToLayout,
   t
 }) {
   const [sections, setSections] = useState({ typography: true, style: false, clock: false, visibility: false });
+  const [titleDraft, setTitleDraft] = useState(String(headerTitle || ''));
   const [logoDraftDefault, setLogoDraftDefault] = useState(String(headerSettings?.logoUrl || ''));
   const [logoDraftLight, setLogoDraftLight] = useState(String(headerSettings?.logoUrlLight || ''));
   const [logoDraftDark, setLogoDraftDark] = useState(String(headerSettings?.logoUrlDark || ''));
@@ -140,31 +142,28 @@ export default function HeaderSidebar({
   const resolvedPreviewDark = resolveLogoUrl(logoDraftDark);
 
   useEffect(() => {
+    setTitleDraft(String(headerTitle || ''));
     setLogoDraftDefault(String(headerSettings?.logoUrl || ''));
     setLogoDraftLight(String(headerSettings?.logoUrlLight || ''));
     setLogoDraftDark(String(headerSettings?.logoUrlDark || ''));
     setLogoPreviewFailed(false);
     setLogoSaveState((prev) => (prev === 'error' ? 'idle' : prev));
-  }, [headerSettings?.logoUrl, headerSettings?.logoUrlLight, headerSettings?.logoUrlDark]);
+  }, [headerTitle, headerSettings?.logoUrl, headerSettings?.logoUrlLight, headerSettings?.logoUrlDark]);
 
   const saveLogos = async () => {
+    if (!canEditGlobalBranding) return;
+    const nextTitle = String(titleDraft || '').trim();
     const nextDefault = String(logoDraftDefault || '').trim();
     const nextLight = String(logoDraftLight || '').trim();
     const nextDark = String(logoDraftDark || '').trim();
     const updatedAt = Date.now();
     setLogoSaveState('saving');
-    updateHeaderSettings((prev) => ({
-      ...(prev || {}),
-      logoUrl: nextDefault,
-      logoUrlLight: nextLight,
-      logoUrlDark: nextDark,
-      logoUpdatedAt: updatedAt,
-    }));
     let persisted = false;
     let saveOk = true;
     if (typeof onSaveLogos === 'function') {
       try {
         const result = await onSaveLogos({
+          title: nextTitle,
           logoUrl: nextDefault,
           logoUrlLight: nextLight,
           logoUrlDark: nextDark,
@@ -253,14 +252,34 @@ export default function HeaderSidebar({
             <label className="text-[11px] font-bold uppercase tracking-wider" style={{ color: 'var(--text-secondary)' }}>{t('header.titleLabel')}</label>
             <input
               type="text"
-              value={headerTitle}
-              onChange={(e) => updateHeaderTitle(e.target.value)}
+              value={titleDraft}
+              onChange={(e) => setTitleDraft(e.target.value)}
+              disabled={!canEditGlobalBranding}
               placeholder={t('header.titlePlaceholder')}
               className="w-full px-3 py-2 rounded-xl text-sm focus:outline-none transition-colors border"
               style={{ 
                   backgroundColor: 'var(--glass-bg)', 
                   borderColor: 'var(--glass-border)',
                   color: 'var(--text-primary)'
+              }}
+            />
+          </div>
+
+          <div className="space-y-2">
+            <label className="text-[11px] font-bold uppercase tracking-wider" style={{ color: 'var(--text-secondary)' }}>
+              {t('statusPills.subtitle') !== 'statusPills.subtitle' ? t('statusPills.subtitle') : 'Subtitle'}
+            </label>
+            <input
+              type="text"
+              value={setting('clientSubtitle', '')}
+              onChange={(e) => update('clientSubtitle', e.target.value)}
+              disabled={!canEditClientSubtitle}
+              placeholder="Client subtitle"
+              className="w-full px-3 py-2 rounded-xl text-sm focus:outline-none transition-colors border"
+              style={{
+                backgroundColor: 'var(--glass-bg)',
+                borderColor: 'var(--glass-border)',
+                color: 'var(--text-primary)'
               }}
             />
           </div>
@@ -277,6 +296,7 @@ export default function HeaderSidebar({
                 setLogoDraftDefault(e.target.value);
                 setLogoPreviewFailed(false);
               }}
+              disabled={!canEditGlobalBranding}
               onKeyDown={(e) => {
                 if (e.key === 'Enter') {
                   e.preventDefault();
@@ -298,6 +318,7 @@ export default function HeaderSidebar({
                 setLogoDraftLight(e.target.value);
                 setLogoPreviewFailed(false);
               }}
+              disabled={!canEditGlobalBranding}
               onKeyDown={(e) => {
                 if (e.key === 'Enter') {
                   e.preventDefault();
@@ -319,6 +340,7 @@ export default function HeaderSidebar({
                 setLogoDraftDark(e.target.value);
                 setLogoPreviewFailed(false);
               }}
+              disabled={!canEditGlobalBranding}
               onKeyDown={(e) => {
                 if (e.key === 'Enter') {
                   e.preventDefault();
@@ -337,14 +359,14 @@ export default function HeaderSidebar({
               <button
                 type="button"
                 onClick={saveLogos}
-                disabled={logoSaveState === 'saving'}
+                disabled={!canEditGlobalBranding || logoSaveState === 'saving'}
                 className="px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-wider border transition-all text-white"
                 style={{
                   backgroundColor: 'var(--accent-color)',
                   borderColor: 'var(--accent-color)',
                 }}
               >
-                {t('header.saveLogo') !== 'header.saveLogo' ? t('header.saveLogo') : 'Save Logos'}
+                {t('header.saveLogo') !== 'header.saveLogo' ? t('header.saveLogo') : 'Save Branding'}
               </button>
               {(!!resolvedPreviewDefault || !!resolvedPreviewLight || !!resolvedPreviewDark || !!logoSavedAt) && (
                 <span className="text-[10px] uppercase tracking-wider" style={{ color: logoPreviewFailed ? '#f87171' : 'var(--text-secondary)' }}>

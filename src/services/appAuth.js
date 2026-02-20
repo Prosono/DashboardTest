@@ -239,3 +239,16 @@ export const saveSharedHaConfig = async (config) => {
   });
   return payload?.config || null;
 };
+
+export const fetchGlobalBranding = async () => {
+  const payload = await apiRequest('/api/branding', { method: 'GET' });
+  return payload?.branding || null;
+};
+
+export const saveGlobalBranding = async (branding) => {
+  const payload = await apiRequest('/api/branding', {
+    method: 'PUT',
+    body: JSON.stringify(branding || {}),
+  });
+  return payload?.branding || null;
+};

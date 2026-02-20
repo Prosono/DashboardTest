@@ -41,6 +41,7 @@ export default function Header({
   const is12h = clockFormat === '12h';
   const clockScale = headerSettings?.clockScale ?? 1.0;
   const dateScale = headerSettings?.dateScale ?? 1.0;
+  const clientSubtitle = String(headerSettings?.clientSubtitle || '').trim();
   const logoSource = getLogoForTheme(headerSettings, currentTheme);
   const logoUrl = appendLogoVersion(
     resolveLogoUrl(logoSource),
@@ -91,7 +92,7 @@ export default function Header({
               />
             )}
             {headerSettings.showTitle && (
-              <>
+              <div className={`flex flex-col ${isMobile ? 'items-center' : 'items-start'}`}>
                 <h1 
                   className={`leading-none select-none ${
                     selectedFont === 'serif' ? 'font-serif' :
@@ -130,7 +131,19 @@ export default function Header({
                 >
                   {headerTitle || 'Tunet'}
                 </h1>
-              </>
+                {clientSubtitle && (
+                  <p
+                    className="mt-1 uppercase tracking-[0.24em] opacity-70"
+                    style={{
+                      color: 'var(--text-secondary)',
+                      fontSize: isMobile ? '0.62rem' : '0.7rem',
+                      fontWeight: 500,
+                    }}
+                  >
+                    {clientSubtitle}
+                  </p>
+                )}
+              </div>
             )}
           </div>
           

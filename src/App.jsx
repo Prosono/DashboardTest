@@ -61,6 +61,8 @@ import {
   listClientDashboards as listServerClientDashboards,
   fetchClientDashboard as fetchServerClientDashboard,
   saveClientDashboard as saveServerClientDashboard,
+  fetchGlobalBranding as fetchServerGlobalBranding,
+  saveGlobalBranding as saveServerGlobalBranding,
   fetchSharedHaConfig,
   saveSharedHaConfig,
 } from './services/appAuth';
@@ -75,6 +77,7 @@ import EditOverlay from './components/ui/EditOverlay';
 import AuroraBackground from './components/effects/AuroraBackground';
 import {
   appendLogoVersion,
+  getLogoForTheme,
   getStoredHeaderLogoUrl,
   getStoredHeaderLogoVersion,
   resolveLogoUrl,
@@ -85,8 +88,10 @@ function AppContent({
   showOnboarding,
   setShowOnboarding,
   currentUser,
+  globalBranding,
   onLogout,
   onProfileUpdated,
+  onSaveGlobalBranding,
   userAdminApi,
   haConfigHydrated,
 }) {
@@ -140,7 +145,6 @@ function AppContent({
     headerScale,
     updateHeaderScale,
     headerTitle,
-    updateHeaderTitle,
     headerSettings,
     updateHeaderSettings,
     sectionSpacing,
@@ -151,7 +155,6 @@ function AppContent({
     globalDashboardProfiles,
     globalStorageBusy,
     globalStorageError,
-    activeGlobalDashboardId,
     refreshGlobalDashboards,
     saveGlobalDashboard,
     loadGlobalDashboard,
@@ -219,7 +222,28 @@ function AppContent({
     return normalizedTargets.some((target) => normalizeRole(target) === normalizedRole);
   };
 
-  const resolvedHeaderTitle = headerTitle || t('page.home');
+  const globalHeaderTitle = String(globalBranding?.title || '').trim();
+  const globalBrandingVersion = Date.parse(String(globalBranding?.updatedAt || '')) || 0;
+  const resolvedHeaderTitle = globalHeaderTitle || headerTitle || t('page.home');
+  const effectiveHeaderSettings = useMemo(() => {
+    const next = { ...(headerSettings || {}) };
+    const globalLogo = String(globalBranding?.logoUrl || '').trim();
+    const globalLogoLight = String(globalBranding?.logoUrlLight || '').trim();
+    const globalLogoDark = String(globalBranding?.logoUrlDark || '').trim();
+
+    if (globalLogo) next.logoUrl = globalLogo;
+    if (globalLogoLight) next.logoUrlLight = globalLogoLight;
+    if (globalLogoDark) next.logoUrlDark = globalLogoDark;
+    if (globalBrandingVersion > 0) next.logoUpdatedAt = globalBrandingVersion;
+
+    return next;
+  }, [
+    headerSettings,
+    globalBranding?.logoUrl,
+    globalBranding?.logoUrlLight,
+    globalBranding?.logoUrlDark,
+    globalBrandingVersion,
+  ]);
 
   // Modal state management
   const modals = useModals();
@@ -266,6 +290,8 @@ function AppContent({
   const [editMode, setEditMode] = useState(false);
   const isPlatformAdmin = currentUser?.isPlatformAdmin === true;
   const canEditDashboard = currentUser?.role === 'admin' && !isPlatformAdmin;
+  const canEditGlobalBranding = isPlatformAdmin;
+  const canEditClientSubtitle = canEditDashboard;
   const canManageUsersAndClients = currentUser?.role === 'admin' || isPlatformAdmin;
   const currentUserRole = normalizeRole(currentUser?.role);
   const WARNING_SENSOR_ID = 'sensor.system_warning_details';
@@ -337,7 +363,12 @@ function AppContent({
     saveStatusPillsConfig([...(statusPillsConfig || []), criticalPill]);
   }, [entities, statusPillsConfig, saveStatusPillsConfig, CRITICAL_SENSOR_ID]);
 
-  const saveHeaderLogos = useCallback(async ({ logoUrl, logoUrlLight, logoUrlDark, updatedAt: updatedAtInput }) => {
+  const saveHeaderLogos = useCallback(async ({ title, logoUrl, logoUrlLight, logoUrlDark, updatedAt: updatedAtInput }) => {
+    if (!canEditGlobalBranding || typeof onSaveGlobalBranding !== 'function') {
+      return { ok: false, persisted: false };
+    }
+
+    const nextTitle = String(title || '').trim();
     const nextDefault = String(logoUrl || '').trim();
     const nextLight = String(logoUrlLight || '').trim();
     const nextDark = String(logoUrlDark || '').trim();
@@ -350,20 +381,21 @@ function AppContent({
       updatedAt,
     });
 
-    if (!canEditDashboard || !saveGlobalDashboard) {
-      return { ok: true, persisted: false };
+    try {
+      const result = await onSaveGlobalBranding({
+        title: nextTitle,
+        logoUrl: nextDefault,
+        logoUrlLight: nextLight,
+        logoUrlDark: nextDark,
+      });
+      return {
+        ok: result?.ok !== false,
+        persisted: true,
+      };
+    } catch {
+      return { ok: false, persisted: true };
     }
-    const nextHeaderSettings = {
-      ...(headerSettings || {}),
-      logoUrl: nextDefault,
-      logoUrlLight: nextLight,
-      logoUrlDark: nextDark,
-      logoUpdatedAt: updatedAt,
-    };
-    const targetProfile = String(currentUser?.assignedDashboardId || activeGlobalDashboardId || 'default').trim() || 'default';
-    const ok = await saveGlobalDashboard(targetProfile, { headerSettings: nextHeaderSettings });
-    return { ok, persisted: true };
-  }, [canEditDashboard, saveGlobalDashboard, headerSettings, activeGlobalDashboardId, currentUser?.assignedDashboardId]);
+  }, [canEditGlobalBranding, onSaveGlobalBranding]);
 
   const [draggingId, setDraggingId] = useState(null);
   const [activePage, _setActivePage] = useState(() => {
@@ -586,7 +618,7 @@ function AppContent({
         onOpenLayout={() => setShowLayoutSidebar(true)}
         onOpenHeader={() => setShowHeaderEditModal(true)}
         showLayout={canEditDashboard}
-        showHeader={canEditDashboard}
+        showHeader={canEditDashboard || canEditGlobalBranding}
         showConnection={canManageUsersAndClients}
         t={t}
       />
@@ -971,7 +1003,7 @@ function AppContent({
           headerTitle={resolvedHeaderTitle}
           headerScale={headerScale}
           editMode={editMode}
-          headerSettings={headerSettings}
+          headerSettings={effectiveHeaderSettings}
           setShowHeaderEditModal={setShowHeaderEditModal}
           t={t}
           isMobile={isMobile}
@@ -1380,9 +1412,11 @@ function AppContent({
             gridColumns, setGridColumns,
             cardBorderRadius, setCardBorderRadius,
             sectionSpacing, updateSectionSpacing,
-            headerTitle, headerScale, headerSettings,
-            updateHeaderTitle, updateHeaderScale, updateHeaderSettings,
+            headerTitle: resolvedHeaderTitle, headerScale, headerSettings: effectiveHeaderSettings,
+            updateHeaderScale, updateHeaderSettings,
             saveHeaderLogos,
+            canEditGlobalBranding,
+            canEditClientSubtitle,
           }}
           onboarding={{
             showOnboarding, setShowOnboarding, isOnboardingActive,
@@ -1453,6 +1487,7 @@ function AppContent({
 export default function App() {
   const [authReady, setAuthReady] = useState(false);
   const [currentUser, setCurrentUser] = useState(null);
+  const [globalBranding, setGlobalBranding] = useState({});
   const [authError, setAuthError] = useState('');
   const [loggingIn, setLoggingIn] = useState(false);
   const [clientId, setClientId] = useState(() => getClientId());
@@ -1463,11 +1498,43 @@ export default function App() {
 
   const { config, setConfig, currentTheme } = useConfig();
   const isLightTheme = currentTheme === 'light';
+  const refreshGlobalBranding = useCallback(async () => {
+    try {
+      const branding = await fetchServerGlobalBranding();
+      if (branding && typeof branding === 'object') {
+        setGlobalBranding(branding);
+        return branding;
+      }
+    } catch {
+      // best effort only
+    }
+    return null;
+  }, []);
+
+  const saveGlobalBranding = useCallback(async (nextBranding) => {
+    if (!currentUser?.isPlatformAdmin) {
+      return { ok: false, branding: null };
+    }
+    try {
+      const saved = await saveServerGlobalBranding(nextBranding || {});
+      if (saved && typeof saved === 'object') {
+        setGlobalBranding(saved);
+        return { ok: true, branding: saved };
+      }
+      return { ok: false, branding: null };
+    } catch {
+      return { ok: false, branding: null };
+    }
+  }, [currentUser?.isPlatformAdmin]);
+
   const loginLogoUrl = useMemo(() => {
-    const configured = resolveLogoUrl(getStoredHeaderLogoUrl(currentTheme));
-    const withVersion = appendLogoVersion(configured, getStoredHeaderLogoVersion());
+    const fromGlobal = getLogoForTheme(globalBranding, currentTheme);
+    const configured = resolveLogoUrl(fromGlobal || getStoredHeaderLogoUrl(currentTheme));
+    const globalVersion = Date.parse(String(globalBranding?.updatedAt || '')) || 0;
+    const withVersion = appendLogoVersion(configured, globalVersion || getStoredHeaderLogoVersion());
     return withVersion || '/logo.png';
-  }, [currentUser, currentTheme]);
+  }, [currentUser, currentTheme, globalBranding]);
+  const loginTitle = String(globalBranding?.title || 'Smart Sauna Systems').trim() || 'Smart Sauna Systems';
 
   const applySharedHaConfig = useCallback((sharedConfig) => {
     if (!sharedConfig) return;
@@ -1501,6 +1568,11 @@ export default function App() {
     let mounted = true;
     const init = async () => {
       try {
+        const branding = await fetchServerGlobalBranding().catch(() => null);
+        if (mounted && branding && typeof branding === 'object') {
+          setGlobalBranding(branding);
+        }
+
         const user = await fetchCurrentUser();
         if (!mounted) return;
         setCurrentUser(user);
@@ -1533,6 +1605,7 @@ export default function App() {
 
       const shared = await fetchSharedHaConfig().catch(() => null);
       applySharedHaConfig(shared);
+      await refreshGlobalBranding();
 
       setCurrentUser(user);
       setHaConfigHydrated(true);
@@ -1641,7 +1714,7 @@ export default function App() {
               className="text-[1.2rem] md:text-[1.38rem] font-light text-center tracking-[0.22em] uppercase"
               style={{ fontFamily: "'Roboto', 'Helvetica Neue', Arial, sans-serif", lineHeight: 1.2 }}
             >
-              Smart Sauna Systems
+              {loginTitle}
             </h1>
             <div className="w-24 h-px opacity-60" style={{ background: 'color-mix(in srgb, var(--accent-color) 36%, var(--glass-border))' }} />
             <p className="text-center text-[12px] leading-relaxed max-w-[24rem]" style={{ color: 'var(--text-secondary)' }}>
@@ -1763,8 +1836,10 @@ export default function App() {
         showOnboarding={showOnboarding}
         setShowOnboarding={setShowOnboarding}
         currentUser={currentUser}
+        globalBranding={globalBranding}
         onLogout={doLogout}
         onProfileUpdated={setCurrentUser}
+        onSaveGlobalBranding={saveGlobalBranding}
         userAdminApi={userAdminApi}
         haConfigHydrated={haConfigHydrated}
       />

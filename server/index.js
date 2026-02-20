@@ -7,6 +7,7 @@ import usersRouter from './routes/users.js';
 import dashboardsRouter from './routes/dashboards.js';
 import iconsRouter from './routes/icons.js';
 import clientsRouter from './routes/clients.js';
+import brandingRouter from './routes/branding.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PORT = parseInt(process.env.PORT || '3002', 10);
@@ -28,6 +29,7 @@ app.use('/api/users', usersRouter);
 app.use('/api/dashboards', dashboardsRouter);
 app.use('/api/icons', iconsRouter);
 app.use('/api/clients', clientsRouter);
+app.use('/api/branding', brandingRouter);
 
 app.get('/api/health', (_req, res) => {
   res.json({ status: 'ok', version: process.env.npm_package_version || 'unknown' });
