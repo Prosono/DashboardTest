@@ -1,4 +1,5 @@
 const ABSOLUTE_URL_PATTERN = /^[a-zA-Z][a-zA-Z\d+\-.]*:/;
+const normalizeThemeKey = (theme) => String(theme || '').trim().toLowerCase();
 
 export const resolveLogoUrl = (value) => {
   const raw = String(value || '').trim();
@@ -17,6 +18,21 @@ export const resolveLogoUrl = (value) => {
   return raw;
 };
 
+export const getLogoForTheme = (settings = {}, theme = '') => {
+  const source = settings && typeof settings === 'object' ? settings : {};
+  const themeKey = normalizeThemeKey(theme);
+
+  if (themeKey === 'light') {
+    const light = String(source.logoUrlLight || '').trim();
+    if (light) return light;
+  } else if (themeKey) {
+    const dark = String(source.logoUrlDark || '').trim();
+    if (dark) return dark;
+  }
+
+  return String(source.logoUrl || '').trim();
+};
+
 const parseJSON = (value) => {
   try {
     return JSON.parse(value);
@@ -25,19 +41,19 @@ const parseJSON = (value) => {
   }
 };
 
-export const getStoredHeaderLogoUrl = () => {
+export const getStoredHeaderLogoUrl = (theme = '') => {
   if (typeof window === 'undefined') return '';
 
   try {
     const cachedRaw = localStorage.getItem('tunet_shared_dashboard_cache');
     const cached = cachedRaw ? parseJSON(cachedRaw) : null;
-    const fromCache = cached?.headerSettings?.logoUrl;
-    if (typeof fromCache === 'string' && fromCache.trim()) return fromCache.trim();
+    const fromCache = getLogoForTheme(cached?.headerSettings, theme);
+    if (fromCache) return fromCache;
 
     const legacyRaw = localStorage.getItem('tunet_header_settings');
     const legacy = legacyRaw ? parseJSON(legacyRaw) : null;
-    const fromLegacy = legacy?.logoUrl;
-    if (typeof fromLegacy === 'string' && fromLegacy.trim()) return fromLegacy.trim();
+    const fromLegacy = getLogoForTheme(legacy, theme);
+    if (fromLegacy) return fromLegacy;
   } catch {
     // best effort lookup only
   }

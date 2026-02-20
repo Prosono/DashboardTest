@@ -445,8 +445,13 @@ export const PageProvider = ({ children }) => {
     setSectionSpacing(nextSpacing);
   };
 
-  const updateHeaderSettings = (newSettings) => {
-    setHeaderSettings(newSettings);
+  const updateHeaderSettings = (nextValue) => {
+    setHeaderSettings((prev) => {
+      if (typeof nextValue === 'function') {
+        return nextValue(prev || {});
+      }
+      return nextValue || {};
+    });
   };
 
   const saveStatusPillsConfig = (newConfig) => {

@@ -950,6 +950,7 @@ function AppContent({
           t={t}
           isMobile={isMobile}
           sectionSpacing={sectionSpacing}
+          currentTheme={currentTheme}
         >
           <div
             className={`w-full mt-0 font-sans ${isMobile ? 'flex flex-col items-center gap-1.5' : 'flex items-center justify-between'}`}
@@ -1435,9 +1436,9 @@ export default function App() {
   const { config, setConfig, currentTheme } = useConfig();
   const isLightTheme = currentTheme === 'light';
   const loginLogoUrl = useMemo(() => {
-    const configured = resolveLogoUrl(getStoredHeaderLogoUrl());
+    const configured = resolveLogoUrl(getStoredHeaderLogoUrl(currentTheme));
     return configured || '/logo.png';
-  }, [currentUser]);
+  }, [currentUser, currentTheme]);
 
   const applySharedHaConfig = useCallback((sharedConfig) => {
     if (!sharedConfig) return;

@@ -1,5 +1,5 @@
 import { Edit2 } from '../icons';
-import { resolveLogoUrl } from '../utils/branding';
+import { getLogoForTheme, resolveLogoUrl } from '../utils/branding';
 
 /**
  * Header component with title, time and edit controls
@@ -23,7 +23,8 @@ export default function Header({
   t,
   children,
   isMobile,
-  sectionSpacing
+  sectionSpacing,
+  currentTheme
 }) {
   const headerBottom = Number.isFinite(sectionSpacing?.statusToNav)
     ? sectionSpacing.statusToNav
@@ -40,7 +41,8 @@ export default function Header({
   const is12h = clockFormat === '12h';
   const clockScale = headerSettings?.clockScale ?? 1.0;
   const dateScale = headerSettings?.dateScale ?? 1.0;
-  const logoUrl = resolveLogoUrl(headerSettings?.logoUrl);
+  const logoSource = getLogoForTheme(headerSettings, currentTheme);
+  const logoUrl = resolveLogoUrl(logoSource);
   const hasLogo = Boolean(logoUrl);
   const mobileTitleLength = String(headerTitle || '').trim().length;
   const mobileFontSize = mobileTitleLength > 16

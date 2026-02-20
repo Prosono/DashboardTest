@@ -124,23 +124,38 @@ export default function HeaderSidebar({
   t
 }) {
   const [sections, setSections] = useState({ typography: true, style: false, clock: false, visibility: false });
-  const [logoDraft, setLogoDraft] = useState(String(headerSettings?.logoUrl || ''));
+  const [logoDraftDefault, setLogoDraftDefault] = useState(String(headerSettings?.logoUrl || ''));
+  const [logoDraftLight, setLogoDraftLight] = useState(String(headerSettings?.logoUrlLight || ''));
+  const [logoDraftDark, setLogoDraftDark] = useState(String(headerSettings?.logoUrlDark || ''));
   const [logoPreviewFailed, setLogoPreviewFailed] = useState(false);
+  const [logoSavedAt, setLogoSavedAt] = useState(0);
   const toggleSection = (key) => setSections(prev => ({ ...prev, [key]: !prev[key] }));
 
   const setting = (key, fallback) => headerSettings?.[key] ?? fallback;
-  const update = (key, value) => updateHeaderSettings({ ...headerSettings, [key]: value });
-  const resolvedLogoPreview = resolveLogoUrl(logoDraft);
+  const update = (key, value) => updateHeaderSettings((prev) => ({ ...(prev || {}), [key]: value }));
+  const resolvedPreviewDefault = resolveLogoUrl(logoDraftDefault);
+  const resolvedPreviewLight = resolveLogoUrl(logoDraftLight);
+  const resolvedPreviewDark = resolveLogoUrl(logoDraftDark);
 
   useEffect(() => {
-    setLogoDraft(String(headerSettings?.logoUrl || ''));
+    setLogoDraftDefault(String(headerSettings?.logoUrl || ''));
+    setLogoDraftLight(String(headerSettings?.logoUrlLight || ''));
+    setLogoDraftDark(String(headerSettings?.logoUrlDark || ''));
     setLogoPreviewFailed(false);
-  }, [headerSettings?.logoUrl]);
+  }, [headerSettings?.logoUrl, headerSettings?.logoUrlLight, headerSettings?.logoUrlDark]);
 
-  const saveLogoUrl = () => {
-    const next = String(logoDraft || '').trim();
-    update('logoUrl', next);
+  const saveLogos = () => {
+    const nextDefault = String(logoDraftDefault || '').trim();
+    const nextLight = String(logoDraftLight || '').trim();
+    const nextDark = String(logoDraftDark || '').trim();
+    updateHeaderSettings((prev) => ({
+      ...(prev || {}),
+      logoUrl: nextDefault,
+      logoUrlLight: nextLight,
+      logoUrlDark: nextDark,
+    }));
     setLogoPreviewFailed(false);
+    setLogoSavedAt(Date.now());
   };
 
   const fontWeight = setting('fontWeight', '300');
@@ -227,18 +242,60 @@ export default function HeaderSidebar({
             </label>
             <input
               type="url"
-              value={logoDraft}
+              value={logoDraftDefault}
               onChange={(e) => {
-                setLogoDraft(e.target.value);
+                setLogoDraftDefault(e.target.value);
                 setLogoPreviewFailed(false);
               }}
               onKeyDown={(e) => {
                 if (e.key === 'Enter') {
                   e.preventDefault();
-                  saveLogoUrl();
+                  saveLogos();
                 }
               }}
-              placeholder={t('header.logoPlaceholder') !== 'header.logoPlaceholder' ? t('header.logoPlaceholder') : 'https://example.com/logo.png'}
+              placeholder={t('header.logoPlaceholder') !== 'header.logoPlaceholder' ? t('header.logoPlaceholder') : 'Fallback logo (all themes)'}
+              className="w-full px-3 py-2 rounded-xl text-sm focus:outline-none transition-colors border"
+              style={{
+                backgroundColor: 'var(--glass-bg)',
+                borderColor: 'var(--glass-border)',
+                color: 'var(--text-primary)'
+              }}
+            />
+            <input
+              type="url"
+              value={logoDraftLight}
+              onChange={(e) => {
+                setLogoDraftLight(e.target.value);
+                setLogoPreviewFailed(false);
+              }}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  saveLogos();
+                }
+              }}
+              placeholder={t('header.logoLightPlaceholder') !== 'header.logoLightPlaceholder' ? t('header.logoLightPlaceholder') : 'Light theme logo URL'}
+              className="w-full px-3 py-2 rounded-xl text-sm focus:outline-none transition-colors border"
+              style={{
+                backgroundColor: 'var(--glass-bg)',
+                borderColor: 'var(--glass-border)',
+                color: 'var(--text-primary)'
+              }}
+            />
+            <input
+              type="url"
+              value={logoDraftDark}
+              onChange={(e) => {
+                setLogoDraftDark(e.target.value);
+                setLogoPreviewFailed(false);
+              }}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  saveLogos();
+                }
+              }}
+              placeholder={t('header.logoDarkPlaceholder') !== 'header.logoDarkPlaceholder' ? t('header.logoDarkPlaceholder') : 'Dark theme logo URL'}
               className="w-full px-3 py-2 rounded-xl text-sm focus:outline-none transition-colors border"
               style={{
                 backgroundColor: 'var(--glass-bg)',
@@ -249,31 +306,57 @@ export default function HeaderSidebar({
             <div className="flex items-center justify-between gap-2">
               <button
                 type="button"
-                onClick={saveLogoUrl}
+                onClick={saveLogos}
                 className="px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-wider border transition-all text-white"
                 style={{
                   backgroundColor: 'var(--accent-color)',
                   borderColor: 'var(--accent-color)',
                 }}
               >
-                {t('header.saveLogo') !== 'header.saveLogo' ? t('header.saveLogo') : 'Save Logo'}
+                {t('header.saveLogo') !== 'header.saveLogo' ? t('header.saveLogo') : 'Save Logos'}
               </button>
-              {!!resolvedLogoPreview && (
+              {(!!resolvedPreviewDefault || !!resolvedPreviewLight || !!resolvedPreviewDark || !!logoSavedAt) && (
                 <span className="text-[10px] uppercase tracking-wider" style={{ color: logoPreviewFailed ? '#f87171' : 'var(--text-secondary)' }}>
                   {logoPreviewFailed
                     ? (t('header.logoInvalid') !== 'header.logoInvalid' ? t('header.logoInvalid') : 'Image failed to load')
-                    : (t('header.logoPreview') !== 'header.logoPreview' ? t('header.logoPreview') : 'Preview')}
+                    : (Date.now() - logoSavedAt < 2000
+                      ? (t('header.logoSaved') !== 'header.logoSaved' ? t('header.logoSaved') : 'Saved')
+                      : (t('header.logoPreview') !== 'header.logoPreview' ? t('header.logoPreview') : 'Preview'))}
                 </span>
               )}
             </div>
-            {!!resolvedLogoPreview && !logoPreviewFailed && (
-              <div className="w-full h-16 rounded-xl border flex items-center justify-center p-2" style={{ borderColor: 'var(--glass-border)', backgroundColor: 'var(--glass-bg)' }}>
-                <img
-                  src={resolvedLogoPreview}
-                  alt="Logo preview"
-                  className="max-h-full max-w-full object-contain"
-                  onError={() => setLogoPreviewFailed(true)}
-                />
+            {(!!resolvedPreviewDefault || !!resolvedPreviewLight || !!resolvedPreviewDark) && !logoPreviewFailed && (
+              <div className="space-y-2">
+                {!!resolvedPreviewLight && (
+                  <div className="w-full h-14 rounded-xl border flex items-center justify-center p-2" style={{ borderColor: 'var(--glass-border)', backgroundColor: '#ffffff' }}>
+                    <img
+                      src={resolvedPreviewLight}
+                      alt="Light logo preview"
+                      className="max-h-full max-w-full object-contain"
+                      onError={() => setLogoPreviewFailed(true)}
+                    />
+                  </div>
+                )}
+                {!!resolvedPreviewDark && (
+                  <div className="w-full h-14 rounded-xl border flex items-center justify-center p-2" style={{ borderColor: 'var(--glass-border)', backgroundColor: '#0b1220' }}>
+                    <img
+                      src={resolvedPreviewDark}
+                      alt="Dark logo preview"
+                      className="max-h-full max-w-full object-contain"
+                      onError={() => setLogoPreviewFailed(true)}
+                    />
+                  </div>
+                )}
+                {!resolvedPreviewLight && !resolvedPreviewDark && !!resolvedPreviewDefault && (
+                  <div className="w-full h-16 rounded-xl border flex items-center justify-center p-2" style={{ borderColor: 'var(--glass-border)', backgroundColor: 'var(--glass-bg)' }}>
+                    <img
+                      src={resolvedPreviewDefault}
+                      alt="Logo preview"
+                      className="max-h-full max-w-full object-contain"
+                      onError={() => setLogoPreviewFailed(true)}
+                    />
+                  </div>
+                )}
               </div>
             )}
           </div>
