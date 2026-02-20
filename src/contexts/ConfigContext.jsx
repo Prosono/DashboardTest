@@ -1,4 +1,5 @@
 import { createContext, useContext, useState, useEffect } from 'react';
+import { Capacitor } from '@capacitor/core';
 import { themes } from '../config/themes';
 
 export const GRADIENT_PRESETS = {
@@ -11,6 +12,19 @@ export const GRADIENT_PRESETS = {
 };
 
 const ConfigContext = createContext(null);
+
+const detectPlatform = () => {
+  const capPlatform = typeof Capacitor?.getPlatform === 'function' ? Capacitor.getPlatform() : 'web';
+  if (capPlatform && capPlatform !== 'web') return capPlatform;
+
+  if (typeof navigator === 'undefined') return 'web';
+  const ua = navigator.userAgent || '';
+  const isIOS = /iPad|iPhone|iPod/.test(ua)
+    || (ua.includes('Mac') && typeof document !== 'undefined' && 'ontouchend' in document);
+  if (isIOS) return 'ios';
+  if (/Android/i.test(ua)) return 'android';
+  return 'web';
+};
 
 export const useConfig = () => {
   const context = useContext(ConfigContext);
@@ -114,6 +128,14 @@ export const ConfigProvider = ({ children }) => {
     return { url: '', fallbackUrl: '', token: '', authMethod: 'oauth' };
   });
 
+  useEffect(() => {
+    const root = document.documentElement;
+    const platform = detectPlatform();
+    root.dataset.platform = platform;
+    root.style.setProperty('--safe-area-top-fallback', platform === 'ios' ? '44px' : '0px');
+    root.style.setProperty('--safe-area-bottom-fallback', platform === 'ios' ? '20px' : '0px');
+  }, []);
+
   // Apply theme to DOM
   useEffect(() => {
     const themeKey = themes[currentTheme] ? currentTheme : 'dark';
@@ -154,6 +176,7 @@ export const ConfigProvider = ({ children }) => {
     const body = document.body;
     const themeKey = themes[currentTheme] ? currentTheme : 'dark';
     const theme = themes[themeKey].colors;
+    let safeAreaColor = theme['--bg-primary'];
 
     // Clean up custom image background and inline overrides
     body.style.backgroundImage = '';
@@ -174,6 +197,7 @@ export const ConfigProvider = ({ children }) => {
       root.style.setProperty('--bg-primary', bgColor);
       root.style.backgroundColor = bgColor;
       body.style.backgroundColor = bgColor;
+      safeAreaColor = bgColor;
     } else if (bgMode === 'gradient') {
       const preset = GRADIENT_PRESETS[bgGradient] || GRADIENT_PRESETS.midnight;
       root.style.setProperty('--bg-gradient-from', preset.from);
@@ -181,6 +205,7 @@ export const ConfigProvider = ({ children }) => {
       root.style.setProperty('--bg-primary', preset.to);
       root.style.backgroundColor = preset.to;
       body.style.backgroundColor = preset.to;
+      safeAreaColor = preset.to;
     } else if (bgMode === 'custom' && bgImage) {
       root.style.backgroundColor = theme['--bg-primary'];
       body.style.backgroundColor = 'transparent';
@@ -190,11 +215,15 @@ export const ConfigProvider = ({ children }) => {
       body.style.backgroundAttachment = 'fixed';
       root.classList.add('custom-bg-active');
       root.style.setProperty('--bg-primary', theme['--bg-primary']);
+      safeAreaColor = theme['--bg-primary'];
     } else {
       // 'theme' mode — let theme colors apply normally
       root.style.backgroundColor = theme['--bg-primary'];
       body.style.backgroundColor = theme['--bg-primary'];
+      safeAreaColor = theme['--bg-primary'];
     }
+
+    root.style.setProperty('--safe-area-bg', safeAreaColor);
   }, [bgMode, bgColor, bgGradient, bgImage, currentTheme]);
 
   // Apply card transparency to DOM

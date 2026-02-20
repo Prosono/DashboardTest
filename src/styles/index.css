@@ -42,12 +42,12 @@ html::after {
 
 html::before {
   top: 0;
-  height: var(--safe-area-top);
+  height: max(var(--safe-area-top), var(--safe-area-top-fallback, 0px));
 }
 
 html::after {
   bottom: 0;
-  height: var(--safe-area-bottom);
+  height: max(var(--safe-area-bottom), var(--safe-area-bottom-fallback, 0px));
 }
 
 body {

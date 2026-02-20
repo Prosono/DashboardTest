@@ -882,14 +882,16 @@ function AppContent({
   const mobileGridGapV = Math.max(12, Math.min(24, Number(gridGapV) || 20));
   const mobileGridGapH = Math.max(10, Math.min(20, Number(gridGapH) || 20));
   const mobileGridAutoRow = 96;
+  const safeAreaTop = 'max(var(--safe-area-top, 0px), var(--safe-area-top-fallback, 0px))';
+  const safeAreaBottom = 'max(var(--safe-area-bottom, 0px), var(--safe-area-bottom-fallback, 0px))';
 
   return (
     <div
       className="font-sans selection:bg-blue-500/30 overflow-x-hidden transition-colors duration-500"
       style={{
-        minHeight: 'calc(100svh - var(--safe-area-top, 0px) - var(--safe-area-bottom, 0px))',
-        paddingTop: 'var(--safe-area-top, 0px)',
-        paddingBottom: 'var(--safe-area-bottom, 0px)',
+        minHeight: `calc(100svh - ${safeAreaTop} - ${safeAreaBottom})`,
+        paddingTop: safeAreaTop,
+        paddingBottom: safeAreaBottom,
         backgroundColor: 'var(--bg-primary)',
         color: 'var(--text-primary)',
       }}
