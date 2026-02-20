@@ -160,7 +160,15 @@ function AppContent({
   };
   const normalizeRole = (role) => {
     const value = String(role || '').trim().toLowerCase();
-    if (value === 'admin' || value === 'administrator') return 'admin';
+    if (
+      value === 'admin'
+      || value === 'administrator'
+      || value === 'administratorclient'
+      || value === 'clientadmin'
+      || value === 'client_admin'
+      || value === 'localadmin'
+      || value === 'local_admin'
+    ) return 'admin';
     if (value === 'inspector' || value === 'inspektør') return 'inspector';
     return 'user';
   };
@@ -243,8 +251,13 @@ function AppContent({
   const [editCardSettingsKey, setEditCardSettingsKey] = useState(null);
 
   const [editMode, setEditMode] = useState(false);
-  const canEditDashboard = currentUser?.role === 'admin';
   const currentUserRole = normalizeRole(currentUser?.role);
+  const isPlatformAdmin = currentUser?.isPlatformAdmin === true;
+  const isLocalClientAdmin = currentUserRole === 'admin' && !isPlatformAdmin;
+  const canEditDashboard = isLocalClientAdmin;
+  const canEditGlobalBranding = isPlatformAdmin;
+  const canEditClientSubtitle = isLocalClientAdmin;
+  const canManageUsersAndClients = currentUserRole === 'admin' || isPlatformAdmin;
   const WARNING_SENSOR_ID = 'sensor.system_warning_details';
   const CRITICAL_SENSOR_ID = 'sensor.system_critical_details';
 
@@ -417,8 +430,8 @@ function AppContent({
     hvacMap, fanMap, swingMap,
   } = useEntityHelpers({ entities, conn, activeUrl, language, now, t });
 
-  const canControlDevices = currentUser?.role !== 'inspector';
-  const isAdminUser = currentUser?.role === 'admin';
+  const canControlDevices = currentUserRole !== 'inspector' && !isPlatformAdmin;
+  const isAdminUser = canManageUsersAndClients;
   const profileDisplayName = String(currentUser?.fullName || currentUser?.username || t('profile.userFallback')).trim();
   const [dashboardDirty, setDashboardDirty] = useState(false);
   const dashboardDirtyReadyRef = useRef(false);
@@ -1063,8 +1076,8 @@ function AppContent({
                 onOpenLayout={() => setShowLayoutSidebar(true)}
                 onOpenHeader={() => setShowHeaderEditModal(true)}
                 showLayout={isAdminUser}
-                showHeader={isAdminUser}
-                showConnection={isAdminUser}
+                showHeader={canEditGlobalBranding || canEditClientSubtitle}
+                showConnection={canManageUsersAndClients}
                 t={t}
               />
               {isAdminUser && updateCount > 0 && (
@@ -1311,6 +1324,8 @@ function AppContent({
             sectionSpacing, updateSectionSpacing,
             headerTitle, headerScale, headerSettings,
             updateHeaderTitle, updateHeaderScale, updateHeaderSettings,
+            canEditGlobalBranding,
+            canEditClientSubtitle,
           }}
           onboarding={{
             showOnboarding, setShowOnboarding, isOnboardingActive,

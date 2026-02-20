@@ -39,6 +39,7 @@ export default function Header({
   const is12h = clockFormat === '12h';
   const clockScale = headerSettings?.clockScale ?? 1.0;
   const dateScale = headerSettings?.dateScale ?? 1.0;
+  const clientSubtitle = String(headerSettings?.clientSubtitle || '').trim();
   const logoUrl = String(headerSettings?.logoUrl || '').trim();
   const hasLogo = logoUrl.length > 0;
   const mobileTitleLength = String(headerTitle || '').trim().length;
@@ -124,6 +125,18 @@ export default function Header({
                 >
                   {headerTitle || 'Tunet'}
                 </h1>
+                {clientSubtitle && (
+                  <p
+                    className="uppercase tracking-[0.2em] md:tracking-[0.35em] leading-none opacity-70"
+                    style={{
+                      color: 'var(--text-muted)',
+                      fontSize: isMobile ? '0.62rem' : '0.7rem',
+                      marginTop: isMobile ? '0.1rem' : '0.2rem',
+                    }}
+                  >
+                    {clientSubtitle}
+                  </p>
+                )}
               </>
             )}
           </div>

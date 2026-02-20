@@ -118,6 +118,8 @@ export default function HeaderSidebar({
   updateHeaderTitle,
   updateHeaderScale,
   updateHeaderSettings,
+  canEditGlobalBranding = false,
+  canEditClientSubtitle = false,
   onSwitchToTheme,
   onSwitchToLayout,
   t
@@ -188,41 +190,65 @@ export default function HeaderSidebar({
           isOpen={sections.typography}
           toggle={toggleSection}
         >
-          {/* Title Input */}
-          <div className="space-y-2">
-            <label className="text-[11px] font-bold uppercase tracking-wider" style={{ color: 'var(--text-secondary)' }}>{t('header.titleLabel')}</label>
-            <input
-              type="text"
-              value={headerTitle}
-              onChange={(e) => updateHeaderTitle(e.target.value)}
-              placeholder={t('header.titlePlaceholder')}
-              className="w-full px-3 py-2 rounded-xl text-sm focus:outline-none transition-colors border"
-              style={{ 
-                  backgroundColor: 'var(--glass-bg)', 
+          {canEditClientSubtitle && (
+            <div className="space-y-2">
+              <label className="text-[11px] font-bold uppercase tracking-wider" style={{ color: 'var(--text-secondary)' }}>
+                {t('statusPills.subtitle') !== 'statusPills.subtitle' ? t('statusPills.subtitle') : 'Subtitle'}
+              </label>
+              <input
+                type="text"
+                value={setting('clientSubtitle', '')}
+                onChange={(e) => update('clientSubtitle', e.target.value)}
+                placeholder="Client subtitle"
+                className="w-full px-3 py-2 rounded-xl text-sm focus:outline-none transition-colors border"
+                style={{
+                  backgroundColor: 'var(--glass-bg)',
                   borderColor: 'var(--glass-border)',
                   color: 'var(--text-primary)'
-              }}
-            />
-          </div>
+                }}
+              />
+            </div>
+          )}
 
-          {/* Logo URL */}
-          <div className="space-y-2">
-            <label className="text-[11px] font-bold uppercase tracking-wider" style={{ color: 'var(--text-secondary)' }}>
-              {t('header.logoUrl') !== 'header.logoUrl' ? t('header.logoUrl') : 'Logo URL'}
-            </label>
-            <input
-              type="url"
-              value={setting('logoUrl', '')}
-              onChange={(e) => update('logoUrl', e.target.value)}
-              placeholder={t('header.logoPlaceholder') !== 'header.logoPlaceholder' ? t('header.logoPlaceholder') : 'https://example.com/logo.png'}
-              className="w-full px-3 py-2 rounded-xl text-sm focus:outline-none transition-colors border"
-              style={{
-                backgroundColor: 'var(--glass-bg)',
-                borderColor: 'var(--glass-border)',
-                color: 'var(--text-primary)'
-              }}
-            />
-          </div>
+          {canEditGlobalBranding && (
+            <>
+              {/* Title Input */}
+              <div className="space-y-2">
+                <label className="text-[11px] font-bold uppercase tracking-wider" style={{ color: 'var(--text-secondary)' }}>{t('header.titleLabel')}</label>
+                <input
+                  type="text"
+                  value={headerTitle}
+                  onChange={(e) => updateHeaderTitle(e.target.value)}
+                  placeholder={t('header.titlePlaceholder')}
+                  className="w-full px-3 py-2 rounded-xl text-sm focus:outline-none transition-colors border"
+                  style={{ 
+                      backgroundColor: 'var(--glass-bg)', 
+                      borderColor: 'var(--glass-border)',
+                      color: 'var(--text-primary)'
+                  }}
+                />
+              </div>
+
+              {/* Logo URL */}
+              <div className="space-y-2">
+                <label className="text-[11px] font-bold uppercase tracking-wider" style={{ color: 'var(--text-secondary)' }}>
+                  {t('header.logoUrl') !== 'header.logoUrl' ? t('header.logoUrl') : 'Logo URL'}
+                </label>
+                <input
+                  type="url"
+                  value={setting('logoUrl', '')}
+                  onChange={(e) => update('logoUrl', e.target.value)}
+                  placeholder={t('header.logoPlaceholder') !== 'header.logoPlaceholder' ? t('header.logoPlaceholder') : 'https://example.com/logo.png'}
+                  className="w-full px-3 py-2 rounded-xl text-sm focus:outline-none transition-colors border"
+                  style={{
+                    backgroundColor: 'var(--glass-bg)',
+                    borderColor: 'var(--glass-border)',
+                    color: 'var(--text-primary)'
+                  }}
+                />
+              </div>
+            </>
+          )}
 
           {/* Font Family */}
           <div className="space-y-2">
@@ -365,11 +391,13 @@ export default function HeaderSidebar({
           toggle={toggleSection}
         >
           <div className="space-y-1">
-             <Toggle
-               label={t('header.showTitle')}
-               value={setting('showTitle', true)}
-               onChange={(v) => update('showTitle', v)}
-             />
+             {canEditGlobalBranding && (
+               <Toggle
+                 label={t('header.showTitle')}
+                 value={setting('showTitle', true)}
+                 onChange={(v) => update('showTitle', v)}
+               />
+             )}
              <Toggle
                label={t('header.showClock')}
                value={setting('showClock', true)}
