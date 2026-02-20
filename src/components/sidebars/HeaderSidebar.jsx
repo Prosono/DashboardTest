@@ -1,7 +1,8 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Palette, ChevronDown, Maximize2, Eye, RefreshCw, Type, AlignLeft, LayoutGrid } from '../../icons';
 import M3Slider from '../ui/M3Slider';
 import SidebarContainer from './SidebarContainer';
+import { resolveLogoUrl } from '../../utils/branding';
 
 const FONTS = [
   { value: 'sans', label: 'Sans-serif' },
@@ -123,10 +124,24 @@ export default function HeaderSidebar({
   t
 }) {
   const [sections, setSections] = useState({ typography: true, style: false, clock: false, visibility: false });
+  const [logoDraft, setLogoDraft] = useState(String(headerSettings?.logoUrl || ''));
+  const [logoPreviewFailed, setLogoPreviewFailed] = useState(false);
   const toggleSection = (key) => setSections(prev => ({ ...prev, [key]: !prev[key] }));
 
   const setting = (key, fallback) => headerSettings?.[key] ?? fallback;
   const update = (key, value) => updateHeaderSettings({ ...headerSettings, [key]: value });
+  const resolvedLogoPreview = resolveLogoUrl(logoDraft);
+
+  useEffect(() => {
+    setLogoDraft(String(headerSettings?.logoUrl || ''));
+    setLogoPreviewFailed(false);
+  }, [headerSettings?.logoUrl]);
+
+  const saveLogoUrl = () => {
+    const next = String(logoDraft || '').trim();
+    update('logoUrl', next);
+    setLogoPreviewFailed(false);
+  };
 
   const fontWeight = setting('fontWeight', '300');
   const letterSpacing = setting('letterSpacing', 'normal');
@@ -212,8 +227,17 @@ export default function HeaderSidebar({
             </label>
             <input
               type="url"
-              value={setting('logoUrl', '')}
-              onChange={(e) => update('logoUrl', e.target.value)}
+              value={logoDraft}
+              onChange={(e) => {
+                setLogoDraft(e.target.value);
+                setLogoPreviewFailed(false);
+              }}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  saveLogoUrl();
+                }
+              }}
               placeholder={t('header.logoPlaceholder') !== 'header.logoPlaceholder' ? t('header.logoPlaceholder') : 'https://example.com/logo.png'}
               className="w-full px-3 py-2 rounded-xl text-sm focus:outline-none transition-colors border"
               style={{
@@ -222,6 +246,36 @@ export default function HeaderSidebar({
                 color: 'var(--text-primary)'
               }}
             />
+            <div className="flex items-center justify-between gap-2">
+              <button
+                type="button"
+                onClick={saveLogoUrl}
+                className="px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-wider border transition-all text-white"
+                style={{
+                  backgroundColor: 'var(--accent-color)',
+                  borderColor: 'var(--accent-color)',
+                }}
+              >
+                {t('header.saveLogo') !== 'header.saveLogo' ? t('header.saveLogo') : 'Save Logo'}
+              </button>
+              {!!resolvedLogoPreview && (
+                <span className="text-[10px] uppercase tracking-wider" style={{ color: logoPreviewFailed ? '#f87171' : 'var(--text-secondary)' }}>
+                  {logoPreviewFailed
+                    ? (t('header.logoInvalid') !== 'header.logoInvalid' ? t('header.logoInvalid') : 'Image failed to load')
+                    : (t('header.logoPreview') !== 'header.logoPreview' ? t('header.logoPreview') : 'Preview')}
+                </span>
+              )}
+            </div>
+            {!!resolvedLogoPreview && !logoPreviewFailed && (
+              <div className="w-full h-16 rounded-xl border flex items-center justify-center p-2" style={{ borderColor: 'var(--glass-border)', backgroundColor: 'var(--glass-bg)' }}>
+                <img
+                  src={resolvedLogoPreview}
+                  alt="Logo preview"
+                  className="max-h-full max-w-full object-contain"
+                  onError={() => setLogoPreviewFailed(true)}
+                />
+              </div>
+            )}
           </div>
 
           {/* Font Family */}
