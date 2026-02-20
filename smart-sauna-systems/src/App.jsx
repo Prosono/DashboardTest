@@ -262,6 +262,7 @@ function AppContent({
   const canManageUsersAndClients = currentUserRole === 'admin' || isPlatformAdmin;
   const WARNING_SENSOR_ID = 'sensor.system_warning_details';
   const CRITICAL_SENSOR_ID = 'sensor.system_critical_details';
+  const { gridColCount, isCompactCards, isMobile } = useResponsiveGrid(gridColumns);
 
   useEffect(() => {
     if (!canEditDashboard && editMode) setEditMode(false);
@@ -364,9 +365,6 @@ function AppContent({
   const pointerDragRef = useRef(false);
   const ignoreTouchRef = useRef(false);
   const [tempHistoryById, _setTempHistoryById] = useTempHistory(conn, cardSettings);
-
-  // ── Responsive grid ────────────────────────────────────────────────────
-  const { gridColCount, isCompactCards, isMobile } = useResponsiveGrid(gridColumns);
 
   // ── Connection / onboarding hook ───────────────────────────────────────
   const {
