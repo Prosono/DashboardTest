@@ -373,6 +373,23 @@ function AppContent({
     saveStatusPillsConfig([...(statusPillsConfig || []), criticalPill]);
   }, [entities, statusPillsConfig, saveStatusPillsConfig, CRITICAL_SENSOR_ID]);
 
+  const parseAlertCountFromState = useCallback((rawState) => {
+    const normalized = String(rawState ?? '').trim().toLowerCase();
+    if (!normalized || ['unknown', 'unavailable', 'none', 'ok', '0'].includes(normalized)) return 0;
+    const numeric = Number(normalized);
+    if (Number.isFinite(numeric) && numeric > 0) return Math.round(numeric);
+    return 1;
+  }, []);
+
+  const warningAlertCount = parseAlertCountFromState(entities?.[WARNING_SENSOR_ID]?.state);
+  const criticalAlertCount = parseAlertCountFromState(entities?.[CRITICAL_SENSOR_ID]?.state);
+  const mobileAlertCount = warningAlertCount + criticalAlertCount;
+  const mobileAlertTargetId = criticalAlertCount > 0 ? CRITICAL_SENSOR_ID : WARNING_SENSOR_ID;
+  const statusPillsForBar = useMemo(() => {
+    if (!isMobile) return statusPillsConfig;
+    return (statusPillsConfig || []).filter((pill) => !String(pill?.entityId || '').includes('system_warning_details'));
+  }, [isMobile, statusPillsConfig]);
+
   const saveHeaderLogos = useCallback(async ({ title, logoUrl, logoUrlLight, logoUrlDark, updatedAt: updatedAtInput }) => {
     if (!canEditGlobalBranding || typeof onSaveGlobalBranding !== 'function') {
       return { ok: false, persisted: false };
@@ -522,6 +539,7 @@ function AppContent({
   const navScrollRafRef = useRef(0);
   const [navStickyOnScrollDown, setNavStickyOnScrollDown] = useState(false);
   const [navPinnedMetrics, setNavPinnedMetrics] = useState({ left: 0, width: 0, height: 0 });
+  const [navPinTopPx, setNavPinTopPx] = useState(8);
   const [mobileTopFadeActive, setMobileTopFadeActive] = useState(false);
   const [mobilePullDistance, setMobilePullDistance] = useState(0);
   const [mobilePullRefreshing, setMobilePullRefreshing] = useState(false);
@@ -628,7 +646,7 @@ function AppContent({
         title={t('profile.title')}
       >
         <User className="w-3 h-3 inline mr-1" />
-        {profileDisplayName} ({currentUser.role})
+        {profileDisplayName}
       </button>
     ) : null
   );
@@ -715,24 +733,39 @@ function AppContent({
 
   const readSafeAreaTopPx = useCallback(() => {
     if (typeof window === 'undefined' || typeof document === 'undefined') return 0;
+    const rootStyle = window.getComputedStyle(document.documentElement);
+    const fromVar = parseFloat(rootStyle.getPropertyValue('--safe-area-top'));
+    const fromFallback = parseFloat(rootStyle.getPropertyValue('--safe-area-top-fallback'));
+    const fromVisualViewport = Number(window.visualViewport?.offsetTop || 0);
     const probe = document.createElement('div');
     probe.style.position = 'fixed';
-    probe.style.top = 'env(safe-area-inset-top)';
+    probe.style.top = '0';
     probe.style.left = '0';
     probe.style.width = '0';
     probe.style.height = '0';
+    probe.style.paddingTop = 'env(safe-area-inset-top)';
     probe.style.visibility = 'hidden';
     probe.style.pointerEvents = 'none';
     document.body.appendChild(probe);
-    const inset = Number(probe.getBoundingClientRect().top) || 0;
+    const fromProbe = parseFloat(window.getComputedStyle(probe).paddingTop) || 0;
     probe.remove();
-    return Math.max(0, inset);
+    const candidates = [fromVar, fromFallback, fromProbe, fromVisualViewport]
+      .filter((value) => Number.isFinite(value) && value >= 0);
+    const inset = candidates.length ? Math.max(...candidates) : 0;
+    return Math.max(0, Math.min(64, inset));
   }, []);
 
   const getNavPinTopPx = useCallback(() => {
     if (!isMobile) return 8;
     return Math.round(readSafeAreaTopPx() + 56);
   }, [isMobile, readSafeAreaTopPx]);
+
+  const syncNavPinTop = useCallback(() => {
+    const next = getNavPinTopPx();
+    navPinTopRef.current = next;
+    setNavPinTopPx((prev) => (Math.abs(prev - next) < 1 ? prev : next));
+    return next;
+  }, [getNavPinTopPx]);
 
   const measureNavRowMetrics = useCallback(() => {
     if (typeof window === 'undefined') return null;
@@ -753,12 +786,15 @@ function AppContent({
 
   const measureNavStickyAnchor = useCallback(() => {
     if (typeof window === 'undefined') return;
-    if (navStickyOnScrollDown) return;
-    navPinTopRef.current = getNavPinTopPx();
+    const pinTop = syncNavPinTop();
+    if (navStickyOnScrollDown) {
+      measureNavRowMetrics();
+      return;
+    }
     const rect = measureNavRowMetrics();
     if (!rect) return;
-    navStickyAnchorRef.current = Math.max(0, (window.scrollY || 0) + rect.top - navPinTopRef.current);
-  }, [navStickyOnScrollDown, measureNavRowMetrics, getNavPinTopPx]);
+    navStickyAnchorRef.current = Math.max(0, (window.scrollY || 0) + rect.top - pinTop);
+  }, [navStickyOnScrollDown, measureNavRowMetrics, syncNavPinTop]);
 
   useEffect(() => {
     if (typeof window === 'undefined') return undefined;
@@ -781,6 +817,7 @@ function AppContent({
         const currentY = window.scrollY || 0;
         const delta = currentY - navScrollLastRef.current;
         const pastAnchor = currentY > navStickyAnchorRef.current;
+        if (isMobile) syncNavPinTop();
         if (pastAnchor && delta > 0) {
           measureNavRowMetrics();
         }
@@ -819,7 +856,7 @@ function AppContent({
         navScrollRafRef.current = 0;
       }
     };
-  }, [measureNavStickyAnchor, measureNavRowMetrics, isMobile]);
+  }, [measureNavStickyAnchor, measureNavRowMetrics, isMobile, syncNavPinTop]);
 
   const triggerPullRefresh = useCallback(() => {
     if (mobilePullRefreshing || typeof window === 'undefined') return;
@@ -1323,7 +1360,7 @@ function AppContent({
                 isMediaActive={isMediaActive}
                 getA={getA}
                 getEntityImageUrl={getEntityImageUrl}
-                statusPillsConfig={statusPillsConfig}
+                statusPillsConfig={statusPillsForBar}
                 isMobile={isMobile}
               />
             </div>
@@ -1351,6 +1388,16 @@ function AppContent({
           <div className="flex items-center justify-between mb-2 px-0.5">
             {renderUserChip('max-w-[58%] truncate')}
             <div className="flex items-center gap-2">
+              {mobileAlertCount > 0 && (
+                <button
+                  onClick={() => setShowSensorInfoModal(mobileAlertTargetId)}
+                  className="inline-flex items-center gap-1 px-2 py-1 rounded-full border border-[var(--glass-border)] bg-[var(--glass-bg)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors"
+                  title="Alerts"
+                >
+                  <AlertTriangle className={`w-3.5 h-3.5 ${criticalAlertCount > 0 ? 'text-red-400' : 'text-amber-400'}`} />
+                  <span className="text-[11px] font-bold leading-none">{mobileAlertCount}</span>
+                </button>
+              )}
               {renderSettingsControl()}
             </div>
           </div>
@@ -1369,7 +1416,7 @@ function AppContent({
               ...(navStickyOnScrollDown
                 ? {
                   position: 'fixed',
-                  top: `${navPinTopRef.current}px`,
+                  top: `${navPinTopPx}px`,
                   left: `${navPinnedMetrics.left}px`,
                   width: `${navPinnedMetrics.width}px`,
                   borderRadius: isMobile ? '1rem' : '1.2rem',
