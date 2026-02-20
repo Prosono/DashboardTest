@@ -1090,10 +1090,9 @@ function AppContent({
               ...(navStickyOnScrollDown
                 ? {
                   position: 'fixed',
-                  top: isMobile ? 'calc(env(safe-area-inset-top, 0px) + 44px)' : '8px',
+                  top: isMobile ? 'calc(env(safe-area-inset-top, 0px) + 56px)' : '8px',
                   left: `${navPinnedMetrics.left}px`,
                   width: `${navPinnedMetrics.width}px`,
-                  border: '1px solid var(--glass-border)',
                   borderRadius: isMobile ? '1rem' : '1.2rem',
                   backgroundColor: 'color-mix(in srgb, var(--card-bg) 88%, transparent)',
                   backdropFilter: 'blur(10px)',
