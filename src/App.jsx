@@ -516,6 +516,7 @@ function AppContent({
   const loadedAssignedDashboardRef = useRef('');
   const navRowRef = useRef(null);
   const navStickyAnchorRef = useRef(0);
+  const navPinTopRef = useRef(8);
   const navScrollLastRef = useRef(0);
   const navScrollRafRef = useRef(0);
   const [navStickyOnScrollDown, setNavStickyOnScrollDown] = useState(false);
@@ -705,6 +706,27 @@ function AppContent({
 
   useEffect(() => () => restoreMobileScroll(), [restoreMobileScroll]);
 
+  const readSafeAreaTopPx = useCallback(() => {
+    if (typeof window === 'undefined' || typeof document === 'undefined') return 0;
+    const probe = document.createElement('div');
+    probe.style.position = 'fixed';
+    probe.style.top = 'env(safe-area-inset-top)';
+    probe.style.left = '0';
+    probe.style.width = '0';
+    probe.style.height = '0';
+    probe.style.visibility = 'hidden';
+    probe.style.pointerEvents = 'none';
+    document.body.appendChild(probe);
+    const inset = Number(probe.getBoundingClientRect().top) || 0;
+    probe.remove();
+    return Math.max(0, inset);
+  }, []);
+
+  const getNavPinTopPx = useCallback(() => {
+    if (!isMobile) return 8;
+    return Math.round(readSafeAreaTopPx() + 56);
+  }, [isMobile, readSafeAreaTopPx]);
+
   const measureNavRowMetrics = useCallback(() => {
     if (typeof window === 'undefined') return null;
     const element = navRowRef.current;
@@ -725,10 +747,11 @@ function AppContent({
   const measureNavStickyAnchor = useCallback(() => {
     if (typeof window === 'undefined') return;
     if (navStickyOnScrollDown) return;
+    navPinTopRef.current = getNavPinTopPx();
     const rect = measureNavRowMetrics();
     if (!rect) return;
-    navStickyAnchorRef.current = Math.max(0, (window.scrollY || 0) + rect.top - 8);
-  }, [navStickyOnScrollDown, measureNavRowMetrics]);
+    navStickyAnchorRef.current = Math.max(0, (window.scrollY || 0) + rect.top - navPinTopRef.current);
+  }, [navStickyOnScrollDown, measureNavRowMetrics, getNavPinTopPx]);
 
   useEffect(() => {
     if (typeof window === 'undefined') return undefined;
@@ -1215,7 +1238,7 @@ function AppContent({
               ...(navStickyOnScrollDown
                 ? {
                   position: 'fixed',
-                  top: isMobile ? 'calc(env(safe-area-inset-top, 0px) + 56px)' : '8px',
+                  top: `${navPinTopRef.current}px`,
                   left: `${navPinnedMetrics.left}px`,
                   width: `${navPinnedMetrics.width}px`,
                   borderRadius: isMobile ? '1rem' : '1.2rem',
