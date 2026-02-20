@@ -61,6 +61,14 @@
   -ms-overflow-style: none;
   scrollbar-width: none;
 }
+/* Alias used by card components (same behavior as scrollbar-hide). */
+.hide-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.hide-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
 .vacuum-card-controls {
   display: flex;
   flex-direction: column;

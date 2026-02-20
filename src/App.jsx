@@ -879,6 +879,10 @@ function AppContent({
     return dispatchCardRender(cardId, dragProps, getControls, cardStyle, settingsKey, ctx);
   };
 
+  const mobileGridGapV = Math.max(12, Math.min(24, Number(gridGapV) || 20));
+  const mobileGridGapH = Math.max(10, Math.min(20, Number(gridGapH) || 20));
+  const mobileGridAutoRow = 96;
+
   return (
     <div
       className="font-sans selection:bg-blue-500/30 overflow-x-hidden transition-colors duration-500"
@@ -1182,8 +1186,8 @@ function AppContent({
             className="grid font-sans page-transition items-start"
             data-dashboard-grid
             style={{
-              gap: isMobile ? '40px' : `${gridGapV}px ${gridGapH}px`,
-              gridAutoRows: isMobile ? '88px' : '100px',
+              gap: isMobile ? `${mobileGridGapV}px ${mobileGridGapH}px` : `${gridGapV}px ${gridGapH}px`,
+              gridAutoRows: isMobile ? `${mobileGridAutoRow}px` : '100px',
               gridTemplateColumns: `repeat(${gridColCount}, minmax(0, 1fr))`,
             }}
           >
@@ -1217,7 +1221,7 @@ function AppContent({
                 return (
                   <div
                     key={id}
-                    className={`h-full relative ${(isCompactCards || isMobile) ? 'card-compact' : ''}`}
+                    className={`h-full relative ${isCompactCards ? 'card-compact' : ''}`}
                     data-grid-card
                     style={{
                       gridRowStart: placement.row,
