@@ -315,11 +315,10 @@ export default function SaunaFieldModal({
         <button
           type="button"
           onClick={onClose}
-          className="absolute top-4 right-4 md:top-6 md:right-6 z-[80] w-10 h-10 rounded-full flex items-center justify-center border hover:scale-105 transition-all"
-          style={{ borderColor: 'var(--glass-border)', backgroundColor: 'var(--glass-bg)', color: 'var(--text-secondary)' }}
+          className="modal-close sauna-popup-close"
           aria-label={tr('common.close', 'Lukk')}
         >
-          <X className="w-5 h-5" />
+          <X className="w-4 h-4" />
         </button>
 
         {!focusedLayout && (
