@@ -869,7 +869,6 @@ function AppContent({
       const resisted = Math.min(PULL_REFRESH_MAX_PX, delta * PULL_REFRESH_RESISTANCE);
       mobilePullDistanceRef.current = resisted;
       setMobilePullDistance((prev) => (Math.abs(prev - resisted) < 0.5 ? prev : resisted));
-      event.preventDefault();
     };
 
     const onTouchEnd = () => {
@@ -886,7 +885,7 @@ function AppContent({
     };
 
     window.addEventListener('touchstart', onTouchStart, { passive: true });
-    window.addEventListener('touchmove', onTouchMove, { passive: false });
+    window.addEventListener('touchmove', onTouchMove, { passive: true });
     window.addEventListener('touchend', onTouchEnd, { passive: true });
     window.addEventListener('touchcancel', onTouchCancel, { passive: true });
 
