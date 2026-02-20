@@ -102,7 +102,7 @@ export default function GenericUtilityModal({
   const content = (
     <>
       {showCloseButton && onClose && (
-        <button onClick={onClose} className="modal-close sauna-popup-close">
+        <button onClick={onClose} className="modal-close" style={{ position: 'absolute', top: '12px', right: '12px', zIndex: 70 }}>
           <X className="w-4 h-4" />
         </button>
       )}
