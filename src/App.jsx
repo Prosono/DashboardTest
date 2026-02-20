@@ -734,7 +734,6 @@ function AppContent({
     const rootStyle = window.getComputedStyle(document.documentElement);
     const fromVar = parseFloat(rootStyle.getPropertyValue('--safe-area-top'));
     const fromFallback = parseFloat(rootStyle.getPropertyValue('--safe-area-top-fallback'));
-    const fromVisualViewport = Number(window.visualViewport?.offsetTop || 0);
     const probe = document.createElement('div');
     probe.style.position = 'fixed';
     probe.style.top = '0';
@@ -747,15 +746,15 @@ function AppContent({
     document.body.appendChild(probe);
     const fromProbe = parseFloat(window.getComputedStyle(probe).paddingTop) || 0;
     probe.remove();
-    const candidates = [fromVar, fromFallback, fromProbe, fromVisualViewport]
+    const candidates = [fromVar, fromFallback, fromProbe]
       .filter((value) => Number.isFinite(value) && value >= 0);
     const inset = candidates.length ? Math.max(...candidates) : 0;
-    return Math.max(0, Math.min(64, inset));
+    return Math.max(0, Math.min(48, inset));
   }, []);
 
   const getNavPinTopPx = useCallback(() => {
     if (!isMobile) return 8;
-    return Math.round(readSafeAreaTopPx() + 56);
+    return Math.round(readSafeAreaTopPx() + 20);
   }, [isMobile, readSafeAreaTopPx]);
 
   const syncNavPinTop = useCallback(() => {
