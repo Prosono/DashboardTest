@@ -315,7 +315,7 @@ export default function SaunaFieldModal({
         <button
           type="button"
           onClick={onClose}
-          className="modal-close" style={{ position: 'absolute', top: '12px', right: '12px', zIndex: 70 }}
+          className="modal-close sauna-popup-close"
           aria-label={tr('common.close', 'Lukk')}
         >
           <X className="w-4 h-4" />

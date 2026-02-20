@@ -43,7 +43,7 @@ export default function GenericNumberModal({
   const content = (
     <>
       {showCloseButton && onClose && (
-        <button onClick={onClose} className="modal-close" style={{ position: 'absolute', top: '12px', right: '12px', zIndex: 70 }}>
+        <button onClick={onClose} className="modal-close sauna-popup-close">
           <X className="w-4 h-4" />
         </button>
       )}
