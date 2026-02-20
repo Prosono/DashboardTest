@@ -21,6 +21,10 @@ export default function GenericMotionModal({
 }) {
   if (!entityId || !entity) return null;
   const tr = makeTr(t);
+  const isLightTheme = typeof document !== 'undefined' && document.documentElement?.dataset?.theme === 'light';
+  const modalSurfaceStyle = isLightTheme
+    ? { background: '#f1f5f9', borderColor: 'rgba(148,163,184,0.45)', color: 'var(--text-primary)' }
+    : { background: 'linear-gradient(135deg, var(--card-bg) 0%, var(--modal-bg) 100%)', borderColor: 'var(--glass-border)', color: 'var(--text-primary)' };
   const state = norm(entity?.state);
   const unavailable = state === 'unavailable' || state === 'unknown';
   const active = state === 'on' || state === 'open' || state === 'detected';
@@ -108,7 +112,7 @@ export default function GenericMotionModal({
     return (
       <div
         className="border w-full rounded-3xl md:rounded-[2.4rem] p-5 md:p-8 font-sans relative backdrop-blur-xl"
-        style={{ background: 'linear-gradient(135deg, var(--card-bg) 0%, var(--modal-bg) 100%)', borderColor: 'var(--glass-border)', color: 'var(--text-primary)' }}
+        style={modalSurfaceStyle}
       >
         {content}
       </div>
@@ -122,8 +126,8 @@ export default function GenericMotionModal({
       onClick={onClose}
     >
       <div
-        className="border w-full max-w-5xl rounded-3xl md:rounded-[3rem] p-6 md:p-10 font-sans relative max-h-[90vh] overflow-y-auto backdrop-blur-xl popup-anim"
-        style={{ background: 'linear-gradient(135deg, var(--card-bg) 0%, var(--modal-bg) 100%)', borderColor: 'var(--glass-border)', color: 'var(--text-primary)' }}
+        className="border w-full max-w-5xl rounded-3xl md:rounded-[3rem] p-6 md:p-10 font-sans relative max-h-[90vh] overflow-y-auto backdrop-blur-xl popup-anim shadow-2xl"
+        style={modalSurfaceStyle}
         onClick={(e) => e.stopPropagation()}
       >
         {content}

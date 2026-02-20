@@ -16,6 +16,7 @@ export default function GenericClimateModal({
   t,
   embedded = false,
   showCloseButton = true,
+  overlayOpacity = 0.3,
 }) {
   if (!entityId || !entity) return null;
   const [dropdownOpen, setDropdownOpen] = useState(false);
@@ -24,6 +25,9 @@ export default function GenericClimateModal({
   const isCooling = hvacAction === 'cooling';
   const isHeating = hvacAction === 'heating';
   const isLightTheme = typeof document !== 'undefined' && document.documentElement?.dataset?.theme === 'light';
+  const modalSurfaceStyle = isLightTheme
+    ? { background: '#f1f5f9', borderColor: 'rgba(148,163,184,0.45)', color: 'var(--text-primary)' }
+    : { background: 'linear-gradient(135deg, var(--card-bg) 0%, var(--modal-bg) 100%)', borderColor: 'var(--glass-border)', color: 'var(--text-primary)' };
   const clTheme = isCooling ? 'blue' : isHeating ? 'orange' : 'gray';
   const currentTemp = entity.attributes?.current_temperature;
   const targetTemp = entity.attributes?.temperature;
@@ -163,7 +167,7 @@ export default function GenericClimateModal({
     return (
       <div
         className={`border w-full rounded-3xl md:rounded-[2.4rem] p-5 md:p-8 font-sans relative backdrop-blur-xl ${dropdownOpen ? 'z-[220]' : ''}`}
-        style={{ background: 'linear-gradient(135deg, var(--card-bg) 0%, var(--modal-bg) 100%)', borderColor: 'var(--glass-border)', color: 'var(--text-primary)' }}
+        style={modalSurfaceStyle}
       >
         {content}
       </div>
@@ -173,12 +177,12 @@ export default function GenericClimateModal({
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center p-4 md:p-6"
-      style={{ backdropFilter: 'blur(20px)', backgroundColor: 'rgba(0,0,0,0.3)' }}
+      style={{ backdropFilter: 'blur(20px)', backgroundColor: 'rgba(0,0,0,' + overlayOpacity + ')' }}
       onClick={onClose}
     >
       <div
-        className="border w-full max-w-5xl rounded-3xl md:rounded-[3rem] p-6 md:p-12 font-sans relative max-h-[90vh] overflow-y-auto backdrop-blur-xl popup-anim"
-        style={{ background: 'linear-gradient(135deg, var(--card-bg) 0%, var(--modal-bg) 100%)', borderColor: 'var(--glass-border)', color: 'var(--text-primary)' }}
+        className="border w-full max-w-5xl rounded-3xl md:rounded-[3rem] p-6 md:p-10 font-sans relative max-h-[90vh] overflow-y-auto backdrop-blur-xl popup-anim shadow-2xl"
+        style={modalSurfaceStyle}
         onClick={(e) => e.stopPropagation()}
       >
         {content}
