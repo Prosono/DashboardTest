@@ -14,13 +14,19 @@ html,
 body,
 #root {
   min-height: 100%;
+  overflow-x: hidden;
 }
 
 /* Keep native mobile bounce behavior. */
 @media (max-width: 768px) {
   html,
-  body {
+  body,
+  #root {
     overscroll-behavior-y: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+  body {
+    overflow-y: auto;
   }
 }
 

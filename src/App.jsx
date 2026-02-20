@@ -1217,7 +1217,7 @@ function AppContent({
 
   return (
     <div
-      className="font-sans selection:bg-blue-500/30 overflow-x-clip transition-colors duration-500"
+      className="font-sans selection:bg-blue-500/30 transition-colors duration-500"
       style={{
         minHeight: `calc(100svh - ${safeAreaTop} - ${safeAreaBottom})`,
         paddingTop: safeAreaTop,
