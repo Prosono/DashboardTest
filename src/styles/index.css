@@ -13,11 +13,41 @@
   --safe-area-bg: var(--bg-primary, #0f172a);
 }
 
+/* Fallback for older iOS WebKit builds that still use constant(). */
+@supports (padding-top: constant(safe-area-inset-top)) {
+  :root {
+    --safe-area-top: constant(safe-area-inset-top);
+    --safe-area-bottom: constant(safe-area-inset-bottom);
+  }
+}
+
 html,
 body,
 #root {
   min-height: 100%;
   background-color: var(--safe-area-bg);
+}
+
+/* Paint top/bottom safe areas explicitly so they always match the active theme. */
+html::before,
+html::after {
+  content: '';
+  position: fixed;
+  left: 0;
+  right: 0;
+  pointer-events: none;
+  background: var(--safe-area-bg);
+  z-index: 2;
+}
+
+html::before {
+  top: 0;
+  height: var(--safe-area-top);
+}
+
+html::after {
+  bottom: 0;
+  height: var(--safe-area-bottom);
 }
 
 body {
