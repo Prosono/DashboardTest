@@ -12,6 +12,7 @@ import {
   User,
   Eye,
   EyeOff,
+  RefreshCw,
 } from './icons';
 
 import SettingsDropdown from './components/ui/SettingsDropdown';
@@ -522,6 +523,11 @@ function AppContent({
   const [navStickyOnScrollDown, setNavStickyOnScrollDown] = useState(false);
   const [navPinnedMetrics, setNavPinnedMetrics] = useState({ left: 0, width: 0, height: 0 });
   const [mobileTopFadeActive, setMobileTopFadeActive] = useState(false);
+  const [mobilePullDistance, setMobilePullDistance] = useState(0);
+  const [mobilePullRefreshing, setMobilePullRefreshing] = useState(false);
+  const mobilePullStartYRef = useRef(0);
+  const mobilePullTrackingRef = useRef(false);
+  const mobilePullDistanceRef = useRef(0);
   const [profileState, setProfileState] = useState({
     username: '',
     fullName: '',
@@ -815,6 +821,84 @@ function AppContent({
     };
   }, [measureNavStickyAnchor, measureNavRowMetrics, isMobile]);
 
+  const triggerPullRefresh = useCallback(() => {
+    if (mobilePullRefreshing || typeof window === 'undefined') return;
+    setMobilePullRefreshing(true);
+    window.setTimeout(() => {
+      window.location.reload();
+    }, 220);
+  }, [mobilePullRefreshing]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || !isMobile) return undefined;
+
+    const PULL_REFRESH_TRIGGER_PX = 52;
+    const PULL_REFRESH_MAX_PX = 110;
+    const PULL_REFRESH_RESISTANCE = 0.6;
+
+    const resetPullState = () => {
+      mobilePullTrackingRef.current = false;
+      mobilePullDistanceRef.current = 0;
+      setMobilePullDistance(0);
+    };
+
+    const onTouchStart = (event) => {
+      if (mobilePullRefreshing || shouldLockMobileScroll || editMode) return;
+      if ((window.scrollY || window.pageYOffset || 0) > 0) return;
+      if (!event.touches || event.touches.length !== 1) return;
+      mobilePullTrackingRef.current = true;
+      mobilePullStartYRef.current = event.touches[0].clientY;
+      mobilePullDistanceRef.current = 0;
+      setMobilePullDistance(0);
+    };
+
+    const onTouchMove = (event) => {
+      if (!mobilePullTrackingRef.current) return;
+      if (!event.touches || event.touches.length !== 1) {
+        resetPullState();
+        return;
+      }
+
+      const scrollTop = window.scrollY || window.pageYOffset || 0;
+      const delta = event.touches[0].clientY - mobilePullStartYRef.current;
+      if (scrollTop > 0 || delta <= 0) {
+        if (scrollTop > 0 || delta < -6) resetPullState();
+        return;
+      }
+
+      const resisted = Math.min(PULL_REFRESH_MAX_PX, delta * PULL_REFRESH_RESISTANCE);
+      mobilePullDistanceRef.current = resisted;
+      setMobilePullDistance((prev) => (Math.abs(prev - resisted) < 0.5 ? prev : resisted));
+      event.preventDefault();
+    };
+
+    const onTouchEnd = () => {
+      if (!mobilePullTrackingRef.current) return;
+      mobilePullTrackingRef.current = false;
+      const shouldRefresh = mobilePullDistanceRef.current >= PULL_REFRESH_TRIGGER_PX;
+      mobilePullDistanceRef.current = 0;
+      setMobilePullDistance(0);
+      if (shouldRefresh) triggerPullRefresh();
+    };
+
+    const onTouchCancel = () => {
+      resetPullState();
+    };
+
+    window.addEventListener('touchstart', onTouchStart, { passive: true });
+    window.addEventListener('touchmove', onTouchMove, { passive: false });
+    window.addEventListener('touchend', onTouchEnd, { passive: true });
+    window.addEventListener('touchcancel', onTouchCancel, { passive: true });
+
+    return () => {
+      window.removeEventListener('touchstart', onTouchStart);
+      window.removeEventListener('touchmove', onTouchMove);
+      window.removeEventListener('touchend', onTouchEnd);
+      window.removeEventListener('touchcancel', onTouchCancel);
+      resetPullState();
+    };
+  }, [isMobile, mobilePullRefreshing, shouldLockMobileScroll, editMode, triggerPullRefresh]);
+
   const getCardSettingsKey = useCallback((cardId, pageId = activePage) => `${pageId}::${cardId}`, [activePage]);
 
   const personStatus = (id) => (
@@ -1065,6 +1149,8 @@ function AppContent({
   const mobileGridGapV = Math.max(12, Math.min(24, Number(gridGapV) || 20));
   const mobileGridGapH = Math.max(10, Math.min(20, Number(gridGapH) || 20));
   const mobileGridAutoRow = 96;
+  const pullRefreshProgress = Math.min(1, mobilePullDistance / 52);
+  const pullRefreshVisible = isMobile && (mobilePullDistance > 0.5 || mobilePullRefreshing);
   const safeAreaTop = 'max(var(--safe-area-top, 0px), var(--safe-area-top-fallback, 0px))';
   const safeAreaBottom = 'max(var(--safe-area-bottom, 0px), var(--safe-area-bottom-fallback, 0px))';
 
@@ -1114,6 +1200,32 @@ function AppContent({
               : 'linear-gradient(to bottom, rgba(2, 6, 23, 0.9) 0%, rgba(2, 6, 23, 0.62) 50%, rgba(2, 6, 23, 0) 100%)',
           }}
         />
+      )}
+
+      {pullRefreshVisible && (
+        <div
+          className="fixed pointer-events-none z-30 transition-all duration-150"
+          style={{
+            left: '50%',
+            top: `calc(${safeAreaTop} + 6px)`,
+            opacity: mobilePullRefreshing ? 1 : Math.max(0.45, pullRefreshProgress),
+            transform: `translateX(-50%) translateY(${mobilePullRefreshing ? 0 : (-14 + (pullRefreshProgress * 14))}px)`,
+          }}
+        >
+          <div
+            className="w-10 h-10 rounded-full border flex items-center justify-center shadow-sm backdrop-blur-md"
+            style={{
+              backgroundColor: 'color-mix(in srgb, var(--card-bg) 86%, transparent)',
+              borderColor: 'color-mix(in srgb, var(--accent-color) 32%, var(--glass-border))',
+              color: 'var(--text-primary)',
+            }}
+          >
+            <RefreshCw
+              className={`w-4 h-4 ${mobilePullRefreshing ? 'animate-spin' : ''}`}
+              style={mobilePullRefreshing ? undefined : { transform: `rotate(${Math.round(pullRefreshProgress * 300)}deg)` }}
+            />
+          </div>
+        </div>
       )}
 
       {editMode && draggingId && touchPath && (
