@@ -43,7 +43,7 @@ export default function GenericNumberModal({
   const content = (
     <>
       {showCloseButton && onClose && (
-        <button onClick={onClose} className="absolute top-6 right-6 md:top-8 md:right-8 modal-close">
+        <button onClick={onClose} className="modal-close sauna-popup-close">
           <X className="w-4 h-4" />
         </button>
       )}

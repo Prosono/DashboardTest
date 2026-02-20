@@ -180,6 +180,18 @@
 .modal-close:active {
   transform: scale(0.96);
 }
+.sauna-popup-close {
+  position: absolute;
+  top: 0.75rem;
+  right: 0.75rem;
+  z-index: 70;
+}
+@media (min-width: 768px) {
+  .sauna-popup-close {
+    top: 1rem;
+    right: 1rem;
+  }
+}
 .light-modal-close-anchor {
   position: absolute;
   pointer-events: auto;
