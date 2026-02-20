@@ -32,7 +32,7 @@ export default function GenericDoorModal({
   const content = (
     <>
       {showCloseButton && onClose && (
-        <button onClick={onClose} className="modal-close sauna-popup-close">
+        <button onClick={onClose} className="modal-close light-modal-close-anchor light-modal-close-anchor--single z-[70]">
           <X className="w-4 h-4" />
         </button>
       )}

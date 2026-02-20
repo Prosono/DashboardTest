@@ -315,7 +315,7 @@ export default function SaunaFieldModal({
         <button
           type="button"
           onClick={onClose}
-          className="modal-close sauna-popup-close"
+          className="modal-close light-modal-close-anchor light-modal-close-anchor--single z-[70]"
           aria-label={tr('common.close', 'Lukk')}
         >
           <X className="w-4 h-4" />
