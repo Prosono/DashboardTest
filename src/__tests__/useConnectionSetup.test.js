@@ -218,10 +218,10 @@ describe('useConnectionSetup › auto-close onboarding', () => {
 });
 
 // ═════════════════════════════════════════════════════════════════════════
-// Re-open onboarding when auth is lost
+// Do not auto-open onboarding when auth is lost
 // ═════════════════════════════════════════════════════════════════════════
-describe('useConnectionSetup › re-open onboarding on auth loss', () => {
-  it('opens onboarding when token is cleared', () => {
+describe('useConnectionSetup › onboarding visibility on auth loss', () => {
+  it('does not auto-open onboarding when token is cleared', () => {
     hasOAuthTokens.mockReturnValue(false);
     const props = makeProps({
       config: { url: 'http://ha.local:8123', token: '', authMethod: 'token' },
@@ -230,7 +230,7 @@ describe('useConnectionSetup › re-open onboarding on auth loss', () => {
     });
     renderHook(() => useConnectionSetup(props));
 
-    expect(props.setShowOnboarding).toHaveBeenCalledWith(true);
+    expect(props.setShowOnboarding).not.toHaveBeenCalled();
   });
 });
 

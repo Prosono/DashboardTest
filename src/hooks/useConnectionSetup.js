@@ -40,16 +40,6 @@ export function useConnectionSetup({
     }
   }, [connected, config.authMethod]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // ── Re-open onboarding when auth is lost ───────────────────────────────
-  useEffect(() => {
-    const hasAuth = config.token || (config.authMethod === 'oauth' && hasOAuthTokens());
-    if (!hasAuth && !showOnboarding && !showConfigModal) {
-      setShowOnboarding(true);
-      setOnboardingStep(0);
-      setConfigTab('connection');
-    }
-  }, [config.token, config.authMethod, showOnboarding, showConfigModal]);
-
   // ── Connection test (long-lived token) ─────────────────────────────────
   const testConnection = async () => {
     if (!validateUrl(config.url)) return;

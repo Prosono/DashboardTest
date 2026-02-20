@@ -152,8 +152,6 @@ function AppContent({
   const {
     entities,
     connected,
-    haUnavailableVisible,
-    oauthExpired,
     conn,
     activeUrl,
     authRef
@@ -391,17 +389,6 @@ function AppContent({
     showOnboarding, setShowOnboarding,
     showConfigModal, setShowConfigModal, t,
   });
-
-  // ✅ Onboarding skal kun vises når vi faktisk ser at HA ikke er tilgjengelig
-  // (dvs. HA-provider har forsøkt å koble og meldt unavailable/expired).
-  useEffect(() => {
-    if (!haConfigHydrated) return;
-
-    const attempted = Boolean(haUnavailableVisible || oauthExpired);
-    const desiredShow = attempted && !connected;
-
-    setShowOnboarding((prev) => (prev === desiredShow ? prev : desiredShow));
-  }, [haConfigHydrated, haUnavailableVisible, oauthExpired, connected, setShowOnboarding]);
 
   const updateCount = Object.values(entities).filter(e => e.entity_id.startsWith('update.') && e.state === 'on' && !e.attributes.skipped_version).length;
 
@@ -1629,7 +1616,7 @@ export default function App() {
                 key={loginLogoUrl}
                 src={loginLogoUrl}
                 alt="App logo"
-                className="w-14 h-14 object-contain select-none"
+                className="w-16 h-16 object-contain select-none"
                 loading="eager"
                 decoding="async"
               />
