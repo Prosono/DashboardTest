@@ -874,9 +874,22 @@ function AppContent({
   useEffect(() => {
     if (typeof window === 'undefined' || !isMobile) return undefined;
 
-    const PULL_REFRESH_TRIGGER_PX = 52;
+    const PULL_REFRESH_TRIGGER_PX = 68;
     const PULL_REFRESH_MAX_PX = 110;
     const PULL_REFRESH_RESISTANCE = 0.6;
+    const PULL_REFRESH_START_ZONE_PX = 170;
+
+    const getSafeAreaTopPx = () => {
+      if (typeof window === 'undefined' || typeof document === 'undefined') return 0;
+      const styles = window.getComputedStyle(document.documentElement);
+      const safeTop = Number.parseFloat(styles.getPropertyValue('--safe-area-top') || '0');
+      const safeTopFallback = Number.parseFloat(styles.getPropertyValue('--safe-area-top-fallback') || '0');
+      const resolved = Math.max(
+        Number.isFinite(safeTop) ? safeTop : 0,
+        Number.isFinite(safeTopFallback) ? safeTopFallback : 0,
+      );
+      return Number.isFinite(resolved) ? resolved : 0;
+    };
 
     const resetPullState = () => {
       mobilePullTrackingRef.current = false;
@@ -888,8 +901,15 @@ function AppContent({
       if (mobilePullRefreshing || shouldLockMobileScroll || editMode) return;
       if ((window.scrollY || window.pageYOffset || 0) > 0) return;
       if (!event.touches || event.touches.length !== 1) return;
+      const startY = event.touches[0].clientY;
+      const safeAreaTopPx = getSafeAreaTopPx();
+      const navTop = navRowRef.current?.getBoundingClientRect?.().top;
+      const maxStartY = Number.isFinite(navTop)
+        ? Math.min(safeAreaTopPx + PULL_REFRESH_START_ZONE_PX, navTop + 6)
+        : (safeAreaTopPx + PULL_REFRESH_START_ZONE_PX);
+      if (startY > maxStartY) return;
       mobilePullTrackingRef.current = true;
-      mobilePullStartYRef.current = event.touches[0].clientY;
+      mobilePullStartYRef.current = startY;
       mobilePullDistanceRef.current = 0;
       setMobilePullDistance(0);
     };
