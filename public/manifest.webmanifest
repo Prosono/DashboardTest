@@ -1,4 +1,11 @@
 {
+  "name": "Tunet Dashboard",
+  "short_name": "Tunet",
+  "start_url": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0f172a",
+  "theme_color": "#0f172a",
   "icons": [
     {
       "src": "../icons/icon-48.webp",

@@ -541,6 +541,7 @@ function AppContent({
   const [mobileTopFadeActive, setMobileTopFadeActive] = useState(false);
   const [mobilePullDistance, setMobilePullDistance] = useState(0);
   const [mobilePullRefreshing, setMobilePullRefreshing] = useState(false);
+  const [mobileLandscapeBlocked, setMobileLandscapeBlocked] = useState(false);
   const mobilePullStartYRef = useRef(0);
   const mobilePullTrackingRef = useRef(false);
   const mobilePullDistanceRef = useRef(0);
@@ -728,6 +729,49 @@ function AppContent({
   }, [shouldLockMobileScroll, restoreMobileScroll]);
 
   useEffect(() => () => restoreMobileScroll(), [restoreMobileScroll]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return undefined;
+
+    const query = '(max-width: 1024px) and (orientation: landscape) and (pointer: coarse)';
+    const mql = window.matchMedia(query);
+    const updateBlocked = () => {
+      setMobileLandscapeBlocked(Boolean(mql.matches));
+    };
+    updateBlocked();
+
+    if (typeof mql.addEventListener === 'function') {
+      mql.addEventListener('change', updateBlocked);
+    } else if (typeof mql.addListener === 'function') {
+      mql.addListener(updateBlocked);
+    }
+    window.addEventListener('orientationchange', updateBlocked);
+    window.addEventListener('resize', updateBlocked);
+
+    return () => {
+      if (typeof mql.removeEventListener === 'function') {
+        mql.removeEventListener('change', updateBlocked);
+      } else if (typeof mql.removeListener === 'function') {
+        mql.removeListener(updateBlocked);
+      }
+      window.removeEventListener('orientationchange', updateBlocked);
+      window.removeEventListener('resize', updateBlocked);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const maybeLock = async () => {
+      try {
+        const orientation = window.screen?.orientation;
+        if (!orientation?.lock) return;
+        await orientation.lock('portrait');
+      } catch {
+        // Some browsers (notably iOS Safari) do not allow programmatic locking.
+      }
+    };
+    maybeLock();
+  }, []);
 
   const readSafeAreaTopPx = useCallback(() => {
     if (typeof window === 'undefined' || typeof document === 'undefined') return 0;
@@ -1192,6 +1236,15 @@ function AppContent({
         color: 'var(--text-primary)',
       }}
     >
+      {mobileLandscapeBlocked && (
+        <div className="fixed inset-0 z-[220] flex items-center justify-center p-6 text-center" style={{ background: 'color-mix(in srgb, var(--bg-primary) 92%, black)' }}>
+          <div className="max-w-sm rounded-3xl border border-[var(--glass-border)] bg-[var(--card-bg)]/90 backdrop-blur-xl p-6 shadow-2xl">
+            <div className="text-sm uppercase tracking-[0.16em] text-[var(--text-secondary)] mb-2">Orientation Not Supported</div>
+            <div className="text-base font-semibold text-[var(--text-primary)]">Please rotate back to portrait mode.</div>
+          </div>
+        </div>
+      )}
+
       {bgMode === 'animated' && !isLightTheme ? (
         <AuroraBackground />
       ) : (
