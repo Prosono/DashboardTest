@@ -175,7 +175,7 @@ export default function LightModal({
           style={modalSurfaceStyle}
           onClick={(e) => e.stopPropagation()}
         >
-          <div className="absolute top-3 right-4 md:top-5 md:right-6 z-50">
+          <div className="light-modal-close-anchor light-modal-close-anchor--multi z-[70]">
             <button onClick={onClose} className="modal-close">
               <X className="w-4 h-4" />
             </button>
@@ -232,7 +232,7 @@ export default function LightModal({
         onClick={(e) => e.stopPropagation()}
       >
         {/* Close Button Row (Mobile & Desktop) */}
-        <div className="absolute top-6 right-6 md:top-10 md:right-10 z-50">
+        <div className="light-modal-close-anchor light-modal-close-anchor--single z-[70]">
           <button onClick={onClose} className="modal-close">
             <X className="w-4 h-4" />
           </button>

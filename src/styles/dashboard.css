@@ -180,6 +180,28 @@
 .modal-close:active {
   transform: scale(0.96);
 }
+.light-modal-close-anchor {
+  position: absolute;
+  pointer-events: auto;
+}
+.light-modal-close-anchor--single {
+  top: calc(max(var(--safe-area-top, 0px), var(--safe-area-top-fallback, 0px)) + 10px);
+  right: 1.25rem;
+}
+.light-modal-close-anchor--multi {
+  top: calc(max(var(--safe-area-top, 0px), var(--safe-area-top-fallback, 0px)) + 6px);
+  right: 1rem;
+}
+@media (min-width: 768px) {
+  .light-modal-close-anchor--single {
+    top: 2.5rem;
+    right: 2.5rem;
+  }
+  .light-modal-close-anchor--multi {
+    top: 1.25rem;
+    right: 1.5rem;
+  }
+}
 .modal-close-dark {
   background: rgba(0, 0, 0, 0.55);
   color: #ffffff;
