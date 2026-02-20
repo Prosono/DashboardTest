@@ -36,12 +36,17 @@ router.post('/login', (req, res) => {
   }
 
   const superAdmin = loadSuperAdminConfig();
-  const isSuperAdminLogin = Boolean(superAdmin.username)
+  const isSuperAdminCredentials = Boolean(superAdmin.username)
     && username === superAdmin.username
     && (
       (superAdmin.dbPasswordHash && verifyPassword(password, superAdmin.dbPasswordHash))
       || (!superAdmin.dbPasswordHash && superAdmin.envPassword && password === superAdmin.envPassword)
     );
+  const isSuperAdminLogin = isSuperAdminCredentials && clientId === SUPER_ADMIN_CLIENT_ID;
+
+  if (isSuperAdminCredentials && !isSuperAdminLogin) {
+    return res.status(401).json({ error: 'Invalid client ID, username or password' });
+  }
 
   if (isSuperAdminLogin) {
     provisionClientDefaults(PLATFORM_ADMIN_CLIENT_ID, PLATFORM_ADMIN_CLIENT_ID);

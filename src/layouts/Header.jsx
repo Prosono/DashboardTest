@@ -59,6 +59,10 @@ export default function Header({
     : { hour: '2-digit', minute: '2-digit', hour12: false };
 
   const timeStr = now.toLocaleTimeString(is12h ? 'en-US' : 'nn-NO', timeOptions);
+  const dateStr = now.toLocaleDateString('nn-NO', { weekday: 'long', day: 'numeric', month: 'long' });
+  const showDateMeta = headerSettings.showDate;
+  const showSubtitleMeta = Boolean(clientSubtitle);
+  const showHeaderMeta = showDateMeta || showSubtitleMeta;
 
   return (
     <header
@@ -131,29 +135,47 @@ export default function Header({
                 >
                   {headerTitle || 'Tunet'}
                 </h1>
-                {clientSubtitle && (
-                  <p
-                    className="mt-1 uppercase tracking-[0.24em] opacity-70"
-                    style={{
-                      color: 'var(--text-secondary)',
-                      fontSize: isMobile ? '0.62rem' : '0.7rem',
-                      fontWeight: 500,
-                    }}
-                  >
-                    {clientSubtitle}
-                  </p>
-                )}
               </div>
             )}
           </div>
-          
-          {headerSettings.showDate && !isMobile && (
-            <p 
-              className="text-gray-500 font-medium uppercase leading-none opacity-50 tracking-[0.2em] md:tracking-[0.6em]"
-              style={{ fontSize: `calc(0.75rem * ${dateScale})` }}
-            >
-              {now.toLocaleDateString('nn-NO', { weekday: 'long', day: 'numeric', month: 'long' })}
-            </p>
+
+          {showHeaderMeta && (
+            <div className={`flex items-center leading-none ${isMobile ? 'justify-center mt-1 gap-2' : 'gap-2.5 mt-1'}`}>
+              {showDateMeta && (
+                <p
+                  className="font-medium uppercase opacity-50 tracking-[0.2em] md:tracking-[0.45em]"
+                  style={{
+                    color: 'var(--text-secondary)',
+                    fontSize: `calc(${isMobile ? 0.62 : 0.75}rem * ${dateScale})`,
+                  }}
+                >
+                  {dateStr}
+                </p>
+              )}
+              {showDateMeta && showSubtitleMeta && (
+                <span
+                  className="opacity-40"
+                  style={{
+                    color: 'var(--text-secondary)',
+                    fontSize: isMobile ? '0.6rem' : '0.68rem',
+                  }}
+                >
+                  •
+                </span>
+              )}
+              {showSubtitleMeta && (
+                <p
+                  className="uppercase opacity-70 tracking-[0.2em] md:tracking-[0.32em]"
+                  style={{
+                    color: 'var(--text-secondary)',
+                    fontSize: isMobile ? '0.62rem' : '0.72rem',
+                    fontWeight: 500,
+                  }}
+                >
+                  {clientSubtitle}
+                </p>
+              )}
+            </div>
           )}
         </div>
 
