@@ -1,7 +1,7 @@
 <?xml version='1.0' encoding='utf-8'?>
 <resources>
-    <string name="app_name">Smart Sauna Systems</string>
-    <string name="title_activity_main">Smart Sauna Systems</string>
+    <string name="app_name">Smart Sauna</string>
+    <string name="title_activity_main">Smart Sauna</string>
     <string name="package_name">no.smartsauna.app</string>
     <string name="custom_url_scheme">no.smartsauna.app</string>
 </resources>

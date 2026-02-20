@@ -2,7 +2,7 @@ import type { CapacitorConfig } from '@capacitor/cli';
 
 const config: CapacitorConfig = {
   appId: 'no.smartsauna.app',
-  appName: 'Smart Sauna Systems',
+  appName: 'Smart Sauna',
   webDir: 'dist',
   server: {
     url: 'https://www.smartsauna.no',
