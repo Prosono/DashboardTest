@@ -938,5 +938,9 @@
   "common.configuration": "Konfigurasjon",
   "common.unavailable": "Utilgjengeleg",
   "common.yes": "Ja",
-  "common.no": "Nei"
+  "common.no": "Nei",
+  "sauna.bookingTemp.minimum": "Min",
+  "sauna.bookingTemp.maximum": "Maks",
+  "sauna.bookingTemp.latest": "Siste",
+  "sauna.bookingTemp.deleteSampleConfirm": "Slette denne målinga?"
 }

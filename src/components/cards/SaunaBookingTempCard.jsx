@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { AlertTriangle, Clock, Flame, Thermometer, TrendingUp, Wrench, X } from '../../icons';
+import { AlertTriangle, Clock, Flame, Thermometer, TrendingUp, Wrench, X, Trash2 } from '../../icons';
 import { getIconComponent } from '../../icons';
 import SparkLine from '../charts/SparkLine';
 
@@ -110,6 +110,20 @@ const formatSince = (timestampMs) => {
   return restHours > 0 ? `${days}d ${restHours}h` : `${days}d`;
 };
 
+const getTempStats = (entries) => {
+  if (!Array.isArray(entries) || entries.length === 0) return null;
+  const values = entries
+    .map((entry) => toNum(entry?.startTemp))
+    .filter((value) => value !== null);
+  if (!values.length) return null;
+  return {
+    min: roundToOne(Math.min(...values)),
+    max: roundToOne(Math.max(...values)),
+    avg: roundToOne(values.reduce((sum, value) => sum + value, 0) / values.length),
+    latest: roundToOne(values[values.length - 1]),
+  };
+};
+
 function makeTr(t) {
   return (key, fallback) => {
     const out = typeof t === 'function' ? t(key) : undefined;
@@ -168,6 +182,22 @@ export default function SaunaBookingTempCard({
   const openHistoryModal = (payload) => {
     if (editMode) return;
     setHistoryModal(payload);
+  };
+
+  const removeSnapshot = (entryId) => {
+    if (!settingsKey || typeof saveCardSetting !== 'function') return;
+    const currentSnapshots = normalizeSnapshots(settings?.bookingSnapshots);
+    const filtered = currentSnapshots.filter((entry) => entry.id !== entryId);
+    if (filtered.length === currentSnapshots.length) return;
+    saveCardSetting(settingsKey, 'bookingSnapshots', serializeSnapshots(filtered));
+    setHistoryModal((prev) => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        entries: Array.isArray(prev.entries) ? prev.entries.filter((entry) => entry.id !== entryId) : [],
+        highlightId: prev.highlightId === entryId ? null : prev.highlightId,
+      };
+    });
   };
 
   useEffect(() => {
@@ -235,6 +265,7 @@ export default function SaunaBookingTempCard({
   const recentSorted = recentSnapshots.slice().sort((a, b) => a.timestampMs - b.timestampMs);
   const recentVisible = recentSorted.slice(-recentRows).reverse();
   const allSnapshotsDesc = snapshots.slice().sort((a, b) => b.timestampMs - a.timestampMs);
+  const trendStats = getTempStats(recentSorted);
 
   const startTemps = recentSnapshots.map((entry) => entry.startTemp);
   const averageStart = startTemps.length ? roundToOne(startTemps.reduce((sum, value) => sum + value, 0) / startTemps.length) : null;
@@ -252,6 +283,7 @@ export default function SaunaBookingTempCard({
 
   const sparkPoints = recentSorted.slice(-30).map((entry) => ({ value: entry.startTemp }));
   const latestSnapshot = snapshots.length ? snapshots[snapshots.length - 1] : null;
+  const modalStats = getTempStats(historyModal?.entries || []);
 
   const missingConfig = [];
   if (!tempEntityId) missingConfig.push(tr('sauna.bookingTemp.tempEntity', 'Temperature sensor'));
@@ -403,6 +435,13 @@ export default function SaunaBookingTempCard({
                     {targetTemp !== null ? `${targetTemp.toFixed(1)}°` : '--'}
                   </span>
                 </div>
+                {trendStats && (
+                  <div className="grid grid-cols-3 gap-2 mb-1.5 text-[10px] uppercase tracking-widest text-[var(--text-muted)]">
+                    <span>{tr('sauna.bookingTemp.minimum', 'Min')}: {trendStats.min.toFixed(1)}°</span>
+                    <span>{tr('sauna.bookingTemp.latest', 'Latest')}: {trendStats.latest.toFixed(1)}°</span>
+                    <span>{tr('sauna.bookingTemp.maximum', 'Max')}: {trendStats.max.toFixed(1)}°</span>
+                  </div>
+                )}
                 <SparkLine
                   data={sparkPoints}
                   currentIndex={sparkPoints.length - 1}
@@ -503,6 +542,13 @@ export default function SaunaBookingTempCard({
 
             {historyModal.entries?.length > 1 && (
               <div className="mt-4 rounded-2xl border border-[var(--glass-border)] bg-[var(--glass-bg)] px-3 py-2">
+                {modalStats && (
+                  <div className="grid grid-cols-3 gap-2 mb-2 text-[10px] uppercase tracking-widest text-[var(--text-muted)]">
+                    <span>{tr('sauna.bookingTemp.minimum', 'Min')}: {modalStats.min.toFixed(1)}°</span>
+                    <span>{tr('sauna.bookingTemp.latest', 'Latest')}: {modalStats.latest.toFixed(1)}°</span>
+                    <span>{tr('sauna.bookingTemp.maximum', 'Max')}: {modalStats.max.toFixed(1)}°</span>
+                  </div>
+                )}
                 <SparkLine
                   data={historyModal.entries.slice().reverse().map((entry) => ({ value: entry.startTemp }))}
                   currentIndex={historyModal.entries.length - 1}
@@ -537,8 +583,25 @@ export default function SaunaBookingTempCard({
                         <Thermometer className="w-3.5 h-3.5 text-[var(--text-secondary)]" />
                         {entry.startTemp.toFixed(1)}°
                       </div>
-                      <div className="text-[10px] uppercase tracking-widest text-[var(--text-muted)]">
-                        {formatDateTime(entry.timestampMs)}
+                      <div className="flex items-center gap-2">
+                        <div className="text-[10px] uppercase tracking-widest text-[var(--text-muted)]">
+                          {formatDateTime(entry.timestampMs)}
+                        </div>
+                        <button
+                          type="button"
+                          className="h-7 w-7 rounded-full border border-red-400/30 bg-red-500/10 text-red-300 hover:bg-red-500/20 inline-flex items-center justify-center"
+                          aria-label={tr('common.delete', 'Delete')}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            const confirmDelete = typeof window === 'undefined'
+                              ? true
+                              : window.confirm(tr('sauna.bookingTemp.deleteSampleConfirm', 'Delete this sample?'));
+                            if (!confirmDelete) return;
+                            removeSnapshot(entry.id);
+                          }}
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
                       </div>
                     </div>
                     <div className="mt-1.5 flex flex-wrap items-center gap-2 text-[10px] uppercase tracking-widest">

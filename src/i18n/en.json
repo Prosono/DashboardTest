@@ -938,5 +938,9 @@
   "common.configuration": "Configuration",
   "common.unavailable": "Unavailable",
   "common.yes": "Yes",
-  "common.no": "No"
+  "common.no": "No",
+  "sauna.bookingTemp.minimum": "Min",
+  "sauna.bookingTemp.maximum": "Max",
+  "sauna.bookingTemp.latest": "Latest",
+  "sauna.bookingTemp.deleteSampleConfirm": "Delete this sample?"
 }
