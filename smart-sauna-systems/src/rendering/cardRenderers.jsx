@@ -12,6 +12,8 @@ import {
   CalendarCard,
   CarCard,
   CoverCard,
+  DividerCard,
+  EmptyCard,
   EntityGroupControlCard,
   TodoCard,
   GenericAndroidTVCard,
@@ -460,7 +462,7 @@ export function renderRoomCard(cardId, dragProps, getControls, cardStyle, settin
 
 
 export function renderSaunaCard(cardId, dragProps, getControls, cardStyle, settingsKey, ctx) {
-  const { entities, editMode, cardSettings, customNames, customIcons, tempHistoryById, setShowLightModal, setActiveSaunaFieldModal, t } = ctx;
+  const { entities, editMode, cardSettings, customNames, customIcons, tempHistoryById, setShowLightModal, setActiveSaunaFieldModal, setShowSensorInfoModal, t } = ctx;
   const saunaSettings = cardSettings[settingsKey] || cardSettings[cardId] || {};
   return (
     <SaunaCard
@@ -473,9 +475,39 @@ export function renderSaunaCard(cardId, dragProps, getControls, cardStyle, setti
       editMode={editMode}
       customNames={customNames}
       customIcons={customIcons}
-      modals={{ setShowLightModal, setActiveSaunaFieldModal }}
+      modals={{ setShowLightModal, setActiveSaunaFieldModal, setShowSensorInfoModal }}
       tempHistoryById={tempHistoryById}
       t={t}
+    />
+  );
+}
+
+export function renderDividerCard(cardId, dragProps, getControls, cardStyle, settingsKey, ctx) {
+  const { editMode, cardSettings } = ctx;
+  const settings = cardSettings[settingsKey] || cardSettings[cardId] || {};
+  return (
+    <DividerCard
+      key={cardId}
+      cardId={cardId}
+      dragProps={dragProps}
+      controls={getControls(cardId)}
+      cardStyle={cardStyle}
+      settings={settings}
+      editMode={editMode}
+    />
+  );
+}
+
+export function renderEmptyCard(cardId, dragProps, getControls, cardStyle, _settingsKey, ctx) {
+  const { editMode } = ctx;
+  return (
+    <EmptyCard
+      key={cardId}
+      cardId={cardId}
+      dragProps={dragProps}
+      controls={getControls(cardId)}
+      cardStyle={cardStyle}
+      editMode={editMode}
     />
   );
 }
@@ -592,6 +624,14 @@ export function dispatchCardRender(cardId, dragProps, getControls, cardStyle, se
     return renderSaunaCard(cardId, dragProps, getControls, cardStyle, settingsKey, ctx);
   }
 
+  if (cardId.startsWith('divider_card_')) {
+    return renderDividerCard(cardId, dragProps, getControls, cardStyle, settingsKey, ctx);
+  }
+
+  if (cardId.startsWith('empty_card_')) {
+    return renderEmptyCard(cardId, dragProps, getControls, cardStyle, settingsKey, ctx);
+  }
+
   if (
     cardId.startsWith('fan_card_')
     || cardId.startsWith('door_card_')
@@ -611,6 +651,12 @@ export function dispatchCardRender(cardId, dragProps, getControls, cardStyle, se
 
   // Generic entity/toggle/sensor type
   const genericSettings = cardSettings[settingsKey] || cardSettings[cardId] || {};
+  if (genericSettings.type === 'divider') {
+    return renderDividerCard(cardId, dragProps, getControls, cardStyle, settingsKey, ctx);
+  }
+  if (genericSettings.type === 'empty') {
+    return renderEmptyCard(cardId, dragProps, getControls, cardStyle, settingsKey, ctx);
+  }
   if (genericSettings.type === 'sensor' || genericSettings.type === 'entity' || genericSettings.type === 'toggle') {
     return renderSensorCard(cardId, dragProps, getControls, cardStyle, settingsKey, ctx);
   }

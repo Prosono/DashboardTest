@@ -252,6 +252,16 @@ export default function SaunaCard({
     }
     else openFieldModal(tr('sauna.lights', 'Lys'), lightIds);
   };
+  const canOpenStatusGraph = Boolean(
+    !editMode
+    && statusGraphEntityId
+    && entities?.[statusGraphEntityId]
+    && modals?.setShowSensorInfoModal
+  );
+  const openStatusGraphModal = () => {
+    if (!canOpenStatusGraph) return;
+    modals.setShowSensorInfoModal(statusGraphEntityId);
+  };
 
   const modePill = {
     label: autoModeOn ? tr('sauna.autoMode', 'Auto') : tr('sauna.manualMode', 'Manuell'),
@@ -458,7 +468,6 @@ export default function SaunaCard({
               )}>
                 <span className="align-middle">{primaryState.label}</span>
               </div>
-              <div className={cx('text-[12px] font-normal text-right', isLightTheme ? 'text-slate-700' : 'text-[var(--text-secondary)]')}>{primaryState.desc}</div>
             </>
           </div>
         </div>
@@ -466,7 +475,19 @@ export default function SaunaCard({
         {(bookingLine || preheatOn) && (() => {
           const BookingIcon = statusVisual.icon;
           return (
-            <div className="mt-6 relative min-h-[7.8rem] pb-5">
+            <div
+              className={cx('mt-6 relative min-h-[7.8rem] pb-5', canOpenStatusGraph ? 'cursor-pointer' : '')}
+              onClick={canOpenStatusGraph ? openStatusGraphModal : undefined}
+              onKeyDown={canOpenStatusGraph ? (event) => {
+                if (event.key === 'Enter' || event.key === ' ') {
+                  event.preventDefault();
+                  openStatusGraphModal();
+                }
+              } : undefined}
+              role={canOpenStatusGraph ? 'button' : undefined}
+              tabIndex={canOpenStatusGraph ? 0 : undefined}
+              aria-label={canOpenStatusGraph ? tr('sensorInfo.title', 'Sensor detaljer') : undefined}
+            >
               <div className="relative z-20 flex items-center justify-center mb-2">
                 <div className="flex items-center justify-center gap-2 min-w-0 text-center px-2 py-0.5 rounded-full bg-black/20 shadow-[0_2px_8px_rgba(0,0,0,0.35)]">
                   <BookingIcon className={cx('w-4 h-4 shrink-0', statusVisual.color)} />
