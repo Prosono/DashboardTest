@@ -106,6 +106,49 @@ export default function SensorModal({
     };
   };
 
+  const normalizeEventState = (value) => String(value ?? '').trim().toLowerCase();
+
+  const sameTempValue = (a, b) => {
+    if (a === null && b === null) return true;
+    if (a === null || b === null) return false;
+    return Math.abs(a - b) < 0.2;
+  };
+
+  const compactHistoryEvents = (inputEvents, { includeTemp = false, maxItems = 900 } = {}) => {
+    if (!Array.isArray(inputEvents) || inputEvents.length <= 1) return Array.isArray(inputEvents) ? inputEvents : [];
+    const sorted = [...inputEvents]
+      .filter((event) => event?.time && !Number.isNaN(new Date(event.time).getTime()))
+      .sort((a, b) => new Date(a.time).getTime() - new Date(b.time).getTime());
+
+    const compacted = [];
+    let prev = null;
+    sorted.forEach((event) => {
+      if (!prev) {
+        compacted.push(event);
+        prev = event;
+        return;
+      }
+
+      const sameState = normalizeEventState(event.state) === normalizeEventState(prev.state);
+      const curr = Number.isFinite(Number(event.currentTemp)) ? Number(event.currentTemp) : null;
+      const prevCurr = Number.isFinite(Number(prev.currentTemp)) ? Number(prev.currentTemp) : null;
+      const target = Number.isFinite(Number(event.targetTemp)) ? Number(event.targetTemp) : null;
+      const prevTarget = Number.isFinite(Number(prev.targetTemp)) ? Number(prev.targetTemp) : null;
+      const tempChanged = includeTemp && (!sameTempValue(curr, prevCurr) || !sameTempValue(target, prevTarget));
+
+      if (!sameState || tempChanged) {
+        compacted.push(event);
+        prev = event;
+      }
+    });
+
+    if (compacted.length <= maxItems) return compacted;
+    const tail = compacted.slice(-maxItems);
+    if (!tail.length) return compacted.slice(-maxItems);
+    tail[0] = compacted[0];
+    return tail;
+  };
+
   const parseHistoryEntryTime = (entry) => toDateSafe(
     entry?.last_changed
     || entry?.last_updated
@@ -168,12 +211,16 @@ export default function SensorModal({
           
           // Determine if we need history data for activity/events display
           const entityDomain = resolvedEntityId?.split('.')?.[0];
+          const isClimateEntity = entityDomain === 'climate';
           const currentState = String(entity?.state ?? '').toLowerCase();
           const isCurrentNumeric = !['script', 'scene'].includes(entityDomain)
             && !Number.isNaN(parseFloat(entity?.state))
             && !String(entity?.state).match(/^unavailable|unknown$/i)
             && !resolvedEntityIdSafe.startsWith('binary_sensor.');
           const needsActivityData = getShouldShowActivity(currentState, isCurrentNumeric);
+          const shouldBuildPoints = isCurrentNumeric || !needsActivityData;
+          const preferSignificantHistory = isClimateEntity || (needsActivityData && !isCurrentNumeric);
+          const includeAttributes = isClimateEntity;
           if (!resolvedEntityId) {
             setHistoryError('Missing entity id for history');
             setHistory([]);
@@ -200,21 +247,23 @@ export default function SensorModal({
                 entityId: resolvedEntityId,
                 start,
                 end,
-                minimal_response: false,
-                no_attributes: false
+                minimal_response: preferSignificantHistory,
+                no_attributes: !includeAttributes
               });
 
               if (wsData && Array.isArray(wsData)) {
                 const raw = Array.isArray(wsData[0]) ? wsData[0] : wsData;
                 setHistoryMeta({ source: 'ws', rawCount: raw.length });
-                points = raw
-                  .map((d) => {
-                    const value = parseHistoryNumber(d);
-                    const time = parseHistoryEntryTime(d);
-                    if (!Number.isFinite(value) || !time) return null;
-                    return { value, time };
-                  })
-                  .filter(Boolean);
+                points = shouldBuildPoints
+                  ? raw
+                    .map((d) => {
+                      const value = parseHistoryNumber(d);
+                      const time = parseHistoryEntryTime(d);
+                      if (!Number.isFinite(value) || !time) return null;
+                      return { value, time };
+                    })
+                    .filter(Boolean)
+                  : [];
                 events = raw
                   .map(d => {
                     if (!d) return null;
@@ -242,22 +291,24 @@ export default function SensorModal({
                     entityId: resolvedEntityId,
                     start,
                     end,
-                    minimal_response: false,
-                    no_attributes: false,
-                    significant_changes_only: false
+                    minimal_response: preferSignificantHistory,
+                    no_attributes: !includeAttributes,
+                    significant_changes_only: preferSignificantHistory
                   });
 
                   if (data && Array.isArray(data)) {
                     const raw = Array.isArray(data[0]) ? data[0] : data;
                     setHistoryMeta({ source: 'rest', rawCount: raw.length });
-                    points = raw
-                      .map((d) => {
-                        const value = parseHistoryNumber(d);
-                        const time = parseHistoryEntryTime(d);
-                        if (!Number.isFinite(value) || !time) return null;
-                        return { value, time };
-                      })
-                      .filter(Boolean);
+                    points = shouldBuildPoints
+                      ? raw
+                        .map((d) => {
+                          const value = parseHistoryNumber(d);
+                          const time = parseHistoryEntryTime(d);
+                          if (!Number.isFinite(value) || !time) return null;
+                          return { value, time };
+                        })
+                        .filter(Boolean)
+                      : [];
                     events = raw
                       .map(d => {
                         if (!d) return null;
@@ -289,7 +340,7 @@ export default function SensorModal({
           }
 
           // Fallback to statistics if history is sparse or empty
-          if (points.length < 2) {
+          if (shouldBuildPoints && points.length < 2) {
              try {
                 const stats = await getStatistics(conn, {
                   statisticId: resolvedEntityId,
@@ -354,8 +405,8 @@ export default function SensorModal({
                     entityId: overlayEntityId,
                     start,
                     end,
-                    minimal_response: false,
-                    no_attributes: false,
+                    minimal_response: true,
+                    no_attributes: true,
                   });
                   overlayEvents = overlayRaw
                     .map((entry) => {
@@ -401,7 +452,10 @@ export default function SensorModal({
           }
 
           setHistory(points);
-          setHistoryEvents(events);
+          setHistoryEvents(compactHistoryEvents(events, {
+            includeTemp: isClimateEntity,
+            maxItems: isClimateEntity ? 720 : 1200,
+          }));
         } catch (_e) {
           console.error("Failed to load history", _e);
           setOverlayHistory([]);
