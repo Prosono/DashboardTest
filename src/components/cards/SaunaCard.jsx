@@ -290,6 +290,7 @@ export default function SaunaCard({
     muted: { pill: 'bg-[var(--glass-bg-hover)] border-[var(--glass-border)] text-[var(--text-secondary)]', icon: 'text-[var(--text-secondary)]' },
   }[primaryState.tone] || { pill: 'bg-[var(--glass-bg-hover)] border-[var(--glass-border)] text-[var(--text-secondary)]', icon: 'text-[var(--text-secondary)]' });
 
+  const minutesShort = tr('sauna.minutesShort', 'min');
   const bookingLine = (() => {
     const hasAny =
       settings?.nextBookingInMinutesEntityId ||
@@ -343,7 +344,6 @@ export default function SaunaCard({
     avg: tr('sauna.avgLabel', 'avg'),
     max: tr('sauna.maxLabel', 'max'),
   };
-  const minutesShort = tr('sauna.minutesShort', 'min');
 
   const renderStatSection = (title, items) => items.length > 0 && (
     <div className="space-y-2">
