@@ -6,11 +6,12 @@ import {
   AlertTriangle,
   Check,
   Edit2,
-  Flame,
   LayoutGrid,
   Plus,
   Lock,
   User,
+  Eye,
+  EyeOff,
   RefreshCw,
 } from './icons';
 
@@ -43,6 +44,7 @@ import './styles/dashboard.css';
 import { clearOAuthTokens, loadTokens, saveTokens } from './services/oauthStorage';
 import {
   fetchCurrentUser,
+  getClientId,
   loginWithPassword,
   logoutUser,
   updateProfile as updateCurrentProfile,
@@ -50,6 +52,18 @@ import {
   createUser as createServerUser,
   updateUser as updateServerUser,
   deleteUser as deleteServerUser,
+  listClients as listServerClients,
+  createClient as createServerClient,
+  createClientAdmin as createServerClientAdmin,
+  updateClient as updateServerClient,
+  deleteClient as deleteServerClient,
+  fetchClientHaConfig as fetchServerClientHaConfig,
+  saveClientHaConfig as saveServerClientHaConfig,
+  listClientDashboards as listServerClientDashboards,
+  fetchClientDashboard as fetchServerClientDashboard,
+  saveClientDashboard as saveServerClientDashboard,
+  fetchGlobalBranding as fetchServerGlobalBranding,
+  saveGlobalBranding as saveServerGlobalBranding,
   fetchSharedHaConfig,
   saveSharedHaConfig,
 } from './services/appAuth';
@@ -62,13 +76,23 @@ import ModalOrchestrator from './rendering/ModalOrchestrator';
 import CardErrorBoundary from './components/ui/CardErrorBoundary';
 import EditOverlay from './components/ui/EditOverlay';
 import AuroraBackground from './components/effects/AuroraBackground';
+import {
+  appendLogoVersion,
+  getLogoForTheme,
+  getStoredHeaderLogoUrl,
+  getStoredHeaderLogoVersion,
+  resolveLogoUrl,
+  saveStoredLogoOverrides,
+} from './utils/branding';
 
 function AppContent({
   showOnboarding,
   setShowOnboarding,
   currentUser,
+  globalBranding,
   onLogout,
   onProfileUpdated,
+  onSaveGlobalBranding,
   userAdminApi,
   haConfigHydrated,
 }) {
@@ -122,7 +146,6 @@ function AppContent({
     headerScale,
     updateHeaderScale,
     headerTitle,
-    updateHeaderTitle,
     headerSettings,
     updateHeaderSettings,
     sectionSpacing,
@@ -208,7 +231,28 @@ function AppContent({
     return normalizedTargets.some((target) => normalizeRole(target) === normalizedRole);
   };
 
-  const resolvedHeaderTitle = headerTitle || t('page.home');
+  const globalHeaderTitle = String(globalBranding?.title || '').trim();
+  const globalBrandingVersion = Date.parse(String(globalBranding?.updatedAt || '')) || 0;
+  const resolvedHeaderTitle = globalHeaderTitle || headerTitle || t('page.home');
+  const effectiveHeaderSettings = useMemo(() => {
+    const next = { ...(headerSettings || {}) };
+    const globalLogo = String(globalBranding?.logoUrl || '').trim();
+    const globalLogoLight = String(globalBranding?.logoUrlLight || '').trim();
+    const globalLogoDark = String(globalBranding?.logoUrlDark || '').trim();
+
+    if (globalLogo) next.logoUrl = globalLogo;
+    if (globalLogoLight) next.logoUrlLight = globalLogoLight;
+    if (globalLogoDark) next.logoUrlDark = globalLogoDark;
+    if (globalBrandingVersion > 0) next.logoUpdatedAt = globalBrandingVersion;
+
+    return next;
+  }, [
+    headerSettings,
+    globalBranding?.logoUrl,
+    globalBranding?.logoUrlLight,
+    globalBranding?.logoUrlDark,
+    globalBrandingVersion,
+  ]);
 
   // Modal state management
   const modals = useModals();
@@ -253,8 +297,8 @@ function AppContent({
   const [editCardSettingsKey, setEditCardSettingsKey] = useState(null);
 
   const [editMode, setEditMode] = useState(false);
-  const currentUserRole = normalizeRole(currentUser?.role);
   const isPlatformAdmin = currentUser?.isPlatformAdmin === true;
+  const currentUserRole = normalizeRole(currentUser?.role);
   const isLocalClientAdmin = currentUserRole === 'admin' && !isPlatformAdmin;
   const canEditDashboard = isLocalClientAdmin;
   const canEditGlobalBranding = isPlatformAdmin;
@@ -347,6 +391,40 @@ function AppContent({
     return (statusPillsConfig || []).filter((pill) => !String(pill?.entityId || '').includes('system_warning_details'));
   }, [isMobile, statusPillsConfig]);
 
+  const saveHeaderLogos = useCallback(async ({ title, logoUrl, logoUrlLight, logoUrlDark, updatedAt: updatedAtInput }) => {
+    if (!canEditGlobalBranding || typeof onSaveGlobalBranding !== 'function') {
+      return { ok: false, persisted: false };
+    }
+
+    const nextTitle = String(title || '').trim();
+    const nextDefault = String(logoUrl || '').trim();
+    const nextLight = String(logoUrlLight || '').trim();
+    const nextDark = String(logoUrlDark || '').trim();
+    const updatedAt = Number.isFinite(Number(updatedAtInput)) ? Number(updatedAtInput) : Date.now();
+
+    saveStoredLogoOverrides({
+      logoUrl: nextDefault,
+      logoUrlLight: nextLight,
+      logoUrlDark: nextDark,
+      updatedAt,
+    });
+
+    try {
+      const result = await onSaveGlobalBranding({
+        title: nextTitle,
+        logoUrl: nextDefault,
+        logoUrlLight: nextLight,
+        logoUrlDark: nextDark,
+      });
+      return {
+        ok: result?.ok !== false,
+        persisted: true,
+      };
+    } catch {
+      return { ok: false, persisted: true };
+    }
+  }, [canEditGlobalBranding, onSaveGlobalBranding]);
+
   const [draggingId, setDraggingId] = useState(null);
   const [activePage, _setActivePage] = useState(() => {
     try { return localStorage.getItem('tunet_active_page') || 'home'; } catch { return 'home'; }
@@ -381,17 +459,6 @@ function AppContent({
     showOnboarding, setShowOnboarding,
     showConfigModal, setShowConfigModal, t,
   });
-
-  // ✅ Onboarding skal kun vises når vi faktisk ser at HA ikke er tilgjengelig
-  // (dvs. HA-provider har forsøkt å koble og meldt unavailable/expired).
-  useEffect(() => {
-    if (!haConfigHydrated) return;
-
-    const attempted = Boolean(haUnavailableVisible || oauthExpired);
-    const desiredShow = attempted && !connected;
-
-    setShowOnboarding((prev) => (prev === desiredShow ? prev : desiredShow));
-  }, [haConfigHydrated, haUnavailableVisible, oauthExpired, connected, setShowOnboarding]);
 
   const updateCount = Object.values(entities).filter(e => e.entity_id.startsWith('update.') && e.state === 'on' && !e.attributes.skipped_version).length;
 
@@ -568,6 +635,39 @@ function AppContent({
       quickSaveBusyRef.current = false;
     }
   }, [isAdminUser, currentUser?.assignedDashboardId, saveGlobalDashboard]);
+
+  const renderUserChip = (extraClassName = '') => (
+    currentUser ? (
+      <button
+        onClick={() => setShowProfileModal(true)}
+        className={`px-2 py-1 rounded-full border border-[var(--glass-border)] text-[10px] uppercase tracking-wider text-[var(--text-secondary)] hover:text-[var(--text-primary)] ${extraClassName}`}
+        title={t('profile.title')}
+      >
+        <User className="w-3 h-3 inline mr-1" />
+        {profileDisplayName}
+      </button>
+    ) : null
+  );
+
+  const renderSettingsControl = () => (
+    <div className="relative">
+      <SettingsDropdown
+        onOpenSettings={() => { setShowConfigModal(true); setConfigTab('connection'); }}
+        onOpenTheme={() => setShowThemeSidebar(true)}
+        onOpenLayout={() => setShowLayoutSidebar(true)}
+        onOpenHeader={() => setShowHeaderEditModal(true)}
+        showLayout={canEditDashboard}
+        showHeader={canEditDashboard || canEditGlobalBranding}
+        showConnection={canManageUsersAndClients}
+        t={t}
+      />
+      {isAdminUser && updateCount > 0 && (
+        <div className="absolute -top-1 -right-1 w-5 h-5 bg-gray-600 rounded-full flex items-center justify-center border-2 border-[var(--card-bg)] pointer-events-none shadow-sm">
+          <span className="text-[11px] font-bold text-white leading-none pt-[1px]">{updateCount}</span>
+        </div>
+      )}
+    </div>
+  );
 
   // ── Page management ────────────────────────────────────────────────────
   const {
@@ -799,6 +899,8 @@ function AppContent({
 
     const onTouchStart = (event) => {
       if (mobilePullRefreshing || shouldLockMobileScroll || editMode) return;
+      const startTarget = event.target;
+      if (startTarget && typeof startTarget.closest === 'function' && startTarget.closest('[data-disable-pull-refresh="true"]')) return;
       if ((window.scrollY || window.pageYOffset || 0) > 0) return;
       if (!event.touches || event.touches.length !== 1) return;
       const startY = event.touches[0].clientY;
@@ -816,6 +918,11 @@ function AppContent({
 
     const onTouchMove = (event) => {
       if (!mobilePullTrackingRef.current) return;
+      const moveTarget = event.target;
+      if (moveTarget && typeof moveTarget.closest === 'function' && moveTarget.closest('[data-disable-pull-refresh="true"]')) {
+        resetPullState();
+        return;
+      }
       if (!event.touches || event.touches.length !== 1) {
         resetPullState();
         return;
@@ -1107,31 +1214,44 @@ function AppContent({
     return dispatchCardRender(cardId, dragProps, getControls, cardStyle, settingsKey, ctx);
   };
 
+  const mobileGridGapV = Math.max(12, Math.min(24, Number(gridGapV) || 20));
+  const mobileGridGapH = Math.max(10, Math.min(20, Number(gridGapH) || 20));
+  const mobileGridAutoRow = 96;
   const pullRefreshProgress = Math.min(1, mobilePullDistance / 52);
   const pullRefreshVisible = isMobile && (mobilePullDistance > 0.5 || mobilePullRefreshing);
+  const safeAreaTop = 'max(var(--safe-area-top, 0px), var(--safe-area-top-fallback, 0px))';
+  const safeAreaBottom = 'max(var(--safe-area-bottom, 0px), var(--safe-area-bottom-fallback, 0px))';
 
   return (
     <div
-      className="min-h-[100svh] font-sans selection:bg-blue-500/30 transition-colors duration-500"
-      style={{ backgroundColor: 'var(--bg-primary)', color: 'var(--text-primary)' }}
+      className="font-sans selection:bg-blue-500/30 transition-colors duration-500"
+      style={{
+        minHeight: `calc(100svh - ${safeAreaTop} - ${safeAreaBottom})`,
+        paddingTop: safeAreaTop,
+        paddingBottom: safeAreaBottom,
+        backgroundColor: 'var(--bg-primary)',
+        color: 'var(--text-primary)',
+      }}
     >
-      {bgMode === 'animated' ? (
+      {bgMode === 'animated' && !isLightTheme ? (
         <AuroraBackground />
       ) : (
         <div className="fixed inset-0 pointer-events-none z-0">
           <div
             className="absolute inset-0"
             style={{
-              background: 'linear-gradient(to bottom right, var(--bg-gradient-from), var(--bg-primary), var(--bg-gradient-to))',
+              background: (isLightTheme && bgMode !== 'custom')
+                ? 'linear-gradient(to bottom right, #f8fafc, #ffffff, #f1f5f9)'
+                : 'linear-gradient(to bottom right, var(--bg-gradient-from), var(--bg-primary), var(--bg-gradient-to))',
             }}
           />
           <div
             className="absolute top-[-15%] right-[-10%] w-[70%] h-[70%] rounded-full pointer-events-none"
-            style={{ background: 'rgba(59, 130, 246, 0.08)', filter: 'blur(150px)' }}
+            style={{ background: isLightTheme ? 'rgba(148, 163, 184, 0.14)' : 'rgba(59, 130, 246, 0.08)', filter: 'blur(150px)' }}
           />
           <div
             className="absolute bottom-[-15%] left-[-10%] w-[70%] h-[70%] rounded-full pointer-events-none"
-            style={{ background: 'rgba(30, 58, 138, 0.1)', filter: 'blur(150px)' }}
+            style={{ background: isLightTheme ? 'rgba(226, 232, 240, 0.26)' : 'rgba(30, 58, 138, 0.1)', filter: 'blur(150px)' }}
           />
         </div>
       )}
@@ -1141,7 +1261,7 @@ function AppContent({
           className="fixed left-0 right-0 pointer-events-none z-20 transition-opacity duration-200"
           style={{
             top: 0,
-            height: 'calc(env(safe-area-inset-top, 0px) + 40px)',
+            height: `calc(${safeAreaTop} + 40px)`,
             opacity: mobileTopFadeActive ? 1 : 0,
             background: isLightTheme
               ? 'linear-gradient(to bottom, rgba(248, 250, 252, 0.94) 0%, rgba(248, 250, 252, 0.76) 50%, rgba(248, 250, 252, 0) 100%)'
@@ -1155,7 +1275,7 @@ function AppContent({
           className="fixed pointer-events-none z-30 transition-all duration-150"
           style={{
             left: '50%',
-            top: 'calc(env(safe-area-inset-top, 0px) + 6px)',
+            top: `calc(${safeAreaTop} + 6px)`,
             opacity: mobilePullRefreshing ? 1 : Math.max(0.45, pullRefreshProgress),
             transform: `translateX(-50%) translateY(${mobilePullRefreshing ? 0 : (-14 + (pullRefreshProgress * 14))}px)`,
           }}
@@ -1202,15 +1322,16 @@ function AppContent({
           headerTitle={resolvedHeaderTitle}
           headerScale={headerScale}
           editMode={editMode}
-          headerSettings={headerSettings}
+          headerSettings={effectiveHeaderSettings}
           setShowHeaderEditModal={setShowHeaderEditModal}
           t={t}
           isMobile={isMobile}
           sectionSpacing={sectionSpacing}
+          currentTheme={currentTheme}
         >
           <div
-            className={`w-full mt-0 font-sans ${isMobile ? 'flex flex-col items-center gap-3' : 'flex items-center justify-between'}`}
-            style={{ marginTop: `${sectionSpacing?.headerToStatus ?? 0}px` }}
+            className={`w-full mt-0 font-sans ${isMobile ? 'flex flex-col items-center gap-1.5' : 'flex items-center justify-between'}`}
+            style={{ marginTop: `${isMobile ? Math.min(8, sectionSpacing?.headerToStatus ?? 0) : (sectionSpacing?.headerToStatus ?? 0)}px` }}
           >
             <div className={`flex flex-wrap gap-2.5 items-center min-w-0 ${isMobile ? 'justify-center w-full' : ''}`}>
               {(pagesConfig.header || []).map(id => personStatus(id))}
@@ -1295,15 +1416,34 @@ function AppContent({
           </div>
         )}
 
+        {isMobile && (
+          <div className="flex items-center justify-between mb-2 px-0.5">
+            {renderUserChip('max-w-[58%] truncate')}
+            <div className="flex items-center gap-2">
+              {mobileAlertCount > 0 && (
+                <button
+                  onClick={() => setShowSensorInfoModal(mobileAlertTargetId)}
+                  className="inline-flex items-center gap-1 px-2 py-1 rounded-full border border-[var(--glass-border)] bg-[var(--glass-bg)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors"
+                  title="Alerts"
+                >
+                  <AlertTriangle className={`w-3.5 h-3.5 ${criticalAlertCount > 0 ? 'text-red-400' : 'text-amber-400'}`} />
+                  <span className="text-[11px] font-bold leading-none">{mobileAlertCount}</span>
+                </button>
+              )}
+              {renderSettingsControl()}
+            </div>
+          </div>
+        )}
+
         <div
           style={{
-            marginBottom: `${sectionSpacing?.navToGrid ?? 24}px`,
+            marginBottom: `${isMobile ? Math.min(14, sectionSpacing?.navToGrid ?? 24) : (sectionSpacing?.navToGrid ?? 24)}px`,
             minHeight: navStickyOnScrollDown && navPinnedMetrics.height > 0 ? `${navPinnedMetrics.height}px` : undefined,
           }}
         >
           <div
             ref={navRowRef}
-            className={`${isMobile ? 'flex flex-col items-center gap-3' : 'flex flex-nowrap items-center justify-between gap-4'} ${navStickyOnScrollDown ? 'z-30 transition-all duration-200' : ''}`}
+            className={`${isMobile ? 'flex flex-col items-center gap-1.5' : 'flex flex-nowrap items-center justify-between gap-4'} ${navStickyOnScrollDown ? 'z-30 transition-all duration-200' : ''}`}
             style={{
               ...(navStickyOnScrollDown
                 ? {
@@ -1314,7 +1454,7 @@ function AppContent({
                   borderRadius: isMobile ? '1rem' : '1.2rem',
                   backgroundColor: 'color-mix(in srgb, var(--card-bg) 88%, transparent)',
                   backdropFilter: 'blur(10px)',
-                  padding: isMobile ? '0.35rem 0.4rem 0.25rem' : '0.35rem 0.6rem',
+                  padding: isMobile ? '0.3rem 0.4rem 0.2rem' : '0.35rem 0.6rem',
                 }
                 : {}),
             }}
@@ -1334,7 +1474,7 @@ function AppContent({
               />
             </div>
 
-            <div className={`relative flex items-center flex-shrink-0 overflow-visible pb-2 ${isMobile ? 'justify-center gap-4 w-full' : 'gap-6 justify-end'}`}>
+            <div className={`relative flex items-center flex-shrink-0 overflow-visible ${isMobile ? 'justify-center gap-3 w-full pb-0' : 'gap-6 justify-end pb-2'}`}>
               {editMode && canEditDashboard && (
                 <button
                   onClick={() => setShowAddCardModal(true)}
@@ -1383,45 +1523,8 @@ function AppContent({
                 </button>
               )}
 
-              {currentUser && (
-                <button
-                  onClick={() => setShowProfileModal(true)}
-                  className="px-2 py-1 rounded-full border border-[var(--glass-border)] text-[10px] uppercase tracking-wider text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
-                  title={t('profile.title')}
-                >
-                  <User className="w-3 h-3 inline mr-1" />
-                  {profileDisplayName}
-                </button>
-              )}
-
-              {isMobile && mobileAlertCount > 0 && (
-                <button
-                  onClick={() => setShowSensorInfoModal(mobileAlertTargetId)}
-                  className="inline-flex items-center gap-1 px-2 py-1 rounded-full border border-[var(--glass-border)] bg-[var(--glass-bg)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors"
-                  title="Alerts"
-                >
-                  <AlertTriangle className={`w-3.5 h-3.5 ${criticalAlertCount > 0 ? 'text-red-400' : 'text-amber-400'}`} />
-                  <span className="text-[11px] font-bold leading-none">{mobileAlertCount}</span>
-                </button>
-              )}
-
-              <div className="relative">
-                <SettingsDropdown
-                  onOpenSettings={() => { setShowConfigModal(true); setConfigTab('connection'); }}
-                  onOpenTheme={() => setShowThemeSidebar(true)}
-                  onOpenLayout={() => setShowLayoutSidebar(true)}
-                  onOpenHeader={() => setShowHeaderEditModal(true)}
-                  showLayout={isAdminUser}
-                  showHeader={canEditGlobalBranding || canEditClientSubtitle}
-                  showConnection={canManageUsersAndClients}
-                  t={t}
-                />
-                {isAdminUser && updateCount > 0 && (
-                  <div className="absolute -top-1 -right-1 w-5 h-5 bg-gray-600 rounded-full flex items-center justify-center border-2 border-[var(--card-bg)] pointer-events-none shadow-sm">
-                    <span className="text-[11px] font-bold text-white leading-none pt-[1px]">{updateCount}</span>
-                  </div>
-                )}
-              </div>
+              {!isMobile && renderUserChip()}
+              {!isMobile && renderSettingsControl()}
 
               {!connected && (
                 <div
@@ -1494,8 +1597,8 @@ function AppContent({
             className="grid font-sans page-transition items-start"
             data-dashboard-grid
             style={{
-              gap: isMobile ? '20px' : `${gridGapV}px ${gridGapH}px`,
-              gridAutoRows: isMobile ? '88px' : '100px',
+              gap: isMobile ? `${mobileGridGapV}px ${mobileGridGapH}px` : `${gridGapV}px ${gridGapH}px`,
+              gridAutoRows: isMobile ? `${mobileGridAutoRow}px` : '100px',
               gridTemplateColumns: `repeat(${gridColCount}, minmax(0, 1fr))`,
             }}
           >
@@ -1529,7 +1632,7 @@ function AppContent({
                 return (
                   <div
                     key={id}
-                    className={`h-full relative ${(isCompactCards || isMobile) ? 'card-compact' : ''}`}
+                    className={`h-full relative ${isCompactCards ? 'card-compact' : ''}`}
                     data-grid-card
                     style={{
                       gridRowStart: placement.row,
@@ -1659,8 +1762,9 @@ function AppContent({
             gridColumns, setGridColumns,
             cardBorderRadius, setCardBorderRadius,
             sectionSpacing, updateSectionSpacing,
-            headerTitle, headerScale, headerSettings,
-            updateHeaderTitle, updateHeaderScale, updateHeaderSettings,
+            headerTitle: resolvedHeaderTitle, headerScale, headerSettings: effectiveHeaderSettings,
+            updateHeaderScale, updateHeaderSettings,
+            saveHeaderLogos,
             canEditGlobalBranding,
             canEditClientSubtitle,
           }}
@@ -1719,6 +1823,7 @@ function AppContent({
             loadGlobalDashboard,
             currentUser,
             canEditDashboard,
+            canManageAdministration: canManageUsersAndClients,
             onLogout,
             userAdminApi,
           }}
@@ -1732,13 +1837,54 @@ function AppContent({
 export default function App() {
   const [authReady, setAuthReady] = useState(false);
   const [currentUser, setCurrentUser] = useState(null);
+  const [globalBranding, setGlobalBranding] = useState({});
   const [authError, setAuthError] = useState('');
   const [loggingIn, setLoggingIn] = useState(false);
+  const [clientId, setClientId] = useState(() => getClientId());
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [haConfigHydrated, setHaConfigHydrated] = useState(false);
 
-  const { config, setConfig } = useConfig();
+  const { config, setConfig, currentTheme } = useConfig();
+  const isLightTheme = currentTheme === 'light';
+  const refreshGlobalBranding = useCallback(async () => {
+    try {
+      const branding = await fetchServerGlobalBranding();
+      if (branding && typeof branding === 'object') {
+        setGlobalBranding(branding);
+        return branding;
+      }
+    } catch {
+      // best effort only
+    }
+    return null;
+  }, []);
+
+  const saveGlobalBranding = useCallback(async (nextBranding) => {
+    if (!currentUser?.isPlatformAdmin) {
+      return { ok: false, branding: null };
+    }
+    try {
+      const saved = await saveServerGlobalBranding(nextBranding || {});
+      if (saved && typeof saved === 'object') {
+        setGlobalBranding(saved);
+        return { ok: true, branding: saved };
+      }
+      return { ok: false, branding: null };
+    } catch {
+      return { ok: false, branding: null };
+    }
+  }, [currentUser?.isPlatformAdmin]);
+
+  const loginLogoUrl = useMemo(() => {
+    const fromGlobal = getLogoForTheme(globalBranding, currentTheme);
+    const configured = resolveLogoUrl(fromGlobal || getStoredHeaderLogoUrl(currentTheme));
+    const globalVersion = Date.parse(String(globalBranding?.updatedAt || '')) || 0;
+    const withVersion = appendLogoVersion(configured, globalVersion || getStoredHeaderLogoVersion());
+    return withVersion || '/logo.png';
+  }, [currentUser, currentTheme, globalBranding]);
+  const loginTitle = String(globalBranding?.title || 'Smart Sauna Systems').trim() || 'Smart Sauna Systems';
 
   const applySharedHaConfig = useCallback((sharedConfig) => {
     if (!sharedConfig) return;
@@ -1772,6 +1918,11 @@ export default function App() {
     let mounted = true;
     const init = async () => {
       try {
+        const branding = await fetchServerGlobalBranding().catch(() => null);
+        if (mounted && branding && typeof branding === 'object') {
+          setGlobalBranding(branding);
+        }
+
         const user = await fetchCurrentUser();
         if (!mounted) return;
         setCurrentUser(user);
@@ -1799,14 +1950,16 @@ export default function App() {
     setLoggingIn(true);
     setAuthError('');
     try {
-      const result = await loginWithPassword(username, password);
+      const result = await loginWithPassword(String(clientId || '').trim(), username, password);
       const user = result?.user || null;
 
       const shared = await fetchSharedHaConfig().catch(() => null);
       applySharedHaConfig(shared);
+      await refreshGlobalBranding();
 
       setCurrentUser(user);
       setHaConfigHydrated(true);
+      setShowPassword(false);
     } catch (error) {
       setAuthError(error?.message || 'Login failed');
     } finally {
@@ -1852,41 +2005,95 @@ export default function App() {
   if (!currentUser) {
     return (
       <div
-        className="min-h-screen flex items-center justify-center px-4"
+        className="min-h-screen flex items-center justify-center px-4 py-6 relative overflow-hidden"
         style={{
           color: 'var(--text-primary)',
-          background:
-            'radial-gradient(1000px 420px at 50% -10%, color-mix(in srgb, var(--accent-color) 18%, transparent), transparent 60%), linear-gradient(145deg, var(--bg-gradient-from), var(--bg-primary), var(--bg-gradient-to))',
+          background: isLightTheme
+            ? 'linear-gradient(155deg, #f8fafc 0%, #ffffff 42%, #f1f5f9 100%)'
+            : 'radial-gradient(880px 320px at 50% -6%, color-mix(in srgb, var(--accent-color) 24%, transparent), transparent 62%), linear-gradient(145deg, var(--bg-gradient-from), var(--bg-primary), var(--bg-gradient-to))',
         }}
       >
+        <div
+          className="pointer-events-none absolute -top-24 -left-10 w-64 h-64 rounded-full blur-3xl opacity-35"
+          style={{ background: isLightTheme ? 'rgba(148, 163, 184, 0.20)' : 'color-mix(in srgb, var(--accent-color) 42%, transparent)' }}
+        />
+        <div
+          className="pointer-events-none absolute -bottom-28 -right-8 w-72 h-72 rounded-full blur-3xl opacity-30"
+          style={{ background: isLightTheme ? 'rgba(148, 163, 184, 0.16)' : 'color-mix(in srgb, var(--accent-color) 28%, transparent)' }}
+        />
         <form
           onSubmit={doLogin}
-          className="w-full max-w-md rounded-3xl border p-8 space-y-5 shadow-2xl backdrop-blur-xl"
+          className="relative w-full max-w-[28rem] rounded-[2rem] border p-7 md:p-8 space-y-5 shadow-2xl backdrop-blur-2xl overflow-hidden"
           style={{
-            background: 'linear-gradient(145deg, color-mix(in srgb, var(--card-bg) 92%, transparent), color-mix(in srgb, var(--modal-bg) 94%, transparent))',
+            background: isLightTheme
+              ? 'linear-gradient(160deg, rgba(255,255,255,0.98), rgba(248,250,252,0.96))'
+              : 'linear-gradient(158deg, color-mix(in srgb, var(--card-bg) 95%, transparent), color-mix(in srgb, var(--modal-bg) 98%, transparent) 68%, color-mix(in srgb, var(--accent-color) 7%, var(--modal-bg)))',
             borderColor: 'var(--glass-border)',
-            boxShadow: '0 22px 48px rgba(2, 6, 23, 0.28)',
+            boxShadow: isLightTheme ? '0 22px 60px rgba(15, 23, 42, 0.16)' : '0 32px 90px rgba(2, 6, 23, 0.34)',
           }}
         >
-          <div className="flex flex-col items-center gap-3 pb-2">
+          <div
+            className="pointer-events-none absolute top-0 inset-x-0 h-14"
+            style={{ background: 'linear-gradient(180deg, color-mix(in srgb, var(--accent-color) 20%, transparent), transparent)' }}
+          />
+          <div
+            className="absolute inset-0 rounded-3xl pointer-events-none"
+            style={{
+              border: '1px solid color-mix(in srgb, var(--accent-color) 24%, transparent)',
+              maskImage: 'linear-gradient(to bottom, rgba(0,0,0,0.9), rgba(0,0,0,0.3) 55%, transparent)',
+            }}
+          />
+          <div className="relative flex flex-col items-center gap-4 pb-1">
             <div
-              className="w-14 h-14 rounded-2xl flex items-center justify-center border"
+              className="w-16 h-16 rounded-[1.15rem] flex items-center justify-center border relative overflow-hidden"
               style={{
-                background: 'color-mix(in srgb, var(--accent-color) 14%, transparent)',
+                background: 'linear-gradient(145deg, color-mix(in srgb, var(--accent-color) 18%, transparent), color-mix(in srgb, var(--accent-color) 8%, transparent))',
                 borderColor: 'color-mix(in srgb, var(--accent-color) 35%, transparent)',
               }}
             >
-              <Flame className="w-8 h-8" style={{ color: 'var(--accent-color)' }} />
+              <img
+                key={loginLogoUrl}
+                src={loginLogoUrl}
+                alt="App logo"
+                className="w-16 h-16 object-contain select-none"
+                loading="eager"
+                decoding="async"
+              />
             </div>
-            <h1 className="text-lg font-black uppercase tracking-[0.24em] text-center">SMART SAUNA SYSTEMS</h1>
-            <p className="text-xs uppercase tracking-[0.2em] text-[var(--text-secondary)]">Secure Dashboard Access</p>
+            <h1
+              className="text-[1.2rem] md:text-[1.38rem] font-light text-center tracking-[0.22em] uppercase"
+              style={{ fontFamily: "'Roboto', 'Helvetica Neue', Arial, sans-serif", lineHeight: 1.2 }}
+            >
+              {loginTitle}
+            </h1>
+            <div className="w-24 h-px opacity-60" style={{ background: 'color-mix(in srgb, var(--accent-color) 36%, var(--glass-border))' }} />
+            <p className="text-center text-[12px] leading-relaxed max-w-[24rem]" style={{ color: 'var(--text-secondary)' }}>
+              Sign in to manage your sauna systems, monitor activity, and keep everything running smoothly in one place.
+            </p>
+          </div>
+
+          <div className="space-y-1.5 pt-1">
+            <label className="block text-[11px] uppercase tracking-[0.18em] text-[var(--text-secondary)]">Client ID</label>
+            <input
+              className="w-full px-4 py-3 rounded-xl border outline-none transition-colors focus:ring-2"
+              style={{
+                background: 'linear-gradient(145deg, color-mix(in srgb, var(--glass-bg) 90%, transparent), color-mix(in srgb, var(--glass-bg) 72%, transparent))',
+                borderColor: 'var(--glass-border)',
+              }}
+              value={clientId}
+              onChange={(e) => setClientId(e.target.value)}
+              autoComplete="organization"
+            />
           </div>
 
           <div className="space-y-1.5">
             <label className="block text-[11px] uppercase tracking-[0.18em] text-[var(--text-secondary)]">Username</label>
             <input
-              className="w-full px-4 py-3 rounded-xl border outline-none transition-colors"
-              style={{ backgroundColor: 'var(--glass-bg)', borderColor: 'var(--glass-border)' }}
+              className="w-full px-4 py-3 rounded-xl border outline-none transition-colors focus:ring-2"
+              style={{
+                background: 'linear-gradient(145deg, color-mix(in srgb, var(--glass-bg) 90%, transparent), color-mix(in srgb, var(--glass-bg) 72%, transparent))',
+                borderColor: 'var(--glass-border)',
+              }}
               value={username}
               onChange={(e) => setUsername(e.target.value)}
               autoComplete="username"
@@ -1895,26 +2102,47 @@ export default function App() {
 
           <div className="space-y-1.5">
             <label className="block text-[11px] uppercase tracking-[0.18em] text-[var(--text-secondary)]">Password</label>
-            <input
-              type="password"
-              className="w-full px-4 py-3 rounded-xl border outline-none transition-colors"
-              style={{ backgroundColor: 'var(--glass-bg)', borderColor: 'var(--glass-border)' }}
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              autoComplete="current-password"
-            />
+            <div className="relative">
+              <input
+                type={showPassword ? 'text' : 'password'}
+                className="w-full px-4 pr-12 py-3 rounded-xl border outline-none transition-colors focus:ring-2"
+                style={{
+                  background: 'linear-gradient(145deg, color-mix(in srgb, var(--glass-bg) 90%, transparent), color-mix(in srgb, var(--glass-bg) 72%, transparent))',
+                  borderColor: 'var(--glass-border)',
+                }}
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                autoComplete="current-password"
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword((prev) => !prev)}
+                className="absolute inset-y-0 right-0 px-3 rounded-r-xl flex items-center justify-center text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors"
+                title={showPassword ? 'Hide password' : 'Show password'}
+                aria-label={showPassword ? 'Hide password' : 'Show password'}
+              >
+                {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+              </button>
+            </div>
           </div>
 
           {authError && <div className="text-sm text-red-300 bg-red-500/15 border border-red-500/30 rounded-xl px-3 py-2">{authError}</div>}
 
           <button
             disabled={loggingIn}
-            className="w-full py-3 rounded-xl text-white font-bold uppercase tracking-[0.16em] disabled:opacity-60 transition-colors"
-            style={{ backgroundColor: 'var(--accent-color)' }}
+            className="w-full py-3.5 rounded-xl text-white font-medium uppercase tracking-[0.18em] disabled:opacity-60 transition-colors shadow-lg"
+            style={{
+              background: 'linear-gradient(135deg, color-mix(in srgb, var(--accent-color) 92%, #1d4ed8), var(--accent-color))',
+              boxShadow: '0 10px 28px color-mix(in srgb, var(--accent-color) 40%, transparent)',
+            }}
           >
             {loggingIn ? <span className="inline-block w-4 h-4 mr-2 border-2 border-white/30 border-t-white rounded-full animate-spin align-[-2px]" /> : <Lock className="w-4 h-4 inline mr-2" />}
             {loggingIn ? 'Signing in…' : 'Sign in'}
           </button>
+
+          <p className="text-center text-[11px] leading-relaxed px-2" style={{ color: 'var(--text-secondary)' }}>
+            If you do not have an account yet, please contact us at <a className="underline underline-offset-2" href="mailto:contact@smarti.dev">contact@smarti.dev</a>.
+          </p>
         </form>
       </div>
     );
@@ -1940,6 +2168,16 @@ export default function App() {
       return updated;
     },
     deleteUser: deleteServerUser,
+    listClients: listServerClients,
+    createClient: createServerClient,
+    createClientAdmin: createServerClientAdmin,
+    updateClient: updateServerClient,
+    deleteClient: deleteServerClient,
+    fetchClientHaConfig: fetchServerClientHaConfig,
+    saveClientHaConfig: saveServerClientHaConfig,
+    listClientDashboards: listServerClientDashboards,
+    fetchClientDashboard: fetchServerClientDashboard,
+    saveClientDashboard: saveServerClientDashboard,
   };
 
   return (
@@ -1948,8 +2186,10 @@ export default function App() {
         showOnboarding={showOnboarding}
         setShowOnboarding={setShowOnboarding}
         currentUser={currentUser}
+        globalBranding={globalBranding}
         onLogout={doLogout}
         onProfileUpdated={setCurrentUser}
+        onSaveGlobalBranding={saveGlobalBranding}
         userAdminApi={userAdminApi}
         haConfigHydrated={haConfigHydrated}
       />

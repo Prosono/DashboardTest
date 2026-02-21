@@ -899,6 +899,8 @@ function AppContent({
 
     const onTouchStart = (event) => {
       if (mobilePullRefreshing || shouldLockMobileScroll || editMode) return;
+      const startTarget = event.target;
+      if (startTarget && typeof startTarget.closest === 'function' && startTarget.closest('[data-disable-pull-refresh="true"]')) return;
       if ((window.scrollY || window.pageYOffset || 0) > 0) return;
       if (!event.touches || event.touches.length !== 1) return;
       const startY = event.touches[0].clientY;
@@ -916,6 +918,11 @@ function AppContent({
 
     const onTouchMove = (event) => {
       if (!mobilePullTrackingRef.current) return;
+      const moveTarget = event.target;
+      if (moveTarget && typeof moveTarget.closest === 'function' && moveTarget.closest('[data-disable-pull-refresh="true"]')) {
+        resetPullState();
+        return;
+      }
       if (!event.touches || event.touches.length !== 1) {
         resetPullState();
         return;

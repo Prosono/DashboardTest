@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { X, Activity, AlertTriangle } from 'lucide-react';
 import { logger } from '../utils/logger';
 import { getHistory, getHistoryRest, getStatistics } from '../services/haClient';
@@ -112,6 +112,16 @@ export default function SensorModal({
     if (isNumericValue && domain !== 'light' && domain !== 'climate') return false;
     return true;
   };
+
+  const overlayConfigKey = useMemo(() => JSON.stringify(
+    (Array.isArray(overlayEntities) ? overlayEntities : []).map((overlay) => ({
+      entityId: overlay?.entityId || '',
+      label: overlay?.label || '',
+      color: overlay?.color || '',
+      activeStates: Array.isArray(overlay?.activeStates) ? overlay.activeStates.join('|') : '',
+      initialState: overlay?.initialState ?? '',
+    }))
+  ), [overlayEntities]);
 
   useEffect(() => {
     if (isOpen && entity && conn) {
@@ -373,7 +383,7 @@ export default function SensorModal({
       setHistoryEvents([]);
       setOverlayHistory([]);
     }
-  }, [isOpen, conn, haUrl, haToken, historyHours, isSystemDetailsSensor, overlayEntities, entityId]);
+  }, [isOpen, conn, haUrl, haToken, historyHours, isSystemDetailsSensor, overlayConfigKey, entityId]);
 
   useEffect(() => {
     if (!Array.isArray(overlayHistory) || overlayHistory.length === 0) {
@@ -399,6 +409,11 @@ export default function SensorModal({
   const state = entity.state;
   const domain = entityId?.split('.')?.[0];
   const isNumeric = !['script', 'scene'].includes(domain) && !isNaN(parseFloat(state)) && !String(state).match(/^unavailable|unknown$/) && !entityId.startsWith('binary_sensor.');
+  const isPeopleNowHistory = isNumeric && (
+    /people_now/i.test(entityId || '')
+    || /(person|people)/i.test(String(attrs.unit_of_measurement || ''))
+  );
+  const historyChartVariant = isPeopleNowHistory ? 'bars' : 'line';
   const deviceClass = attrs.device_class;
   // Determine if entity should show activity timeline and log
   const shouldShowActivity = () => getShouldShowActivity(String(state ?? '').toLowerCase(), isNumeric);
@@ -649,6 +664,7 @@ export default function SensorModal({
                     <div className="-ml-4 -mr-4 md:mr-0 h-full">
                       <SensorHistoryGraph
                         data={history}
+                        variant={historyChartVariant}
                         overlays={visibleOverlays}
                         height={350}
                         noDataLabel={t('sensorInfo.noHistory')}
@@ -718,6 +734,7 @@ export default function SensorModal({
                      <div className="-ml-4 -mr-4 md:mr-0 h-full">
                         <SensorHistoryGraph
                           data={history}
+                          variant={historyChartVariant}
                           overlays={visibleOverlays}
                           height={350}
                           noDataLabel={t('sensorInfo.noHistory')}

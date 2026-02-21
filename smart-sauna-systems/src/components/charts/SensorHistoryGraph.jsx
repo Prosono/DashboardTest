@@ -63,6 +63,7 @@ export default function SensorHistoryGraph({
   color = '#3b82f6',
   strokeColor,
   areaColor,
+  variant = 'line',
   overlays = [],
   noDataLabel = 'No history data available',
   formatXLabel,
@@ -81,10 +82,12 @@ export default function SensorHistoryGraph({
   const graphHeight = height - padding.top - padding.bottom;
   const lineColor = strokeColor || color;
   const fillColor = areaColor || lineColor;
+  const chartVariant = variant === 'bars' ? 'bars' : 'line';
 
   const values = data.map((d) => d.value);
   let min = Math.min(...values);
   let max = Math.max(...values);
+  if (chartVariant === 'bars') min = Math.min(0, min);
   if (min === max) {
     min -= 1;
     max += 1;
@@ -125,6 +128,8 @@ export default function SensorHistoryGraph({
 
   const pathData = createLinePath(pointsArray);
   const areaData = `${pathData} L ${padding.left + graphWidth},${height} L ${padding.left},${height} Z`;
+  const barStep = pointsArray.length > 1 ? (graphWidth / Math.max(1, pointsArray.length - 1)) : graphWidth;
+  const barWidth = Math.max(2, Math.min(22, barStep * 0.62));
 
   const yLabels = [
     { value: max, y: padding.top },
@@ -250,17 +255,33 @@ export default function SensorHistoryGraph({
           </g>
         ))}
 
-        <path d={areaData} fill={`url(#${areaGradientId})`} mask={`url(#${maskId})`} />
-
-        <path
-          d={pathData}
-          fill="none"
-          stroke={lineColor}
-          strokeWidth="2.5"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          opacity="0.9"
-        />
+        {chartVariant === 'line' ? (
+          <>
+            <path d={areaData} fill={`url(#${areaGradientId})`} mask={`url(#${maskId})`} />
+            <path
+              d={pathData}
+              fill="none"
+              stroke={lineColor}
+              strokeWidth="2.5"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              opacity="0.9"
+            />
+          </>
+        ) : (
+          pointsArray.map(([x, y], index) => (
+            <rect
+              key={`bar-${index}`}
+              x={x - (barWidth / 2)}
+              y={y}
+              width={barWidth}
+              height={Math.max(1, (height - padding.bottom) - y)}
+              rx={Math.min(3, barWidth / 3)}
+              fill={lineColor}
+              fillOpacity="0.72"
+            />
+          ))
+        )}
 
         {yLabels.map((label, index) => (
           <text

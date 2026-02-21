@@ -517,16 +517,16 @@ export default function SaunaBookingTempCard({
 
       {historyModal && (
         <div
+          data-disable-pull-refresh="true"
           className="fixed inset-0 z-[130] flex items-center justify-center p-3 sm:p-4"
           style={{ background: 'rgba(4, 10, 20, 0.68)', backdropFilter: 'blur(8px)' }}
           onClick={() => setHistoryModal(null)}
-          onTouchMove={(e) => e.stopPropagation()}
         >
           <div
-            className="border w-full max-w-3xl rounded-2xl sm:rounded-3xl p-4 sm:p-6 shadow-2xl relative font-sans backdrop-blur-xl popup-anim flex flex-col max-h-[86vh]"
+            data-disable-pull-refresh="true"
+            className="border w-full max-w-3xl rounded-2xl sm:rounded-3xl p-4 sm:p-6 shadow-2xl relative font-sans backdrop-blur-xl popup-anim flex flex-col max-h-[86vh] overflow-hidden"
             style={{ background: 'var(--modal-bg)', borderColor: 'var(--glass-border)', touchAction: 'pan-y' }}
             onClick={(e) => e.stopPropagation()}
-            onTouchMove={(e) => e.stopPropagation()}
           >
             <button
               type="button"
@@ -570,7 +570,6 @@ export default function SaunaBookingTempCard({
             <div
               className="mt-4 flex-1 min-h-0 overflow-y-auto custom-scrollbar space-y-2 pr-1 overscroll-contain"
               style={{ WebkitOverflowScrolling: 'touch', touchAction: 'pan-y' }}
-              onTouchMove={(e) => e.stopPropagation()}
             >
               {!historyModal.entries?.length && (
                 <div className="px-2 py-5 text-center text-xs text-[var(--text-muted)]">
