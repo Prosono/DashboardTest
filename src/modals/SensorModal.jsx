@@ -82,7 +82,28 @@ export default function SensorModal({
   const parseHistoryNumber = (entry) => {
     const raw = entry?.state ?? entry?.s ?? entry?.mean ?? entry?.value;
     const num = Number.parseFloat(raw);
-    return Number.isFinite(num) ? num : null;
+    if (Number.isFinite(num)) return num;
+    const attrs = (entry?.attributes && typeof entry.attributes === 'object')
+      ? entry.attributes
+      : ((entry?.a && typeof entry.a === 'object') ? entry.a : {});
+    const climateCurrent = Number.parseFloat(attrs?.current_temperature ?? attrs?.current_temp ?? attrs?.currentTemperature);
+    if (Number.isFinite(climateCurrent)) return climateCurrent;
+    const climateTarget = Number.parseFloat(attrs?.temperature ?? attrs?.target_temperature ?? attrs?.target_temp);
+    return Number.isFinite(climateTarget) ? climateTarget : null;
+  };
+
+  const parseHistoryClimateSnapshot = (entry) => {
+    const attrs = (entry?.attributes && typeof entry.attributes === 'object')
+      ? entry.attributes
+      : ((entry?.a && typeof entry.a === 'object') ? entry.a : {});
+    const currentRaw = attrs?.current_temperature ?? attrs?.current_temp ?? attrs?.currentTemperature;
+    const targetRaw = attrs?.temperature ?? attrs?.target_temperature ?? attrs?.target_temp;
+    const currentTemp = Number.parseFloat(currentRaw);
+    const targetTemp = Number.parseFloat(targetRaw);
+    return {
+      currentTemp: Number.isFinite(currentTemp) ? currentTemp : null,
+      targetTemp: Number.isFinite(targetTemp) ? targetTemp : null,
+    };
   };
 
   const parseHistoryEntryTime = (entry) => toDateSafe(
@@ -201,10 +222,13 @@ export default function SensorModal({
                     const changed = d.last_changed || d.last_updated || d.last_reported || d.timestamp || d.l || d.lc || d.lu || d.lr;
                     const time = parseHistoryEntryTime(d);
                     if (stateValue === undefined || !time) return null;
+                    const climateSnapshot = parseHistoryClimateSnapshot(d);
                     return {
                       state: stateValue,
                       time,
-                      lastChanged: changed
+                      lastChanged: changed,
+                      currentTemp: climateSnapshot.currentTemp,
+                      targetTemp: climateSnapshot.targetTemp,
                     };
                   })
                   .filter(Boolean);
@@ -241,10 +265,13 @@ export default function SensorModal({
                         const changed = d.last_changed || d.last_updated || d.last_reported || d.timestamp || d.l || d.lc || d.lu || d.lr;
                         const time = parseHistoryEntryTime(d);
                         if (stateValue === undefined || !time) return null;
+                        const climateSnapshot = parseHistoryClimateSnapshot(d);
                         return {
                           state: stateValue,
                           time,
-                          lastChanged: changed
+                          lastChanged: changed,
+                          currentTemp: climateSnapshot.currentTemp,
+                          targetTemp: climateSnapshot.targetTemp,
                         };
                       })
                       .filter(Boolean);
@@ -303,7 +330,13 @@ export default function SensorModal({
              events = [{
                state: entity.state,
                time: start, 
-               lastChanged: start.toISOString()
+               lastChanged: start.toISOString(),
+               currentTemp: Number.isFinite(Number(entity?.attributes?.current_temperature))
+                 ? Number(entity.attributes.current_temperature)
+                 : null,
+               targetTemp: Number.isFinite(Number(entity?.attributes?.temperature))
+                 ? Number(entity.attributes.temperature)
+                 : null,
              }];
           }
 
@@ -701,6 +734,8 @@ export default function SensorModal({
                             {recentEvents.map((event, idx) => {
                                 let stateLabel = formatStateLabel(event.state, deviceClass);
                                 const domain = entityId?.split('.')?.[0];
+                                const climateCurrent = Number.isFinite(Number(event?.currentTemp)) ? Number(event.currentTemp) : null;
+                                const climateTarget = Number.isFinite(Number(event?.targetTemp)) ? Number(event.targetTemp) : null;
                                 
                                 // Specific formatting for Scenes in log
                                 if (domain === 'scene' && String(event.state).match(/^\d{4}-\d{2}-\d{2}T/)) {
@@ -715,10 +750,26 @@ export default function SensorModal({
                                 return (
                                 <div key={`${event.lastChanged || idx}`} className="flex items-center gap-4 p-3 rounded-xl transition-colors hover:bg-white/5 group border border-transparent hover:border-white/5">
                                   <div className={`h-2 w-2 rounded-full flex-shrink-0 ${(event.state === 'on' || event.state === 'true' || event.state === 'open' || event.state === 'unlocked' || event.state === 'playing' || event.state > 0) ? 'bg-green-400 opacity-80' : 'bg-[var(--text-secondary)] opacity-35'}`} />
-                                    <div className="flex-1 min-w-0 flex items-baseline justify-between gap-4">
-                                        <span className="text-sm font-medium text-[var(--text-primary)] truncate">
-                                            {logLabel}
-                                        </span>
+                                    <div className="flex-1 min-w-0 flex items-start justify-between gap-4">
+                                        <div className="min-w-0">
+                                          <span className="text-sm font-medium text-[var(--text-primary)] truncate block">
+                                              {logLabel}
+                                          </span>
+                                          {domain === 'climate' && (climateCurrent !== null || climateTarget !== null) && (
+                                            <span className="mt-1 text-[10px] uppercase tracking-widest text-[var(--text-secondary)] inline-flex flex-wrap gap-2">
+                                              {climateCurrent !== null && (
+                                                <span>
+                                                  {(t('climate.current') === 'climate.current' ? 'Current' : t('climate.current'))}: {climateCurrent.toFixed(1)}°C
+                                                </span>
+                                              )}
+                                              {climateTarget !== null && (
+                                                <span>
+                                                  {(t('climate.target') === 'climate.target' ? 'Target' : t('climate.target'))}: {climateTarget.toFixed(1)}°C
+                                                </span>
+                                              )}
+                                            </span>
+                                          )}
+                                        </div>
                                         <span className="text-xs font-mono text-[var(--text-secondary)] opacity-70 group-hover:opacity-100 transition-opacity whitespace-nowrap">
                                             {formatRelativeTime(event.time, t)}
                                         </span>

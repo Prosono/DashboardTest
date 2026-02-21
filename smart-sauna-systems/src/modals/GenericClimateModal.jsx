@@ -4,6 +4,12 @@ import M3Slider from '../components/ui/M3Slider';
 import ModernDropdown from '../components/ui/ModernDropdown';
 
 const getDisplayName = (entity, fallback) => entity?.attributes?.friendly_name || fallback;
+const translate = (t, key, fallback) => {
+  const out = typeof t === 'function' ? t(key) : undefined;
+  const s = String(out ?? '');
+  const looksLikeKey = !s || s === key || s.toLowerCase() === key.toLowerCase() || s === s.toUpperCase() || s.includes('.');
+  return looksLikeKey ? fallback : s;
+};
 
 export default function GenericClimateModal({
   entityId,
@@ -165,7 +171,7 @@ export default function GenericClimateModal({
                 className="w-full h-11 px-4 rounded-2xl border inline-flex items-center justify-center transition-all bg-[var(--glass-bg)] border-[var(--glass-border)] text-[var(--text-primary)] not-italic"
               >
                 <span className="text-xs uppercase tracking-[0.22em] font-bold">
-                  {t('common.history')}
+                  {translate(t, 'common.history', 'Historikk')}
                 </span>
               </button>
             )}
