@@ -21,27 +21,10 @@ const isStateActive = (state, activeStates = DEFAULT_ACTIVE_STATES) => {
   return activeStates.map((entry) => String(entry).trim().toLowerCase()).includes(normalized);
 };
 
-const createBezierPath = (points, smoothing = 0.3) => {
-  const line = (p1, p2) => {
-    const dx = p2[0] - p1[0];
-    const dy = p2[1] - p1[1];
-    return { length: Math.sqrt(dx * dx + dy * dy), angle: Math.atan2(dy, dx) };
-  };
-  const controlPoint = (current, previous, next, reverse) => {
-    const p = previous || current;
-    const n = next || current;
-    const l = line(p, n);
-    const angle = l.angle + (reverse ? Math.PI : 0);
-    const length = l.length * smoothing;
-    return [current[0] + Math.cos(angle) * length, current[1] + Math.sin(angle) * length];
-  };
-  return points.reduce((acc, point, i, a) => {
-    if (i === 0) return `M ${point[0]},${point[1]}`;
-    const [cpsX, cpsY] = controlPoint(a[i - 1], a[i - 2], point, false);
-    const [cpeX, cpeY] = controlPoint(point, a[i - 1], a[i + 1], true);
-    return `${acc} C ${cpsX.toFixed(2)},${cpsY.toFixed(2)} ${cpeX.toFixed(2)},${cpeY.toFixed(2)} ${point[0].toFixed(2)},${point[1].toFixed(2)}`;
-  }, '');
-};
+const createLinePath = (points) => points.reduce((acc, point, index) => {
+  if (index === 0) return `M ${point[0].toFixed(2)},${point[1].toFixed(2)}`;
+  return `${acc} L ${point[0].toFixed(2)},${point[1].toFixed(2)}`;
+}, '');
 
 const buildOverlaySegments = (events, startMs, endMs, activeStates) => {
   if (!Number.isFinite(startMs) || !Number.isFinite(endMs) || endMs <= startMs) return [];
@@ -140,7 +123,7 @@ export default function SensorHistoryGraph({
     padding.top + graphHeight - (((point.value - renderMin) / renderRange) * graphHeight),
   ]));
 
-  const pathData = createBezierPath(pointsArray, 0.3);
+  const pathData = createLinePath(pointsArray);
   const areaData = `${pathData} L ${padding.left + graphWidth},${height} L ${padding.left},${height} Z`;
 
   const yLabels = [

@@ -373,7 +373,7 @@ export default function SensorModal({
       setHistoryEvents([]);
       setOverlayHistory([]);
     }
-  }, [isOpen, entity, conn, haUrl, haToken, historyHours, isSystemDetailsSensor, overlayEntities, entityId]);
+  }, [isOpen, conn, haUrl, haToken, historyHours, isSystemDetailsSensor, overlayEntities, entityId]);
 
   useEffect(() => {
     if (!Array.isArray(overlayHistory) || overlayHistory.length === 0) {
@@ -646,32 +646,31 @@ export default function SensorModal({
               )}
               {isNumeric && !hasActivity ? (
                 <div className="h-full w-full min-h-[250px] relative">
-                   {loading ? (
-                      <div className="absolute inset-0 flex items-center justify-center">
-                         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[var(--text-primary)] opacity-20"></div>
-                      </div>
-                    ) : (
-                      <div className="-ml-4 -mr-4 md:mr-0 h-full">
-                         <SensorHistoryGraph
-                           data={history}
-                           overlays={visibleOverlays}
-                           height={350}
-                           noDataLabel={t('sensorInfo.noHistory')}
-                           strokeColor="var(--text-primary)"
-                           areaColor="var(--text-primary)"
-                         />
+                    <div className="-ml-4 -mr-4 md:mr-0 h-full">
+                      <SensorHistoryGraph
+                        data={history}
+                        overlays={visibleOverlays}
+                        height={350}
+                        noDataLabel={t('sensorInfo.noHistory')}
+                        strokeColor="var(--text-primary)"
+                        areaColor="var(--text-primary)"
+                      />
+                    </div>
+                    {loading && (
+                      <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[var(--text-primary)] opacity-20"></div>
                       </div>
                     )}
                 </div>
               ) : (
                 <div className="flex-1 overflow-y-auto custom-scrollbar pr-2 -mr-2">
-                   {loading && (
-                      <div className="h-[100px] flex items-center justify-center">
-                        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[var(--text-primary)] opacity-20"></div>
-                      </div>
+                   {loading && recentEvents.length === 0 && (
+                     <div className="h-[100px] flex items-center justify-center">
+                       <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[var(--text-primary)] opacity-20"></div>
+                     </div>
                    )}
                    
-                   {!loading && hasActivity && (
+                   {hasActivity && (
                      <>
                         <h4 className="text-xs font-bold uppercase tracking-widest text-[var(--text-secondary)] opacity-80 mb-4 bg-transparent">{t('history.activity')}</h4> 
                         <div className="mb-6">

@@ -442,6 +442,10 @@ export default function SaunaBookingTempCard({
                     <span>{tr('sauna.bookingTemp.maximum', 'Max')}: {trendStats.max.toFixed(1)}°</span>
                   </div>
                 )}
+                <div className="flex items-center justify-between mb-1.5 text-[10px] uppercase tracking-widest text-[var(--text-muted)]">
+                  <span>{tr('sauna.bookingTemp.graphTop', 'Top')}: {trendStats ? `${trendStats.max.toFixed(1)}°` : '--'}</span>
+                  <span>{tr('sauna.bookingTemp.graphBottom', 'Bottom')}: {trendStats ? `${trendStats.min.toFixed(1)}°` : '--'}</span>
+                </div>
                 <SparkLine
                   data={sparkPoints}
                   currentIndex={sparkPoints.length - 1}
@@ -516,11 +520,13 @@ export default function SaunaBookingTempCard({
           className="fixed inset-0 z-[130] flex items-center justify-center p-3 sm:p-4"
           style={{ background: 'rgba(4, 10, 20, 0.68)', backdropFilter: 'blur(8px)' }}
           onClick={() => setHistoryModal(null)}
+          onTouchMove={(e) => e.stopPropagation()}
         >
           <div
             className="border w-full max-w-3xl rounded-2xl sm:rounded-3xl p-4 sm:p-6 shadow-2xl relative font-sans backdrop-blur-xl popup-anim flex flex-col max-h-[86vh]"
-            style={{ background: 'var(--modal-bg)', borderColor: 'var(--glass-border)' }}
+            style={{ background: 'var(--modal-bg)', borderColor: 'var(--glass-border)', touchAction: 'pan-y' }}
             onClick={(e) => e.stopPropagation()}
+            onTouchMove={(e) => e.stopPropagation()}
           >
             <button
               type="button"
@@ -549,6 +555,10 @@ export default function SaunaBookingTempCard({
                     <span>{tr('sauna.bookingTemp.maximum', 'Max')}: {modalStats.max.toFixed(1)}°</span>
                   </div>
                 )}
+                <div className="flex items-center justify-between mb-2 text-[10px] uppercase tracking-widest text-[var(--text-muted)]">
+                  <span>{tr('sauna.bookingTemp.graphTop', 'Top')}: {modalStats ? `${modalStats.max.toFixed(1)}°` : '--'}</span>
+                  <span>{tr('sauna.bookingTemp.graphBottom', 'Bottom')}: {modalStats ? `${modalStats.min.toFixed(1)}°` : '--'}</span>
+                </div>
                 <SparkLine
                   data={historyModal.entries.slice().reverse().map((entry) => ({ value: entry.startTemp }))}
                   currentIndex={historyModal.entries.length - 1}
@@ -557,7 +567,11 @@ export default function SaunaBookingTempCard({
               </div>
             )}
 
-            <div className="mt-4 flex-1 min-h-0 overflow-y-auto custom-scrollbar space-y-2 pr-1">
+            <div
+              className="mt-4 flex-1 min-h-0 overflow-y-auto custom-scrollbar space-y-2 pr-1 overscroll-contain"
+              style={{ WebkitOverflowScrolling: 'touch', touchAction: 'pan-y' }}
+              onTouchMove={(e) => e.stopPropagation()}
+            >
               {!historyModal.entries?.length && (
                 <div className="px-2 py-5 text-center text-xs text-[var(--text-muted)]">
                   {tr('sauna.bookingTemp.noStarts', 'No hourly samples in selected window')}

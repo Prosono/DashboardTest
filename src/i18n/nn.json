@@ -942,5 +942,7 @@
   "sauna.bookingTemp.minimum": "Min",
   "sauna.bookingTemp.maximum": "Maks",
   "sauna.bookingTemp.latest": "Siste",
-  "sauna.bookingTemp.deleteSampleConfirm": "Slette denne målinga?"
+  "sauna.bookingTemp.deleteSampleConfirm": "Slette denne målinga?",
+  "sauna.bookingTemp.graphTop": "Topp",
+  "sauna.bookingTemp.graphBottom": "Botn"
 }

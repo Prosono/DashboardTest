@@ -942,5 +942,7 @@
   "sauna.bookingTemp.minimum": "Min",
   "sauna.bookingTemp.maximum": "Max",
   "sauna.bookingTemp.latest": "Latest",
-  "sauna.bookingTemp.deleteSampleConfirm": "Delete this sample?"
+  "sauna.bookingTemp.deleteSampleConfirm": "Delete this sample?",
+  "sauna.bookingTemp.graphTop": "Top",
+  "sauna.bookingTemp.graphBottom": "Bottom"
 }
