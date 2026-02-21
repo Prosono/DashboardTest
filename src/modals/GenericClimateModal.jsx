@@ -9,6 +9,7 @@ export default function GenericClimateModal({
   entityId,
   entity,
   onClose,
+  onShowHistory,
   callService,
   hvacMap,
   fanMap,
@@ -156,6 +157,17 @@ export default function GenericClimateModal({
                 placeholder={t('dropdown.noneSelected')}
                 onOpenChange={setDropdownOpen}
               />
+            )}
+            {typeof onShowHistory === 'function' && (
+              <button
+                type="button"
+                onClick={() => onShowHistory(entityId)}
+                className="w-full h-11 px-4 rounded-2xl border inline-flex items-center justify-center transition-all bg-[var(--glass-bg)] border-[var(--glass-border)] text-[var(--text-primary)] not-italic"
+              >
+                <span className="text-xs uppercase tracking-[0.22em] font-bold">
+                  {t('common.history')}
+                </span>
+              </button>
             )}
           </div>
         )}

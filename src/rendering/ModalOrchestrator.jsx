@@ -421,6 +421,10 @@ export default function ModalOrchestrator({
             entityId={activeClimateEntityModal}
             entity={entities[activeClimateEntityModal]}
             onClose={() => setActiveClimateEntityModal(null)}
+            onShowHistory={(entityId) => {
+              setActiveClimateEntityModal(null);
+              setShowSensorInfoModal(entityId);
+            }}
             callService={callService}
             hvacMap={hvacMap}
             fanMap={fanMap}

@@ -844,6 +844,7 @@ export default function SaunaFieldModal({
                           fanMap={fanMap}
                           swingMap={swingMap}
                           t={t}
+                          onShowHistory={showEntityHistory}
                           embedded
                           showCloseButton={false}
                         />
