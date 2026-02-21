@@ -868,7 +868,7 @@
   "sauna.bookingTemp.tempEntity": "Current temperature sensor",
   "sauna.bookingTemp.activeEntity": "Booking active sensor",
   "sauna.bookingTemp.serviceEntity": "Service type sensor (optional)",
-  "sauna.bookingTemp.targetEntity": "Target temperature sensor (optional)",
+  "sauna.bookingTemp.targetEntity": "Target temperature (°C, optional)",
   "sauna.bookingTemp.cardOptions": "Sauna booking temperature logger",
   "sauna.bookingTemp.description": "Stores the sauna temperature at each booking start and summarizes the latest period.",
   "sauna.bookingTemp.summaryHours": "Summary hours",

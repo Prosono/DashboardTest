@@ -1345,15 +1345,30 @@ export default function EditCardModal({
                 t={t}
               />
 
-              <SearchableSelect
-                label={translateText('sauna.bookingTemp.targetEntity', 'Target temperature sensor (optional)')}
-                value={editSettings.targetTempEntityId || null}
-                options={saunaTempSensorOptions}
-                onChange={(value) => saveCardSetting(editSettingsKey, 'targetTempEntityId', value)}
-                placeholder={translateText('dropdown.noneSelected', 'None selected')}
-                entities={entities}
-                t={t}
-              />
+              <div className="space-y-1">
+                <label className="text-[10px] uppercase tracking-wider text-[var(--text-secondary)]">
+                  {translateText('sauna.bookingTemp.targetEntity', 'Target temperature (deg C, optional)')}
+                </label>
+                <input
+                  type="number"
+                  min={0}
+                  max={130}
+                  step={0.5}
+                  className="w-full px-3 py-2 rounded-xl popup-surface text-[var(--text-primary)]"
+                  value={editSettings.targetTempValue ?? ''}
+                  placeholder="80"
+                  onChange={(e) => {
+                    const raw = e.target.value;
+                    if (raw === '') {
+                      saveCardSetting(editSettingsKey, 'targetTempValue', null);
+                      return;
+                    }
+                    const value = Number(raw);
+                    if (!Number.isFinite(value)) return;
+                    saveCardSetting(editSettingsKey, 'targetTempValue', Math.max(0, Math.min(130, Number(value.toFixed(1)))));
+                  }}
+                />
+              </div>
 
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1">

@@ -913,7 +913,7 @@
   "sauna.bookingTemp.tempEntity": "Noverande temperatursensor",
   "sauna.bookingTemp.activeEntity": "Booking aktiv-sensor",
   "sauna.bookingTemp.serviceEntity": "Servicetype-sensor (valfri)",
-  "sauna.bookingTemp.targetEntity": "Måltemperatur-sensor (valfri)",
+  "sauna.bookingTemp.targetEntity": "Måltemperatur (°C, valfri)",
   "sauna.bookingTemp.cardOptions": "Badstove temperatur-loggar for booking",
   "sauna.bookingTemp.description": "Lagrar badstovetemperaturen ved kvar bookingstart og oppsummerer siste periode.",
   "sauna.bookingTemp.summaryHours": "Oppsummeringstimar",

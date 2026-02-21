@@ -196,6 +196,7 @@ export const handleAddSelected = (ctx) => {
         keepDays: 120,
         maxEntries: 500,
         recentRows: 6,
+        targetTempValue: null,
         targetToleranceC: 0,
         activeOnStates: ['on', 'true', '1', 'yes', 'active', 'booked', 'occupied', 'aktiv'],
         serviceOnStates: ['ja', 'yes', 'service', 'on', 'true', '1', 'active', 'aktiv'],

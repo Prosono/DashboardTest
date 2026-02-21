@@ -138,7 +138,8 @@ export default function SaunaBookingTempCard({
   const targetEntity = targetTempEntityId ? entities?.[targetTempEntityId] : null;
 
   const currentTemp = toNum(tempEntity?.state);
-  const targetTemp = toNum(targetEntity?.state);
+  const targetTempSetting = toNum(settings?.targetTempValue);
+  const targetTemp = targetTempSetting !== null ? targetTempSetting : toNum(targetEntity?.state);
   const bookingActive = activeEntity ? isStateActive(activeEntity.state, settings?.activeOnStates) : false;
   const serviceActive = serviceEntity ? isStateActive(serviceEntity.state, settings?.serviceOnStates || DEFAULT_SERVICE_STATES) : false;
 

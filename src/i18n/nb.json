@@ -913,7 +913,7 @@
   "sauna.bookingTemp.tempEntity": "Nåværende temperatursensor",
   "sauna.bookingTemp.activeEntity": "Booking aktiv-sensor",
   "sauna.bookingTemp.serviceEntity": "Servicetype-sensor (valgfri)",
-  "sauna.bookingTemp.targetEntity": "Måltemperatur-sensor (valgfri)",
+  "sauna.bookingTemp.targetEntity": "Måltemperatur (°C, valgfri)",
   "sauna.bookingTemp.cardOptions": "Badstu temperatur-logger for booking",
   "sauna.bookingTemp.description": "Lagrer badstutemperaturen ved hver bookingstart og oppsummerer siste periode.",
   "sauna.bookingTemp.summaryHours": "Oppsummeringstimer",
