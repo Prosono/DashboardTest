@@ -442,15 +442,21 @@ export default function SaunaBookingTempCard({
                     <span>{tr('sauna.bookingTemp.maximum', 'Max')}: {trendStats.max.toFixed(1)}°</span>
                   </div>
                 )}
-                <div className="flex items-center justify-between mb-1.5 text-[10px] uppercase tracking-widest text-[var(--text-muted)]">
-                  <span>{tr('sauna.bookingTemp.graphTop', 'Top')}: {trendStats ? `${trendStats.max.toFixed(1)}°` : '--'}</span>
-                  <span>{tr('sauna.bookingTemp.graphBottom', 'Bottom')}: {trendStats ? `${trendStats.min.toFixed(1)}°` : '--'}</span>
+                <div className="relative">
+                  <div className="absolute left-0 top-0 text-[10px] uppercase tracking-widest text-[var(--text-muted)] tabular-nums">
+                    {trendStats ? `${trendStats.max.toFixed(1)}°` : '--'}
+                  </div>
+                  <div className="absolute left-0 bottom-0 text-[10px] uppercase tracking-widest text-[var(--text-muted)] tabular-nums">
+                    {trendStats ? `${trendStats.min.toFixed(1)}°` : '--'}
+                  </div>
+                  <div className="pl-12">
+                    <SparkLine
+                      data={sparkPoints}
+                      currentIndex={sparkPoints.length - 1}
+                      height={62}
+                    />
+                  </div>
                 </div>
-                <SparkLine
-                  data={sparkPoints}
-                  currentIndex={sparkPoints.length - 1}
-                  height={62}
-                />
               </button>
             )}
 
@@ -518,14 +524,24 @@ export default function SaunaBookingTempCard({
       {historyModal && (
         <div
           data-disable-pull-refresh="true"
-          className="fixed inset-0 z-[130] flex items-center justify-center p-3 sm:p-4"
-          style={{ background: 'rgba(4, 10, 20, 0.68)', backdropFilter: 'blur(8px)' }}
+          className="fixed inset-0 z-[130] flex items-start sm:items-center justify-center p-3 sm:p-4 overflow-y-auto"
+          style={{
+            background: 'rgba(4, 10, 20, 0.68)',
+            backdropFilter: 'blur(8px)',
+            paddingTop: 'calc(env(safe-area-inset-top, 0px) + 12px)',
+            paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 12px)',
+          }}
           onClick={() => setHistoryModal(null)}
         >
           <div
             data-disable-pull-refresh="true"
-            className="border w-full max-w-3xl rounded-2xl sm:rounded-3xl p-4 sm:p-6 shadow-2xl relative font-sans backdrop-blur-xl popup-anim flex flex-col max-h-[86vh] overflow-hidden"
-            style={{ background: 'var(--modal-bg)', borderColor: 'var(--glass-border)', touchAction: 'pan-y' }}
+            className="border w-full max-w-3xl rounded-2xl sm:rounded-3xl p-4 sm:p-6 shadow-2xl relative font-sans backdrop-blur-xl popup-anim flex flex-col overflow-hidden my-auto"
+            style={{
+              background: 'var(--modal-bg)',
+              borderColor: 'var(--glass-border)',
+              touchAction: 'pan-y',
+              maxHeight: 'calc(100dvh - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px) - 24px)',
+            }}
             onClick={(e) => e.stopPropagation()}
           >
             <button
@@ -555,15 +571,21 @@ export default function SaunaBookingTempCard({
                     <span>{tr('sauna.bookingTemp.maximum', 'Max')}: {modalStats.max.toFixed(1)}°</span>
                   </div>
                 )}
-                <div className="flex items-center justify-between mb-2 text-[10px] uppercase tracking-widest text-[var(--text-muted)]">
-                  <span>{tr('sauna.bookingTemp.graphTop', 'Top')}: {modalStats ? `${modalStats.max.toFixed(1)}°` : '--'}</span>
-                  <span>{tr('sauna.bookingTemp.graphBottom', 'Bottom')}: {modalStats ? `${modalStats.min.toFixed(1)}°` : '--'}</span>
+                <div className="relative">
+                  <div className="absolute left-0 top-0 text-[10px] uppercase tracking-widest text-[var(--text-muted)] tabular-nums">
+                    {modalStats ? `${modalStats.max.toFixed(1)}°` : '--'}
+                  </div>
+                  <div className="absolute left-0 bottom-0 text-[10px] uppercase tracking-widest text-[var(--text-muted)] tabular-nums">
+                    {modalStats ? `${modalStats.min.toFixed(1)}°` : '--'}
+                  </div>
+                  <div className="pl-12">
+                    <SparkLine
+                      data={historyModal.entries.slice().reverse().map((entry) => ({ value: entry.startTemp }))}
+                      currentIndex={historyModal.entries.length - 1}
+                      height={72}
+                    />
+                  </div>
                 </div>
-                <SparkLine
-                  data={historyModal.entries.slice().reverse().map((entry) => ({ value: entry.startTemp }))}
-                  currentIndex={historyModal.entries.length - 1}
-                  height={72}
-                />
               </div>
             )}
 
