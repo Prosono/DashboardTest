@@ -887,9 +887,11 @@
   "sauna.bookingTemp.startTrend": "Trend for starttemperatur",
   "sauna.bookingTemp.starts": "målingar",
   "sauna.bookingTemp.noStarts": "Ingen timemålingar i vald periode",
-  "sauna.bookingTemp.noTarget": "Ingen målsensor",
+  "sauna.bookingTemp.noTarget": "Ingen måltemperatur sett",
   "sauna.currentTemp": "Noverande temperatur",
   "sauna.target": "Mål",
   "common.configuration": "Konfigurasjon",
-  "common.unavailable": "Utilgjengeleg"
+  "common.unavailable": "Utilgjengeleg",
+  "common.yes": "Ja",
+  "common.no": "Nei"
 }

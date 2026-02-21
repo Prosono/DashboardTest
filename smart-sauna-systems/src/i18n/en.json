@@ -887,9 +887,11 @@
   "sauna.bookingTemp.startTrend": "Start temperature trend",
   "sauna.bookingTemp.starts": "samples",
   "sauna.bookingTemp.noStarts": "No hourly samples in selected window",
-  "sauna.bookingTemp.noTarget": "No target sensor",
+  "sauna.bookingTemp.noTarget": "No target configured",
   "sauna.currentTemp": "Current temperature",
   "sauna.target": "Target",
   "common.configuration": "Configuration",
-  "common.unavailable": "Unavailable"
+  "common.unavailable": "Unavailable",
+  "common.yes": "Yes",
+  "common.no": "No"
 }

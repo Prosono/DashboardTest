@@ -1,5 +1,5 @@
-import React, { useEffect, useMemo, useRef } from 'react';
-import { AlertTriangle, Clock, Flame, Thermometer, TrendingUp, Wrench } from '../../icons';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { AlertTriangle, Clock, Flame, Thermometer, TrendingUp, Wrench, X } from '../../icons';
 import { getIconComponent } from '../../icons';
 import SparkLine from '../charts/SparkLine';
 
@@ -163,6 +163,12 @@ export default function SaunaBookingTempCard({
 
   const snapshots = useMemo(() => normalizeSnapshots(settings?.bookingSnapshots), [settings?.bookingSnapshots]);
   const lastLoggedHourRef = useRef(null);
+  const [historyModal, setHistoryModal] = useState(null);
+
+  const openHistoryModal = (payload) => {
+    if (editMode) return;
+    setHistoryModal(payload);
+  };
 
   useEffect(() => {
     if (editMode || !settingsKey || typeof saveCardSetting !== 'function') {
@@ -171,7 +177,7 @@ export default function SaunaBookingTempCard({
 
     const maybeCaptureHourlySnapshot = () => {
       const now = new Date();
-      if (now.getMinutes() !== 1) return;
+      if (now.getMinutes() < 1) return;
       if (!bookingActive || serviceActive || currentTemp === null) return;
 
       const nowMs = now.getTime();
@@ -228,6 +234,7 @@ export default function SaunaBookingTempCard({
   const recentSnapshots = snapshots.filter((entry) => entry.timestampMs >= windowStart);
   const recentSorted = recentSnapshots.slice().sort((a, b) => a.timestampMs - b.timestampMs);
   const recentVisible = recentSorted.slice(-recentRows).reverse();
+  const allSnapshotsDesc = snapshots.slice().sort((a, b) => b.timestampMs - a.timestampMs);
 
   const startTemps = recentSnapshots.map((entry) => entry.startTemp);
   const averageStart = startTemps.length ? roundToOne(startTemps.reduce((sum, value) => sum + value, 0) / startTemps.length) : null;
@@ -318,32 +325,77 @@ export default function SaunaBookingTempCard({
         ) : (
           <>
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-2">
-              <div className="rounded-2xl border border-[var(--glass-border)] bg-[var(--glass-bg)] px-3 py-2">
+              <button
+                type="button"
+                className="text-left rounded-2xl border border-[var(--glass-border)] bg-[var(--glass-bg)] px-3 py-2 transition-colors hover:bg-[var(--glass-bg-hover)]"
+                onClick={() => openHistoryModal({
+                  title: tr('sauna.bookingTemp.starts', 'Samples'),
+                  subtitle: `${summaryHours}h`,
+                  entries: recentSorted.slice().reverse(),
+                  highlightId: null,
+                })}
+              >
                 <div className="text-[10px] uppercase tracking-widest text-[var(--text-secondary)] font-bold">{summaryHours}h</div>
                 <div className="text-lg font-semibold tabular-nums text-[var(--text-primary)]">{recentSnapshots.length}</div>
                 <div className="text-[10px] text-[var(--text-muted)]">{tr('sauna.bookingTemp.starts', 'samples')}</div>
-              </div>
-              <div className="rounded-2xl border border-[var(--glass-border)] bg-[var(--glass-bg)] px-3 py-2">
+              </button>
+              <button
+                type="button"
+                className="text-left rounded-2xl border border-[var(--glass-border)] bg-[var(--glass-bg)] px-3 py-2 transition-colors hover:bg-[var(--glass-bg-hover)]"
+                onClick={() => openHistoryModal({
+                  title: tr('sauna.bookingTemp.avgStart', 'Avg start'),
+                  subtitle: `${recentSnapshots.length} ${tr('sauna.bookingTemp.starts', 'samples')}`,
+                  entries: recentSorted.slice().reverse(),
+                  highlightId: null,
+                })}
+              >
                 <div className="text-[10px] uppercase tracking-widest text-[var(--text-secondary)] font-bold">{tr('sauna.bookingTemp.avgStart', 'Avg start')}</div>
                 <div className="text-lg font-semibold tabular-nums text-[var(--text-primary)]">{averageStart !== null ? `${averageStart.toFixed(1)}°` : '--'}</div>
                 <div className="text-[10px] text-[var(--text-muted)]">{minStart !== null && maxStart !== null ? `${minStart.toFixed(1)}° - ${maxStart.toFixed(1)}°` : '--'}</div>
-              </div>
-              <div className="rounded-2xl border border-[var(--glass-border)] bg-[var(--glass-bg)] px-3 py-2">
+              </button>
+              <button
+                type="button"
+                className="text-left rounded-2xl border border-[var(--glass-border)] bg-[var(--glass-bg)] px-3 py-2 transition-colors hover:bg-[var(--glass-bg-hover)]"
+                onClick={() => openHistoryModal({
+                  title: tr('sauna.bookingTemp.targetHit', 'Target hit'),
+                  subtitle: targetSamples.length ? `${reachedCount}/${targetSamples.length}` : tr('common.unavailable', 'Unavailable'),
+                  entries: targetSamples.slice().sort((a, b) => b.timestampMs - a.timestampMs),
+                  highlightId: null,
+                })}
+              >
                 <div className="text-[10px] uppercase tracking-widest text-[var(--text-secondary)] font-bold">{tr('sauna.bookingTemp.targetHit', 'Target hit')}</div>
                 <div className="text-lg font-semibold tabular-nums text-[var(--text-primary)]">{reachedRate !== null ? `${reachedRate}%` : '--'}</div>
                 <div className="text-[10px] text-[var(--text-muted)]">{targetSamples.length ? `${reachedCount}/${targetSamples.length}` : tr('common.unavailable', 'Unavailable')}</div>
-              </div>
-              <div className="rounded-2xl border border-[var(--glass-border)] bg-[var(--glass-bg)] px-3 py-2">
+              </button>
+              <button
+                type="button"
+                className="text-left rounded-2xl border border-[var(--glass-border)] bg-[var(--glass-bg)] px-3 py-2 transition-colors hover:bg-[var(--glass-bg-hover)]"
+                onClick={() => openHistoryModal({
+                  title: tr('sauna.bookingTemp.deviation', 'Deviation'),
+                  subtitle: avgDeviation !== null ? `${avgDeviation > 0 ? '+' : ''}${avgDeviation.toFixed(1)}°` : '--',
+                  entries: targetSamples.slice().sort((a, b) => b.timestampMs - a.timestampMs),
+                  highlightId: null,
+                })}
+              >
                 <div className="text-[10px] uppercase tracking-widest text-[var(--text-secondary)] font-bold">{tr('sauna.bookingTemp.deviation', 'Deviation')}</div>
                 <div className={`text-lg font-semibold tabular-nums ${avgDeviation !== null && avgDeviation < 0 ? 'text-rose-300' : 'text-[var(--text-primary)]'}`}>
                   {avgDeviation !== null ? `${avgDeviation > 0 ? '+' : ''}${avgDeviation.toFixed(1)}°` : '--'}
                 </div>
                 <div className="text-[10px] text-[var(--text-muted)]">{tr('sauna.bookingTemp.regularService', 'R/S')}: {regularCount}/{serviceCount}</div>
-              </div>
+              </button>
             </div>
 
             {sparkPoints.length > 1 && (
-              <div className="rounded-2xl border border-[var(--glass-border)] bg-[var(--glass-bg)] px-3 py-2">
+              <button
+                type="button"
+                className="w-full text-left rounded-2xl border border-[var(--glass-border)] bg-[var(--glass-bg)] px-3 py-2 transition-colors hover:bg-[var(--glass-bg-hover)]"
+                onClick={() => openHistoryModal({
+                  title: tr('sauna.bookingTemp.startTrend', 'Start temperature trend'),
+                  subtitle: `${recentSnapshots.length} ${tr('sauna.bookingTemp.starts', 'samples')}`,
+                  entries: recentSorted.slice().reverse(),
+                  highlightId: null,
+                })}
+              >
                 <div className="flex items-center justify-between text-[10px] uppercase tracking-widest font-bold text-[var(--text-secondary)] mb-1.5">
                   <span>{tr('sauna.bookingTemp.startTrend', 'Start temperature trend')}</span>
                   <span className="inline-flex items-center gap-1">
@@ -356,7 +408,7 @@ export default function SaunaBookingTempCard({
                   currentIndex={sparkPoints.length - 1}
                   height={62}
                 />
-              </div>
+              </button>
             )}
 
             <div className="flex-1 min-h-0 rounded-2xl border border-[var(--glass-border)] bg-[var(--glass-bg)] p-2.5 overflow-y-auto custom-scrollbar">
@@ -378,7 +430,17 @@ export default function SaunaBookingTempCard({
                   </div>
                 )}
                 {recentVisible.map((entry) => (
-                  <div key={entry.id} className="rounded-xl border border-[var(--glass-border)] bg-[var(--glass-bg-hover)] px-3 py-2">
+                  <button
+                    key={entry.id}
+                    type="button"
+                    className="w-full text-left rounded-xl border border-[var(--glass-border)] bg-[var(--glass-bg-hover)] px-3 py-2 transition-colors hover:bg-[var(--glass-bg)]"
+                    onClick={() => openHistoryModal({
+                      title: formatDateTime(entry.timestampMs),
+                      subtitle: tr('common.history', 'History'),
+                      entries: allSnapshotsDesc,
+                      highlightId: entry.id,
+                    })}
+                  >
                     <div className="flex items-center justify-between gap-2">
                       <div className="text-sm font-semibold tabular-nums text-[var(--text-primary)] inline-flex items-center gap-1.5">
                         <Thermometer className="w-3.5 h-3.5 text-[var(--text-secondary)]" />
@@ -399,16 +461,110 @@ export default function SaunaBookingTempCard({
                       <span className="text-[var(--text-secondary)] tabular-nums">
                         {entry.targetTemp !== null
                           ? `${tr('sauna.target', 'Target')}: ${entry.targetTemp.toFixed(1)}° (${entry.deviation >= 0 ? '+' : ''}${entry.deviation.toFixed(1)}°)`
-                          : tr('sauna.bookingTemp.noTarget', 'No target sensor')}
+                          : tr('sauna.bookingTemp.noTarget', 'No target configured')}
                       </span>
                     </div>
-                  </div>
+                  </button>
                 ))}
               </div>
             </div>
           </>
         )}
       </div>
+
+      {historyModal && (
+        <div
+          className="fixed inset-0 z-[130] flex items-center justify-center p-3 sm:p-4"
+          style={{ background: 'rgba(4, 10, 20, 0.68)', backdropFilter: 'blur(8px)' }}
+          onClick={() => setHistoryModal(null)}
+        >
+          <div
+            className="border w-full max-w-3xl rounded-2xl sm:rounded-3xl p-4 sm:p-6 shadow-2xl relative font-sans backdrop-blur-xl popup-anim flex flex-col max-h-[86vh]"
+            style={{ background: 'var(--modal-bg)', borderColor: 'var(--glass-border)' }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button
+              type="button"
+              onClick={() => setHistoryModal(null)}
+              className="absolute top-4 right-4 modal-close"
+              aria-label={tr('common.close', 'Close')}
+            >
+              <X className="w-4 h-4" />
+            </button>
+
+            <div className="pr-10">
+              <div className="text-xs uppercase tracking-widest font-bold text-[var(--text-secondary)]">
+                {historyModal.subtitle || tr('common.history', 'History')}
+              </div>
+              <div className="text-lg sm:text-xl font-semibold text-[var(--text-primary)] mt-1">
+                {historyModal.title || tr('common.history', 'History')}
+              </div>
+            </div>
+
+            {historyModal.entries?.length > 1 && (
+              <div className="mt-4 rounded-2xl border border-[var(--glass-border)] bg-[var(--glass-bg)] px-3 py-2">
+                <SparkLine
+                  data={historyModal.entries.slice().reverse().map((entry) => ({ value: entry.startTemp }))}
+                  currentIndex={historyModal.entries.length - 1}
+                  height={72}
+                />
+              </div>
+            )}
+
+            <div className="mt-4 flex-1 min-h-0 overflow-y-auto custom-scrollbar space-y-2 pr-1">
+              {!historyModal.entries?.length && (
+                <div className="px-2 py-5 text-center text-xs text-[var(--text-muted)]">
+                  {tr('sauna.bookingTemp.noStarts', 'No hourly samples in selected window')}
+                </div>
+              )}
+
+              {historyModal.entries?.map((entry) => {
+                const hit = entry.targetTemp !== null
+                  ? entry.startTemp >= (entry.targetTemp - targetToleranceC)
+                  : null;
+                const isHighlighted = historyModal.highlightId && historyModal.highlightId === entry.id;
+                return (
+                  <div
+                    key={entry.id}
+                    className={`rounded-xl border px-3 py-2 ${
+                      isHighlighted
+                        ? 'border-blue-400/50 bg-blue-500/10'
+                        : 'border-[var(--glass-border)] bg-[var(--glass-bg)]'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="text-sm font-semibold tabular-nums text-[var(--text-primary)] inline-flex items-center gap-1.5">
+                        <Thermometer className="w-3.5 h-3.5 text-[var(--text-secondary)]" />
+                        {entry.startTemp.toFixed(1)}°
+                      </div>
+                      <div className="text-[10px] uppercase tracking-widest text-[var(--text-muted)]">
+                        {formatDateTime(entry.timestampMs)}
+                      </div>
+                    </div>
+                    <div className="mt-1.5 flex flex-wrap items-center gap-2 text-[10px] uppercase tracking-widest">
+                      <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full border border-[var(--glass-border)] bg-[var(--glass-bg-hover)] text-[var(--text-secondary)]">
+                        {tr('sauna.target', 'Target')}: {entry.targetTemp !== null ? `${entry.targetTemp.toFixed(1)}°` : '--'}
+                      </span>
+                      <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full border border-[var(--glass-border)] bg-[var(--glass-bg-hover)] text-[var(--text-secondary)]">
+                        {tr('sauna.bookingTemp.deviation', 'Deviation')}: {entry.deviation !== null ? `${entry.deviation > 0 ? '+' : ''}${entry.deviation.toFixed(1)}°` : '--'}
+                      </span>
+                      {hit !== null && (
+                        <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full border ${
+                          hit
+                            ? 'border-emerald-400/40 bg-emerald-500/15 text-emerald-300'
+                            : 'border-rose-400/40 bg-rose-500/15 text-rose-300'
+                        }`}>
+                          {tr('sauna.bookingTemp.targetHit', 'Target hit')}: {hit ? tr('common.yes', 'Yes') : tr('common.no', 'No')}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
