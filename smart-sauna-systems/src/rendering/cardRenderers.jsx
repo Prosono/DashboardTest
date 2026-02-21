@@ -26,6 +26,7 @@ import {
   MissingEntityCard,
   RoomCard,
   SaunaCard,
+  SaunaBookingTempCard,
   SensorCard,
   VacuumCard,
   WeatherTempCard,
@@ -482,6 +483,27 @@ export function renderSaunaCard(cardId, dragProps, getControls, cardStyle, setti
   );
 }
 
+export function renderSaunaBookingTempCard(cardId, dragProps, getControls, cardStyle, settingsKey, ctx) {
+  const { entities, editMode, cardSettings, customNames, customIcons, saveCardSetting, t } = ctx;
+  const trackerSettings = cardSettings[settingsKey] || cardSettings[cardId] || {};
+  return (
+    <SaunaBookingTempCard
+      cardId={cardId}
+      settings={trackerSettings}
+      settingsKey={settingsKey}
+      entities={entities}
+      dragProps={dragProps}
+      controls={getControls(cardId)}
+      cardStyle={cardStyle}
+      editMode={editMode}
+      customNames={customNames}
+      customIcons={customIcons}
+      saveCardSetting={saveCardSetting}
+      t={t}
+    />
+  );
+}
+
 export function renderDividerCard(cardId, dragProps, getControls, cardStyle, settingsKey, ctx) {
   const { editMode, cardSettings } = ctx;
   const settings = cardSettings[settingsKey] || cardSettings[cardId] || {};
@@ -622,6 +644,10 @@ export function dispatchCardRender(cardId, dragProps, getControls, cardStyle, se
 
   if (cardId.startsWith('sauna_card_')) {
     return renderSaunaCard(cardId, dragProps, getControls, cardStyle, settingsKey, ctx);
+  }
+
+  if (cardId.startsWith('sauna_booking_temp_card_')) {
+    return renderSaunaBookingTempCard(cardId, dragProps, getControls, cardStyle, settingsKey, ctx);
   }
 
   if (cardId.startsWith('divider_card_')) {

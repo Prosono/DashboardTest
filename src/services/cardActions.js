@@ -188,6 +188,22 @@ export const handleAddSelected = (ctx) => {
       return;
     }
 
+    case 'saunaBookingTemp': {
+      const cardId = `sauna_booking_temp_card_${Date.now()}`;
+      commitSingleCard(cardId, {
+        type: 'sauna_booking_temp',
+        summaryHours: 24,
+        keepDays: 120,
+        maxEntries: 500,
+        recentRows: 6,
+        targetToleranceC: 0,
+        activeOnStates: ['on', 'true', '1', 'yes', 'active', 'booked', 'occupied', 'aktiv'],
+        serviceOnStates: ['ja', 'yes', 'service', 'on', 'true', '1', 'active', 'aktiv'],
+        bookingSnapshots: [],
+      }, { openEdit: true });
+      return;
+    }
+
     case 'divider': {
       const cardId = `divider_card_${Date.now()}`;
       commitSingleCard(cardId, {

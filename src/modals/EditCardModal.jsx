@@ -95,6 +95,7 @@ export default function EditCardModal({
   isEditCar,
   isEditRoom,
   isEditSauna,
+  isEditSaunaBookingTemp,
   isEditDivider,
   isEditAndroidTV,
   editSettingsKey,
@@ -182,6 +183,25 @@ export default function EditCardModal({
   const calendarOptions = sortByName(byDomain('calendar'));
   const todoOptions = sortByName(byDomain('todo'));
   const mediaPlayerOptions = sortByName(byDomain('media_player'));
+  const saunaTempSensorOptions = sortByName(entityEntries
+    .filter(([id, entity]) => {
+      if (!id.startsWith('sensor.') && !id.startsWith('number.') && !id.startsWith('input_number.')) return false;
+      const deviceClass = String(entity?.attributes?.device_class || '').toLowerCase();
+      const lowerId = id.toLowerCase();
+      return deviceClass === 'temperature' || lowerId.includes('temp') || lowerId.includes('temperature');
+    })
+    .map(([id]) => id));
+  const saunaActiveOptions = sortByName(entityEntries
+    .filter(([id]) => id.startsWith('binary_sensor.') || id.startsWith('input_boolean.') || id.startsWith('sensor.'))
+    .map(([id]) => id));
+  const saunaServiceOptions = sortByName(entityEntries
+    .filter(([id]) => id.startsWith('sensor.') || id.startsWith('select.') || id.startsWith('input_select.') || id.startsWith('binary_sensor.') || id.startsWith('input_boolean.'))
+    .map(([id]) => id));
+
+  const parseStateCsv = (value) => String(value || '')
+    .split(',')
+    .map((state) => state.trim().toLowerCase())
+    .filter(Boolean);
 
   const lastUpdatedOptions = sortByName(entityEntries
     .filter(([id]) => id.startsWith('sensor.') && id.toLowerCase().includes('update'))
@@ -1283,6 +1303,199 @@ export default function EditCardModal({
               </div>
             );
           })()}
+
+          {isEditSaunaBookingTemp && editSettingsKey && (
+            <div className="space-y-6">
+              <div className="popup-surface rounded-2xl p-4 space-y-3">
+                <div className="text-xs uppercase font-bold tracking-widest text-gray-500">
+                  {translateText('sauna.bookingTemp.cardOptions', 'Sauna booking temperature logger')}
+                </div>
+                <div className="text-[11px] text-[var(--text-secondary)] leading-relaxed">
+                  {translateText('sauna.bookingTemp.description', 'Stores the sauna temperature at each booking start and summarizes the latest period.')}
+                </div>
+              </div>
+
+              <SearchableSelect
+                label={translateText('sauna.bookingTemp.tempEntity', 'Current temperature sensor')}
+                value={editSettings.tempEntityId || null}
+                options={saunaTempSensorOptions}
+                onChange={(value) => saveCardSetting(editSettingsKey, 'tempEntityId', value)}
+                placeholder={translateText('dropdown.noneSelected', 'None selected')}
+                entities={entities}
+                t={t}
+              />
+
+              <SearchableSelect
+                label={translateText('sauna.bookingTemp.activeEntity', 'Booking active sensor')}
+                value={editSettings.bookingActiveEntityId || null}
+                options={saunaActiveOptions}
+                onChange={(value) => saveCardSetting(editSettingsKey, 'bookingActiveEntityId', value)}
+                placeholder={translateText('dropdown.noneSelected', 'None selected')}
+                entities={entities}
+                t={t}
+              />
+
+              <SearchableSelect
+                label={translateText('sauna.bookingTemp.serviceEntity', 'Service type sensor (optional)')}
+                value={editSettings.serviceEntityId || null}
+                options={saunaServiceOptions}
+                onChange={(value) => saveCardSetting(editSettingsKey, 'serviceEntityId', value)}
+                placeholder={translateText('dropdown.noneSelected', 'None selected')}
+                entities={entities}
+                t={t}
+              />
+
+              <SearchableSelect
+                label={translateText('sauna.bookingTemp.targetEntity', 'Target temperature sensor (optional)')}
+                value={editSettings.targetTempEntityId || null}
+                options={saunaTempSensorOptions}
+                onChange={(value) => saveCardSetting(editSettingsKey, 'targetTempEntityId', value)}
+                placeholder={translateText('dropdown.noneSelected', 'None selected')}
+                entities={entities}
+                t={t}
+              />
+
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <label className="text-[10px] uppercase tracking-wider text-[var(--text-secondary)]">
+                    {translateText('sauna.bookingTemp.summaryHours', 'Summary hours')}
+                  </label>
+                  <input
+                    type="number"
+                    min={6}
+                    max={168}
+                    step={1}
+                    className="w-full px-3 py-2 rounded-xl popup-surface text-[var(--text-primary)]"
+                    value={Number(editSettings.summaryHours) || 24}
+                    onChange={(e) => {
+                      const value = Number(e.target.value);
+                      if (!Number.isFinite(value)) return;
+                      saveCardSetting(editSettingsKey, 'summaryHours', Math.max(6, Math.min(168, Math.round(value))));
+                    }}
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[10px] uppercase tracking-wider text-[var(--text-secondary)]">
+                    {translateText('sauna.bookingTemp.recentRows', 'Rows shown')}
+                  </label>
+                  <input
+                    type="number"
+                    min={3}
+                    max={20}
+                    step={1}
+                    className="w-full px-3 py-2 rounded-xl popup-surface text-[var(--text-primary)]"
+                    value={Number(editSettings.recentRows) || 6}
+                    onChange={(e) => {
+                      const value = Number(e.target.value);
+                      if (!Number.isFinite(value)) return;
+                      saveCardSetting(editSettingsKey, 'recentRows', Math.max(3, Math.min(20, Math.round(value))));
+                    }}
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[10px] uppercase tracking-wider text-[var(--text-secondary)]">
+                    {translateText('sauna.bookingTemp.keepDays', 'Retention days')}
+                  </label>
+                  <input
+                    type="number"
+                    min={7}
+                    max={365}
+                    step={1}
+                    className="w-full px-3 py-2 rounded-xl popup-surface text-[var(--text-primary)]"
+                    value={Number(editSettings.keepDays) || 120}
+                    onChange={(e) => {
+                      const value = Number(e.target.value);
+                      if (!Number.isFinite(value)) return;
+                      saveCardSetting(editSettingsKey, 'keepDays', Math.max(7, Math.min(365, Math.round(value))));
+                    }}
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[10px] uppercase tracking-wider text-[var(--text-secondary)]">
+                    {translateText('sauna.bookingTemp.maxEntries', 'Max entries')}
+                  </label>
+                  <input
+                    type="number"
+                    min={25}
+                    max={3000}
+                    step={25}
+                    className="w-full px-3 py-2 rounded-xl popup-surface text-[var(--text-primary)]"
+                    value={Number(editSettings.maxEntries) || 500}
+                    onChange={(e) => {
+                      const value = Number(e.target.value);
+                      if (!Number.isFinite(value)) return;
+                      saveCardSetting(editSettingsKey, 'maxEntries', Math.max(25, Math.min(3000, Math.round(value))));
+                    }}
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-[10px] uppercase tracking-wider text-[var(--text-secondary)]">
+                  {translateText('sauna.bookingTemp.targetTolerance', 'Target tolerance (deg C)')}
+                </label>
+                <input
+                  type="number"
+                  min={0}
+                  max={20}
+                  step={0.1}
+                  className="w-full px-3 py-2 rounded-xl popup-surface text-[var(--text-primary)]"
+                  value={Number.isFinite(Number(editSettings.targetToleranceC)) ? Number(editSettings.targetToleranceC) : 0}
+                  onChange={(e) => {
+                    const value = Number(e.target.value);
+                    if (!Number.isFinite(value)) return;
+                    saveCardSetting(editSettingsKey, 'targetToleranceC', Math.max(0, Math.min(20, Number(value.toFixed(1)))));
+                  }}
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-[10px] uppercase tracking-wider text-[var(--text-secondary)]">
+                  {translateText('sauna.bookingTemp.activeStates', 'Booking active states (comma separated)')}
+                </label>
+                <input
+                  type="text"
+                  className="w-full px-3 py-2 rounded-xl popup-surface text-[var(--text-primary)]"
+                  defaultValue={Array.isArray(editSettings.activeOnStates) && editSettings.activeOnStates.length ? editSettings.activeOnStates.join(', ') : 'on, true, 1, yes, active'}
+                  onBlur={(e) => {
+                    const parsed = parseStateCsv(e.target.value);
+                    saveCardSetting(editSettingsKey, 'activeOnStates', parsed.length ? parsed : null);
+                  }}
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-[10px] uppercase tracking-wider text-[var(--text-secondary)]">
+                  {translateText('sauna.bookingTemp.serviceStates', 'Service states (comma separated)')}
+                </label>
+                <input
+                  type="text"
+                  className="w-full px-3 py-2 rounded-xl popup-surface text-[var(--text-primary)]"
+                  defaultValue={Array.isArray(editSettings.serviceOnStates) && editSettings.serviceOnStates.length ? editSettings.serviceOnStates.join(', ') : 'ja, yes, service, on, true'}
+                  onBlur={(e) => {
+                    const parsed = parseStateCsv(e.target.value);
+                    saveCardSetting(editSettingsKey, 'serviceOnStates', parsed.length ? parsed : null);
+                  }}
+                />
+              </div>
+
+              <div className="popup-surface rounded-2xl p-3 space-y-2">
+                <div className="text-[10px] uppercase tracking-wider text-[var(--text-secondary)]">
+                  {translateText('sauna.bookingTemp.history', 'Stored booking starts')}
+                </div>
+                <div className="text-sm font-semibold text-[var(--text-primary)]">
+                  {Array.isArray(editSettings.bookingSnapshots) ? editSettings.bookingSnapshots.length : 0}
+                </div>
+                <button
+                  type="button"
+                  onClick={() => saveCardSetting(editSettingsKey, 'bookingSnapshots', [])}
+                  className="w-full px-3 py-2 rounded-xl border border-red-400/35 bg-red-500/10 text-red-300 text-xs font-bold uppercase tracking-widest hover:bg-red-500/15 transition-colors"
+                >
+                  {translateText('sauna.bookingTemp.clearHistory', 'Clear stored history')}
+                </button>
+              </div>
+            </div>
+          )}
 
           {isEditCost && (
             <div className="space-y-6">
