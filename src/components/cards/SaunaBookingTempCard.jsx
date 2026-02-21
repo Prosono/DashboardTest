@@ -18,6 +18,14 @@ const toNum = (value) => {
 };
 
 const roundToOne = (value) => Math.round(Number(value) * 10) / 10;
+const toHourKey = (timestampMs) => {
+  const date = new Date(timestampMs);
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  const hour = String(date.getHours()).padStart(2, '0');
+  return `${year}-${month}-${day}-${hour}`;
+};
 
 const normalizeState = (value) => String(value ?? '').trim().toLowerCase();
 
@@ -52,10 +60,12 @@ const normalizeSnapshots = (rawValue) => {
         id: String(entry?.id || `${timestamp}_${index}`),
         timestamp,
         timestampMs,
+        hourKey: String(entry?.hourKey || toHourKey(timestampMs)),
         startTemp: roundToOne(startTemp),
         targetTemp,
         deviation,
         bookingType,
+        sampleMode: String(entry?.sampleMode || 'hourly'),
         serviceRaw: entry?.serviceRaw ?? null,
         activeRaw: entry?.activeRaw ?? null,
       };
@@ -67,10 +77,12 @@ const normalizeSnapshots = (rawValue) => {
 const serializeSnapshots = (snapshots) => snapshots.map((entry) => ({
   id: entry.id,
   timestamp: entry.timestamp,
+  hourKey: entry.hourKey,
   startTemp: entry.startTemp,
   targetTemp: entry.targetTemp,
   deviation: entry.deviation,
   bookingType: entry.bookingType,
+  sampleMode: entry.sampleMode,
   serviceRaw: entry.serviceRaw,
   activeRaw: entry.activeRaw,
 }));
@@ -123,7 +135,7 @@ export default function SaunaBookingTempCard({
 }) {
   const tr = useMemo(() => makeTr(t), [t]);
 
-  const cardName = customNames?.[cardId] || settings?.name || tr('sauna.bookingTemp.title', 'Sauna booking start temperatures');
+  const cardName = customNames?.[cardId] || settings?.name || tr('sauna.bookingTemp.title', 'Sauna hourly KPI log');
   const iconName = customIcons?.[cardId] || settings?.icon;
   const CardIcon = iconName ? (getIconComponent(iconName) || Thermometer) : Thermometer;
 
@@ -150,45 +162,52 @@ export default function SaunaBookingTempCard({
   const targetToleranceC = Number.isFinite(Number(settings?.targetToleranceC)) ? Number(settings.targetToleranceC) : 0;
 
   const snapshots = useMemo(() => normalizeSnapshots(settings?.bookingSnapshots), [settings?.bookingSnapshots]);
-  const previousActiveRef = useRef(null);
+  const lastLoggedHourRef = useRef(null);
 
   useEffect(() => {
-    previousActiveRef.current = Boolean(bookingActive);
-  }, [activeEntityId]); // Prevent false "new booking" captures when sensor binding changes.
-
-  useEffect(() => {
-    const activeNow = Boolean(bookingActive);
-    if (previousActiveRef.current === null) {
-      previousActiveRef.current = activeNow;
-      return;
-    }
     if (editMode || !settingsKey || typeof saveCardSetting !== 'function') {
-      previousActiveRef.current = activeNow;
       return;
     }
 
-    const activeTransitionStarted = previousActiveRef.current === false && activeNow === true;
-    if (activeTransitionStarted && currentTemp !== null) {
-      const nowMs = Date.now();
-      const keepCutoff = nowMs - (keepDays * 24 * 60 * 60 * 1000);
+    const maybeCaptureHourlySnapshot = () => {
+      const now = new Date();
+      if (now.getMinutes() !== 1) return;
+      if (!bookingActive || serviceActive || currentTemp === null) return;
+
+      const nowMs = now.getTime();
+      const hourKey = toHourKey(nowMs);
+      if (lastLoggedHourRef.current === hourKey) return;
+
+      const existing = normalizeSnapshots(settings?.bookingSnapshots);
+      if (existing.some((entry) => entry.hourKey === hourKey)) {
+        lastLoggedHourRef.current = hourKey;
+        return;
+      }
+
+      const captureMs = nowMs;
+      const keepCutoff = captureMs - (keepDays * 24 * 60 * 60 * 1000);
       const nextEntry = {
-        id: `${nowMs}_${Math.random().toString(36).slice(2, 8)}`,
-        timestamp: new Date(nowMs).toISOString(),
+        id: `${captureMs}_${Math.random().toString(36).slice(2, 8)}`,
+        timestamp: new Date(captureMs).toISOString(),
+        hourKey,
         startTemp: roundToOne(currentTemp),
         targetTemp: targetTemp !== null ? roundToOne(targetTemp) : null,
         deviation: targetTemp !== null ? roundToOne(currentTemp - targetTemp) : null,
-        bookingType: serviceActive ? 'service' : 'regular',
+        bookingType: 'regular',
+        sampleMode: 'hourly',
         serviceRaw: serviceEntity?.state ?? null,
         activeRaw: activeEntity?.state ?? null,
       };
 
-      const existing = normalizeSnapshots(settings?.bookingSnapshots);
       const retained = existing.filter((entry) => entry.timestampMs >= keepCutoff);
       const trimmed = [...retained, nextEntry].slice(-maxEntries);
       saveCardSetting(settingsKey, 'bookingSnapshots', serializeSnapshots(trimmed));
-    }
+      lastLoggedHourRef.current = hourKey;
+    };
 
-    previousActiveRef.current = activeNow;
+    maybeCaptureHourlySnapshot();
+    const intervalId = window.setInterval(maybeCaptureHourlySnapshot, 15000);
+    return () => window.clearInterval(intervalId);
   }, [
     bookingActive,
     currentTemp,
@@ -302,7 +321,7 @@ export default function SaunaBookingTempCard({
               <div className="rounded-2xl border border-[var(--glass-border)] bg-[var(--glass-bg)] px-3 py-2">
                 <div className="text-[10px] uppercase tracking-widest text-[var(--text-secondary)] font-bold">{summaryHours}h</div>
                 <div className="text-lg font-semibold tabular-nums text-[var(--text-primary)]">{recentSnapshots.length}</div>
-                <div className="text-[10px] text-[var(--text-muted)]">{tr('sauna.bookingTemp.starts', 'starts')}</div>
+                <div className="text-[10px] text-[var(--text-muted)]">{tr('sauna.bookingTemp.starts', 'samples')}</div>
               </div>
               <div className="rounded-2xl border border-[var(--glass-border)] bg-[var(--glass-bg)] px-3 py-2">
                 <div className="text-[10px] uppercase tracking-widest text-[var(--text-secondary)] font-bold">{tr('sauna.bookingTemp.avgStart', 'Avg start')}</div>
@@ -355,7 +374,7 @@ export default function SaunaBookingTempCard({
               <div className="space-y-2">
                 {recentVisible.length === 0 && (
                   <div className="px-2 py-5 text-center text-xs text-[var(--text-muted)]">
-                    {tr('sauna.bookingTemp.noStarts', 'No booking starts in selected window')}
+                    {tr('sauna.bookingTemp.noStarts', 'No hourly samples in selected window')}
                   </div>
                 )}
                 {recentVisible.map((entry) => (

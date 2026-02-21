@@ -1308,10 +1308,10 @@ export default function EditCardModal({
             <div className="space-y-6">
               <div className="popup-surface rounded-2xl p-4 space-y-3">
                 <div className="text-xs uppercase font-bold tracking-widest text-gray-500">
-                  {translateText('sauna.bookingTemp.cardOptions', 'Sauna booking temperature logger')}
+                  {translateText('sauna.bookingTemp.cardOptions', 'Sauna hourly KPI logger')}
                 </div>
                 <div className="text-[11px] text-[var(--text-secondary)] leading-relaxed">
-                  {translateText('sauna.bookingTemp.description', 'Stores the sauna temperature at each booking start and summarizes the latest period.')}
+                  {translateText('sauna.bookingTemp.description', 'Stores sauna KPIs each hour at :01 when sauna is active and service is off.')}
                 </div>
               </div>
 
