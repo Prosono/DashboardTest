@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Hash, Minus, Plus, X } from '../icons';
 import M3Slider from '../components/ui/M3Slider';
 
@@ -20,6 +20,8 @@ export default function GenericNumberModal({
   t,
   embedded = false,
   showCloseButton = true,
+  directInput = false,
+  maxDigits = null,
   overlayOpacity = 0.3,
 }) {
   if (!entityId || !entity) return null;
@@ -37,12 +39,56 @@ export default function GenericNumberModal({
   const max = Number.isFinite(Number(entity?.attributes?.max)) ? Number(entity.attributes.max) : fallbackMax;
   const step = Number.isFinite(Number(entity?.attributes?.step)) ? Number(entity.attributes.step) : 1;
   const value = hasValue ? numeric : min;
+  const [inputValue, setInputValue] = useState(hasValue ? String(Math.round(value)) : '');
+  const [inputError, setInputError] = useState('');
+  const normalizedMaxDigits = useMemo(() => {
+    if (!Number.isFinite(Number(maxDigits))) return null;
+    const parsed = Math.max(1, Math.floor(Number(maxDigits)));
+    return Number.isFinite(parsed) ? parsed : null;
+  }, [maxDigits]);
+
+  useEffect(() => {
+    if (!directInput) return;
+    if (!hasValue) {
+      setInputValue('');
+      return;
+    }
+    setInputValue(String(Math.round(value)));
+  }, [directInput, hasValue, value]);
 
   const setValue = (next) => {
     const n = Number(next);
     if (!Number.isFinite(n)) return;
     const clamped = Math.max(min, Math.min(max, n));
     callService(domain, 'set_value', { entity_id: entityId, value: clamped });
+  };
+
+  const commitInputValue = () => {
+    if (!directInput) return;
+    const trimmed = String(inputValue ?? '').trim();
+    if (!trimmed) {
+      setInputError(tr('common.required', 'Verdi kreves'));
+      return;
+    }
+    if (!/^\d+$/.test(trimmed)) {
+      setInputError(tr('number.onlyDigits', 'Kun tall er tillatt'));
+      return;
+    }
+    if (normalizedMaxDigits && trimmed.length > normalizedMaxDigits) {
+      setInputError(`${tr('number.maxDigits', 'Maks')} ${normalizedMaxDigits} ${tr('number.digits', 'sifre')}`);
+      return;
+    }
+    const parsed = Number(trimmed);
+    if (!Number.isFinite(parsed)) {
+      setInputError(tr('common.invalidValue', 'Ugyldig verdi'));
+      return;
+    }
+    if (parsed < min || parsed > max) {
+      setInputError(`${tr('common.range', 'Område')}: ${min} - ${max}`);
+      return;
+    }
+    setInputError('');
+    setValue(parsed);
   };
 
   const content = (
@@ -107,6 +153,51 @@ export default function GenericNumberModal({
         </div>
 
         <div className="lg:col-span-2 space-y-4 py-2">
+          {directInput && (
+            <div className="rounded-2xl border px-4 py-3 bg-[var(--glass-bg)] border-[var(--glass-border)]">
+              <div className="text-xs uppercase tracking-[0.22em] font-bold text-[var(--text-secondary)] mb-2">
+                {tr('sauna.activeCodes', 'Aktive koder')}
+              </div>
+              <div className="flex items-center gap-2">
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  pattern="[0-9]*"
+                  value={inputValue}
+                  onChange={(event) => {
+                    const digitsOnly = String(event.target.value || '').replace(/\D/g, '');
+                    setInputValue(digitsOnly);
+                    if (normalizedMaxDigits && digitsOnly.length > normalizedMaxDigits) {
+                      setInputError(`${tr('number.maxDigits', 'Maks')} ${normalizedMaxDigits} ${tr('number.digits', 'sifre')}`);
+                    } else if (inputError) {
+                      setInputError('');
+                    }
+                  }}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter') {
+                      event.preventDefault();
+                      commitInputValue();
+                    }
+                  }}
+                  className="flex-1 h-11 px-3 rounded-xl border bg-[var(--glass-bg-hover)] border-[var(--glass-border)] text-[var(--text-primary)] font-mono tracking-[0.2em] text-lg"
+                  placeholder={normalizedMaxDigits ? '0'.repeat(normalizedMaxDigits) : '0000'}
+                  aria-label={tr('sauna.activeCodes', 'Aktive koder')}
+                />
+                <button
+                  type="button"
+                  onClick={commitInputValue}
+                  className="h-11 px-4 rounded-xl border bg-[var(--glass-bg)] border-[var(--glass-border)] text-[var(--text-primary)] text-xs uppercase tracking-[0.2em] font-bold"
+                >
+                  {tr('common.save', 'Lagre')}
+                </button>
+              </div>
+              {inputError && (
+                <div className="mt-2 text-xs font-semibold text-red-400">
+                  {inputError}
+                </div>
+              )}
+            </div>
+          )}
           <div className="rounded-2xl border px-4 py-3 bg-[var(--glass-bg)] border-[var(--glass-border)]">
             <div className="text-xs uppercase tracking-[0.22em] font-bold text-[var(--text-secondary)] mb-1">
               {tr('common.range', 'Område')}

@@ -260,7 +260,29 @@ export default function SaunaCard({
   );
   const openStatusGraphModal = () => {
     if (!canOpenStatusGraph) return;
-    modals.setShowSensorInfoModal(statusGraphEntityId);
+    const bookingEntityId = settings?.saunaActiveBooleanEntityId;
+    const serviceEntityId = settings?.serviceEntityId;
+    const overlayEntities = [
+      bookingEntityId && {
+        entityId: bookingEntityId,
+        label: tr('sauna.active', 'Aktiv'),
+        color: '#38bdf8',
+        activeStates: ['on', 'true', '1', 'yes'],
+        initialState: entities?.[bookingEntityId]?.state,
+      },
+      serviceEntityId && {
+        entityId: serviceEntityId,
+        label: tr('sauna.service', 'Service'),
+        color: '#ef4444',
+        activeStates: ['ja', 'yes', 'on', 'true', '1', 'service', 'active'],
+        initialState: entities?.[serviceEntityId]?.state,
+      },
+    ].filter(Boolean);
+    modals.setShowSensorInfoModal({
+      entityId: statusGraphEntityId,
+      customName: `${saunaName} - ${tr('sauna.tempOverview', 'Temperaturoversikt')}`,
+      overlayEntities,
+    });
   };
 
   const modePill = {
@@ -331,7 +353,7 @@ export default function SaunaCard({
     settings?.showLights !== false && { key: 'lights', icon: iconFor(settings?.lightsIcon, Lightbulb), title: tr('sauna.lights', 'Lys'), value: lightIds.length ? `${lightsOn}/${lightIds.length} ${tr('common.on', 'på')}` : '--', active: lightsOn > 0, onClick: openGlobalLightModal, clickable: Boolean(settings?.lightsModalEntityId || lightIds?.length), category: 'control' },
     settings?.showFans !== false && { key: 'fans', icon: iconFor(settings?.fansIcon, Fan), title: tr('sauna.fans', 'Vifter'), value: fanIds.length ? `${activeFans}/${fanIds.length} ${tr('common.on', 'på')}` : '--', active: activeFans > 0, onClick: () => openFieldModal(tr('sauna.fans', 'Vifter'), fanIds, { fieldType: 'fan' }), clickable: fanIds.length > 0, category: 'control' },
     settings?.showThermostatOverview !== false && { key: 'thermostatGroup', icon: iconFor(settings?.thermostatsIcon, Shield), title: tr('sauna.thermostats', 'Termostater'), value: thermostatIds.length ? `${activeThermostats}/${thermostatIds.length} ${tr('common.on', 'på')}` : '--', active: activeThermostats > 0, onClick: () => openFieldModal(tr('sauna.thermostats', 'Termostater'), thermostatIds), clickable: thermostatIds.length > 0, category: 'control' },
-    settings?.showActiveCodes !== false && { key: 'codes', icon: iconFor(settings?.codesIcon, Hash), title: tr('sauna.activeCodes', 'Aktive koder'), value: codeIds.length ? `${codeIds.length}` : '--', active: codeIds.length > 0, onClick: () => openFieldModal(tr('sauna.activeCodes', 'Aktive koder'), codeIds, { fieldType: 'number' }), clickable: codeIds.length > 0, category: 'safety' },
+    settings?.showActiveCodes !== false && { key: 'codes', icon: iconFor(settings?.codesIcon, Hash), title: tr('sauna.activeCodes', 'Aktive koder'), value: codeIds.length ? `${codeIds.length}` : '--', active: codeIds.length > 0, onClick: () => openFieldModal(tr('sauna.activeCodes', 'Aktive koder'), codeIds, { fieldType: 'number', numberMode: 'code', numberMaxDigits: 4 }), clickable: codeIds.length > 0, category: 'safety' },
     settings?.showAutoLock !== false && { key: 'autoLock', icon: iconFor(settings?.autoLockIcon, ToggleRight), title: tr('sauna.autoLock', 'Autolåsing'), value: autoLockOn ? tr('common.on', 'På') : tr('common.off', 'Av'), active: autoLockOn, onClick: () => openFieldModal(tr('sauna.autoLock', 'Autolåsing'), [settings?.autoLockEntityId], { fieldType: 'switch' }), clickable: Boolean(settings?.autoLockEntityId), category: 'safety' },
     settings?.showDoors !== false && { key: 'doors', icon: iconFor(settings?.doorsIcon, DoorOpen), title: tr('sauna.doors', 'Dør'), value: `${openDoors} ${openDoors === 1 ? tr('sauna.openShort', 'åpen') : tr('sauna.openShortPlural', 'åpne')}`, active: openDoors > 0, onClick: () => openFieldModal(tr('sauna.doors', 'Dører'), doorIds, { fieldType: 'door' }), clickable: doorIds.length > 0, category: 'safety' },
     settings?.showLocks !== false && { key: 'locks', icon: iconFor(settings?.locksIcon, Lock), title: tr('sauna.locks', 'Lås'), value: `${unlockedDoors} ${unlockedDoors === 1 ? tr('sauna.unlockedShort', 'ulåst') : tr('sauna.unlockedShortPlural', 'ulåste')}`, active: unlockedDoors > 0, onClick: () => openFieldModal(tr('sauna.locks', 'Låser'), lockIds, { fieldType: 'lock' }), clickable: lockIds.length > 0, category: 'safety' },

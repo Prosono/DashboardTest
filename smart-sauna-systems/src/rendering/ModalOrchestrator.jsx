@@ -99,7 +99,8 @@ export default function ModalOrchestrator({
     cardBorderRadius, setCardBorderRadius,
     sectionSpacing, updateSectionSpacing,
     headerTitle, headerScale, headerSettings,
-    updateHeaderTitle, updateHeaderScale, updateHeaderSettings,
+    updateHeaderScale, updateHeaderSettings,
+    saveHeaderLogos,
     canEditGlobalBranding,
     canEditClientSubtitle,
   } = layout;
@@ -162,6 +163,7 @@ export default function ModalOrchestrator({
     loadGlobalDashboard,
     currentUser,
     canEditDashboard,
+    canManageAdministration,
     onLogout,
     userAdminApi,
   } = cardConfig;
@@ -188,14 +190,16 @@ export default function ModalOrchestrator({
     const isEditCar = !!editId && (editId === 'car' || editId.startsWith('car_card_'));
     const isEditRoom = !!editId && editId.startsWith('room_card_');
     const isEditSauna = !!editId && editId.startsWith('sauna_card_');
+    const isEditDivider = !!editId && editId.startsWith('divider_card_');
+    const isEditEmpty = !!editId && editId.startsWith('empty_card_');
     const isEditCover = !!editId && editId.startsWith('cover_card_');
     const editSettings = isEditCar ? resolveCarSettings(editId, rawEditSettings) : rawEditSettings;
-    const isEditGenericType = (!!editSettings?.type && (editSettings.type === 'entity' || editSettings.type === 'toggle' || editSettings.type === 'sensor')) || isEditVacuum || isEditAutomation || isEditCar || isEditAndroidTV || isEditRoom || isEditSauna;
+    const isEditGenericType = (!!editSettings?.type && (editSettings.type === 'entity' || editSettings.type === 'toggle' || editSettings.type === 'sensor' || editSettings.type === 'divider' || editSettings.type === 'empty')) || isEditVacuum || isEditAutomation || isEditCar || isEditAndroidTV || isEditRoom || isEditSauna || isEditDivider || isEditEmpty;
     const isEditSensor = !!editSettings?.type && editSettings.type === 'sensor';
     const isEditWeatherTemp = !!editId && editId.startsWith('weather_temp_');
-    const canEditName = !!editId && !isEditWeatherTemp && editId !== 'media_player' && editId !== 'sonos';
+    const canEditName = !!editId && !isEditWeatherTemp && !isEditDivider && !isEditEmpty && editId !== 'media_player' && editId !== 'sonos';
     const canEditIcon = !!editId && (
-      isEditLight || isEditCalendar || isEditTodo || isEditRoom || isEditSauna || isEditCover
+      isEditLight || isEditCalendar || isEditTodo || isEditRoom || isEditSauna || isEditCover || isEditDivider
       || editId.startsWith('automation.') || editId.startsWith('vacuum.')
       || editId.startsWith('climate_card_') || editId.startsWith('cost_card_')
       || editId.startsWith('fan_card_') || editId.startsWith('door_card_') || editId.startsWith('motion_card_')
@@ -208,7 +212,7 @@ export default function ModalOrchestrator({
     return {
       canEditName, canEditIcon, canEditStatus,
       isEditLight, isEditCalendar, isEditTodo, isEditCost, isEditGenericType,
-      isEditAndroidTV, isEditCar, isEditRoom, isEditSauna, isEditSensor, isEditWeatherTemp,
+      isEditAndroidTV, isEditCar, isEditRoom, isEditSauna, isEditDivider, isEditEmpty, isEditSensor, isEditWeatherTemp,
       editSettingsKey, editSettings,
     };
   }, [showEditCardModal, editSettingsKey, cardSettings, entities]);
@@ -285,6 +289,7 @@ export default function ModalOrchestrator({
             loadGlobalDashboard={loadGlobalDashboard}
             currentUser={currentUser}
             canEditDashboard={canEditDashboard}
+            canManageAdministration={canManageAdministration}
             onLogout={onLogout}
             userAdminApi={userAdminApi}
             onClose={() => setShowConfigModal(false)}
@@ -352,9 +357,9 @@ export default function ModalOrchestrator({
           headerTitle={headerTitle}
           headerScale={headerScale}
           headerSettings={headerSettings}
-          updateHeaderTitle={updateHeaderTitle}
           updateHeaderScale={updateHeaderScale}
           updateHeaderSettings={updateHeaderSettings}
+          onSaveLogos={saveHeaderLogos}
           canEditGlobalBranding={canEditGlobalBranding}
           canEditClientSubtitle={canEditClientSubtitle}
           onSwitchToTheme={() => { setShowHeaderEditModal(false); setShowThemeSidebar(true); }}
@@ -605,6 +610,8 @@ export default function ModalOrchestrator({
             show={!!activeSaunaFieldModal}
             title={activeSaunaFieldModal.title}
             fieldType={activeSaunaFieldModal.fieldType}
+            numberMode={activeSaunaFieldModal.numberMode}
+            numberMaxDigits={activeSaunaFieldModal.numberMaxDigits}
             entityIds={activeSaunaFieldModal.entityIds}
             entities={entities}
             callService={callService}
@@ -741,19 +748,29 @@ export default function ModalOrchestrator({
       )}
 
       {showSensorInfoModal && (
+        (() => {
+          const sensorPayload = typeof showSensorInfoModal === 'string'
+            ? { entityId: showSensorInfoModal }
+            : (showSensorInfoModal || {});
+          const sensorEntityId = sensorPayload?.entityId;
+          if (!sensorEntityId) return null;
+          return (
         <ModalSuspense>
           <SensorModal
             isOpen={!!showSensorInfoModal}
             onClose={() => setShowSensorInfoModal(null)}
-            entityId={showSensorInfoModal}
-            entity={entities[showSensorInfoModal]}
-            customName={customNames[showSensorInfoModal]}
+            entityId={sensorEntityId}
+            entity={entities[sensorEntityId]}
+            customName={sensorPayload.customName || customNames[sensorEntityId]}
+            overlayEntities={Array.isArray(sensorPayload.overlayEntities) ? sensorPayload.overlayEntities : []}
             conn={conn}
             haUrl={activeUrl}
             haToken={config.authMethod === 'oauth' ? (authRef?.current?.accessToken || '') : config.token}
             t={t}
           />
         </ModalSuspense>
+          );
+        })()
       )}
 
       {showPersonModal && (

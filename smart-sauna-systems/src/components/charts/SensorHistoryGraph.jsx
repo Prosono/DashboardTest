@@ -1,6 +1,26 @@
-import React, { useMemo } from 'react';
+import React from 'react';
 
-// Helper function to create smooth Bezier curves
+const DEFAULT_ACTIVE_STATES = [
+  'on', 'open', 'unlocked', 'detected', 'occupied', 'presence', 'active',
+  'true', '1', 'yes', 'ja', 'heat', 'heating', 'playing',
+];
+
+const parseTimeMs = (value) => {
+  if (!value) return NaN;
+  if (value instanceof Date) return value.getTime();
+  if (typeof value === 'number') return value < 1e12 ? value * 1000 : value;
+  const direct = Date.parse(String(value));
+  if (Number.isFinite(direct)) return direct;
+  const numeric = Number(value);
+  if (Number.isFinite(numeric)) return numeric < 1e12 ? numeric * 1000 : numeric;
+  return NaN;
+};
+
+const isStateActive = (state, activeStates = DEFAULT_ACTIVE_STATES) => {
+  const normalized = String(state ?? '').trim().toLowerCase();
+  return activeStates.map((entry) => String(entry).trim().toLowerCase()).includes(normalized);
+};
+
 const createBezierPath = (points, smoothing = 0.3) => {
   const line = (p1, p2) => {
     const dx = p2[0] - p1[0];
@@ -23,7 +43,47 @@ const createBezierPath = (points, smoothing = 0.3) => {
   }, '');
 };
 
-export default function SensorHistoryGraph({ data, height = 200, color = "#3b82f6", noDataLabel = "No history data available", formatXLabel }) {
+const buildOverlaySegments = (events, startMs, endMs, activeStates) => {
+  if (!Number.isFinite(startMs) || !Number.isFinite(endMs) || endMs <= startMs) return [];
+  const sorted = (Array.isArray(events) ? events : [])
+    .map((event) => ({ ...event, ms: parseTimeMs(event?.time) }))
+    .filter((event) => Number.isFinite(event.ms))
+    .sort((a, b) => a.ms - b.ms);
+
+  if (!sorted.length) return [{ start: startMs, end: endMs, active: false }];
+
+  const previous = [...sorted].reverse().find((event) => event.ms <= startMs);
+  let currentState = previous ? previous.state : sorted[0].state;
+  let cursor = startMs;
+  const segments = [];
+
+  sorted.forEach((event) => {
+    if (event.ms <= startMs) return;
+    if (event.ms > endMs) return;
+    if (event.ms > cursor) {
+      segments.push({ start: cursor, end: event.ms, active: isStateActive(currentState, activeStates) });
+      cursor = event.ms;
+    }
+    currentState = event.state;
+  });
+
+  if (cursor < endMs) {
+    segments.push({ start: cursor, end: endMs, active: isStateActive(currentState, activeStates) });
+  }
+
+  return segments;
+};
+
+export default function SensorHistoryGraph({
+  data,
+  height = 200,
+  color = '#3b82f6',
+  strokeColor,
+  areaColor,
+  overlays = [],
+  noDataLabel = 'No history data available',
+  formatXLabel,
+}) {
   if (!data || data.length === 0) {
     return (
       <div className="h-[200px] flex items-center justify-center text-gray-500 text-sm">
@@ -32,66 +92,101 @@ export default function SensorHistoryGraph({ data, height = 200, color = "#3b82f
     );
   }
 
-  // Determine graph dimensions
   const padding = { top: 20, right: 20, bottom: 30, left: 40 };
-  const width = 600; // viewBox width
+  const width = 600;
   const graphWidth = width - padding.left - padding.right;
   const graphHeight = height - padding.top - padding.bottom;
+  const lineColor = strokeColor || color;
+  const fillColor = areaColor || lineColor;
 
-  // Calculate min/max values
-  const values = data.map(d => d.value);
+  const values = data.map((d) => d.value);
   let min = Math.min(...values);
   let max = Math.max(...values);
-  
   if (min === max) {
     min -= 1;
     max += 1;
   }
-  
-  // Add some padding to top of Y-axis range only
+
   const range = max - min;
-  const renderMin = min; // No bottom padding
+  const renderMin = min;
   const renderMax = max + (range * 0.05);
   const renderRange = renderMax - renderMin;
 
-  // Create points for Bezier curve
-  const pointsArray = data.map((d, i) => [
-    padding.left + (i / (data.length - 1)) * graphWidth,
-    padding.top + graphHeight - ((d.value - renderMin) / renderRange) * graphHeight
-  ]);
+  const timeMs = data.map((point) => parseTimeMs(point?.time)).filter((ms) => Number.isFinite(ms));
+  const startMs = timeMs.length ? Math.min(...timeMs) : 0;
+  const endMs = timeMs.length ? Math.max(...timeMs) : 0;
+  const hasTimeScale = Number.isFinite(startMs) && Number.isFinite(endMs) && endMs > startMs;
+  const indexDenominator = Math.max(1, data.length - 1);
 
-  const pathData = useMemo(() => createBezierPath(pointsArray, 0.3), [data]);
-  const areaData = useMemo(() => `${pathData} L ${padding.left + graphWidth},${height} L ${padding.left},${height} Z`, [pathData]);
+  const xForPoint = (point, index) => {
+    if (hasTimeScale) {
+      const ms = parseTimeMs(point?.time);
+      if (Number.isFinite(ms)) {
+        const ratio = Math.max(0, Math.min(1, (ms - startMs) / (endMs - startMs)));
+        return padding.left + (ratio * graphWidth);
+      }
+    }
+    return padding.left + ((index / indexDenominator) * graphWidth);
+  };
 
-  // Generate Y-axis labels (Max, Mid, Min)
+  const xFromMs = (ms) => {
+    if (!hasTimeScale) return padding.left;
+    const ratio = Math.max(0, Math.min(1, (ms - startMs) / (endMs - startMs)));
+    return padding.left + (ratio * graphWidth);
+  };
+
+  const pointsArray = data.map((point, index) => ([
+    xForPoint(point, index),
+    padding.top + graphHeight - (((point.value - renderMin) / renderRange) * graphHeight),
+  ]));
+
+  const pathData = createBezierPath(pointsArray, 0.3);
+  const areaData = `${pathData} L ${padding.left + graphWidth},${height} L ${padding.left},${height} Z`;
+
   const yLabels = [
     { value: max, y: padding.top },
     { value: (max + min) / 2, y: padding.top + graphHeight / 2 },
-    { value: min, y: height - padding.bottom }
+    { value: min, y: height - padding.bottom },
   ];
 
-  // Generate X-axis labels (Start, End + Intermediates)
-  // Logic: try to fit ~5 labels.
   const xLabels = [];
-  const numLabels = 5;
-  for (let i = 0; i < numLabels; i++) {
-    const fraction = i / (numLabels - 1);
-    const index = Math.round(fraction * (data.length - 1));
-    const point = data[index];
-    if (point) {
-      const x = padding.left + fraction * graphWidth;
-      const label = formatXLabel 
-        ? formatXLabel(new Date(point.time))
-        : new Date(point.time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-      const anchor = i === 0 ? 'start' : (i === numLabels - 1 ? 'end' : 'middle');
-      xLabels.push({ x, label, anchor });
+  const labelCount = 5;
+  for (let i = 0; i < labelCount; i += 1) {
+    const fraction = i / (labelCount - 1);
+    const x = padding.left + (fraction * graphWidth);
+    let label = '';
+    if (hasTimeScale) {
+      const ts = startMs + ((endMs - startMs) * fraction);
+      label = formatXLabel ? formatXLabel(new Date(ts)) : new Date(ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    } else {
+      const index = Math.round(fraction * (data.length - 1));
+      const point = data[index];
+      label = point
+        ? (formatXLabel ? formatXLabel(new Date(point.time)) : new Date(point.time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }))
+        : '';
     }
+    const anchor = i === 0 ? 'start' : (i === labelCount - 1 ? 'end' : 'middle');
+    xLabels.push({ x, label, anchor });
   }
 
-  // Generate unique IDs for gradients
-  const areaGradientId = `area-gradient-${Math.random().toString(36).substr(2, 9)}`;
-  const fadeGradientId = `fade-gradient-${Math.random().toString(36).substr(2, 9)}`;
-  const maskId = `mask-${Math.random().toString(36).substr(2, 9)}`;
+  const overlayRows = hasTimeScale
+    ? (Array.isArray(overlays) ? overlays : [])
+      .map((overlay) => {
+        const events = Array.isArray(overlay?.events) ? overlay.events : [];
+        if (!events.length) return null;
+        return {
+          label: overlay.label || '',
+          color: overlay.color || '#60a5fa',
+          segments: buildOverlaySegments(events, startMs, endMs, overlay.activeStates),
+        };
+      })
+      .filter(Boolean)
+    : [];
+
+  const idSeed = `${Math.round(startMs)}_${Math.round(endMs)}_${data.length}`;
+  const areaGradientId = `area-gradient-${idSeed}`;
+  const fadeGradientId = `fade-gradient-${idSeed}`;
+  const maskId = `mask-${idSeed}`;
 
   return (
     <div className="w-full relative select-none">
@@ -101,29 +196,24 @@ export default function SensorHistoryGraph({ data, height = 200, color = "#3b82f
         preserveAspectRatio="none"
       >
         <defs>
-          {/* Area gradient - more opaque at top, fades to bottom */}
           <linearGradient id={areaGradientId} x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor={color} stopOpacity="0.25" />
-            <stop offset="50%" stopColor={color} stopOpacity="0.12" />
-            <stop offset="100%" stopColor={color} stopOpacity="0.02" />
+            <stop offset="0%" stopColor={fillColor} stopOpacity="0.25" />
+            <stop offset="50%" stopColor={fillColor} stopOpacity="0.12" />
+            <stop offset="100%" stopColor={fillColor} stopOpacity="0.02" />
           </linearGradient>
-          
-          {/* Fade mask for smooth bottom edge */}
           <linearGradient id={fadeGradientId} x1="0" y1="0" x2="0" y2="1">
             <stop offset="0%" stopColor="white" stopOpacity="1" />
             <stop offset="80%" stopColor="white" stopOpacity="0.6" />
             <stop offset="100%" stopColor="white" stopOpacity="0" />
           </linearGradient>
-          
           <mask id={maskId}>
             <rect x="0" y="0" width={width} height={height} fill={`url(#${fadeGradientId})`} />
           </mask>
         </defs>
 
-        {/* Grid lines - Very subtle */}
-        {yLabels.map((label, i) => (
+        {yLabels.map((label, index) => (
           <line
-            key={i}
+            key={index}
             x1={padding.left}
             y1={label.y}
             x2={width - padding.right}
@@ -134,46 +224,85 @@ export default function SensorHistoryGraph({ data, height = 200, color = "#3b82f
           />
         ))}
 
-        {/* Area fill with gradient */}
+        {overlayRows.map((overlay, overlayIndex) => (
+          <g key={`${overlay.label}-${overlayIndex}`}>
+            {overlay.segments
+              .filter((segment) => segment.active && segment.end > segment.start)
+              .map((segment, segmentIndex) => {
+                const x1 = xFromMs(segment.start);
+                const x2 = xFromMs(segment.end);
+                return (
+                  <rect
+                    key={`${overlay.label}-${segmentIndex}`}
+                    x={x1}
+                    y={padding.top}
+                    width={Math.max(0.5, x2 - x1)}
+                    height={graphHeight}
+                    fill={overlay.color}
+                    opacity={0.09}
+                  />
+                );
+              })}
+            {overlay.segments.length > 0 && (
+              <path
+                d={overlay.segments
+                  .map((segment, segmentIndex) => {
+                    const y = segment.active
+                      ? (padding.top + 14 + (overlayIndex * 11))
+                      : (padding.top + graphHeight);
+                    const x1 = xFromMs(segment.start);
+                    const x2 = xFromMs(segment.end);
+                    if (segmentIndex === 0) return `M ${x1.toFixed(2)} ${y.toFixed(2)} L ${x2.toFixed(2)} ${y.toFixed(2)}`;
+                    return `L ${x1.toFixed(2)} ${y.toFixed(2)} L ${x2.toFixed(2)} ${y.toFixed(2)}`;
+                  })
+                  .join(' ')}
+                fill="none"
+                stroke={overlay.color}
+                strokeWidth="1.8"
+                strokeOpacity="0.85"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            )}
+          </g>
+        ))}
+
         <path d={areaData} fill={`url(#${areaGradientId})`} mask={`url(#${maskId})`} />
 
-        {/* Bezier line - smooth and crisp */}
         <path
           d={pathData}
           fill="none"
-          stroke={color}
+          stroke={lineColor}
           strokeWidth="2.5"
           strokeLinecap="round"
           strokeLinejoin="round"
           opacity="0.9"
         />
 
-        {/* Y-axis Labels */}
-        {yLabels.map((label, i) => (
+        {yLabels.map((label, index) => (
           <text
-            key={i}
+            key={index}
             x={padding.left - 8}
             y={label.y}
             textAnchor="end"
             dominantBaseline="middle"
             className="text-[10px] fill-current opacity-60 font-mono tracking-tighter"
-            style={{fill: 'var(--text-secondary)'}}
+            style={{ fill: 'var(--text-secondary)' }}
           >
             {label.value.toFixed(1)}
           </text>
         ))}
 
-        {/* X-axis Labels */}
-        {xLabels.map((l, i) => (
+        {xLabels.map((label, index) => (
           <text
-            key={i}
-            x={l.x}
+            key={index}
+            x={label.x}
             y={height - 5}
-            textAnchor={l.anchor}
+            textAnchor={label.anchor}
             className="text-[10px] fill-current opacity-60 font-mono tracking-tighter"
-            style={{fill: 'var(--text-secondary)'}}
+            style={{ fill: 'var(--text-secondary)' }}
           >
-            {l.label}
+            {label.label}
           </text>
         ))}
       </svg>

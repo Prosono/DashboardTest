@@ -610,6 +610,8 @@ export default function ModalOrchestrator({
             show={!!activeSaunaFieldModal}
             title={activeSaunaFieldModal.title}
             fieldType={activeSaunaFieldModal.fieldType}
+            numberMode={activeSaunaFieldModal.numberMode}
+            numberMaxDigits={activeSaunaFieldModal.numberMaxDigits}
             entityIds={activeSaunaFieldModal.entityIds}
             entities={entities}
             callService={callService}
@@ -746,19 +748,29 @@ export default function ModalOrchestrator({
       )}
 
       {showSensorInfoModal && (
+        (() => {
+          const sensorPayload = typeof showSensorInfoModal === 'string'
+            ? { entityId: showSensorInfoModal }
+            : (showSensorInfoModal || {});
+          const sensorEntityId = sensorPayload?.entityId;
+          if (!sensorEntityId) return null;
+          return (
         <ModalSuspense>
           <SensorModal
             isOpen={!!showSensorInfoModal}
             onClose={() => setShowSensorInfoModal(null)}
-            entityId={showSensorInfoModal}
-            entity={entities[showSensorInfoModal]}
-            customName={customNames[showSensorInfoModal]}
+            entityId={sensorEntityId}
+            entity={entities[sensorEntityId]}
+            customName={sensorPayload.customName || customNames[sensorEntityId]}
+            overlayEntities={Array.isArray(sensorPayload.overlayEntities) ? sensorPayload.overlayEntities : []}
             conn={conn}
             haUrl={activeUrl}
             haToken={config.authMethod === 'oauth' ? (authRef?.current?.accessToken || '') : config.token}
             t={t}
           />
         </ModalSuspense>
+          );
+        })()
       )}
 
       {showPersonModal && (

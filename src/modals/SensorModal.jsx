@@ -7,9 +7,21 @@ import BinaryTimeline from '../components/charts/BinaryTimeline';
 import { formatRelativeTime } from '../utils';
 import { getIconComponent } from '../icons';
 
-export default function SensorModal({ isOpen, onClose, entityId, entity, customName, conn, haUrl, haToken, t = (key) => key }) {
+export default function SensorModal({
+  isOpen,
+  onClose,
+  entityId,
+  entity,
+  customName,
+  overlayEntities = [],
+  conn,
+  haUrl,
+  haToken,
+  t = (key) => key,
+}) {
   const [history, setHistory] = useState([]);
   const [historyEvents, setHistoryEvents] = useState([]);
+  const [overlayHistory, setOverlayHistory] = useState([]);
   const [loading, setLoading] = useState(false);
   const [_historyError, setHistoryError] = useState(null);
   const [_historyMeta, setHistoryMeta] = useState({ source: null, rawCount: 0 });
@@ -86,7 +98,7 @@ export default function SensorModal({ isOpen, onClose, entityId, entity, customN
   );
 
   // Helper to determine if entity should show activity (called early before useEffect)
-  const getShouldShowActivity = () => {
+  const getShouldShowActivity = (stateValue, isNumericValue) => {
     const domain = entityId?.split('.')?.[0];
     const activityDomains = [
       'binary_sensor', 'automation', 'switch', 'input_boolean',
@@ -95,8 +107,8 @@ export default function SensorModal({ isOpen, onClose, entityId, entity, customN
     ];
     
     if (!activityDomains.includes(domain)) return false;
-    if (state === 'unavailable' || state === 'unknown') return false;
-    if (isNumeric && domain !== 'light' && domain !== 'climate') return false;
+    if (stateValue === 'unavailable' || stateValue === 'unknown') return false;
+    if (isNumericValue && domain !== 'light' && domain !== 'climate') return false;
     return true;
   };
 
@@ -105,6 +117,7 @@ export default function SensorModal({ isOpen, onClose, entityId, entity, customN
       if (isSystemDetailsSensor) {
         setHistory([]);
         setHistoryEvents([]);
+        setOverlayHistory([]);
         return;
       }
       const fetchHistory = async () => {
@@ -115,22 +128,30 @@ export default function SensorModal({ isOpen, onClose, entityId, entity, customN
           const end = new Date();
           const start = new Date(end.getTime() - historyHours * 60 * 60 * 1000);
           const resolvedEntityId = entity?.entity_id || entityId;
+          const resolvedEntityIdSafe = String(resolvedEntityId || '');
           setTimeWindow({ start, end });
           
           let points = [];
           let events = [];
           
           // Determine if we need history data for activity/events display
-          const needsActivityData = getShouldShowActivity();
+          const entityDomain = resolvedEntityId?.split('.')?.[0];
+          const currentState = String(entity?.state ?? '').toLowerCase();
+          const isCurrentNumeric = !['script', 'scene'].includes(entityDomain)
+            && !Number.isNaN(parseFloat(entity?.state))
+            && !String(entity?.state).match(/^unavailable|unknown$/i)
+            && !resolvedEntityIdSafe.startsWith('binary_sensor.');
+          const needsActivityData = getShouldShowActivity(currentState, isCurrentNumeric);
           if (!resolvedEntityId) {
             setHistoryError('Missing entity id for history');
             setHistory([]);
             setHistoryEvents([]);
+            setOverlayHistory([]);
             return;
           }
           
           // Fetch via WebSocket first to avoid browser CORS limitations on direct REST calls
-          const shouldFetch = needsActivityData || isNumeric;
+          const shouldFetch = needsActivityData || isCurrentNumeric;
           const canTryRestFallback = (() => {
             if (!haUrl || typeof window === 'undefined') return false;
             try {
@@ -274,10 +295,72 @@ export default function SensorModal({ isOpen, onClose, entityId, entity, customN
                lastChanged: start.toISOString()
              }];
           }
+
+          const configuredOverlays = Array.isArray(overlayEntities)
+            ? overlayEntities.filter((overlay) => overlay?.entityId)
+            : [];
+
+          if (configuredOverlays.length > 0) {
+            const overlaySeries = await Promise.all(
+              configuredOverlays.map(async (overlay) => {
+                const overlayEntityId = overlay.entityId;
+                let overlayEvents = [];
+                try {
+                  const overlayRaw = await getHistory(conn, {
+                    entityId: overlayEntityId,
+                    start,
+                    end,
+                    minimal_response: false,
+                    no_attributes: false,
+                  });
+                  overlayEvents = overlayRaw
+                    .map((entry) => {
+                      if (!entry) return null;
+                      const stateValue = entry.state ?? entry.s;
+                      const changed = entry.last_changed || entry.last_updated || entry.last_reported || entry.timestamp || entry.l || entry.lc || entry.lu || entry.lr;
+                      const time = parseHistoryEntryTime(entry);
+                      if (stateValue === undefined || !time) return null;
+                      return {
+                        state: stateValue,
+                        time,
+                        lastChanged: changed,
+                      };
+                    })
+                    .filter(Boolean);
+                } catch {
+                  overlayEvents = [];
+                }
+
+                if (overlayEvents.length === 0 && overlay.initialState !== undefined && overlay.initialState !== null && overlay.initialState !== '') {
+                  overlayEvents = [{
+                    state: overlay.initialState,
+                    time: start,
+                    lastChanged: start.toISOString(),
+                  }];
+                }
+
+                return {
+                  entityId: overlayEntityId,
+                  label: overlay.label || overlayEntityId,
+                  color: overlay.color || '#60a5fa',
+                  activeStates: Array.isArray(overlay.activeStates) ? overlay.activeStates : undefined,
+                  events: overlayEvents,
+                };
+              })
+            );
+
+            setOverlayHistory(
+              overlaySeries.filter((overlay) => Array.isArray(overlay.events) && overlay.events.length > 0)
+            );
+          } else {
+            setOverlayHistory([]);
+          }
+
           setHistory(points);
           setHistoryEvents(events);
         } catch (_e) {
           console.error("Failed to load history", _e);
+          setOverlayHistory([]);
         } finally {
           setLoading(false);
         }
@@ -287,8 +370,9 @@ export default function SensorModal({ isOpen, onClose, entityId, entity, customN
     } else {
       setHistory([]);
       setHistoryEvents([]);
+      setOverlayHistory([]);
     }
-  }, [isOpen, entity, conn, haUrl, haToken, historyHours, isSystemDetailsSensor]);
+  }, [isOpen, entity, conn, haUrl, haToken, historyHours, isSystemDetailsSensor, overlayEntities, entityId]);
 
   if (!isOpen || !entity) return null;
 
@@ -300,7 +384,7 @@ export default function SensorModal({ isOpen, onClose, entityId, entity, customN
   const isNumeric = !['script', 'scene'].includes(domain) && !isNaN(parseFloat(state)) && !String(state).match(/^unavailable|unknown$/) && !entityId.startsWith('binary_sensor.');
   const deviceClass = attrs.device_class;
   // Determine if entity should show activity timeline and log
-  const shouldShowActivity = () => getShouldShowActivity();
+  const shouldShowActivity = () => getShouldShowActivity(String(state ?? '').toLowerCase(), isNumeric);
   
   const hasActivity = shouldShowActivity();
 
@@ -506,6 +590,26 @@ export default function SensorModal({ isOpen, onClose, entityId, entity, customN
 
            {/* Main Content Area */}
            <div className="flex-1 flex flex-col min-h-0 relative">
+              {isNumeric && overlayHistory.length > 0 && (
+                <div className="mb-4 flex flex-wrap gap-2">
+                  <span className="inline-flex items-center gap-2 px-2.5 py-1 rounded-full border text-[10px] font-bold uppercase tracking-widest bg-[var(--glass-bg)] border-[var(--glass-border)] text-[var(--text-secondary)]">
+                    <span className="w-2 h-2 rounded-full bg-[var(--text-primary)] opacity-80" />
+                    {t('sensorInfo.temperature') === 'sensorInfo.temperature' ? 'Temperatur' : t('sensorInfo.temperature')}
+                  </span>
+                  {overlayHistory.map((overlay) => (
+                    <span
+                      key={overlay.entityId}
+                      className="inline-flex items-center gap-2 px-2.5 py-1 rounded-full border text-[10px] font-bold uppercase tracking-widest bg-[var(--glass-bg)] border-[var(--glass-border)] text-[var(--text-secondary)]"
+                    >
+                      <span
+                        className="w-2 h-2 rounded-full"
+                        style={{ backgroundColor: overlay.color || '#60a5fa' }}
+                      />
+                      {overlay.label}
+                    </span>
+                  ))}
+                </div>
+              )}
               {isNumeric && !hasActivity ? (
                 <div className="h-full w-full min-h-[250px] relative">
                    {loading ? (
@@ -514,7 +618,14 @@ export default function SensorModal({ isOpen, onClose, entityId, entity, customN
                       </div>
                     ) : (
                       <div className="-ml-4 -mr-4 md:mr-0 h-full">
-                         <SensorHistoryGraph data={history} height={350} noDataLabel={t('sensorInfo.noHistory')} strokeColor="var(--text-primary)" areaColor="var(--text-primary)" />
+                         <SensorHistoryGraph
+                           data={history}
+                           overlays={overlayHistory}
+                           height={350}
+                           noDataLabel={t('sensorInfo.noHistory')}
+                           strokeColor="var(--text-primary)"
+                           areaColor="var(--text-primary)"
+                         />
                       </div>
                     )}
                 </div>
@@ -572,7 +683,14 @@ export default function SensorModal({ isOpen, onClose, entityId, entity, customN
                    
                    {!loading && !hasActivity && isNumeric && (
                      <div className="-ml-4 -mr-4 md:mr-0 h-full">
-                        <SensorHistoryGraph data={history} height={350} noDataLabel={t('sensorInfo.noHistory')} strokeColor="var(--text-primary)" areaColor="var(--text-primary)" />
+                        <SensorHistoryGraph
+                          data={history}
+                          overlays={overlayHistory}
+                          height={350}
+                          noDataLabel={t('sensorInfo.noHistory')}
+                          strokeColor="var(--text-primary)"
+                          areaColor="var(--text-primary)"
+                        />
                      </div>
                    )}
                 </div>

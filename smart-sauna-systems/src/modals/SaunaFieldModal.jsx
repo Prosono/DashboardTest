@@ -90,6 +90,8 @@ export default function SaunaFieldModal({
   show,
   title,
   fieldType,
+  numberMode,
+  numberMaxDigits,
   entityIds,
   entities,
   callService,
@@ -592,6 +594,8 @@ export default function SaunaFieldModal({
                       entity={ent}
                       callService={callService}
                       t={t}
+                      directInput={numberMode === 'code'}
+                      maxDigits={numberMode === 'code' ? (Number(numberMaxDigits) || 4) : null}
                       onShowHistory={showEntityHistory}
                       embedded
                       showCloseButton={false}
@@ -1115,6 +1119,8 @@ export default function SaunaFieldModal({
           entity={entities[activeNumberEntityModal]}
           callService={callService}
           t={t}
+          directInput={numberMode === 'code'}
+          maxDigits={numberMode === 'code' ? (Number(numberMaxDigits) || 4) : null}
           overlayOpacity={0}
           onShowHistory={(entityId) => {
             setActiveNumberEntityModal(null);
