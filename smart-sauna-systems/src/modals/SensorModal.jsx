@@ -22,6 +22,7 @@ export default function SensorModal({
   const [history, setHistory] = useState([]);
   const [historyEvents, setHistoryEvents] = useState([]);
   const [overlayHistory, setOverlayHistory] = useState([]);
+  const [overlayVisibility, setOverlayVisibility] = useState({});
   const [loading, setLoading] = useState(false);
   const [_historyError, setHistoryError] = useState(null);
   const [_historyMeta, setHistoryMeta] = useState({ source: null, rawCount: 0 });
@@ -374,6 +375,22 @@ export default function SensorModal({
     }
   }, [isOpen, entity, conn, haUrl, haToken, historyHours, isSystemDetailsSensor, overlayEntities, entityId]);
 
+  useEffect(() => {
+    if (!Array.isArray(overlayHistory) || overlayHistory.length === 0) {
+      setOverlayVisibility({});
+      return;
+    }
+    setOverlayVisibility((prev) => {
+      const next = {};
+      overlayHistory.forEach((overlay) => {
+        const key = overlay?.entityId;
+        if (!key) return;
+        next[key] = prev[key] ?? true;
+      });
+      return next;
+    });
+  }, [overlayHistory]);
+
   if (!isOpen || !entity) return null;
 
   const attrs = entity.attributes || {};
@@ -387,6 +404,11 @@ export default function SensorModal({
   const shouldShowActivity = () => getShouldShowActivity(String(state ?? '').toLowerCase(), isNumeric);
   
   const hasActivity = shouldShowActivity();
+  const visibleOverlays = overlayHistory.filter((overlay) => {
+    const key = overlay?.entityId;
+    if (!key) return false;
+    return overlayVisibility[key] !== false;
+  });
 
   const lastChanged = entity.last_changed ? new Date(entity.last_changed).toLocaleString() : '--';
   const lastUpdated = entity.last_updated ? new Date(entity.last_updated).toLocaleString() : '--';
@@ -597,16 +619,28 @@ export default function SensorModal({
                     {t('sensorInfo.temperature') === 'sensorInfo.temperature' ? 'Temperatur' : t('sensorInfo.temperature')}
                   </span>
                   {overlayHistory.map((overlay) => (
-                    <span
+                    <button
                       key={overlay.entityId}
-                      className="inline-flex items-center gap-2 px-2.5 py-1 rounded-full border text-[10px] font-bold uppercase tracking-widest bg-[var(--glass-bg)] border-[var(--glass-border)] text-[var(--text-secondary)]"
+                      type="button"
+                      onClick={() => {
+                        const key = overlay.entityId;
+                        if (!key) return;
+                        setOverlayVisibility((prev) => ({ ...prev, [key]: !(prev[key] ?? true) }));
+                      }}
+                      className={`inline-flex items-center gap-2 px-2.5 py-1 rounded-full border text-[10px] font-bold uppercase tracking-widest transition-all ${
+                        overlayVisibility[overlay.entityId] !== false
+                          ? 'bg-[var(--glass-bg)] border-[var(--glass-border)] text-[var(--text-secondary)]'
+                          : 'bg-transparent border-[var(--glass-border)] text-[var(--text-secondary)] opacity-45'
+                      }`}
+                      aria-pressed={overlayVisibility[overlay.entityId] !== false}
+                      title={overlayVisibility[overlay.entityId] !== false ? 'Skjul' : 'Vis'}
                     >
                       <span
                         className="w-2 h-2 rounded-full"
                         style={{ backgroundColor: overlay.color || '#60a5fa' }}
                       />
                       {overlay.label}
-                    </span>
+                    </button>
                   ))}
                 </div>
               )}
@@ -620,7 +654,7 @@ export default function SensorModal({
                       <div className="-ml-4 -mr-4 md:mr-0 h-full">
                          <SensorHistoryGraph
                            data={history}
-                           overlays={overlayHistory}
+                           overlays={visibleOverlays}
                            height={350}
                            noDataLabel={t('sensorInfo.noHistory')}
                            strokeColor="var(--text-primary)"
@@ -685,7 +719,7 @@ export default function SensorModal({
                      <div className="-ml-4 -mr-4 md:mr-0 h-full">
                         <SensorHistoryGraph
                           data={history}
-                          overlays={overlayHistory}
+                          overlays={visibleOverlays}
                           height={350}
                           noDataLabel={t('sensorInfo.noHistory')}
                           strokeColor="var(--text-primary)"

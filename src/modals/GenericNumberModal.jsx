@@ -154,11 +154,11 @@ export default function GenericNumberModal({
 
         <div className="lg:col-span-2 space-y-4 py-2">
           {directInput && (
-            <div className="rounded-2xl border px-4 py-3 bg-[var(--glass-bg)] border-[var(--glass-border)]">
+            <div className="rounded-2xl border px-4 py-3 bg-[var(--glass-bg)] border-[var(--glass-border)] overflow-hidden">
               <div className="text-xs uppercase tracking-[0.22em] font-bold text-[var(--text-secondary)] mb-2">
                 {tr('sauna.activeCodes', 'Aktive koder')}
               </div>
-              <div className="flex items-center gap-2">
+              <div className="w-full min-w-0">
                 <input
                   type="text"
                   inputMode="numeric"
@@ -179,14 +179,14 @@ export default function GenericNumberModal({
                       commitInputValue();
                     }
                   }}
-                  className="flex-1 h-11 px-3 rounded-xl border bg-[var(--glass-bg-hover)] border-[var(--glass-border)] text-[var(--text-primary)] font-mono tracking-[0.2em] text-lg"
+                  className="w-full min-w-0 h-11 px-3 rounded-xl border bg-[var(--glass-bg-hover)] border-[var(--glass-border)] text-[var(--text-primary)] font-mono tracking-[0.12em] text-base md:text-lg"
                   placeholder={normalizedMaxDigits ? '0'.repeat(normalizedMaxDigits) : '0000'}
                   aria-label={tr('sauna.activeCodes', 'Aktive koder')}
                 />
                 <button
                   type="button"
                   onClick={commitInputValue}
-                  className="h-11 px-4 rounded-xl border bg-[var(--glass-bg)] border-[var(--glass-border)] text-[var(--text-primary)] text-xs uppercase tracking-[0.2em] font-bold"
+                  className="w-full mt-2 h-11 px-4 rounded-xl border bg-[var(--glass-bg)] border-[var(--glass-border)] text-[var(--text-primary)] text-xs uppercase tracking-[0.2em] font-bold"
                 >
                   {tr('common.save', 'Lagre')}
                 </button>
