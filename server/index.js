@@ -38,11 +38,39 @@ app.get('/api/health', (_req, res) => {
 if (isProduction) {
   const distPath = join(__dirname, '..', 'dist');
   if (existsSync(distPath)) {
-    app.use(express.static(distPath));
+    const assetsPath = join(distPath, 'assets');
+    if (existsSync(assetsPath)) {
+      app.use('/assets', express.static(assetsPath, {
+        fallthrough: false,
+        maxAge: '1y',
+        immutable: true,
+        setHeaders: (res) => {
+          res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+        },
+      }));
+    }
+
+    app.use(express.static(distPath, {
+      index: false,
+      setHeaders: (res, filePath) => {
+        if (filePath.endsWith('.html')) {
+          res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+          res.setHeader('Pragma', 'no-cache');
+          res.setHeader('Expires', '0');
+        }
+      },
+    }));
+
     app.get('*', (req, res) => {
       if (req.path.startsWith('/api/')) {
         return res.status(404).json({ error: 'Not found' });
       }
+      if (req.path.startsWith('/assets/')) {
+        return res.status(404).type('text/plain').send('Asset not found');
+      }
+      res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+      res.setHeader('Pragma', 'no-cache');
+      res.setHeader('Expires', '0');
       return res.sendFile(join(distPath, 'index.html'));
     });
   }
