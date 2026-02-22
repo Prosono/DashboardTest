@@ -18,6 +18,13 @@ const toNum = (value) => {
 };
 
 const roundToOne = (value) => Math.round(Number(value) * 10) / 10;
+const calcDeviationPct = (startTemp, targetTemp) => {
+  const start = toNum(startTemp);
+  const target = toNum(targetTemp);
+  if (start === null || target === null) return null;
+  if (Math.abs(target) < 0.001) return null;
+  return roundToOne(((start - target) / target) * 100);
+};
 const toHourKey = (timestampMs) => {
   const date = new Date(timestampMs);
   const year = date.getFullYear();
@@ -50,9 +57,13 @@ const normalizeSnapshots = (rawValue) => {
       if (!Number.isFinite(timestampMs) || startTemp === null) return null;
       const targetTemp = toNum(entry?.targetTemp);
       const providedDeviation = toNum(entry?.deviation);
+      const providedDeviationPct = toNum(entry?.deviationPct ?? entry?.deviationPercent);
       const deviation = providedDeviation !== null
         ? roundToOne(providedDeviation)
         : (targetTemp !== null ? roundToOne(startTemp - targetTemp) : null);
+      const deviationPct = providedDeviationPct !== null
+        ? roundToOne(providedDeviationPct)
+        : calcDeviationPct(startTemp, targetTemp);
       const bookingType = String(entry?.bookingType || 'regular').toLowerCase() === 'service'
         ? 'service'
         : 'regular';
@@ -64,6 +75,7 @@ const normalizeSnapshots = (rawValue) => {
         startTemp: roundToOne(startTemp),
         targetTemp,
         deviation,
+        deviationPct,
         bookingType,
         sampleMode: String(entry?.sampleMode || 'hourly'),
         serviceRaw: entry?.serviceRaw ?? null,
@@ -88,6 +100,7 @@ const serializeSnapshots = (snapshots) => snapshots.map((entry) => ({
   startTemp: entry.startTemp,
   targetTemp: entry.targetTemp,
   deviation: entry.deviation,
+  deviationPct: entry.deviationPct ?? null,
   bookingType: entry.bookingType,
   sampleMode: entry.sampleMode,
   serviceRaw: entry.serviceRaw,
@@ -256,6 +269,7 @@ export default function SaunaBookingTempCard({
         startTemp: roundToOne(currentTemp),
         targetTemp: targetTemp !== null ? roundToOne(targetTemp) : null,
         deviation: targetTemp !== null ? roundToOne(currentTemp - targetTemp) : null,
+        deviationPct: calcDeviationPct(currentTemp, targetTemp),
         bookingType: serviceActive ? 'service' : 'regular',
         sampleMode: 'hourly',
         serviceRaw: serviceEntity?.state ?? null,
@@ -301,8 +315,9 @@ export default function SaunaBookingTempCard({
   const maxStart = startTemps.length ? roundToOne(Math.max(...startTemps)) : null;
 
   const targetSamples = recentSnapshots.filter((entry) => entry.targetTemp !== null);
-  const avgDeviation = targetSamples.length
-    ? roundToOne(targetSamples.reduce((sum, entry) => sum + (entry.deviation ?? 0), 0) / targetSamples.length)
+  const targetSamplesWithPct = targetSamples.filter((entry) => entry.deviationPct !== null);
+  const avgDeviationPct = targetSamplesWithPct.length
+    ? roundToOne(targetSamplesWithPct.reduce((sum, entry) => sum + (entry.deviationPct ?? 0), 0) / targetSamplesWithPct.length)
     : null;
   const reachedCount = targetSamples.filter((entry) => entry.startTemp >= (entry.targetTemp - targetToleranceC)).length;
   const serviceCount = recentSnapshots.filter((entry) => entry.bookingType === 'service').length;
@@ -312,6 +327,11 @@ export default function SaunaBookingTempCard({
   const sparkPoints = recentSorted.slice(-30).map((entry) => ({ value: entry.startTemp }));
   const latestSnapshot = snapshots.length ? snapshots[snapshots.length - 1] : null;
   const modalStats = getTempStats(historyModal?.entries || []);
+  const formatDeviationPercent = (value) => {
+    if (!Number.isFinite(Number(value))) return '--';
+    const num = Number(value);
+    return `${num > 0 ? '+' : ''}${num.toFixed(1)}%`;
+  };
 
   const missingConfig = [];
   if (!tempEntityId) missingConfig.push(tr('sauna.bookingTemp.tempEntity', 'Temperature sensor'));
@@ -432,14 +452,14 @@ export default function SaunaBookingTempCard({
                 className="text-left rounded-2xl border border-[var(--glass-border)] bg-[var(--glass-bg)] px-3 py-2 transition-colors hover:bg-[var(--glass-bg-hover)]"
                 onClick={() => openHistoryModal({
                   title: tr('sauna.bookingTemp.deviation', 'Deviation'),
-                  subtitle: avgDeviation !== null ? `${avgDeviation > 0 ? '+' : ''}${avgDeviation.toFixed(1)}°` : '--',
+                  subtitle: formatDeviationPercent(avgDeviationPct),
                   entries: targetSamples.slice().sort((a, b) => b.timestampMs - a.timestampMs),
                   highlightId: null,
                 })}
               >
                 <div className="text-[10px] uppercase tracking-widest text-[var(--text-secondary)] font-bold">{tr('sauna.bookingTemp.deviation', 'Deviation')}</div>
-                <div className={`text-lg font-semibold tabular-nums ${avgDeviation !== null && avgDeviation < 0 ? 'text-rose-300' : 'text-[var(--text-primary)]'}`}>
-                  {avgDeviation !== null ? `${avgDeviation > 0 ? '+' : ''}${avgDeviation.toFixed(1)}°` : '--'}
+                <div className={`text-lg font-semibold tabular-nums ${avgDeviationPct !== null && avgDeviationPct < 0 ? 'text-rose-300' : 'text-[var(--text-primary)]'}`}>
+                  {formatDeviationPercent(avgDeviationPct)}
                 </div>
                 <div className="text-[10px] text-[var(--text-muted)]">{tr('sauna.bookingTemp.regularService', 'R/S')}: {regularCount}/{serviceCount}</div>
               </button>
@@ -482,6 +502,7 @@ export default function SaunaBookingTempCard({
                       data={sparkPoints}
                       currentIndex={sparkPoints.length - 1}
                       height={62}
+                      variant="bar"
                     />
                   </div>
                 </div>
@@ -537,7 +558,7 @@ export default function SaunaBookingTempCard({
                       </span>
                       <span className="text-[var(--text-secondary)] tabular-nums">
                         {entry.targetTemp !== null
-                          ? `${tr('sauna.target', 'Target')}: ${entry.targetTemp.toFixed(1)}° (${entry.deviation >= 0 ? '+' : ''}${entry.deviation.toFixed(1)}°)`
+                          ? `${tr('sauna.target', 'Target')}: ${entry.targetTemp.toFixed(1)}° (${formatDeviationPercent(entry.deviationPct)})`
                           : tr('sauna.bookingTemp.noTarget', 'No target configured')}
                       </span>
                     </div>
@@ -611,6 +632,7 @@ export default function SaunaBookingTempCard({
                       data={historyModal.entries.slice().reverse().map((entry) => ({ value: entry.startTemp }))}
                       currentIndex={historyModal.entries.length - 1}
                       height={72}
+                      variant="bar"
                     />
                   </div>
                 </div>
@@ -672,7 +694,7 @@ export default function SaunaBookingTempCard({
                         {tr('sauna.target', 'Target')}: {entry.targetTemp !== null ? `${entry.targetTemp.toFixed(1)}°` : '--'}
                       </span>
                       <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full border border-[var(--glass-border)] bg-[var(--glass-bg-hover)] text-[var(--text-secondary)]">
-                        {tr('sauna.bookingTemp.deviation', 'Deviation')}: {entry.deviation !== null ? `${entry.deviation > 0 ? '+' : ''}${entry.deviation.toFixed(1)}°` : '--'}
+                        {tr('sauna.bookingTemp.deviation', 'Deviation')}: {formatDeviationPercent(entry.deviationPct)}
                       </span>
                       {hit !== null && (
                         <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full border ${

@@ -23,12 +23,21 @@ const createBezierPath = (points, smoothing = 0.3) => {
   }, '');
 };
 
-export default function SparkLine({ data, currentIndex, height = 40, fade = false, minValue, maxValue }) {
+export default function SparkLine({
+  data,
+  currentIndex,
+  height = 40,
+  fade = false,
+  minValue,
+  maxValue,
+  variant = 'line',
+}) {
   if (!data || data.length === 0) return null;
   
   const idSuffix = useMemo(() => Math.random().toString(36).substr(2, 9), []);
   const areaId = `cardAreaGrad-${idSuffix}`;
   const lineId = `cardLineGrad-${idSuffix}`;
+  const barId = `cardBarGrad-${idSuffix}`;
   const maskId = `cardMask-${idSuffix}`;
 
   const values = data.map(d => d.value);
@@ -45,6 +54,9 @@ export default function SparkLine({ data, currentIndex, height = 40, fade = fals
   }
   const range = max - min || 1;
   const width = 300;
+  const safeCurrentIndex = Number.isFinite(Number(currentIndex))
+    ? Math.max(0, Math.min(values.length - 1, Number(currentIndex)))
+    : Math.max(0, values.length - 1);
   const points = values.map((v, i) => [
     values.length === 1 ? width / 2 : (i / (values.length - 1)) * width,
     height - ((v - min) / range) * height
@@ -52,7 +64,11 @@ export default function SparkLine({ data, currentIndex, height = 40, fade = fals
 
   const pathData = useMemo(() => createBezierPath(points, 0.3), [data]);
   const areaData = useMemo(() => `${pathData} L ${width},${height} L 0,${height} Z`, [pathData]);
-  const currentPoint = points[currentIndex] || points[0];
+  const currentPoint = points[safeCurrentIndex] || points[0];
+  const useBars = String(variant || '').toLowerCase() === 'bar';
+  const barWidth = values.length <= 1
+    ? 26
+    : Math.max(2.8, Math.min(16, (width / values.length) * 0.52));
 
   const getDotColor = (val) => {
     const t = (val - min) / range;
@@ -78,6 +94,11 @@ export default function SparkLine({ data, currentIndex, height = 40, fade = fals
             <stop offset="50%" stopColor="#eab308" />
             <stop offset="100%" stopColor="#3b82f6" />
           </linearGradient>
+
+          <linearGradient id={barId} x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="#f59e0b" stopOpacity="0.95" />
+            <stop offset="100%" stopColor="#60a5fa" stopOpacity="0.7" />
+          </linearGradient>
           
           {/* Fade mask for smooth bottom */}
           <linearGradient id={maskId} x1="0" y1="0" x2="0" y2="1">
@@ -91,14 +112,39 @@ export default function SparkLine({ data, currentIndex, height = 40, fade = fals
           </mask>
         </defs>
         
-        {/* Area fill with smooth fade */}
-        <path d={areaData} fill={`url(#${areaId})`} mask={`url(#${maskId}-use)`} />
-        
-        {/* Bezier line with gradient */}
-        <path d={pathData} fill="none" stroke={`url(#${lineId})`} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
-        
-        {/* Current point marker */}
-        <circle cx={currentPoint[0]} cy={currentPoint[1]} r="3.5" fill={getDotColor(values[currentIndex])} className="animate-pulse" />
+        {useBars ? (
+          <>
+            {values.map((v, i) => {
+              const normalized = (v - min) / range;
+              const y = height - (normalized * height);
+              const h = Math.max(1.5, height - y);
+              const x = points[i][0] - (barWidth / 2);
+              return (
+                <rect
+                  key={`bar-${i}`}
+                  x={x}
+                  y={y}
+                  width={barWidth}
+                  height={h}
+                  rx={Math.min(4, barWidth / 2)}
+                  fill={`url(#${barId})`}
+                  opacity={i === safeCurrentIndex ? 0.95 : 0.66}
+                />
+              );
+            })}
+          </>
+        ) : (
+          <>
+            {/* Area fill with smooth fade */}
+            <path d={areaData} fill={`url(#${areaId})`} mask={`url(#${maskId}-use)`} />
+
+            {/* Bezier line with gradient */}
+            <path d={pathData} fill="none" stroke={`url(#${lineId})`} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+
+            {/* Current point marker */}
+            <circle cx={currentPoint[0]} cy={currentPoint[1]} r="3.5" fill={getDotColor(values[safeCurrentIndex])} className="animate-pulse" />
+          </>
+        )}
       </svg>
       {fade && (
         <div className="pointer-events-none absolute inset-0 bg-gradient-to-b from-transparent via-transparent to-[var(--glass-bg)] opacity-60" />
