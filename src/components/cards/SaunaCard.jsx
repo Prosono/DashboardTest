@@ -5,6 +5,7 @@ import SparkLine from '../charts/SparkLine';
 
 const asArray = (v) => (Array.isArray(v) ? v.filter(Boolean) : []);
 const norm = (s) => String(s ?? '').toLowerCase();
+const STATUS_GRAPH_WINDOW_MS = 12 * 60 * 60 * 1000;
 
 const isOn = (state) => ['on', 'true', '1', 'yes'].includes(norm(state));
 const isOnish = (state) => ['on', 'open', 'unlocked', 'heat', 'heating', 'true', '1', 'yes'].includes(norm(state));
@@ -296,20 +297,36 @@ export default function SaunaCard({
 
   const tempSeries = useMemo(() => {
     if (!statusGraphEntityId) return [];
+    const windowEnd = Date.now();
+    const windowStart = windowEnd - STATUS_GRAPH_WINDOW_MS;
     const raw = tempHistoryById?.[statusGraphEntityId];
-    const extracted = extractHistorySeries(raw).slice(-40);
-    if (extracted.length > 0) return extracted;
+    const extracted = extractHistorySeries(raw)
+      .filter((point) => point.t >= windowStart && point.t <= windowEnd);
+    if (extracted.length > 1) return extracted;
+    if (extracted.length === 1) {
+      const value = extracted[0].v;
+      return [
+        { t: windowStart, v: value },
+        { t: windowEnd, v: value },
+      ];
+    }
 
     if (tempIsValid) {
-      const now = Date.now();
       return [
-        { t: now - (12 * 60 * 60 * 1000), v: currentTemp },
-        { t: now, v: currentTemp },
+        { t: windowStart, v: currentTemp },
+        { t: windowEnd, v: currentTemp },
       ];
     }
 
     return [];
   }, [statusGraphEntityId, tempHistoryById, tempIsValid, currentTemp]);
+  const statusWindow = useMemo(() => {
+    const end = tempSeries.length > 0
+      ? Math.max(tempSeries[tempSeries.length - 1]?.t || 0, tempSeries[0]?.t || 0)
+      : Date.now();
+    const start = end - STATUS_GRAPH_WINDOW_MS;
+    return { start, end };
+  }, [tempSeries]);
   const statusHistory = useMemo(
     () => tempSeries.map((p) => ({ value: p.v, time: new Date(p.t) })),
     [tempSeries]
@@ -327,9 +344,8 @@ export default function SaunaCard({
     return extractStateSeries(raw, ['ja', 'yes', 'on', 'true', '1', 'service', 'active']);
   }, [settings?.serviceEntityId, tempHistoryById]);
   const statusOverlaySegments = useMemo(() => {
-    if (!tempSeries.length) return [];
-    const start = tempSeries[0]?.t;
-    const end = tempSeries[tempSeries.length - 1]?.t;
+    const start = statusWindow.start;
+    const end = statusWindow.end;
     if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start) return [];
 
     const bookingSegments = buildOverlaySegments(bookingStateSeries, start, end)
@@ -349,16 +365,15 @@ export default function SaunaCard({
           : 'bg-rose-400/10 border border-rose-300/20',
       }));
     return [...bookingSegments, ...serviceSegments];
-  }, [tempSeries, bookingStateSeries, serviceStateSeries, isLightTheme]);
+  }, [statusWindow, bookingStateSeries, serviceStateSeries, isLightTheme]);
   const statusTimeLabels = useMemo(() => {
-    if (!tempSeries.length) return null;
-    const first = tempSeries[0]?.t;
-    const last = tempSeries[tempSeries.length - 1]?.t;
+    const first = statusWindow.start;
+    const last = statusWindow.end;
     if (!Number.isFinite(first) || !Number.isFinite(last)) return null;
     const mid = first + ((last - first) / 2);
     const fmt = (ts) => new Date(ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     return { left: fmt(first), mid: fmt(mid), right: fmt(last) };
-  }, [tempSeries]);
+  }, [statusWindow]);
   const openFieldModal = (title, entityIds, options = {}) => {
     if (editMode) return;
     const ids = asArray(entityIds);
