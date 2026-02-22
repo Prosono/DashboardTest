@@ -27,6 +27,8 @@ export default function useTempHistory(conn, cardSettings) {
       if (settings.targetTempEntityId) ids.push(settings.targetTempEntityId);
       if (settings.preheatMinutesEntityId) ids.push(settings.preheatMinutesEntityId);
       if (settings.statusGraphEntityId) ids.push(settings.statusGraphEntityId);
+      if (settings.saunaActiveBooleanEntityId) ids.push(settings.saunaActiveBooleanEntityId);
+      if (settings.serviceEntityId) ids.push(settings.serviceEntityId);
       return ids;
     }).map((id) => String(id ?? '').trim()).filter(Boolean);
 

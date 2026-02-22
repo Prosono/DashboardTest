@@ -17,6 +17,37 @@ const toNum = (v) => {
 
 const cx = (...p) => p.filter(Boolean).join(' ');
 
+function parseHistoryTimestamp(value) {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return value > 1e12 ? value : value * 1000;
+  }
+
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (!trimmed) return NaN;
+    const numeric = Number(trimmed);
+    if (Number.isFinite(numeric)) {
+      return numeric > 1e12 ? numeric : numeric * 1000;
+    }
+    return Date.parse(trimmed);
+  }
+
+  return Date.parse(String(value ?? ''));
+}
+
+function unwrapHistoryArray(value) {
+  if (Array.isArray(value)) return value;
+  if (!value || typeof value !== 'object') return [];
+
+  if (Array.isArray(value.result)) return unwrapHistoryArray(value.result);
+  if (value.result && typeof value.result === 'object') return unwrapHistoryArray(value.result);
+  if (Array.isArray(value.history)) return unwrapHistoryArray(value.history);
+  if (Array.isArray(value.states)) return unwrapHistoryArray(value.states);
+
+  const nestedArray = Object.values(value).find((v) => Array.isArray(v));
+  return nestedArray ? unwrapHistoryArray(nestedArray) : [];
+}
+
 function makeTr(t) {
   return (key, fallback) => {
     const out = typeof t === 'function' ? t(key) : undefined;
@@ -63,38 +94,7 @@ function resolveImageUrl(settings, entities) {
 function extractHistorySeries(raw) {
   if (!raw) return [];
 
-  const parseTimestamp = (value) => {
-    if (typeof value === 'number' && Number.isFinite(value)) {
-      return value > 1e12 ? value : value * 1000;
-    }
-
-    if (typeof value === 'string') {
-      const trimmed = value.trim();
-      if (!trimmed) return NaN;
-      const numeric = Number(trimmed);
-      if (Number.isFinite(numeric)) {
-        return numeric > 1e12 ? numeric : numeric * 1000;
-      }
-      return Date.parse(trimmed);
-    }
-
-    return Date.parse(String(value ?? ''));
-  };
-
-  const unwrapArray = (value) => {
-    if (Array.isArray(value)) return value;
-    if (!value || typeof value !== 'object') return [];
-
-    if (Array.isArray(value.result)) return unwrapArray(value.result);
-    if (value.result && typeof value.result === 'object') return unwrapArray(value.result);
-    if (Array.isArray(value.history)) return unwrapArray(value.history);
-    if (Array.isArray(value.states)) return unwrapArray(value.states);
-
-    const nestedArray = Object.values(value).find((v) => Array.isArray(v));
-    return nestedArray ? unwrapArray(nestedArray) : [];
-  };
-
-  const arr = unwrapArray(raw);
+  const arr = unwrapHistoryArray(raw);
   const flat = Array.isArray(arr?.[0]) ? arr[0] : arr;
   if (!Array.isArray(flat)) return [];
 
@@ -116,12 +116,103 @@ function extractHistorySeries(raw) {
       const vRaw = entry?.state ?? entry?.s ?? entry?.mean ?? entry?.value ?? entry?.v;
       const numericValue = typeof vRaw === 'string' ? Number(vRaw.replace(',', '.')) : Number(vRaw);
       return {
-        t: parseTimestamp(tRaw),
+        t: parseHistoryTimestamp(tRaw),
         v: numericValue,
       };
     })
     .filter((p) => Number.isFinite(p.t) && Number.isFinite(p.v))
     .sort((a, b) => a.t - b.t);
+}
+
+function extractStateSeries(raw, activeStates = []) {
+  if (!raw) return [];
+  const activeSet = new Set(activeStates.map((state) => norm(state)));
+  const arr = unwrapHistoryArray(raw);
+  const flat = Array.isArray(arr?.[0]) ? arr[0] : arr;
+  if (!Array.isArray(flat)) return [];
+
+  return flat
+    .map((entry) => {
+      const tRaw = entry?.last_updated
+        || entry?.last_changed
+        || entry?.last_reported
+        || entry?.start
+        || entry?.end
+        || entry?.timestamp
+        || entry?.time
+        || entry?.t
+        || entry?.l
+        || entry?.lu
+        || entry?.lc
+        || entry?.lr
+        || '';
+
+      const stateRaw = entry?.state ?? entry?.s ?? entry?.mean ?? entry?.value ?? entry?.v;
+      const normalized = norm(stateRaw);
+      const numericState = Number(stateRaw);
+
+      let active = false;
+      if (activeSet.has(normalized)) active = true;
+      else if (Number.isFinite(numericState)) active = numericState > 0.5;
+
+      return {
+        t: parseHistoryTimestamp(tRaw),
+        v: active ? 1 : 0,
+      };
+    })
+    .filter((point) => Number.isFinite(point.t))
+    .sort((a, b) => a.t - b.t);
+}
+
+function buildOverlaySegments(stateSeries, startMs, endMs) {
+  if (!Array.isArray(stateSeries) || stateSeries.length === 0) return [];
+  if (!Number.isFinite(startMs) || !Number.isFinite(endMs) || endMs <= startMs) return [];
+
+  const sorted = [...stateSeries]
+    .filter((point) => Number.isFinite(point.t) && Number.isFinite(point.v))
+    .sort((a, b) => a.t - b.t);
+  if (!sorted.length) return [];
+
+  let activeAtStart = 0;
+  let hasPointBeforeStart = false;
+  for (const point of sorted) {
+    if (point.t <= startMs) {
+      activeAtStart = point.v > 0 ? 1 : 0;
+      hasPointBeforeStart = true;
+    } else {
+      break;
+    }
+  }
+  if (!hasPointBeforeStart) activeAtStart = sorted[0].v > 0 ? 1 : 0;
+
+  const rawSegments = [];
+  let cursor = startMs;
+  let current = activeAtStart;
+
+  for (const point of sorted) {
+    if (point.t <= startMs) continue;
+    if (point.t >= endMs) break;
+    if (current > 0 && point.t > cursor) {
+      rawSegments.push({ start: cursor, end: point.t });
+    }
+    cursor = point.t;
+    current = point.v > 0 ? 1 : 0;
+  }
+
+  if (current > 0 && endMs > cursor) {
+    rawSegments.push({ start: cursor, end: endMs });
+  }
+
+  const span = endMs - startMs;
+  return rawSegments
+    .map((segment) => {
+      const start = Math.max(startMs, Math.min(segment.start, endMs));
+      const end = Math.max(startMs, Math.min(segment.end, endMs));
+      const leftPct = ((start - startMs) / span) * 100;
+      const widthPct = ((end - start) / span) * 100;
+      return { leftPct, widthPct };
+    })
+    .filter((segment) => segment.widthPct > 0.05);
 }
 
 export default function SaunaCard({
@@ -223,6 +314,42 @@ export default function SaunaCard({
     () => tempSeries.map((p) => ({ value: p.v, time: new Date(p.t) })),
     [tempSeries]
   );
+  const bookingStateSeries = useMemo(() => {
+    const bookingEntityId = settings?.saunaActiveBooleanEntityId;
+    if (!bookingEntityId) return [];
+    const raw = tempHistoryById?.[bookingEntityId];
+    return extractStateSeries(raw, ['on', 'true', '1', 'yes']);
+  }, [settings?.saunaActiveBooleanEntityId, tempHistoryById]);
+  const serviceStateSeries = useMemo(() => {
+    const serviceEntityId = settings?.serviceEntityId;
+    if (!serviceEntityId) return [];
+    const raw = tempHistoryById?.[serviceEntityId];
+    return extractStateSeries(raw, ['ja', 'yes', 'on', 'true', '1', 'service', 'active']);
+  }, [settings?.serviceEntityId, tempHistoryById]);
+  const statusOverlaySegments = useMemo(() => {
+    if (!tempSeries.length) return [];
+    const start = tempSeries[0]?.t;
+    const end = tempSeries[tempSeries.length - 1]?.t;
+    if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start) return [];
+
+    const bookingSegments = buildOverlaySegments(bookingStateSeries, start, end)
+      .map((segment, index) => ({
+        id: `booking-${index}`,
+        ...segment,
+        className: isLightTheme
+          ? 'bg-sky-500/16 border border-sky-600/25'
+          : 'bg-sky-400/12 border border-sky-300/20',
+      }));
+    const serviceSegments = buildOverlaySegments(serviceStateSeries, start, end)
+      .map((segment, index) => ({
+        id: `service-${index}`,
+        ...segment,
+        className: isLightTheme
+          ? 'bg-rose-500/12 border border-rose-600/25'
+          : 'bg-rose-400/10 border border-rose-300/20',
+      }));
+    return [...bookingSegments, ...serviceSegments];
+  }, [tempSeries, bookingStateSeries, serviceStateSeries, isLightTheme]);
   const statusTimeLabels = useMemo(() => {
     if (!tempSeries.length) return null;
     const first = tempSeries[0]?.t;
@@ -424,9 +551,25 @@ export default function SaunaCard({
                 'w-12 h-12 rounded-full flex items-center justify-center border',
                 flameOn && isLightTheme
                   ? 'bg-orange-100 border-orange-300/80'
-                  : 'bg-[var(--glass-bg-hover)] border-[var(--glass-border)]'
+                  : (!flameOn && isLightTheme
+                    ? 'bg-slate-100 border-slate-300/80'
+                    : 'bg-[var(--glass-bg-hover)] border-[var(--glass-border)]')
               )}>
-                {flameOn ? <FlameAnimated className="w-6 h-6" isLightTheme={isLightTheme} /> : <SaunaIcon className={cx('w-6 h-6', tone.icon)} />}
+                {flameOn ? (
+                  <FlameAnimated className="w-6 h-6" isLightTheme={isLightTheme} />
+                ) : (
+                  <div className="relative w-6 h-6" aria-label={tr('sauna.notHeating', 'Varmer ikke')}>
+                    <Flame className={cx('w-6 h-6', isLightTheme ? 'text-slate-700' : 'text-slate-300')} />
+                    <span
+                      className={cx(
+                        'absolute left-1/2 top-1/2 w-7 h-[2px] -translate-x-1/2 -translate-y-1/2 -rotate-[34deg] rounded-full',
+                        isLightTheme
+                          ? 'bg-slate-800/80 shadow-[0_0_0_1px_rgba(255,255,255,0.55)]'
+                          : 'bg-white/75'
+                      )}
+                    />
+                  </div>
+                )}
               </div>
               <div className="min-w-0">
                 <h3 className="text-lg font-bold text-[var(--text-primary)] truncate">{saunaName}</h3>
@@ -532,8 +675,27 @@ export default function SaunaCard({
                 </div>
               </div>
               {statusHistory.length > 0 && (
-                <div className="absolute inset-x-2 top-8 h-[4.4rem] opacity-85 pointer-events-none">
+                <div className="absolute inset-x-2 top-8 h-[4.4rem] opacity-85 pointer-events-none overflow-hidden rounded-lg">
+                  {statusOverlaySegments.map((segment) => (
+                    <span
+                      key={segment.id}
+                      className={cx('absolute inset-y-1 rounded-md', segment.className)}
+                      style={{ left: `${segment.leftPct}%`, width: `${segment.widthPct}%` }}
+                    />
+                  ))}
                   <SparkLine data={statusHistory} height={72} currentIndex={statusHistory.length - 1} fade minValue={0} maxValue={100} />
+                </div>
+              )}
+              {statusOverlaySegments.length > 0 && (
+                <div className="absolute right-2 top-8 z-10 flex items-center gap-1.5 text-[9px] leading-none pointer-events-none">
+                  <span className={cx('inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full border', isLightTheme ? 'bg-sky-100/80 border-sky-500/30 text-sky-800' : 'bg-sky-500/15 border-sky-300/25 text-sky-100')}>
+                    <span className={cx('w-1.5 h-1.5 rounded-full', isLightTheme ? 'bg-sky-600' : 'bg-sky-300')} />
+                    {tr('sauna.active', 'Aktiv')}
+                  </span>
+                  <span className={cx('inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full border', isLightTheme ? 'bg-rose-100/80 border-rose-500/30 text-rose-800' : 'bg-rose-500/15 border-rose-300/25 text-rose-100')}>
+                    <span className={cx('w-1.5 h-1.5 rounded-full', isLightTheme ? 'bg-rose-600' : 'bg-rose-300')} />
+                    {tr('sauna.service', 'Service')}
+                  </span>
                 </div>
               )}
               <div className={cx('absolute left-2 top-9 h-[4.0rem] z-10 flex flex-col justify-between text-[10px] leading-none pointer-events-none', isLightTheme ? 'text-slate-900/90' : 'text-orange-200/80')}>
