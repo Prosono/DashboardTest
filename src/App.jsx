@@ -7,6 +7,7 @@ import {
   Check,
   Edit2,
   LayoutGrid,
+  Server,
   Plus,
   Lock,
   User,
@@ -22,6 +23,7 @@ import {
   MediaPage,
   PageNavigation,
   PersonStatus,
+  SuperAdminOverview,
 } from './components';
 
 import {
@@ -60,6 +62,7 @@ import {
   createClientAdmin as createServerClientAdmin,
   updateClient as updateServerClient,
   deleteClient as deleteServerClient,
+  fetchPlatformOverview as fetchServerPlatformOverview,
   fetchClientHaConfig as fetchServerClientHaConfig,
   saveClientHaConfig as saveServerClientHaConfig,
   listClientDashboards as listServerClientDashboards,
@@ -92,6 +95,8 @@ import {
 } from './utils/branding';
 import { normalizeHaConfig } from './utils/haConnections';
 
+const SUPER_ADMIN_OVERVIEW_PAGE_ID = '__super_admin_overview';
+
 function AppContent({
   showOnboarding,
   setShowOnboarding,
@@ -101,7 +106,6 @@ function AppContent({
   onProfileUpdated,
   onSaveGlobalBranding,
   userAdminApi,
-  haConfigHydrated,
 }) {
   const {
     currentTheme,
@@ -190,7 +194,7 @@ function AppContent({
     if ((language === 'nn' || language === 'nb') && nnFallback[key]) return nnFallback[key];
     return key;
   };
-  const normalizeRole = (role) => {
+  const normalizeRole = useCallback((role) => {
     const value = String(role || '').trim().toLowerCase();
     if (
       value === 'admin'
@@ -203,8 +207,8 @@ function AppContent({
     ) return 'admin';
     if (value === 'inspector' || value === 'inspektør') return 'inspector';
     return 'user';
-  };
-  const isVisibleForRole = (visibleRoles, role) => {
+  }, []);
+  const isVisibleForRole = useCallback((visibleRoles, role) => {
     let rawTargets = [];
     if (Array.isArray(visibleRoles)) {
       rawTargets = visibleRoles;
@@ -236,7 +240,7 @@ function AppContent({
     if (normalizedTargets.length === 0) return false;
     if (normalizedTargets.includes('all')) return true;
     return normalizedTargets.some((target) => normalizeRole(target) === normalizedRole);
-  };
+  }, [normalizeRole]);
 
   const globalHeaderTitle = String(globalBranding?.title || '').trim();
   const globalBrandingVersion = Date.parse(String(globalBranding?.updatedAt || '')) || 0;
@@ -502,12 +506,26 @@ function AppContent({
   // ── Validate persisted activePage still exists in config ───────────────
   const visiblePageIds = useMemo(() => {
     const allPageIds = pagesConfig.pages || [];
-    if (editMode && canEditDashboard) return allPageIds;
-    return allPageIds.filter((id) => {
+    const roleFiltered = (editMode && canEditDashboard) ? allPageIds : allPageIds.filter((id) => {
       const settings = pageSettings[id] || {};
       return isVisibleForRole(settings.visibleRoles, currentUserRole);
     });
-  }, [pagesConfig.pages, pageSettings, editMode, canEditDashboard, currentUserRole]);
+    if (!isPlatformAdmin) return roleFiltered;
+    const deduped = [SUPER_ADMIN_OVERVIEW_PAGE_ID];
+    roleFiltered.forEach((id) => {
+      if (id !== SUPER_ADMIN_OVERVIEW_PAGE_ID) deduped.push(id);
+    });
+    return deduped;
+  }, [pagesConfig.pages, pageSettings, editMode, canEditDashboard, currentUserRole, isPlatformAdmin, isVisibleForRole]);
+
+  const appliedSuperOverviewRef = useRef('');
+  useEffect(() => {
+    if (!isPlatformAdmin) return;
+    const marker = `${currentUser?.id || ''}:${currentUser?.clientId || ''}`;
+    if (!marker || appliedSuperOverviewRef.current === marker) return;
+    appliedSuperOverviewRef.current = marker;
+    setActivePage(SUPER_ADMIN_OVERVIEW_PAGE_ID);
+  }, [isPlatformAdmin, currentUser?.id, currentUser?.clientId, setActivePage]);
 
   useEffect(() => {
     if (visiblePageIds.includes(activePage)) return;
@@ -1027,7 +1045,8 @@ function AppContent({
   );
 
   const pageDefaults = {
-    home: { label: t('page.home'), icon: LayoutGrid }
+    home: { label: t('page.home'), icon: LayoutGrid },
+    [SUPER_ADMIN_OVERVIEW_PAGE_ID]: { label: t('superAdminOverview.pageLabel'), icon: Server },
   };
 
   const pages = visiblePageIds.map(id => ({
@@ -1044,7 +1063,7 @@ function AppContent({
       ...(cardSettings[settingsKey] || {}),
     };
     return isVisibleForRole(settings.visibleRoles, currentUserRole);
-  }, [editMode, canEditDashboard, activePage, cardSettings, currentUserRole]);
+  }, [editMode, canEditDashboard, activePage, cardSettings, currentUserRole, isVisibleForRole]);
 
   const cardUtilCtx = { getCardSettingsKey, cardSettings, entities, activePage };
   const isCardRemovable = (cardId, pageId = activePage) => _isCardRemovable(cardId, pageId, cardUtilCtx);
@@ -1609,6 +1628,15 @@ function AppContent({
               savePageSetting={savePageSetting}
               formatDuration={formatDuration}
               t={t}
+            />
+          </div>
+        ) : activePage === SUPER_ADMIN_OVERVIEW_PAGE_ID && isPlatformAdmin ? (
+          <div key={activePage} className="page-transition">
+            <SuperAdminOverview
+              t={t}
+              language={language}
+              userAdminApi={userAdminApi}
+              isMobile={isMobile}
             />
           </div>
         ) : (pagesConfig[activePage] || []).filter(id => gridLayout[id]).length === 0 ? (
@@ -2287,6 +2315,7 @@ export default function App() {
     saveClientDashboard: saveServerClientDashboard,
     listClientDashboardVersions: listServerClientDashboardVersions,
     restoreClientDashboardVersion: restoreServerClientDashboardVersion,
+    fetchPlatformOverview: fetchServerPlatformOverview,
   };
 
   return (
@@ -2300,7 +2329,6 @@ export default function App() {
         onProfileUpdated={setCurrentUser}
         onSaveGlobalBranding={saveGlobalBranding}
         userAdminApi={userAdminApi}
-        haConfigHydrated={haConfigHydrated}
       />
     </HomeAssistantProvider>
   );

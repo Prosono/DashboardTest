@@ -233,6 +233,12 @@ export const listClients = async () => {
   return Array.isArray(payload?.clients) ? payload.clients : [];
 };
 
+export const fetchPlatformOverview = async (logLimit = 50) => {
+  const safeLimit = Math.max(1, Math.min(200, Number.parseInt(String(logLimit ?? ''), 10) || 50));
+  const payload = await apiRequest(`/api/clients/overview?logLimit=${safeLimit}`, { method: 'GET' });
+  return payload && typeof payload === 'object' ? payload : null;
+};
+
 export const createClient = async (clientId, name = '') => {
   const payload = await apiRequest('/api/clients', {
     method: 'POST',

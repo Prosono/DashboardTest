@@ -20,6 +20,28 @@ const parseLimit = (value, fallback = 30) => {
   if (!Number.isFinite(parsed)) return fallback;
   return Math.max(1, Math.min(200, parsed));
 };
+const getConnectionConfigStatus = (connection) => {
+  const authMethod = String(connection?.authMethod || 'oauth').trim() === 'token' ? 'token' : 'oauth';
+  const url = String(connection?.url || '').trim();
+  const token = String(connection?.token || '').trim();
+  const oauthTokens = connection?.oauthTokens && typeof connection.oauthTokens === 'object' ? connection.oauthTokens : null;
+  const hasOAuthAccessToken = Boolean(
+    String(oauthTokens?.access_token || oauthTokens?.accessToken || '').trim(),
+  );
+  const hasCredentials = authMethod === 'token' ? Boolean(token) : hasOAuthAccessToken;
+
+  if (!url) {
+    return { status: 'missing_url', ready: false, authMethod };
+  }
+  if (!hasCredentials) {
+    return {
+      status: authMethod === 'token' ? 'missing_token' : 'missing_oauth',
+      ready: false,
+      authMethod,
+    };
+  }
+  return { status: 'ready', ready: true, authMethod };
+};
 const toDashboardMeta = (row) => ({
   id: row.id,
   clientId: row.client_id,
@@ -62,6 +84,146 @@ router.get('/', (_req, res) => {
       createdAt: c.created_at,
       updatedAt: c.updated_at,
     })),
+  });
+});
+
+router.get('/overview', (req, res) => {
+  const logLimit = parseLimit(req.query?.logLimit, 50);
+  const clients = db.prepare(`
+    SELECT
+      c.id,
+      c.name,
+      c.created_at,
+      c.updated_at,
+      (SELECT COUNT(*) FROM users u WHERE u.client_id = c.id) AS user_count,
+      (SELECT COUNT(*) FROM users u WHERE u.client_id = c.id AND u.role = 'admin') AS admin_count
+    FROM clients c
+    ORDER BY c.id ASC
+  `).all();
+
+  const dashboardCountRows = db.prepare(`
+    SELECT client_id, COUNT(*) AS total
+    FROM dashboards
+    GROUP BY client_id
+  `).all();
+  const dashboardCounts = new Map(
+    dashboardCountRows.map((row) => [row.client_id, Number(row.total || 0)]),
+  );
+
+  const sessionCountRows = db.prepare(`
+    SELECT
+      COALESCE(NULLIF(s.scope_client_id, ''), u.client_id) AS client_id,
+      COUNT(*) AS total
+    FROM sessions s
+    JOIN users u ON u.id = s.user_id
+    WHERE datetime(s.expires_at) > datetime('now')
+    GROUP BY COALESCE(NULLIF(s.scope_client_id, ''), u.client_id)
+  `).all();
+  const sessionCounts = new Map(
+    sessionCountRows.map((row) => [row.client_id, Number(row.total || 0)]),
+  );
+
+  const haConfigRows = db.prepare('SELECT * FROM ha_config').all();
+  const haConfigByClient = new Map(haConfigRows.map((row) => [row.client_id, row]));
+
+  const recentVersionRows = db.prepare(`
+    SELECT
+      dv.version_id,
+      dv.client_id,
+      dv.dashboard_id,
+      dv.created_by,
+      dv.created_at,
+      dv.source_updated_at,
+      COALESCE(u.username, '') AS created_by_username
+    FROM dashboard_versions dv
+    LEFT JOIN users u ON u.id = dv.created_by
+    ORDER BY dv.created_at DESC
+    LIMIT ?
+  `).all(logLimit);
+
+  const clientOverview = clients.map((client) => {
+    const parsedConfig = parseHaConfigRow(haConfigByClient.get(client.id));
+    const primaryConnectionId = String(
+      parsedConfig?.primaryConnectionId
+      || parsedConfig?.connections?.[0]?.id
+      || 'primary',
+    ).trim() || 'primary';
+    const connections = Array.isArray(parsedConfig?.connections) ? parsedConfig.connections : [];
+    const connectionOverview = connections.map((connection) => {
+      const connectionId = String(connection?.id || 'primary').trim() || 'primary';
+      const statusMeta = getConnectionConfigStatus(connection);
+      return {
+        id: connectionId,
+        name: String(connection?.name || connectionId || 'Connection').trim() || connectionId,
+        isPrimary: connectionId === primaryConnectionId,
+        authMethod: statusMeta.authMethod,
+        status: statusMeta.status,
+        ready: statusMeta.ready,
+        hasUrl: Boolean(String(connection?.url || '').trim()),
+        hasFallbackUrl: Boolean(String(connection?.fallbackUrl || '').trim()),
+      };
+    });
+    const readyConnectionCount = connectionOverview.filter((connection) => connection.ready).length;
+    const issueConnectionCount = Math.max(0, connectionOverview.length - readyConnectionCount);
+    const dashboardCount = Number(dashboardCounts.get(client.id) || 0);
+    const activeSessionCount = Number(sessionCounts.get(client.id) || 0);
+
+    return {
+      id: client.id,
+      name: client.name,
+      createdAt: client.created_at,
+      updatedAt: client.updated_at,
+      userCount: Number(client.user_count || 0),
+      adminCount: Number(client.admin_count || 0),
+      dashboardCount,
+      activeSessionCount,
+      primaryConnectionId,
+      connectionCount: connectionOverview.length,
+      readyConnectionCount,
+      issueConnectionCount,
+      connections: connectionOverview,
+    };
+  });
+
+  const totals = clientOverview.reduce((acc, client) => ({
+    clients: acc.clients + 1,
+    users: acc.users + Number(client.userCount || 0),
+    admins: acc.admins + Number(client.adminCount || 0),
+    dashboards: acc.dashboards + Number(client.dashboardCount || 0),
+    activeSessions: acc.activeSessions + Number(client.activeSessionCount || 0),
+    connections: acc.connections + Number(client.connectionCount || 0),
+    readyConnections: acc.readyConnections + Number(client.readyConnectionCount || 0),
+    issueConnections: acc.issueConnections + Number(client.issueConnectionCount || 0),
+  }), {
+    clients: 0,
+    users: 0,
+    admins: 0,
+    dashboards: 0,
+    activeSessions: 0,
+    connections: 0,
+    readyConnections: 0,
+    issueConnections: 0,
+  });
+
+  const recentLogs = recentVersionRows.map((row) => ({
+    id: row.version_id,
+    type: 'dashboard_version',
+    clientId: row.client_id,
+    dashboardId: row.dashboard_id,
+    createdAt: row.created_at,
+    sourceUpdatedAt: row.source_updated_at || null,
+    createdBy: row.created_by || '',
+    createdByUsername: row.created_by_username || '',
+  }));
+
+  return res.json({
+    generatedAt: new Date().toISOString(),
+    totals: {
+      ...totals,
+      logs: recentLogs.length,
+    },
+    clients: clientOverview,
+    recentLogs,
   });
 });
 

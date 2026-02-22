@@ -35,3 +35,4 @@ export { EmbyLogo, JellyfinLogo, NRKLogo, getServerInfo } from './ui/CustomIcons
 // ── Pages ────────────────────────────────────────────────────────────────
 export { default as PageNavigation } from './pages/PageNavigation';
 export { default as MediaPage } from './pages/MediaPage';
+export { default as SuperAdminOverview } from './pages/SuperAdminOverview';
