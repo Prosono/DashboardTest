@@ -572,6 +572,9 @@ function AppContent({
   const mobilePullStartYRef = useRef(0);
   const mobilePullTrackingRef = useRef(false);
   const mobilePullDistanceRef = useRef(0);
+  const mobilePageSwipeTrackingRef = useRef(false);
+  const mobilePageSwipeHorizontalRef = useRef(false);
+  const mobilePageSwipeStartRef = useRef({ x: 0, y: 0 });
   const [profileState, setProfileState] = useState({
     username: '',
     fullName: '',
@@ -1038,6 +1041,98 @@ function AppContent({
       resetPullState();
     };
   }, [isMobile, mobilePullRefreshing, shouldLockMobileScroll, editMode, triggerPullRefresh, activePage, currentUser?.isPlatformAdmin]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || !isMobile) return undefined;
+    if (shouldLockMobileScroll || editMode || mobilePullRefreshing) return undefined;
+    if (!Array.isArray(visiblePageIds) || visiblePageIds.length < 2) return undefined;
+
+    const SWIPE_MIN_PX = 64;
+    const SWIPE_MAX_VERTICAL_DRIFT_PX = 56;
+    const SWIPE_DIRECTION_LOCK_PX = 14;
+
+    const resetSwipe = () => {
+      mobilePageSwipeTrackingRef.current = false;
+      mobilePageSwipeHorizontalRef.current = false;
+      mobilePageSwipeStartRef.current = { x: 0, y: 0 };
+    };
+
+    const onTouchStart = (event) => {
+      if (shouldLockMobileScroll || editMode || mobilePullRefreshing) return;
+      if (!event.touches || event.touches.length !== 1) return;
+      const target = event.target;
+      if (target && typeof target.closest === 'function') {
+        if (target.closest('[data-disable-page-swipe="true"]')) return;
+        if (target.closest('input, textarea, select, [contenteditable="true"]')) return;
+      }
+      const touch = event.touches[0];
+      mobilePageSwipeTrackingRef.current = true;
+      mobilePageSwipeHorizontalRef.current = false;
+      mobilePageSwipeStartRef.current = { x: touch.clientX, y: touch.clientY };
+    };
+
+    const onTouchMove = (event) => {
+      if (!mobilePageSwipeTrackingRef.current) return;
+      if (!event.touches || event.touches.length !== 1) {
+        resetSwipe();
+        return;
+      }
+      const touch = event.touches[0];
+      const dx = touch.clientX - mobilePageSwipeStartRef.current.x;
+      const dy = touch.clientY - mobilePageSwipeStartRef.current.y;
+      const absX = Math.abs(dx);
+      const absY = Math.abs(dy);
+
+      if (!mobilePageSwipeHorizontalRef.current && absX >= SWIPE_DIRECTION_LOCK_PX && absX > (absY * 1.2)) {
+        mobilePageSwipeHorizontalRef.current = true;
+      }
+
+      if (absY > SWIPE_MAX_VERTICAL_DRIFT_PX && absY > absX) {
+        resetSwipe();
+      }
+    };
+
+    const onTouchEnd = (event) => {
+      if (!mobilePageSwipeTrackingRef.current) return;
+      const wasHorizontal = mobilePageSwipeHorizontalRef.current;
+      const startX = mobilePageSwipeStartRef.current.x;
+      const startY = mobilePageSwipeStartRef.current.y;
+      resetSwipe();
+      if (!wasHorizontal) return;
+      if (!event.changedTouches || event.changedTouches.length !== 1) return;
+
+      const touch = event.changedTouches[0];
+      const dx = touch.clientX - startX;
+      const dy = touch.clientY - startY;
+      if (Math.abs(dx) < SWIPE_MIN_PX || Math.abs(dy) > SWIPE_MAX_VERTICAL_DRIFT_PX) return;
+
+      const currentIndex = visiblePageIds.indexOf(activePage);
+      if (currentIndex < 0) return;
+
+      const targetIndex = dx < 0
+        ? Math.min(visiblePageIds.length - 1, currentIndex + 1)
+        : Math.max(0, currentIndex - 1);
+      if (targetIndex === currentIndex) return;
+      setActivePage(visiblePageIds[targetIndex]);
+    };
+
+    const onTouchCancel = () => {
+      resetSwipe();
+    };
+
+    window.addEventListener('touchstart', onTouchStart, { passive: true });
+    window.addEventListener('touchmove', onTouchMove, { passive: true });
+    window.addEventListener('touchend', onTouchEnd, { passive: true });
+    window.addEventListener('touchcancel', onTouchCancel, { passive: true });
+
+    return () => {
+      window.removeEventListener('touchstart', onTouchStart);
+      window.removeEventListener('touchmove', onTouchMove);
+      window.removeEventListener('touchend', onTouchEnd);
+      window.removeEventListener('touchcancel', onTouchCancel);
+      resetSwipe();
+    };
+  }, [isMobile, shouldLockMobileScroll, editMode, mobilePullRefreshing, visiblePageIds, activePage, setActivePage]);
 
   const getCardSettingsKey = useCallback((cardId, pageId = activePage) => `${pageId}::${cardId}`, [activePage]);
 

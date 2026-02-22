@@ -46,7 +46,7 @@ export default function PageNavigation({
   };
 
   return (
-    <div className="flex items-center gap-4 overflow-x-auto pb-2 scrollbar-hide flex-1 min-w-0">
+    <div data-disable-page-swipe="true" className="flex items-center gap-4 overflow-x-auto pb-2 scrollbar-hide flex-1 min-w-0">
       {pages.map(page => {
         const settings = pageSettings[page.id] || {};
         const label = settings.label || page.label;
