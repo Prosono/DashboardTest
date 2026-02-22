@@ -20,6 +20,16 @@ const parseLimit = (value, fallback = 30) => {
   if (!Number.isFinite(parsed)) return fallback;
   return Math.max(1, Math.min(200, parsed));
 };
+const parseUrlHost = (value) => {
+  const raw = String(value || '').trim();
+  if (!raw) return '';
+  try {
+    const parsed = new URL(raw);
+    return parsed.host || parsed.hostname || '';
+  } catch {
+    return raw.replace(/^https?:\/\//i, '').split('/')[0] || raw;
+  }
+};
 const getConnectionConfigStatus = (connection) => {
   const authMethod = String(connection?.authMethod || 'oauth').trim() === 'token' ? 'token' : 'oauth';
   const url = String(connection?.url || '').trim();
@@ -159,8 +169,11 @@ router.get('/overview', (req, res) => {
         authMethod: statusMeta.authMethod,
         status: statusMeta.status,
         ready: statusMeta.ready,
+        urlHost: parseUrlHost(connection?.url),
+        fallbackUrlHost: parseUrlHost(connection?.fallbackUrl),
         hasUrl: Boolean(String(connection?.url || '').trim()),
         hasFallbackUrl: Boolean(String(connection?.fallbackUrl || '').trim()),
+        updatedAt: parsedConfig?.updatedAt || client.updated_at || null,
       };
     });
     const readyConnectionCount = connectionOverview.filter((connection) => connection.ready).length;
@@ -216,6 +229,26 @@ router.get('/overview', (req, res) => {
     createdByUsername: row.created_by_username || '',
   }));
 
+  const instances = clientOverview.flatMap((client) => (
+    (Array.isArray(client.connections) ? client.connections : []).map((connection) => ({
+      clientId: client.id,
+      clientName: client.name,
+      clientUpdatedAt: client.updatedAt,
+      connectionId: connection.id,
+      connectionName: connection.name,
+      isPrimary: Boolean(connection.isPrimary),
+      authMethod: connection.authMethod,
+      status: connection.status,
+      ready: Boolean(connection.ready),
+      urlHost: connection.urlHost || '',
+      fallbackUrlHost: connection.fallbackUrlHost || '',
+      hasUrl: Boolean(connection.hasUrl),
+      hasFallbackUrl: Boolean(connection.hasFallbackUrl),
+      updatedAt: connection.updatedAt || client.updatedAt || null,
+    }))
+  ));
+  const issues = instances.filter((instance) => instance.status !== 'ready');
+
   return res.json({
     generatedAt: new Date().toISOString(),
     totals: {
@@ -223,6 +256,8 @@ router.get('/overview', (req, res) => {
       logs: recentLogs.length,
     },
     clients: clientOverview,
+    instances,
+    issues,
     recentLogs,
   });
 });
