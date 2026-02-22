@@ -415,19 +415,32 @@ export default function SaunaCard({
 
       <div className="relative z-10 h-full min-h-0 flex flex-col overflow-y-auto custom-scrollbar pr-1">
         <div className="grid grid-cols-3 items-start gap-4">
-          <div className="flex items-center gap-3 min-w-0">
-            <div className={cx(
-              'w-12 h-12 rounded-full flex items-center justify-center border',
-              flameOn && isLightTheme
-                ? 'bg-orange-100 border-orange-300/80'
-                : 'bg-[var(--glass-bg-hover)] border-[var(--glass-border)]'
-            )}>
-              {flameOn ? <FlameAnimated className="w-6 h-6" isLightTheme={isLightTheme} /> : <SaunaIcon className={cx('w-6 h-6', tone.icon)} />}
+          <div className="min-w-0 space-y-2">
+            <div className="flex items-center gap-3 min-w-0">
+              <div className={cx(
+                'w-12 h-12 rounded-full flex items-center justify-center border',
+                flameOn && isLightTheme
+                  ? 'bg-orange-100 border-orange-300/80'
+                  : 'bg-[var(--glass-bg-hover)] border-[var(--glass-border)]'
+              )}>
+                {flameOn ? <FlameAnimated className="w-6 h-6" isLightTheme={isLightTheme} /> : <SaunaIcon className={cx('w-6 h-6', tone.icon)} />}
+              </div>
+              <div className="min-w-0">
+                <h3 className="text-lg font-bold text-[var(--text-primary)] truncate">{saunaName}</h3>
+              </div>
             </div>
-            <div className="min-w-0">
-              <h3 className="text-lg font-bold text-[var(--text-primary)] truncate">{saunaName}</h3>
-
-            </div>
+            {flameOn && (
+              <button
+                type="button"
+                onClick={() => openFieldModal(tr('sauna.heating', 'Varmer'), [settings?.flameEntityId])}
+                className={cx(
+                  'px-2.5 py-1 rounded-full border bg-orange-500/18 border-orange-400/25 text-[10px] uppercase tracking-widest inline-flex items-center',
+                  isLightTheme ? 'text-white font-medium' : 'text-orange-200 font-extrabold'
+                )}
+              >
+                {tr('sauna.heating', 'Varmer')}
+              </button>
+            )}
           </div>
 
           <div className="flex justify-center">
@@ -462,18 +475,15 @@ export default function SaunaCard({
               )}>
                 {imageUrl ? <img src={imageUrl} alt={saunaName} className="w-full h-full object-cover" draggable={false} /> : <div className="w-full h-full bg-gradient-to-br from-white/10 to-black/20" />}
                 <div className="absolute inset-0 rounded-full ring-1 ring-white/10" />
-                {flameOn && (
-                <button
-                  type="button"
-                  onClick={() => openFieldModal(tr('sauna.heating', 'Varmer'), [settings?.flameEntityId])}
+                <div
                   className={cx(
-                    'absolute bottom-2 left-1/2 -translate-x-1/2 px-2.5 py-1 rounded-full border bg-orange-500/18 border-orange-400/25 text-[10px] uppercase tracking-widest',
-                    isLightTheme ? 'text-white font-medium' : 'text-orange-200 font-extrabold'
+                    'absolute bottom-2 left-1/2 -translate-x-1/2 px-2.5 py-1 rounded-full border text-[10px] uppercase tracking-widest whitespace-nowrap',
+                    tone.pill,
+                    isLightTheme ? `font-semibold ${lightTonePill[primaryState.tone] || lightTonePill.muted}` : 'font-extrabold'
                   )}
                 >
-                  {tr('sauna.heating', 'Varmer')}
-                </button>
-                )}
+                  <span className="align-middle">{primaryState.label}</span>
+                </div>
               </div>
             </div>
           </div>
@@ -492,16 +502,6 @@ export default function SaunaCard({
                 {modePill.label}
               </button>
             )}
-
-            <>
-              <div className={cx(
-                'px-4 py-2 rounded-full text-[12px] uppercase tracking-widest border',
-                tone.pill,
-                isLightTheme ? `font-semibold ${lightTonePill[primaryState.tone] || lightTonePill.muted}` : 'font-extrabold'
-              )}>
-                <span className="align-middle">{primaryState.label}</span>
-              </div>
-            </>
           </div>
         </div>
 
