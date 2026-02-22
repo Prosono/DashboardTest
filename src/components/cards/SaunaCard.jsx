@@ -194,8 +194,9 @@ export default function SaunaCard({
   const isWarmByTemp = tempIsValid && currentTemp >= warmTempC;
 
   const serviceState = serviceEntity?.state ?? '';
-  const serviceYes = serviceState === 'Ja';
-  const serviceNo = serviceState === 'Nei';
+  const serviceNorm = norm(serviceState);
+  const serviceYes = ['ja', 'yes', 'on', 'true', '1', 'service', 'active'].includes(serviceNorm);
+  const serviceNo = ['nei', 'no', 'off', 'false', '0', 'inactive'].includes(serviceNorm);
   const nextMinutes = toNum(nextBookingEntity?.state);
   const hasNext = nextMinutes != null && nextMinutes >= 0;
   const preheatOn = isOn(preheatWindowEntity?.state);
@@ -431,18 +432,28 @@ export default function SaunaCard({
 
           <div className="flex justify-center">
             <div className="relative w-40 h-40">
-              {settings?.peopleNowEntityId && (
+              {(settings?.peopleNowEntityId || (serviceYes && settings?.serviceEntityId)) && (
                 <button
                   type="button"
-                  onClick={() => openFieldModal(tr('sauna.peopleNow', 'Antall folk nå'), [settings?.peopleNowEntityId], { fieldType: 'number' })}
+                  onClick={() => {
+                    if (serviceYes && settings?.serviceEntityId) {
+                      openFieldModal(tr('sauna.service', 'Service'), [settings?.serviceEntityId]);
+                      return;
+                    }
+                    openFieldModal(tr('sauna.peopleNow', 'Antall folk nå'), [settings?.peopleNowEntityId], { fieldType: 'number' });
+                  }}
                   className={cx(
                     'absolute top-0 left-1/2 -translate-x-1/2 min-w-[2.7rem] h-10 px-3 rounded-full border flex items-center justify-center text-2xl font-extrabold z-20 shadow-lg',
-                    isLightTheme
-                      ? 'border-slate-300/70 bg-white text-slate-800 shadow-slate-300/40'
-                      : 'border-emerald-400/25 bg-emerald-500/20 text-emerald-100 shadow-emerald-900/30'
+                    serviceYes
+                      ? (isLightTheme
+                        ? 'border-amber-400/80 bg-amber-100 text-amber-700 shadow-amber-300/40'
+                        : 'border-amber-400/40 bg-amber-500/25 text-amber-100 shadow-amber-900/40')
+                      : (isLightTheme
+                        ? 'border-slate-300/70 bg-white text-slate-800 shadow-slate-300/40'
+                        : 'border-emerald-400/25 bg-emerald-500/20 text-emerald-100 shadow-emerald-900/30')
                   )}
                 >
-                  {peopleNow}
+                  {serviceYes ? <Wrench className="w-5 h-5" /> : peopleNow}
                 </button>
               )}
               <div className={cx(
