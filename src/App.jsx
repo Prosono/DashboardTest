@@ -1515,19 +1515,17 @@ function AppContent({
         >
           <div
             ref={navRowRef}
-            className={`${isMobile ? 'flex flex-col items-center gap-1.5' : 'flex flex-nowrap items-center justify-between gap-4'} ${navStickyOnScrollDown ? 'z-30 transition-all duration-200' : ''}`}
+            className={`${isMobile ? 'flex flex-col items-center gap-1.5' : 'flex flex-nowrap items-center justify-between gap-4'} z-30 transition-all duration-200`}
             style={{
-              ...(navStickyOnScrollDown
-                ? {
-                  position: 'sticky',
-                  top: `${navPinTopPx}px`,
-                  alignSelf: 'stretch',
-                  borderRadius: isMobile ? '1rem' : '1.2rem',
-                  backgroundColor: 'color-mix(in srgb, var(--card-bg) 88%, transparent)',
-                  backdropFilter: 'blur(10px)',
-                  padding: isMobile ? '0.3rem 0.4rem 0.2rem' : '0.35rem 0.6rem',
-                }
-                : {}),
+              position: 'sticky',
+              top: `${navPinTopPx}px`,
+              alignSelf: 'stretch',
+              borderRadius: isMobile ? '1rem' : '1.2rem',
+              backgroundColor: navStickyOnScrollDown
+                ? 'color-mix(in srgb, var(--card-bg) 88%, transparent)'
+                : 'transparent',
+              backdropFilter: navStickyOnScrollDown ? 'blur(10px)' : 'none',
+              padding: isMobile ? '0.3rem 0.4rem 0.2rem' : '0.35rem 0.6rem',
             }}
           >
             <div className={`${isMobile ? 'w-full' : 'flex-1 min-w-0'}`}>
