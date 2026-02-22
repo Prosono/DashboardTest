@@ -300,6 +300,12 @@ export default function SaunaCard({
     danger: 'bg-rose-100 border-rose-400 text-rose-900',
     muted: 'bg-white/80 border-slate-300 text-slate-700',
   };
+  const statusPillClass = isLightTheme
+    ? (lightTonePill[primaryState.tone] || lightTonePill.muted)
+    : tone.pill;
+  const heatingPillClass = isLightTheme
+    ? 'bg-orange-100/95 border-orange-500/65 text-orange-900 shadow-[0_6px_14px_rgba(15,23,42,0.18)] backdrop-blur-sm'
+    : 'bg-orange-500/18 border-orange-400/25 text-orange-200';
 
   const primaryState = (() => {
     if (saunaIsActive && serviceYes) return { label: tr('sauna.service', 'Service'), desc: tr('sauna.serviceOngoing', 'Pågår nå'), tone: 'warn' };
@@ -431,8 +437,9 @@ export default function SaunaCard({
                 type="button"
                 onClick={() => openFieldModal(tr('sauna.heating', 'Varmer'), [settings?.flameEntityId])}
                 className={cx(
-                  'px-2.5 py-1 rounded-full border bg-orange-500/18 border-orange-400/25 text-[10px] uppercase tracking-widest inline-flex items-center',
-                  isLightTheme ? 'text-white font-medium' : 'text-orange-200 font-extrabold'
+                  'px-2.5 py-1 rounded-full border text-[10px] uppercase tracking-widest inline-flex items-center',
+                  heatingPillClass,
+                  isLightTheme ? 'font-semibold' : 'font-extrabold'
                 )}
               >
                 {tr('sauna.heating', 'Varmer')}
@@ -474,9 +481,9 @@ export default function SaunaCard({
                 <div className="absolute inset-0 rounded-full ring-1 ring-white/10" />
                 <div
                   className={cx(
-                    'absolute bottom-2 left-1/2 -translate-x-1/2 px-2.5 py-1 rounded-full border text-[10px] uppercase tracking-widest whitespace-nowrap',
-                    tone.pill,
-                    isLightTheme ? `font-semibold ${lightTonePill[primaryState.tone] || lightTonePill.muted}` : 'font-extrabold'
+                    'absolute bottom-2 left-1/2 -translate-x-1/2 px-2.5 py-1 rounded-full border text-[10px] uppercase tracking-widest whitespace-nowrap backdrop-blur-sm shadow-[0_8px_16px_rgba(0,0,0,0.24)]',
+                    statusPillClass,
+                    isLightTheme ? 'font-semibold' : 'font-extrabold'
                   )}
                 >
                   <span className="align-middle">{primaryState.label}</span>
