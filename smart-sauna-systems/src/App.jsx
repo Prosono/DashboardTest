@@ -521,6 +521,8 @@ function AppContent({
   const dashboardDirtyReadyRef = useRef(false);
   const quickSaveBusyRef = useRef(false);
   const snapshotPersistTimerRef = useRef(0);
+  const latestSaveGlobalDashboardRef = useRef(saveGlobalDashboard);
+  const latestAssignedDashboardRef = useRef(String(currentUser?.assignedDashboardId || 'default'));
   const callService = useCallback((domain, service, payload, target) => {
     if (!canControlDevices) return false;
     return rawCallService(domain, service, payload, target);
@@ -596,6 +598,14 @@ function AppContent({
   }, [currentUser?.id, currentUser?.assignedDashboardId, loadGlobalDashboard]);
 
   useEffect(() => {
+    latestSaveGlobalDashboardRef.current = saveGlobalDashboard;
+  }, [saveGlobalDashboard]);
+
+  useEffect(() => {
+    latestAssignedDashboardRef.current = String(currentUser?.assignedDashboardId || 'default');
+  }, [currentUser?.assignedDashboardId]);
+
+  useEffect(() => {
     if (!isAdminUser) {
       dashboardDirtyReadyRef.current = false;
       setDashboardDirty(false);
@@ -628,14 +638,16 @@ function AppContent({
   const quickSaveDashboard = useCallback(async () => {
     if (!isAdminUser || quickSaveBusyRef.current) return;
     quickSaveBusyRef.current = true;
-    const target = String(currentUser?.assignedDashboardId || 'default');
+    const target = latestAssignedDashboardRef.current || 'default';
     try {
-      const ok = await saveGlobalDashboard(target);
+      const saveFn = latestSaveGlobalDashboardRef.current;
+      if (typeof saveFn !== 'function') return;
+      const ok = await saveFn(target);
       if (ok) setDashboardDirty(false);
     } finally {
       quickSaveBusyRef.current = false;
     }
-  }, [isAdminUser, currentUser?.assignedDashboardId, saveGlobalDashboard]);
+  }, [isAdminUser]);
 
   const scheduleSnapshotPersist = useCallback(() => {
     if (!isAdminUser || typeof window === 'undefined') return;

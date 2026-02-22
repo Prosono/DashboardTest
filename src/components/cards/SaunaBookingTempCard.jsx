@@ -74,6 +74,13 @@ const normalizeSnapshots = (rawValue) => {
     .sort((a, b) => a.timestampMs - b.timestampMs);
 };
 
+const normalizeIgnoredHours = (rawValue) => {
+  if (!Array.isArray(rawValue)) return [];
+  return rawValue
+    .map((value) => String(value || '').trim())
+    .filter(Boolean);
+};
+
 const serializeSnapshots = (snapshots) => snapshots.map((entry) => ({
   id: entry.id,
   timestamp: entry.timestamp,
@@ -187,9 +194,24 @@ export default function SaunaBookingTempCard({
   const removeSnapshot = (entryId) => {
     if (!settingsKey || typeof saveCardSetting !== 'function') return;
     const currentSnapshots = normalizeSnapshots(settings?.bookingSnapshots);
+    const removedEntries = currentSnapshots.filter((entry) => entry.id === entryId);
     const filtered = currentSnapshots.filter((entry) => entry.id !== entryId);
     if (filtered.length === currentSnapshots.length) return;
     saveCardSetting(settingsKey, 'bookingSnapshots', serializeSnapshots(filtered));
+    if (removedEntries.length > 0) {
+      const removedHourKeys = removedEntries
+        .map((entry) => entry.hourKey)
+        .filter(Boolean);
+      if (removedHourKeys.length > 0) {
+        const existingIgnoredHours = normalizeIgnoredHours(settings?.ignoredSnapshotHours);
+        const nextIgnoredHours = Array.from(new Set([...existingIgnoredHours, ...removedHourKeys])).slice(-500);
+        saveCardSetting(settingsKey, 'ignoredSnapshotHours', nextIgnoredHours);
+      }
+      const latestRemovedHourKey = removedEntries[removedEntries.length - 1]?.hourKey;
+      if (latestRemovedHourKey) {
+        lastLoggedHourRef.current = latestRemovedHourKey;
+      }
+    }
     setHistoryModal((prev) => {
       if (!prev) return prev;
       return {
@@ -213,6 +235,11 @@ export default function SaunaBookingTempCard({
       const nowMs = now.getTime();
       const hourKey = toHourKey(nowMs);
       if (lastLoggedHourRef.current === hourKey) return;
+      const ignoredSnapshotHours = normalizeIgnoredHours(settings?.ignoredSnapshotHours);
+      if (ignoredSnapshotHours.includes(hourKey)) {
+        lastLoggedHourRef.current = hourKey;
+        return;
+      }
 
       const existing = normalizeSnapshots(settings?.bookingSnapshots);
       if (existing.some((entry) => entry.hourKey === hourKey)) {
@@ -252,6 +279,7 @@ export default function SaunaBookingTempCard({
     serviceEntity?.state,
     activeEntity?.state,
     settings?.bookingSnapshots,
+    settings?.ignoredSnapshotHours,
     keepDays,
     maxEntries,
     editMode,
