@@ -76,6 +76,7 @@ const toMetricSnapshot = (payload) => {
     totals: {
       clients: Number(totals.clients || 0),
       users: Number(totals.users || 0),
+      loggedInUsers: Number(totals.loggedInUsers || 0),
       connections: Number(totals.connections || 0),
       readyConnections: Number(totals.readyConnections || 0),
       issueConnections: Number(totals.issueConnections || 0),
@@ -303,6 +304,13 @@ export default function SuperAdminOverview({
       tone: 'neutral',
     },
     {
+      key: 'loggedInUsers',
+      icon: Shield,
+      label: t('superAdminOverview.stats.loggedInUsers'),
+      value: totals.loggedInUsers || 0,
+      tone: 'good',
+    },
+    {
       key: 'connections',
       icon: Wifi,
       label: t('superAdminOverview.stats.connections'),
@@ -382,6 +390,16 @@ export default function SuperAdminOverview({
             date: client.updatedAt,
           }))
           .sort((a, b) => Number(b.value || 0) - Number(a.value || 0));
+      case 'loggedInUsers':
+        return clients
+          .map((client) => ({
+            id: client.id,
+            title: client.name || client.id,
+            subtitle: `${t('superAdminOverview.client.id')}: ${client.id}`,
+            value: `${formatNumber(client.loggedInUserCount || 0)}`,
+            date: client.updatedAt,
+          }))
+          .sort((a, b) => Number(b.value || 0) - Number(a.value || 0));
       case 'connections':
         return instances.map((instance) => ({
           id: `${instance.clientId}:${instance.connectionId}`,
@@ -445,7 +463,7 @@ export default function SuperAdminOverview({
   }, [activeKpiKey, clients, instances, issues, recentLogs, t]);
 
   return (
-    <div className="page-transition flex flex-col gap-4 md:gap-6 font-sans">
+    <div className="page-transition flex flex-col gap-4 md:gap-6 font-sans" data-disable-pull-refresh="true">
       <section className="popup-surface rounded-3xl p-4 md:p-6 border border-[var(--glass-border)]">
         <div className={`flex ${isMobile ? 'flex-col gap-3' : 'items-start justify-between gap-4'}`}>
           <div>
@@ -614,7 +632,7 @@ export default function SuperAdminOverview({
                         </div>
                       </div>
 
-                      <div className="mt-3 grid grid-cols-2 md:grid-cols-4 gap-2">
+                      <div className="mt-3 grid grid-cols-2 md:grid-cols-5 gap-2">
                         <div className="rounded-xl border border-[var(--glass-border)] bg-[var(--card-bg)] px-2.5 py-2">
                           <p className="text-[10px] uppercase tracking-[0.16em] text-[var(--text-muted)]">{t('superAdminOverview.client.users')}</p>
                           <p className="text-base font-semibold text-[var(--text-primary)]">{formatNumber(client.userCount)}</p>
@@ -630,6 +648,10 @@ export default function SuperAdminOverview({
                         <div className="rounded-xl border border-[var(--glass-border)] bg-[var(--card-bg)] px-2.5 py-2">
                           <p className="text-[10px] uppercase tracking-[0.16em] text-[var(--text-muted)]">{t('superAdminOverview.client.sessions')}</p>
                           <p className="text-base font-semibold text-[var(--text-primary)]">{formatNumber(client.activeSessionCount)}</p>
+                        </div>
+                        <div className="rounded-xl border border-[var(--glass-border)] bg-[var(--card-bg)] px-2.5 py-2">
+                          <p className="text-[10px] uppercase tracking-[0.16em] text-[var(--text-muted)]">{t('superAdminOverview.client.loggedInUsers')}</p>
+                          <p className="text-base font-semibold text-[var(--text-primary)]">{formatNumber(client.loggedInUserCount)}</p>
                         </div>
                       </div>
                     </article>

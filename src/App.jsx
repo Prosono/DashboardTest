@@ -961,6 +961,7 @@ function AppContent({
     };
 
     const onTouchStart = (event) => {
+      if (currentUser?.isPlatformAdmin || activePage === SUPER_ADMIN_OVERVIEW_PAGE_ID) return;
       if (mobilePullRefreshing || shouldLockMobileScroll || editMode) return;
       const startTarget = event.target;
       if (startTarget && typeof startTarget.closest === 'function' && startTarget.closest('[data-disable-pull-refresh="true"]')) return;
@@ -1028,7 +1029,7 @@ function AppContent({
       window.removeEventListener('touchcancel', onTouchCancel);
       resetPullState();
     };
-  }, [isMobile, mobilePullRefreshing, shouldLockMobileScroll, editMode, triggerPullRefresh]);
+  }, [isMobile, mobilePullRefreshing, shouldLockMobileScroll, editMode, triggerPullRefresh, activePage, currentUser?.isPlatformAdmin]);
 
   const getCardSettingsKey = useCallback((cardId, pageId = activePage) => `${pageId}::${cardId}`, [activePage]);
 

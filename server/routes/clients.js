@@ -132,6 +132,18 @@ router.get('/overview', (req, res) => {
   const sessionCounts = new Map(
     sessionCountRows.map((row) => [row.client_id, Number(row.total || 0)]),
   );
+  const loggedInUserCountRows = db.prepare(`
+    SELECT
+      COALESCE(NULLIF(s.scope_client_id, ''), u.client_id) AS client_id,
+      COUNT(DISTINCT s.user_id) AS total
+    FROM sessions s
+    JOIN users u ON u.id = s.user_id
+    WHERE datetime(s.expires_at) > datetime('now')
+    GROUP BY COALESCE(NULLIF(s.scope_client_id, ''), u.client_id)
+  `).all();
+  const loggedInUserCounts = new Map(
+    loggedInUserCountRows.map((row) => [row.client_id, Number(row.total || 0)]),
+  );
 
   const haConfigRows = db.prepare('SELECT * FROM ha_config').all();
   const haConfigByClient = new Map(haConfigRows.map((row) => [row.client_id, row]));
@@ -180,6 +192,7 @@ router.get('/overview', (req, res) => {
     const issueConnectionCount = Math.max(0, connectionOverview.length - readyConnectionCount);
     const dashboardCount = Number(dashboardCounts.get(client.id) || 0);
     const activeSessionCount = Number(sessionCounts.get(client.id) || 0);
+    const loggedInUserCount = Number(loggedInUserCounts.get(client.id) || 0);
 
     return {
       id: client.id,
@@ -190,6 +203,7 @@ router.get('/overview', (req, res) => {
       adminCount: Number(client.admin_count || 0),
       dashboardCount,
       activeSessionCount,
+      loggedInUserCount,
       primaryConnectionId,
       connectionCount: connectionOverview.length,
       readyConnectionCount,
@@ -204,6 +218,7 @@ router.get('/overview', (req, res) => {
     admins: acc.admins + Number(client.adminCount || 0),
     dashboards: acc.dashboards + Number(client.dashboardCount || 0),
     activeSessions: acc.activeSessions + Number(client.activeSessionCount || 0),
+    loggedInUsers: acc.loggedInUsers + Number(client.loggedInUserCount || 0),
     connections: acc.connections + Number(client.connectionCount || 0),
     readyConnections: acc.readyConnections + Number(client.readyConnectionCount || 0),
     issueConnections: acc.issueConnections + Number(client.issueConnectionCount || 0),
@@ -213,6 +228,7 @@ router.get('/overview', (req, res) => {
     admins: 0,
     dashboards: 0,
     activeSessions: 0,
+    loggedInUsers: 0,
     connections: 0,
     readyConnections: 0,
     issueConnections: 0,
