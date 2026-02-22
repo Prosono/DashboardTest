@@ -410,6 +410,26 @@ export default function SaunaCard({
       overlayEntities,
     });
   };
+  const openTemperatureGraph = () => {
+    if (editMode) return;
+    if (canOpenStatusGraph) {
+      openStatusGraphModal();
+      return;
+    }
+    if (statusGraphEntityId) {
+      openFieldModal(tr('sauna.currentTempNow', 'Temp i badstuen nå'), [statusGraphEntityId]);
+    }
+  };
+  const openPreheatQuickAction = () => {
+    if (editMode) return;
+    if (canOpenStatusGraph || statusGraphEntityId) {
+      openTemperatureGraph();
+      return;
+    }
+    if (settings?.preheatMinutesEntityId) {
+      openFieldModal(tr('sauna.preheatTime', 'Oppvarmingstid'), [settings.preheatMinutesEntityId]);
+    }
+  };
 
   const modePill = {
     label: autoModeOn ? tr('sauna.autoMode', 'Auto') : tr('sauna.manualMode', 'Manuell'),
@@ -718,19 +738,29 @@ export default function SaunaCard({
 
 
         <div className="mt-4 grid grid-cols-3 gap-4 items-end">
-          <div className="col-span-2 px-3 py-3 relative overflow-hidden">
+          <button
+            type="button"
+            onClick={openTemperatureGraph}
+            className={cx(
+              'col-span-2 px-3 py-3 relative overflow-hidden text-left',
+              !editMode ? 'cursor-pointer active:scale-[0.99]' : 'cursor-default'
+            )}
+          >
             <div className="mt-2 text-[10px] uppercase tracking-widest font-bold text-[var(--text-secondary)]">{tr('sauna.currentTempNow', 'Temp i badstuen nå')}</div>
             <div className="mt-4 flex items-end gap-2 relative">
               <Thermometer className="w-4 h-4 text-[var(--text-secondary)] mb-1" />
               <span className="text-5xl font-semibold leading-none tabular-nums text-[var(--text-primary)]">{tempIsValid ? currentTemp.toFixed(1) : '--'}</span>
               <span className="text-2xl text-[var(--text-secondary)] mb-1">°C</span>
             </div>
-          </div>
+          </button>
 
           <button
             type="button"
-            onClick={() => openFieldModal(tr('sauna.preheatTime', 'Oppvarmingstid'), [settings?.preheatMinutesEntityId])}
-            className="col-span-1 text-right px-3 py-3 relative overflow-hidden"
+            onClick={openPreheatQuickAction}
+            className={cx(
+              'col-span-1 text-right px-3 py-3 relative overflow-hidden',
+              !editMode ? 'cursor-pointer active:scale-[0.99]' : 'cursor-default'
+            )}
           >
             <div className="mt-8 text-[10px] uppercase tracking-widest font-bold text-[var(--text-secondary)]">{tr('sauna.preheatTime', 'Oppvarmingstid')}</div>
             <div className="text-3xl font-bold text-[var(--text-primary)] leading-tight">{preheatMinutes != null ? `${Math.round(preheatMinutes)}` : '--'}</div>
