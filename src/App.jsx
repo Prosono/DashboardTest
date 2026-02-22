@@ -928,14 +928,22 @@ function AppContent({
 
   const triggerPullRefresh = useCallback(() => {
     if (mobilePullRefreshing || typeof window === 'undefined') return;
+    if (currentUser?.isPlatformAdmin || activePage === SUPER_ADMIN_OVERVIEW_PAGE_ID) return;
     setMobilePullRefreshing(true);
     window.setTimeout(() => {
       window.location.reload();
     }, 220);
-  }, [mobilePullRefreshing]);
+  }, [mobilePullRefreshing, currentUser?.isPlatformAdmin, activePage]);
 
   useEffect(() => {
     if (typeof window === 'undefined' || !isMobile) return undefined;
+    if (currentUser?.isPlatformAdmin || activePage === SUPER_ADMIN_OVERVIEW_PAGE_ID) {
+      mobilePullTrackingRef.current = false;
+      mobilePullDistanceRef.current = 0;
+      setMobilePullDistance(0);
+      if (mobilePullRefreshing) setMobilePullRefreshing(false);
+      return undefined;
+    }
 
     const PULL_REFRESH_TRIGGER_PX = 68;
     const PULL_REFRESH_MAX_PX = 110;
