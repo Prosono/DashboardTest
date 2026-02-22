@@ -6,6 +6,7 @@ import SparkLine from '../charts/SparkLine';
 const asArray = (v) => (Array.isArray(v) ? v.filter(Boolean) : []);
 const norm = (s) => String(s ?? '').toLowerCase();
 const STATUS_GRAPH_WINDOW_MS = 12 * 60 * 60 * 1000;
+const OVERLAY_HOUR_BUCKET_MS = 60 * 60 * 1000;
 
 const isOn = (state) => ['on', 'true', '1', 'yes'].includes(norm(state));
 const isOnish = (state) => ['on', 'open', 'unlocked', 'heat', 'heating', 'true', '1', 'yes'].includes(norm(state));
@@ -165,7 +166,28 @@ function extractStateSeries(raw, activeStates = []) {
     .sort((a, b) => a.t - b.t);
 }
 
-function buildOverlaySegments(stateSeries, startMs, endMs) {
+function normalizeIntervalsToHourlyBuckets(intervals, startMs, endMs) {
+  if (!Array.isArray(intervals) || intervals.length === 0) return [];
+  if (!Number.isFinite(startMs) || !Number.isFinite(endMs) || endMs <= startMs) return [];
+
+  const buckets = [];
+  let bucketStart = Math.floor(startMs / OVERLAY_HOUR_BUCKET_MS) * OVERLAY_HOUR_BUCKET_MS;
+  if (!Number.isFinite(bucketStart)) return [];
+
+  for (; bucketStart < endMs; bucketStart += OVERLAY_HOUR_BUCKET_MS) {
+    const bucketEnd = bucketStart + OVERLAY_HOUR_BUCKET_MS;
+    const clampedStart = Math.max(startMs, bucketStart);
+    const clampedEnd = Math.min(endMs, bucketEnd);
+    if (clampedEnd <= clampedStart) continue;
+    const hasActivity = intervals.some((segment) => segment.end > clampedStart && segment.start < clampedEnd);
+    if (!hasActivity) continue;
+    buckets.push({ start: clampedStart, end: clampedEnd });
+  }
+
+  return buckets;
+}
+
+function buildOverlaySegments(stateSeries, startMs, endMs, { normalizeHourly = false } = {}) {
   if (!Array.isArray(stateSeries) || stateSeries.length === 0) return [];
   if (!Number.isFinite(startMs) || !Number.isFinite(endMs) || endMs <= startMs) return [];
 
@@ -204,8 +226,12 @@ function buildOverlaySegments(stateSeries, startMs, endMs) {
     rawSegments.push({ start: cursor, end: endMs });
   }
 
+  const normalizedSegments = normalizeHourly
+    ? normalizeIntervalsToHourlyBuckets(rawSegments, startMs, endMs)
+    : rawSegments;
+
   const span = endMs - startMs;
-  return rawSegments
+  return normalizedSegments
     .map((segment) => {
       const start = Math.max(startMs, Math.min(segment.start, endMs));
       const end = Math.max(startMs, Math.min(segment.end, endMs));
@@ -348,7 +374,7 @@ export default function SaunaCard({
     const end = statusWindow.end;
     if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start) return [];
 
-    const bookingSegments = buildOverlaySegments(bookingStateSeries, start, end)
+    const bookingSegments = buildOverlaySegments(bookingStateSeries, start, end, { normalizeHourly: true })
       .map((segment, index) => ({
         id: `booking-${index}`,
         ...segment,
@@ -356,7 +382,7 @@ export default function SaunaCard({
           ? 'bg-sky-500/16 border border-sky-600/25'
           : 'bg-sky-400/12 border border-sky-300/20',
       }));
-    const serviceSegments = buildOverlaySegments(serviceStateSeries, start, end)
+    const serviceSegments = buildOverlaySegments(serviceStateSeries, start, end, { normalizeHourly: true })
       .map((segment, index) => ({
         id: `service-${index}`,
         ...segment,
