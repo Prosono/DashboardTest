@@ -188,9 +188,7 @@ export default function SaunaCard({
   const activeThermostats = countOn(thermostatIds, entities);
   const autoLockOn = isOn(autoLockEntity?.state);
 
-  const inUseTempC = Number.isFinite(Number(settings?.inUseTempC)) ? Number(settings.inUseTempC) : 45;
   const warmTempC = Number.isFinite(Number(settings?.warmTempC)) ? Number(settings.warmTempC) : 35;
-  const isInUseByTemp = tempIsValid && currentTemp >= inUseTempC;
   const isWarmByTemp = tempIsValid && currentTemp >= warmTempC;
 
   const serviceState = serviceEntity?.state ?? '';
@@ -307,7 +305,6 @@ export default function SaunaCard({
     if (saunaIsActive && serviceYes) return { label: tr('sauna.service', 'Service'), desc: tr('sauna.serviceOngoing', 'Pågår nå'), tone: 'warn' };
     if (saunaIsActive) return { label: tr('sauna.active', 'Aktiv'), desc: tr('sauna.bookingNow', 'Pågående økt'), tone: 'ok' };
     if (preheatOn) return { label: tr('sauna.preheat', 'Forvarmer'), desc: hasNext ? `${tr('sauna.next', 'Neste')}: ${Math.round(nextMinutes)}m` : tr('sauna.beforeBooking', 'Før booking'), tone: 'warm' };
-    if (isInUseByTemp) return { label: tr('sauna.inUse', 'I bruk'), desc: tr('sauna.hotCabin', 'Varm badstue'), tone: 'ok' };
     if (isWarmByTemp) return { label: tr('sauna.warm', 'Varm'), desc: tr('sauna.readySoon', 'Snart klar'), tone: 'warm' };
     if (thermostatOn) return { label: tr('common.on', 'På'), desc: tr('sauna.standby', 'Standby'), tone: 'info' };
     return { label: tr('common.off', 'Av'), desc: hasNext ? `${tr('sauna.next', 'Neste')}: ${Math.round(nextMinutes)}m` : tr('sauna.inactive', 'Inaktiv'), tone: 'muted' };
@@ -612,7 +609,7 @@ export default function SaunaCard({
 
         {settings?.showThresholdHint && (
           <div className="mt-3 text-[11px] text-[var(--text-secondary)]">
-            {`${tr('sauna.inUse', 'I bruk')} ≥ ${inUseTempC}°C · ${tr('sauna.warm', 'Varm')} ≥ ${warmTempC}°C`}
+            {`${tr('sauna.warm', 'Varm')} ≥ ${warmTempC}°C`}
           </div>
         )}
       </div>
