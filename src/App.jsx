@@ -188,12 +188,12 @@ function AppContent({
     'system.tabLayout': 'Oppsett'
   }), []);
 
-  const t = (key) => {
+  const t = useCallback((key) => {
     const value = translations[language]?.[key] ?? translations.nn[key];
     if (value !== undefined) return value;
     if ((language === 'nn' || language === 'nb') && nnFallback[key]) return nnFallback[key];
     return key;
-  };
+  }, [translations, language, nnFallback]);
   const normalizeRole = useCallback((role) => {
     const value = String(role || '').trim().toLowerCase();
     if (
