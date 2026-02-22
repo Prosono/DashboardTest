@@ -1503,10 +1503,7 @@ export default function EditCardModal({
                 </div>
                 <button
                   type="button"
-                  onClick={() => {
-                    saveCardSetting(editSettingsKey, 'bookingSnapshots', []);
-                    saveCardSetting(editSettingsKey, 'bookingSnapshotsUpdatedAt', Date.now());
-                  }}
+                  onClick={() => saveCardSetting(editSettingsKey, 'bookingSnapshots', [])}
                   className="w-full px-3 py-2 rounded-xl border border-red-400/35 bg-red-500/10 text-red-300 text-xs font-bold uppercase tracking-widest hover:bg-red-500/15 transition-colors"
                 >
                   {translateText('sauna.bookingTemp.clearHistory', 'Clear stored history')}

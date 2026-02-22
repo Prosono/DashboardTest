@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { AlertTriangle, Clock, Flame, Thermometer, TrendingUp, Wrench, X, Trash2 } from '../../icons';
 import { getIconComponent } from '../../icons';
 import SparkLine from '../charts/SparkLine';
@@ -184,20 +184,12 @@ export default function SaunaBookingTempCard({
     setHistoryModal(payload);
   };
 
-  const persistSnapshots = useCallback((nextSnapshots) => {
-    if (!settingsKey || typeof saveCardSetting !== 'function') return;
-    const safeSnapshots = Array.isArray(nextSnapshots) ? nextSnapshots : [];
-    const updatedAt = Date.now();
-    saveCardSetting(settingsKey, 'bookingSnapshots', serializeSnapshots(safeSnapshots));
-    saveCardSetting(settingsKey, 'bookingSnapshotsUpdatedAt', updatedAt);
-  }, [settingsKey, saveCardSetting]);
-
   const removeSnapshot = (entryId) => {
     if (!settingsKey || typeof saveCardSetting !== 'function') return;
     const currentSnapshots = normalizeSnapshots(settings?.bookingSnapshots);
     const filtered = currentSnapshots.filter((entry) => entry.id !== entryId);
     if (filtered.length === currentSnapshots.length) return;
-    persistSnapshots(filtered);
+    saveCardSetting(settingsKey, 'bookingSnapshots', serializeSnapshots(filtered));
     setHistoryModal((prev) => {
       if (!prev) return prev;
       return {
@@ -245,7 +237,7 @@ export default function SaunaBookingTempCard({
 
       const retained = existing.filter((entry) => entry.timestampMs >= keepCutoff);
       const trimmed = [...retained, nextEntry].slice(-maxEntries);
-      persistSnapshots(trimmed);
+      saveCardSetting(settingsKey, 'bookingSnapshots', serializeSnapshots(trimmed));
       lastLoggedHourRef.current = hourKey;
     };
 
@@ -265,7 +257,6 @@ export default function SaunaBookingTempCard({
     editMode,
     settingsKey,
     saveCardSetting,
-    persistSnapshots,
   ]);
 
   const nowMs = Date.now();

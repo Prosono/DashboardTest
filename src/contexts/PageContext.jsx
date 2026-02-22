@@ -136,58 +136,6 @@ function normalizeDashboardState(raw) {
   };
 }
 
-const getBookingSnapshotVersion = (setting) => {
-  const parsed = Number(setting?.bookingSnapshotsUpdatedAt);
-  return Number.isFinite(parsed) && parsed > 0 ? parsed : 0;
-};
-
-const hasBookingSnapshotData = (setting) => Array.isArray(setting?.bookingSnapshots);
-
-function mergeCardSettingsByBookingSnapshots(remoteCardSettings, localCardSettings) {
-  const remote = remoteCardSettings && typeof remoteCardSettings === 'object' ? remoteCardSettings : {};
-  const local = localCardSettings && typeof localCardSettings === 'object' ? localCardSettings : {};
-  if (!Object.keys(local).length) return remote;
-
-  const merged = { ...remote };
-  const keys = new Set([...Object.keys(remote), ...Object.keys(local)]);
-  keys.forEach((key) => {
-    const localEntry = local[key];
-    if (!localEntry || typeof localEntry !== 'object') return;
-
-    const remoteEntry = remote[key];
-    if (!remoteEntry || typeof remoteEntry !== 'object') {
-      if (hasBookingSnapshotData(localEntry)) {
-        merged[key] = { ...localEntry };
-      }
-      return;
-    }
-
-    const localVersion = getBookingSnapshotVersion(localEntry);
-    const remoteVersion = getBookingSnapshotVersion(remoteEntry);
-    if (localVersion === 0 && remoteVersion === 0) return;
-
-    if (localVersion > remoteVersion) {
-      merged[key] = {
-        ...remoteEntry,
-        bookingSnapshots: hasBookingSnapshotData(localEntry) ? localEntry.bookingSnapshots : [],
-        bookingSnapshotsUpdatedAt: localVersion,
-      };
-    }
-  });
-
-  return merged;
-}
-
-function mergeDashboardStateWithLocalSnapshots(remoteState, localState) {
-  if (!remoteState || typeof remoteState !== 'object') return remoteState;
-  if (!localState || typeof localState !== 'object') return remoteState;
-
-  return {
-    ...remoteState,
-    cardSettings: mergeCardSettingsByBookingSnapshots(remoteState.cardSettings, localState.cardSettings),
-  };
-}
-
 function loadLegacyLocalStorageState() {
   const state = getDefaultDashboardState();
   state.pagesConfig = normalizePagesConfig(readJSON('tunet_pages_config', null));
@@ -405,9 +353,7 @@ export const PageProvider = ({ children }) => {
       try {
         const remoteData = await fetchSharedDashboard();
         if (!cancelled && remoteData) {
-          const localSnapshot = getDashboardStateSnapshot();
-          const mergedRemoteData = mergeDashboardStateWithLocalSnapshots(remoteData, localSnapshot);
-          applyDashboardState(mergedRemoteData);
+          applyDashboardState(remoteData);
         }
       } catch (error) {
         console.warn('Failed to load shared dashboard config on startup. Using cache/local fallback.', error);
@@ -421,7 +367,7 @@ export const PageProvider = ({ children }) => {
     return () => {
       cancelled = true;
     };
-  }, [applyDashboardState, getDashboardStateSnapshot, refreshGlobalDashboards]);
+  }, [applyDashboardState, refreshGlobalDashboards]);
 
   useEffect(() => {
     writeCachedDashboard({
