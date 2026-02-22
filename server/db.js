@@ -86,6 +86,30 @@ const ensureDashboardsTable = () => {
   }
 };
 
+const ensureDashboardVersionsTable = () => {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS dashboard_versions (
+      version_id TEXT PRIMARY KEY,
+      client_id TEXT NOT NULL,
+      dashboard_id TEXT NOT NULL,
+      name TEXT NOT NULL,
+      data TEXT NOT NULL,
+      source_updated_at TEXT,
+      created_by TEXT,
+      created_at TEXT NOT NULL,
+      FOREIGN KEY (client_id, dashboard_id) REFERENCES dashboards(client_id, id) ON DELETE CASCADE ON UPDATE CASCADE
+    );
+    CREATE INDEX IF NOT EXISTS idx_dashboard_versions_lookup
+      ON dashboard_versions(client_id, dashboard_id, created_at DESC);
+  `);
+
+  const columns = db.prepare('PRAGMA table_info(dashboard_versions)').all().map((col) => col.name);
+  if (!columns.includes('source_updated_at')) {
+    db.prepare('ALTER TABLE dashboard_versions ADD COLUMN source_updated_at TEXT').run();
+  }
+  db.exec('CREATE INDEX IF NOT EXISTS idx_dashboard_versions_lookup ON dashboard_versions(client_id, dashboard_id, created_at DESC)');
+};
+
 const ensureUsersTable = () => {
   const sql = db.prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'users'").get()?.sql || '';
   if (!sql) {
@@ -378,6 +402,7 @@ export const provisionClientDefaults = (clientId, name = '') => {
 
 ensureClientsTable();
 ensureDashboardsTable();
+ensureDashboardVersionsTable();
 ensureUsersTable();
 ensureSessionsTable();
 ensureHaConfigTable();

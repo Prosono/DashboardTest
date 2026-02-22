@@ -62,6 +62,8 @@ import {
   listClientDashboards as listServerClientDashboards,
   fetchClientDashboard as fetchServerClientDashboard,
   saveClientDashboard as saveServerClientDashboard,
+  listClientDashboardVersions as listServerClientDashboardVersions,
+  restoreClientDashboardVersion as restoreServerClientDashboardVersion,
   fetchGlobalBranding as fetchServerGlobalBranding,
   saveGlobalBranding as saveServerGlobalBranding,
   fetchSharedHaConfig,
@@ -2178,6 +2180,8 @@ export default function App() {
     listClientDashboards: listServerClientDashboards,
     fetchClientDashboard: fetchServerClientDashboard,
     saveClientDashboard: saveServerClientDashboard,
+    listClientDashboardVersions: listServerClientDashboardVersions,
+    restoreClientDashboardVersion: restoreServerClientDashboardVersion,
   };
 
   return (

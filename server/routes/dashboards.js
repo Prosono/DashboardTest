@@ -1,6 +1,12 @@
 import { Router } from 'express';
 import db from '../db.js';
 import { adminRequired, authRequired } from '../auth.js';
+import {
+  fetchDashboardVersionRow,
+  listDashboardVersions,
+  saveDashboardVersionSnapshot,
+  toDashboardVersionMeta,
+} from '../dashboardVersions.js';
 
 const router = Router();
 
@@ -13,6 +19,11 @@ const toDashboardMeta = (row) => ({
 });
 
 const normalizeDashboardId = (value) => String(value || 'default').trim().replace(/\s+/g, '_').toLowerCase();
+const parseLimit = (value, fallback = 30) => {
+  const parsed = Number.parseInt(String(value ?? ''), 10);
+  if (!Number.isFinite(parsed)) return fallback;
+  return Math.max(1, Math.min(200, parsed));
+};
 
 const canUserAccessDashboard = (user, dashboardId) => {
   if (user.role === 'admin') return true;
@@ -48,6 +59,69 @@ router.get('/:id', (req, res) => {
   return res.json({
     ...toDashboardMeta(row),
     data: JSON.parse(row.data),
+  });
+});
+
+router.get('/:id/versions', adminRequired, (req, res) => {
+  const clientId = req.auth.user.clientId;
+  const id = normalizeDashboardId(req.params.id);
+  const existing = db.prepare('SELECT id FROM dashboards WHERE client_id = ? AND id = ?').get(clientId, id);
+  if (!existing) return res.status(404).json({ error: 'Dashboard not found' });
+
+  const limit = parseLimit(req.query?.limit, 30);
+  const versions = listDashboardVersions(clientId, id, limit);
+  return res.json({ versions });
+});
+
+router.post('/:id/versions/:versionId/restore', adminRequired, (req, res) => {
+  if (req.auth?.user?.isPlatformAdmin) {
+    return res.status(403).json({ error: 'Platform admin cannot edit tenant dashboards' });
+  }
+  const clientId = req.auth.user.clientId;
+  const dashboardId = normalizeDashboardId(req.params.id);
+  const versionId = String(req.params.versionId || '').trim();
+  if (!versionId) return res.status(400).json({ error: 'versionId is required' });
+
+  const existing = db.prepare('SELECT * FROM dashboards WHERE client_id = ? AND id = ?').get(clientId, dashboardId);
+  if (!existing) return res.status(404).json({ error: 'Dashboard not found' });
+
+  const versionRow = fetchDashboardVersionRow(clientId, dashboardId, versionId);
+  if (!versionRow) return res.status(404).json({ error: 'Dashboard version not found' });
+
+  let restoredData;
+  try {
+    restoredData = JSON.parse(versionRow.data);
+  } catch {
+    return res.status(500).json({ error: 'Stored dashboard version is invalid JSON' });
+  }
+
+  let backupVersionId = null;
+  const now = new Date().toISOString();
+  db.exec('BEGIN');
+  try {
+    backupVersionId = saveDashboardVersionSnapshot({
+      clientId,
+      dashboardId,
+      name: existing.name,
+      data: existing.data,
+      createdBy: req.auth.user.id,
+      sourceUpdatedAt: existing.updated_at,
+    });
+    db.prepare('UPDATE dashboards SET data = ?, updated_at = ? WHERE client_id = ? AND id = ?')
+      .run(JSON.stringify(restoredData), now, clientId, dashboardId);
+    db.exec('COMMIT');
+  } catch (error) {
+    db.exec('ROLLBACK');
+    throw error;
+  }
+
+  const row = db.prepare('SELECT client_id, id, name, created_at, updated_at FROM dashboards WHERE client_id = ? AND id = ?')
+    .get(clientId, dashboardId);
+  return res.json({
+    dashboard: toDashboardMeta(row),
+    data: restoredData,
+    restoredVersion: toDashboardVersionMeta(versionRow),
+    backupVersionId,
   });
 });
 
@@ -92,8 +166,23 @@ router.put('/:id', adminRequired, (req, res) => {
   const nextData = data && typeof data === 'object' ? data : JSON.parse(existing.data);
   const now = new Date().toISOString();
 
-  db.prepare('UPDATE dashboards SET name = ?, data = ?, updated_at = ? WHERE client_id = ? AND id = ?')
-    .run(nextName, JSON.stringify(nextData), now, clientId, id);
+  db.exec('BEGIN');
+  try {
+    saveDashboardVersionSnapshot({
+      clientId,
+      dashboardId: id,
+      name: existing.name,
+      data: existing.data,
+      createdBy: req.auth.user.id,
+      sourceUpdatedAt: existing.updated_at,
+    });
+    db.prepare('UPDATE dashboards SET name = ?, data = ?, updated_at = ? WHERE client_id = ? AND id = ?')
+      .run(nextName, JSON.stringify(nextData), now, clientId, id);
+    db.exec('COMMIT');
+  } catch (error) {
+    db.exec('ROLLBACK');
+    throw error;
+  }
 
   const row = db.prepare('SELECT client_id, id, name, created_at, updated_at FROM dashboards WHERE client_id = ? AND id = ?').get(clientId, id);
   return res.json({ dashboard: toDashboardMeta(row) });

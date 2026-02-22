@@ -3,11 +3,22 @@ import { randomUUID } from 'crypto';
 import db, { DEFAULT_CLIENT_ID, normalizeClientId, provisionClientDefaults } from '../db.js';
 import { adminRequired, authRequired } from '../auth.js';
 import { hashPassword } from '../password.js';
+import {
+  fetchDashboardVersionRow,
+  listDashboardVersions,
+  saveDashboardVersionSnapshot,
+  toDashboardVersionMeta,
+} from '../dashboardVersions.js';
 
 const router = Router();
 
 const PLATFORM_ADMIN_CLIENT_ID = normalizeClientId(process.env.PLATFORM_ADMIN_CLIENT_ID || DEFAULT_CLIENT_ID) || DEFAULT_CLIENT_ID;
 const normalizeDashboardId = (value) => String(value || 'default').trim().replace(/\s+/g, '_').toLowerCase();
+const parseLimit = (value, fallback = 30) => {
+  const parsed = Number.parseInt(String(value ?? ''), 10);
+  if (!Number.isFinite(parsed)) return fallback;
+  return Math.max(1, Math.min(200, parsed));
+};
 const toDashboardMeta = (row) => ({
   id: row.id,
   clientId: row.client_id,
@@ -238,6 +249,71 @@ router.get('/:clientId/dashboards/:dashboardId', (req, res) => {
   });
 });
 
+router.get('/:clientId/dashboards/:dashboardId/versions', (req, res) => {
+  const clientId = normalizeClientId(req.params.clientId);
+  const dashboardId = normalizeDashboardId(req.params.dashboardId);
+  if (!clientId) return res.status(400).json({ error: 'Valid clientId is required' });
+  const client = db.prepare('SELECT id FROM clients WHERE id = ?').get(clientId);
+  if (!client) return res.status(404).json({ error: 'Client not found' });
+  const existing = db.prepare('SELECT id FROM dashboards WHERE client_id = ? AND id = ?').get(clientId, dashboardId);
+  if (!existing) return res.status(404).json({ error: 'Dashboard not found' });
+  const limit = parseLimit(req.query?.limit, 30);
+  return res.json({ versions: listDashboardVersions(clientId, dashboardId, limit) });
+});
+
+router.post('/:clientId/dashboards/:dashboardId/versions/:versionId/restore', (req, res) => {
+  const clientId = normalizeClientId(req.params.clientId);
+  const dashboardId = normalizeDashboardId(req.params.dashboardId);
+  const versionId = String(req.params.versionId || '').trim();
+  if (!clientId) return res.status(400).json({ error: 'Valid clientId is required' });
+  if (!versionId) return res.status(400).json({ error: 'versionId is required' });
+
+  const client = db.prepare('SELECT id FROM clients WHERE id = ?').get(clientId);
+  if (!client) return res.status(404).json({ error: 'Client not found' });
+
+  const existing = db.prepare('SELECT * FROM dashboards WHERE client_id = ? AND id = ?').get(clientId, dashboardId);
+  if (!existing) return res.status(404).json({ error: 'Dashboard not found' });
+
+  const versionRow = fetchDashboardVersionRow(clientId, dashboardId, versionId);
+  if (!versionRow) return res.status(404).json({ error: 'Dashboard version not found' });
+
+  let restoredData;
+  try {
+    restoredData = JSON.parse(versionRow.data);
+  } catch {
+    return res.status(500).json({ error: 'Stored dashboard version is invalid JSON' });
+  }
+
+  let backupVersionId = null;
+  const now = new Date().toISOString();
+  db.exec('BEGIN');
+  try {
+    backupVersionId = saveDashboardVersionSnapshot({
+      clientId,
+      dashboardId,
+      name: existing.name,
+      data: existing.data,
+      createdBy: req.auth?.user?.id || null,
+      sourceUpdatedAt: existing.updated_at,
+    });
+    db.prepare('UPDATE dashboards SET data = ?, updated_at = ? WHERE client_id = ? AND id = ?')
+      .run(JSON.stringify(restoredData), now, clientId, dashboardId);
+    db.exec('COMMIT');
+  } catch (error) {
+    db.exec('ROLLBACK');
+    throw error;
+  }
+
+  const row = db.prepare('SELECT client_id, id, name, created_at, updated_at FROM dashboards WHERE client_id = ? AND id = ?')
+    .get(clientId, dashboardId);
+  return res.json({
+    dashboard: toDashboardMeta(row),
+    data: restoredData,
+    restoredVersion: toDashboardVersionMeta(versionRow),
+    backupVersionId,
+  });
+});
+
 router.put('/:clientId/dashboards/:dashboardId', (req, res) => {
   const clientId = normalizeClientId(req.params.clientId);
   const dashboardId = normalizeDashboardId(req.params.dashboardId);
@@ -256,8 +332,23 @@ router.put('/:clientId/dashboards/:dashboardId', (req, res) => {
     db.prepare('INSERT INTO dashboards (client_id, id, name, data, created_by, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)')
       .run(clientId, dashboardId, name, JSON.stringify(data), req.auth.user.id, now, now);
   } else {
-    db.prepare('UPDATE dashboards SET name = ?, data = ?, updated_at = ? WHERE client_id = ? AND id = ?')
-      .run(name, JSON.stringify(data), now, clientId, dashboardId);
+    db.exec('BEGIN');
+    try {
+      saveDashboardVersionSnapshot({
+        clientId,
+        dashboardId,
+        name: existing.name,
+        data: existing.data,
+        createdBy: req.auth.user.id,
+        sourceUpdatedAt: existing.updated_at,
+      });
+      db.prepare('UPDATE dashboards SET name = ?, data = ?, updated_at = ? WHERE client_id = ? AND id = ?')
+        .run(name, JSON.stringify(data), now, clientId, dashboardId);
+      db.exec('COMMIT');
+    } catch (error) {
+      db.exec('ROLLBACK');
+      throw error;
+    }
   }
 
   const row = db.prepare('SELECT client_id, id, name, created_at, updated_at FROM dashboards WHERE client_id = ? AND id = ?').get(clientId, dashboardId);
@@ -310,6 +401,7 @@ router.delete('/:clientId', (req, res) => {
   try {
     db.prepare('DELETE FROM sessions WHERE user_id IN (SELECT id FROM users WHERE client_id = ?)').run(clientId);
     db.prepare('DELETE FROM users WHERE client_id = ?').run(clientId);
+    db.prepare('DELETE FROM dashboard_versions WHERE client_id = ?').run(clientId);
     db.prepare('DELETE FROM dashboards WHERE client_id = ?').run(clientId);
     db.prepare('DELETE FROM ha_config WHERE client_id = ?').run(clientId);
     db.prepare('DELETE FROM clients WHERE id = ?').run(clientId);

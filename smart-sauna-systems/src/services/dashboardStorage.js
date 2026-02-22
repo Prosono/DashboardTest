@@ -42,6 +42,16 @@ const normalizeList = (dashboards) => {
   return list;
 };
 
+const normalizeVersions = (versions) => (Array.isArray(versions) ? versions : []).map((entry) => ({
+  id: String(entry?.id || '').trim(),
+  clientId: String(entry?.clientId || entry?.client_id || '').trim(),
+  dashboardId: String(entry?.dashboardId || entry?.dashboard_id || '').trim(),
+  name: String(entry?.name || '').trim(),
+  createdBy: String(entry?.createdBy || entry?.created_by || '').trim(),
+  createdAt: entry?.createdAt || entry?.created_at || null,
+  sourceUpdatedAt: entry?.sourceUpdatedAt || entry?.source_updated_at || null,
+})).filter((entry) => entry.id);
+
 export const readCachedDashboard = () => {
   try {
     const raw = localStorage.getItem(STORAGE_CACHE_KEY);
@@ -114,5 +124,23 @@ export const saveSharedDashboardProfile = async (profileId, data) => {
 
 export const saveSharedDashboard = async (data) => saveSharedDashboardProfile('default', data);
 
-export const __resetDashboardStorageRuntime = () => {};
+export const listSharedDashboardVersions = async (profileId = 'default', limit = 30) => {
+  const id = toProfileId(profileId);
+  const safeLimit = Math.max(1, Math.min(200, Number.parseInt(String(limit ?? ''), 10) || 30));
+  const payload = await apiRequest(`/api/dashboards/${encodeURIComponent(id)}/versions?limit=${safeLimit}`, { method: 'GET' });
+  return normalizeVersions(payload?.versions || []);
+};
 
+export const restoreSharedDashboardVersion = async (profileId, versionId) => {
+  const id = toProfileId(profileId);
+  const targetVersionId = String(versionId || '').trim();
+  if (!targetVersionId) throw new Error('Version id is required');
+  const payload = await apiRequest(`/api/dashboards/${encodeURIComponent(id)}/versions/${encodeURIComponent(targetVersionId)}/restore`, {
+    method: 'POST',
+  });
+  const data = payload?.data || null;
+  if (id === 'default' && data) writeCachedDashboard(data);
+  return payload;
+};
+
+export const __resetDashboardStorageRuntime = () => {};

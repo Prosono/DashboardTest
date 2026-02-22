@@ -1,9 +1,15 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import ModernDropdown from '../components/ui/ModernDropdown';
 import M3Slider from '../components/ui/M3Slider';
 import { GRADIENT_PRESETS } from '../contexts/ConfigContext';
 import { hasOAuthTokens } from '../services/oauthStorage';
-import { fetchSharedDashboardProfile, saveSharedDashboardProfile, toProfileId } from '../services/dashboardStorage';
+import {
+  fetchSharedDashboardProfile,
+  listSharedDashboardVersions,
+  restoreSharedDashboardVersion,
+  saveSharedDashboardProfile,
+  toProfileId,
+} from '../services/dashboardStorage';
 import {
   X,
   Check,
@@ -153,6 +159,10 @@ export default function ConfigModal({
   const [managedConnectionSaving, setManagedConnectionSaving] = useState(false);
   const [assignTargetUserId, setAssignTargetUserId] = useState('');
   const [dashboardProfilesByClient, setDashboardProfilesByClient] = useState({});
+  const [dashboardVersions, setDashboardVersions] = useState([]);
+  const [selectedDashboardVersionId, setSelectedDashboardVersionId] = useState('');
+  const [loadingDashboardVersions, setLoadingDashboardVersions] = useState(false);
+  const [restoringDashboardVersion, setRestoringDashboardVersion] = useState(false);
 
   const normalizeRole = (role) => {
     const value = String(role || '').trim();
@@ -283,6 +293,49 @@ export default function ConfigModal({
   const canManageClients = currentUser?.isPlatformAdmin === true && typeof userAdminApi?.listClients === 'function';
   const isPlatformAdmin = currentUser?.isPlatformAdmin === true;
   const selectedManagedClient = clients.find((client) => client.id === connectionManageClientId) || null;
+  const activeDashboardClientId = canManageClients
+    ? String(selectedClientId || '').trim()
+    : String(currentUser?.clientId || '').trim();
+  const normalizedSelectedDashboardId = toProfileId(selectedGlobalDashboard || 'default');
+
+  const refreshDashboardVersions = useCallback(async () => {
+    const dashboardId = toProfileId(selectedGlobalDashboard || 'default');
+    if (!dashboardId) {
+      setDashboardVersions([]);
+      setSelectedDashboardVersionId('');
+      return [];
+    }
+
+    setLoadingDashboardVersions(true);
+    try {
+      let versions = [];
+      if (canManageClients && userAdminApi?.listClientDashboardVersions) {
+        const clientId = String(selectedClientId || '').trim();
+        if (!clientId) {
+          setDashboardVersions([]);
+          setSelectedDashboardVersionId('');
+          return [];
+        }
+        versions = await userAdminApi.listClientDashboardVersions(clientId, dashboardId, 40);
+      } else {
+        versions = await listSharedDashboardVersions(dashboardId, 40);
+      }
+
+      const safeVersions = Array.isArray(versions) ? versions : [];
+      setDashboardVersions(safeVersions);
+      setSelectedDashboardVersionId((prev) => (
+        safeVersions.some((entry) => entry.id === prev) ? prev : (safeVersions[0]?.id || '')
+      ));
+      return safeVersions;
+    } catch (error) {
+      setDashboardVersions([]);
+      setSelectedDashboardVersionId('');
+      setGlobalActionMessage(error?.message || 'Failed to load dashboard history');
+      return [];
+    } finally {
+      setLoadingDashboardVersions(false);
+    }
+  }, [canManageClients, selectedClientId, selectedGlobalDashboard, userAdminApi]);
 
   useEffect(() => {
     if (!open || !canManageClients || !canManageAdministration || !userAdminApi?.listClientDashboards) return;
@@ -364,6 +417,11 @@ export default function ConfigModal({
       setSelectedGlobalDashboard(String(options[0]?.id || 'default').trim() || 'default');
     }
   }, [canManageClients, dashboardProfilesByClient, selectedClientId, selectedGlobalDashboard]);
+
+  useEffect(() => {
+    if (!open || configTab !== 'storage' || storageSection !== 'dashboards') return;
+    refreshDashboardVersions();
+  }, [open, configTab, storageSection, normalizedSelectedDashboardId, activeDashboardClientId, refreshDashboardVersions]);
 
   if (!open) return null;
 
@@ -702,6 +760,7 @@ export default function ConfigModal({
           const canonicalId = String(target || 'default').trim().replace(/\s+/g, '_').toLowerCase();
         setGlobalActionMessage(`${t('userMgmt.savedGlobally')}: ${target}`);
         setSelectedGlobalDashboard(canonicalId);
+        await refreshDashboardVersions();
       }
     };
 
@@ -722,6 +781,45 @@ export default function ConfigModal({
       const ok = await loadGlobalDashboard(target);
       if (ok) {
         setGlobalActionMessage(`${t('userMgmt.loadedDashboard')}: ${target}`);
+      }
+    };
+
+    const handleRestoreDashboardVersion = async () => {
+      const target = toProfileId(selectedGlobalDashboard || 'default');
+      const versionId = String(selectedDashboardVersionId || '').trim();
+      if (!versionId) {
+        setGlobalActionMessage(i18nOrFallback('userMgmt.noDashboardVersionSelected', 'Select a dashboard version first'));
+        return;
+      }
+      const selectedVersion = dashboardVersions.find((entry) => entry.id === versionId) || null;
+      const versionLabel = selectedVersion?.createdAt
+        ? new Date(selectedVersion.createdAt).toLocaleString()
+        : versionId;
+      const confirmMessage = `${i18nOrFallback('userMgmt.restoreDashboardVersionConfirm', 'Restore this dashboard version?')}\n${versionLabel}`;
+      if (typeof window !== 'undefined' && !window.confirm(confirmMessage)) return;
+
+      setRestoringDashboardVersion(true);
+      try {
+        if (canManageClients && userAdminApi?.restoreClientDashboardVersion) {
+          const clientId = String(activeDashboardClientId || '').trim();
+          if (!clientId) {
+            setGlobalActionMessage(t('userMgmt.clientIdRequired'));
+            return;
+          }
+          await userAdminApi.restoreClientDashboardVersion(clientId, target, versionId);
+          const list = await userAdminApi.listClientDashboards(clientId).catch(() => []);
+          setDashboardProfilesByClient((prev) => ({ ...prev, [clientId]: Array.isArray(list) ? list : [] }));
+        } else {
+          await restoreSharedDashboardVersion(target, versionId);
+          await loadGlobalDashboard?.(target);
+        }
+
+        await refreshDashboardVersions();
+        setGlobalActionMessage(`${i18nOrFallback('userMgmt.restoredDashboardVersion', 'Restored dashboard version')}: ${versionLabel}`);
+      } catch (error) {
+        setGlobalActionMessage(error?.message || i18nOrFallback('userMgmt.restoreDashboardVersionFailed', 'Failed to restore dashboard version'));
+      } finally {
+        setRestoringDashboardVersion(false);
       }
     };
 
@@ -1129,6 +1227,50 @@ export default function ConfigModal({
                 >
                   {globalStorageBusy ? t('common.loading') : t('userMgmt.loadDashboard')}
                 </button>
+                <div className="space-y-2 pt-1">
+                  <label className="text-[10px] uppercase tracking-wider text-[var(--text-secondary)] font-bold">
+                    {i18nOrFallback('userMgmt.dashboardHistory', 'Dashboard history')}
+                  </label>
+                  <select
+                    value={selectedDashboardVersionId}
+                    onChange={(e) => setSelectedDashboardVersionId(e.target.value)}
+                    className="w-full px-3 py-2.5 rounded-xl bg-[var(--glass-bg)] border border-[var(--glass-border)] text-sm text-[var(--text-primary)]"
+                    disabled={loadingDashboardVersions || restoringDashboardVersion}
+                  >
+                    {dashboardVersions.length === 0 ? (
+                      <option value="">
+                        {loadingDashboardVersions
+                          ? i18nOrFallback('common.loading', 'Loading...')
+                          : i18nOrFallback('userMgmt.noDashboardHistory', 'No history available')}
+                      </option>
+                    ) : (
+                      dashboardVersions.map((version) => (
+                        <option key={version.id} value={version.id}>
+                          {(version.createdAt ? new Date(version.createdAt).toLocaleString() : version.id)}
+                          {version.sourceUpdatedAt ? ` - ${i18nOrFallback('userMgmt.from', 'from')} ${new Date(version.sourceUpdatedAt).toLocaleString()}` : ''}
+                        </option>
+                      ))
+                    )}
+                  </select>
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      onClick={refreshDashboardVersions}
+                      disabled={loadingDashboardVersions || restoringDashboardVersion}
+                      className="py-2.5 rounded-xl bg-[var(--glass-bg-hover)] hover:bg-[var(--glass-bg)] border border-[var(--glass-border)] text-[var(--text-primary)] text-xs font-bold uppercase tracking-wider disabled:opacity-50"
+                    >
+                      {loadingDashboardVersions ? i18nOrFallback('common.loading', 'Loading...') : i18nOrFallback('common.refresh', 'Refresh')}
+                    </button>
+                    <button
+                      onClick={handleRestoreDashboardVersion}
+                      disabled={!selectedDashboardVersionId || loadingDashboardVersions || restoringDashboardVersion}
+                      className="py-2.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-white text-xs font-bold uppercase tracking-wider disabled:opacity-50"
+                    >
+                      {restoringDashboardVersion
+                        ? i18nOrFallback('common.loading', 'Loading...')
+                        : i18nOrFallback('userMgmt.restoreVersion', 'Restore')}
+                    </button>
+                  </div>
+                </div>
                 {canImportExportDashboards && (
                   <div className="grid grid-cols-2 gap-2 pt-1">
                     <button

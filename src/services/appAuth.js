@@ -227,6 +227,21 @@ export const saveClientDashboard = async (clientId, dashboardId, name, data) => 
   return payload?.dashboard || null;
 };
 
+export const listClientDashboardVersions = async (clientId, dashboardId, limit = 30) => {
+  const safeLimit = Math.max(1, Math.min(200, Number.parseInt(String(limit ?? ''), 10) || 30));
+  const payload = await apiRequest(`/api/clients/${encodeURIComponent(clientId)}/dashboards/${encodeURIComponent(dashboardId)}/versions?limit=${safeLimit}`, {
+    method: 'GET',
+  });
+  return Array.isArray(payload?.versions) ? payload.versions : [];
+};
+
+export const restoreClientDashboardVersion = async (clientId, dashboardId, versionId) => {
+  const payload = await apiRequest(`/api/clients/${encodeURIComponent(clientId)}/dashboards/${encodeURIComponent(dashboardId)}/versions/${encodeURIComponent(versionId)}/restore`, {
+    method: 'POST',
+  });
+  return payload || null;
+};
+
 export const fetchSharedHaConfig = async () => {
   const payload = await apiRequest('/api/auth/ha-config', { method: 'GET' });
   return payload?.config || null;
