@@ -64,7 +64,8 @@ export function useDashboardEffects({
 
   // ── Document title, favicon & viewport meta ────────────────────────────
   useEffect(() => {
-    document.title = resolvedHeaderTitle;
+    const browserTitle = 'Smart Sauna';
+    document.title = browserTitle;
 
     let link = document.querySelector("link[rel~='icon']");
     if (!link) {
@@ -72,9 +73,17 @@ export function useDashboardEffects({
       link.rel = 'icon';
       document.head.appendChild(link);
     }
-    link.type = 'image/svg+xml';
-    link.href =
-      "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🏠</text></svg>";
+    link.type = 'image/png';
+    link.href = '/favicon.png';
+
+    let shortcutIcon = document.querySelector("link[rel='shortcut icon']");
+    if (!shortcutIcon) {
+      shortcutIcon = document.createElement('link');
+      shortcutIcon.rel = 'shortcut icon';
+      document.head.appendChild(shortcutIcon);
+    }
+    shortcutIcon.type = 'image/png';
+    shortcutIcon.href = '/favicon.png';
 
     let meta = document.querySelector("meta[name='viewport']");
     if (!meta) {

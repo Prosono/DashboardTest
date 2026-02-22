@@ -208,7 +208,7 @@ export default function SaunaBookingTempCard({
     const maybeCaptureHourlySnapshot = () => {
       const now = new Date();
       if (now.getMinutes() < 1) return;
-      if (!bookingActive || serviceActive || currentTemp === null) return;
+      if (!(bookingActive || serviceActive) || currentTemp === null) return;
 
       const nowMs = now.getTime();
       const hourKey = toHourKey(nowMs);
@@ -229,7 +229,7 @@ export default function SaunaBookingTempCard({
         startTemp: roundToOne(currentTemp),
         targetTemp: targetTemp !== null ? roundToOne(targetTemp) : null,
         deviation: targetTemp !== null ? roundToOne(currentTemp - targetTemp) : null,
-        bookingType: 'regular',
+        bookingType: serviceActive ? 'service' : 'regular',
         sampleMode: 'hourly',
         serviceRaw: serviceEntity?.state ?? null,
         activeRaw: activeEntity?.state ?? null,
