@@ -1520,10 +1520,10 @@ function AppContent({
             style={{
               ...(navStickyOnScrollDown
                 ? {
-                  position: 'sticky',
+                  position: 'fixed',
                   top: `${navPinTopPx}px`,
-                  width: '100%',
-                  alignSelf: 'stretch',
+                  left: `${navPinnedMetrics.left}px`,
+                  width: `${navPinnedMetrics.width}px`,
                   borderRadius: isMobile ? '1rem' : '1.2rem',
                   backgroundColor: 'color-mix(in srgb, var(--card-bg) 88%, transparent)',
                   backdropFilter: 'blur(10px)',
