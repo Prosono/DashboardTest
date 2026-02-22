@@ -127,7 +127,7 @@ function AppContent({
     setPagesConfig,
     persistConfig,
     cardSettings,
-    saveCardSetting,
+    saveCardSetting: saveCardSettingRaw,
     customNames,
     saveCustomName,
     customIcons,
@@ -522,6 +522,7 @@ function AppContent({
   const [dashboardDirty, setDashboardDirty] = useState(false);
   const dashboardDirtyReadyRef = useRef(false);
   const quickSaveBusyRef = useRef(false);
+  const snapshotPersistTimerRef = useRef(0);
   const callService = useCallback((domain, service, payload, target) => {
     if (!canControlDevices) return false;
     return rawCallService(domain, service, payload, target);
@@ -637,6 +638,31 @@ function AppContent({
       quickSaveBusyRef.current = false;
     }
   }, [isAdminUser, currentUser?.assignedDashboardId, saveGlobalDashboard]);
+
+  const scheduleSnapshotPersist = useCallback(() => {
+    if (!isAdminUser || typeof window === 'undefined') return;
+    if (snapshotPersistTimerRef.current) {
+      window.clearTimeout(snapshotPersistTimerRef.current);
+    }
+    snapshotPersistTimerRef.current = window.setTimeout(() => {
+      snapshotPersistTimerRef.current = 0;
+      quickSaveDashboard();
+    }, 1200);
+  }, [isAdminUser, quickSaveDashboard]);
+
+  useEffect(() => () => {
+    if (snapshotPersistTimerRef.current && typeof window !== 'undefined') {
+      window.clearTimeout(snapshotPersistTimerRef.current);
+      snapshotPersistTimerRef.current = 0;
+    }
+  }, []);
+
+  const saveCardSetting = useCallback((id, setting, value) => {
+    saveCardSettingRaw(id, setting, value);
+    if (setting === 'bookingSnapshots') {
+      scheduleSnapshotPersist();
+    }
+  }, [saveCardSettingRaw, scheduleSnapshotPersist]);
 
   const renderUserChip = (extraClassName = '') => (
     currentUser ? (
