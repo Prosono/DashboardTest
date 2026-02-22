@@ -300,12 +300,6 @@ export default function SaunaCard({
     danger: 'bg-rose-100 border-rose-400 text-rose-900',
     muted: 'bg-white/80 border-slate-300 text-slate-700',
   };
-  const statusPillClass = isLightTheme
-    ? (lightTonePill[primaryState.tone] || lightTonePill.muted)
-    : tone.pill;
-  const heatingPillClass = isLightTheme
-    ? 'bg-orange-100/95 border-orange-500/65 text-orange-900 shadow-[0_6px_14px_rgba(15,23,42,0.18)] backdrop-blur-sm'
-    : 'bg-orange-500/18 border-orange-400/25 text-orange-200';
 
   const primaryState = (() => {
     if (saunaIsActive && serviceYes) return { label: tr('sauna.service', 'Service'), desc: tr('sauna.serviceOngoing', 'Pågår nå'), tone: 'warn' };
@@ -325,6 +319,12 @@ export default function SaunaCard({
     danger: { pill: 'bg-rose-500/14 border-rose-400/20 text-rose-200', icon: 'text-rose-300' },
     muted: { pill: 'bg-[var(--glass-bg-hover)] border-[var(--glass-border)] text-[var(--text-secondary)]', icon: 'text-[var(--text-secondary)]' },
   }[primaryState.tone] || { pill: 'bg-[var(--glass-bg-hover)] border-[var(--glass-border)] text-[var(--text-secondary)]', icon: 'text-[var(--text-secondary)]' });
+  const statusPillClass = isLightTheme
+    ? (lightTonePill[primaryState.tone] || lightTonePill.muted)
+    : tone.pill;
+  const heatingPillClass = isLightTheme
+    ? 'bg-orange-100/95 border-orange-500/65 text-orange-900 shadow-[0_6px_14px_rgba(15,23,42,0.18)] backdrop-blur-sm'
+    : 'bg-orange-500/18 border-orange-400/25 text-orange-200';
 
   const minutesShort = tr('sauna.minutesShort', 'min');
   const bookingLine = (() => {
