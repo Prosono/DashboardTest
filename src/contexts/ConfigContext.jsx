@@ -1,6 +1,7 @@
 import { createContext, useContext, useState, useEffect } from 'react';
 import { Capacitor } from '@capacitor/core';
 import { themes } from '../config/themes';
+import { readStoredHaConfig } from '../services/appAuth';
 
 export const GRADIENT_PRESETS = {
   midnight: { label: 'Midnight', from: '#0f172a', to: '#020617' },
@@ -114,12 +115,7 @@ export const ConfigProvider = ({ children }) => {
   const [config, setConfig] = useState(() => {
     if (typeof window !== 'undefined') {
       try {
-        return {
-          url: localStorage.getItem('ha_url') || '',
-          fallbackUrl: localStorage.getItem('ha_fallback_url') || '',
-          token: localStorage.getItem('ha_token') || '',
-          authMethod: localStorage.getItem('ha_auth_method') || 'oauth',
-        };
+        return readStoredHaConfig();
       } catch (error) {
         console.error('Failed to read config from localStorage:', error);
         return { url: '', fallbackUrl: '', token: '', authMethod: 'oauth' };

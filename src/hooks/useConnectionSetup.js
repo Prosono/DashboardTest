@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { validateUrl } from '../config/onboarding';
 import { saveTokens, loadTokens, clearOAuthTokens, hasOAuthTokens } from '../services/oauthStorage';
+import { clearStoredHaConfig, writeStoredHaConfig } from '../services/appAuth';
 
 /**
  * Centralises connection-testing, OAuth login/logout and onboarding-step state.
@@ -63,10 +64,12 @@ export function useConnectionSetup({
   const startOAuthLogin = () => {
     if (!validateUrl(config.url) || !window.HAWS) return;
     const cleanUrl = config.url.replace(/\/$/, '');
-    try {
-      localStorage.setItem('ha_url', cleanUrl);
-      localStorage.setItem('ha_auth_method', 'oauth');
-    } catch {}
+    writeStoredHaConfig({
+      url: cleanUrl,
+      fallbackUrl: config.fallbackUrl || '',
+      authMethod: 'oauth',
+      token: '',
+    });
     window.HAWS.getAuth({
       hassUrl: cleanUrl,
       saveTokens,
@@ -81,10 +84,13 @@ export function useConnectionSetup({
   const handleOAuthLogout = () => {
     clearOAuthTokens();
     setConfig({ ...config, authMethod: 'oauth', token: '' });
-    try {
-      localStorage.removeItem('ha_oauth_tokens');
-      localStorage.setItem('ha_auth_method', 'oauth');
-    } catch {}
+    clearStoredHaConfig();
+    writeStoredHaConfig({
+      url: config.url || '',
+      fallbackUrl: config.fallbackUrl || '',
+      authMethod: 'oauth',
+      token: '',
+    });
   };
 
   // ── Derived: can the user advance past onboarding step 0? ──────────────

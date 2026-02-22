@@ -53,6 +53,53 @@ export const setClientId = (clientId) => {
   }
 };
 
+const normalizeClientScope = (clientId = getClientId()) => String(clientId || '').trim().toLowerCase();
+
+const buildScopedKey = (baseKey, clientId = getClientId()) => {
+  const scope = normalizeClientScope(clientId);
+  return scope ? `${baseKey}::${scope}` : baseKey;
+};
+
+export const readStoredHaConfig = (clientId = getClientId()) => {
+  try {
+    return {
+      url: localStorage.getItem(buildScopedKey('ha_url', clientId)) || '',
+      fallbackUrl: localStorage.getItem(buildScopedKey('ha_fallback_url', clientId)) || '',
+      token: localStorage.getItem(buildScopedKey('ha_token', clientId)) || '',
+      authMethod: localStorage.getItem(buildScopedKey('ha_auth_method', clientId)) || 'oauth',
+    };
+  } catch {
+    return { url: '', fallbackUrl: '', token: '', authMethod: 'oauth' };
+  }
+};
+
+export const writeStoredHaConfig = (config = {}, clientId = getClientId()) => {
+  try {
+    localStorage.setItem(buildScopedKey('ha_url', clientId), String(config.url || ''));
+    localStorage.setItem(buildScopedKey('ha_fallback_url', clientId), String(config.fallbackUrl || ''));
+    localStorage.setItem(buildScopedKey('ha_token', clientId), String(config.token || ''));
+    localStorage.setItem(buildScopedKey('ha_auth_method', clientId), String(config.authMethod || 'oauth'));
+  } catch {
+    // best effort
+  }
+};
+
+export const clearStoredHaConfig = (clientId = getClientId()) => {
+  try {
+    localStorage.removeItem(buildScopedKey('ha_url', clientId));
+    localStorage.removeItem(buildScopedKey('ha_fallback_url', clientId));
+    localStorage.removeItem(buildScopedKey('ha_token', clientId));
+    localStorage.removeItem(buildScopedKey('ha_auth_method', clientId));
+    // Legacy keys from older builds.
+    localStorage.removeItem('ha_url');
+    localStorage.removeItem('ha_fallback_url');
+    localStorage.removeItem('ha_token');
+    localStorage.removeItem('ha_auth_method');
+  } catch {
+    // best effort
+  }
+};
+
 export const apiRequest = async (path, options = {}) => {
   const token = getAuthToken();
   const headers = {

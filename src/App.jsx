@@ -44,9 +44,12 @@ import './styles/dashboard.css';
 import { clearOAuthTokens, loadTokens, saveTokens } from './services/oauthStorage';
 import {
   fetchCurrentUser,
+  clearStoredHaConfig,
   getClientId,
   loginWithPassword,
   logoutUser,
+  readStoredHaConfig,
+  setClientId as setStoredClientId,
   updateProfile as updateCurrentProfile,
   listUsers as listServerUsers,
   createUser as createServerUser,
@@ -68,6 +71,7 @@ import {
   saveGlobalBranding as saveServerGlobalBranding,
   fetchSharedHaConfig,
   saveSharedHaConfig,
+  writeStoredHaConfig,
 } from './services/appAuth';
 
 import { isCardRemovable as _isCardRemovable, isCardHiddenByLogic as _isCardHiddenByLogic, isMediaPage as _isMediaPage } from './utils/cardUtils';
@@ -1926,8 +1930,20 @@ export default function App() {
   }, [currentUser, currentTheme, globalBranding]);
   const loginTitle = String(globalBranding?.title || 'Smart Sauna Systems').trim() || 'Smart Sauna Systems';
 
+  const clearHaRuntimeConfig = useCallback(() => {
+    clearStoredHaConfig();
+    clearOAuthTokens({ syncServer: false });
+    setConfig((prev) => ({
+      ...prev,
+      url: '',
+      fallbackUrl: '',
+      authMethod: 'oauth',
+      token: '',
+    }));
+  }, [setConfig]);
+
   const applySharedHaConfig = useCallback((sharedConfig) => {
-    if (!sharedConfig) return;
+    if (!sharedConfig) return false;
     const resolvedAuthMethod = sharedConfig.authMethod === 'token'
       ? 'token'
       : (sharedConfig.oauthTokens ? 'oauth' : (sharedConfig.token ? 'token' : 'oauth'));
@@ -1940,18 +1956,19 @@ export default function App() {
       token: sharedConfig.token || '',
     }));
 
-    try {
-      localStorage.setItem('ha_url', sharedConfig.url || '');
-      localStorage.setItem('ha_fallback_url', sharedConfig.fallbackUrl || '');
-      localStorage.setItem('ha_auth_method', resolvedAuthMethod);
-      localStorage.setItem('ha_token', sharedConfig.token || '');
-    } catch {}
+    writeStoredHaConfig({
+      url: sharedConfig.url || '',
+      fallbackUrl: sharedConfig.fallbackUrl || '',
+      authMethod: resolvedAuthMethod,
+      token: sharedConfig.token || '',
+    });
 
     if (resolvedAuthMethod === 'oauth' && sharedConfig.oauthTokens) {
       saveTokens(sharedConfig.oauthTokens);
     } else {
       clearOAuthTokens({ syncServer: false });
     }
+    return true;
   }, [setConfig]);
 
   useEffect(() => {
@@ -1968,12 +1985,25 @@ export default function App() {
         setCurrentUser(user);
 
         if (user) {
+          setStoredClientId(user.clientId || getClientId());
           const shared = await fetchSharedHaConfig().catch(() => null);
           if (!mounted) return;
-          applySharedHaConfig(shared);
+          const applied = applySharedHaConfig(shared);
+          if (!applied) {
+            const localScoped = readStoredHaConfig(user.clientId || getClientId());
+            const canUseScopedLocal = Boolean(localScoped.url);
+            if (canUseScopedLocal) {
+              setConfig((prev) => ({ ...prev, ...localScoped }));
+            } else {
+              clearHaRuntimeConfig();
+            }
+          }
         }
       } catch {
-        if (mounted) setCurrentUser(null);
+        if (mounted) {
+          setCurrentUser(null);
+          clearHaRuntimeConfig();
+        }
       } finally {
         if (mounted) {
           setHaConfigHydrated(true);
@@ -1983,7 +2013,7 @@ export default function App() {
     };
     init();
     return () => { mounted = false; };
-  }, [applySharedHaConfig]);
+  }, [applySharedHaConfig, clearHaRuntimeConfig, setConfig]);
 
   const doLogin = async (e) => {
     e.preventDefault();
@@ -1992,9 +2022,19 @@ export default function App() {
     try {
       const result = await loginWithPassword(String(clientId || '').trim(), username, password);
       const user = result?.user || null;
+      setStoredClientId(user?.clientId || String(clientId || '').trim());
 
       const shared = await fetchSharedHaConfig().catch(() => null);
-      applySharedHaConfig(shared);
+      const applied = applySharedHaConfig(shared);
+      if (!applied) {
+        const localScoped = readStoredHaConfig(user?.clientId || getClientId());
+        const canUseScopedLocal = Boolean(localScoped.url);
+        if (canUseScopedLocal) {
+          setConfig((prev) => ({ ...prev, ...localScoped }));
+        } else {
+          clearHaRuntimeConfig();
+        }
+      }
       await refreshGlobalBranding();
 
       setCurrentUser(user);
@@ -2009,6 +2049,12 @@ export default function App() {
 
   const doLogout = async () => {
     await logoutUser();
+    clearHaRuntimeConfig();
+    setStoredClientId('');
+    setClientId('');
+    setUsername('');
+    setPassword('');
+    setShowPassword(false);
     setCurrentUser(null);
   };
 

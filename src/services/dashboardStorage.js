@@ -1,7 +1,13 @@
-import { apiRequest } from './appAuth';
+import { apiRequest, getClientId } from './appAuth';
 
 const STORAGE_CACHE_KEY = 'tunet_shared_dashboard_cache';
 const STORAGE_PROFILES_CACHE_KEY = 'tunet_shared_dashboard_profiles_cache';
+
+const normalizeClientScope = (clientId = getClientId()) => String(clientId || '').trim().toLowerCase();
+const getScopedStorageKey = (baseKey, clientId = getClientId()) => {
+  const scope = normalizeClientScope(clientId);
+  return scope ? `${baseKey}::${scope}` : baseKey;
+};
 
 export const toProfileId = (value) => String(value || 'default').trim().replace(/\s+/g, '_').toLowerCase();
 
@@ -15,7 +21,7 @@ const safeParse = (value, fallback = null) => {
 
 const readProfilesCache = () => {
   try {
-    const raw = localStorage.getItem(STORAGE_PROFILES_CACHE_KEY);
+    const raw = localStorage.getItem(getScopedStorageKey(STORAGE_PROFILES_CACHE_KEY));
     const parsed = raw ? safeParse(raw, []) : [];
     return Array.isArray(parsed) ? parsed : [];
   } catch {
@@ -25,7 +31,7 @@ const readProfilesCache = () => {
 
 const writeProfilesCache = (profiles) => {
   try {
-    localStorage.setItem(STORAGE_PROFILES_CACHE_KEY, JSON.stringify(profiles));
+    localStorage.setItem(getScopedStorageKey(STORAGE_PROFILES_CACHE_KEY), JSON.stringify(profiles));
   } catch {
     // best effort
   }
@@ -54,7 +60,7 @@ const normalizeVersions = (versions) => (Array.isArray(versions) ? versions : []
 
 export const readCachedDashboard = () => {
   try {
-    const raw = localStorage.getItem(STORAGE_CACHE_KEY);
+    const raw = localStorage.getItem(getScopedStorageKey(STORAGE_CACHE_KEY));
     if (!raw) return null;
     return safeParse(raw, null);
   } catch {
@@ -64,7 +70,7 @@ export const readCachedDashboard = () => {
 
 export const writeCachedDashboard = (payload) => {
   try {
-    localStorage.setItem(STORAGE_CACHE_KEY, JSON.stringify(payload));
+    localStorage.setItem(getScopedStorageKey(STORAGE_CACHE_KEY), JSON.stringify(payload));
   } catch {
     // best effort
   }

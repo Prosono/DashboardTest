@@ -1,9 +1,14 @@
 // OAuth2 token persistence for Home Assistant
 // Used as saveTokens / loadTokens callbacks for HAWS getAuth()
 
-import { fetchSharedHaConfig, saveSharedHaConfig } from './appAuth';
+import { fetchSharedHaConfig, getClientId, saveSharedHaConfig } from './appAuth';
 
 const OAUTH_TOKENS_KEY = 'ha_oauth_tokens';
+const normalizeClientScope = (clientId = getClientId()) => String(clientId || '').trim().toLowerCase();
+const getScopedOauthKey = (clientId = getClientId()) => {
+  const scope = normalizeClientScope(clientId);
+  return scope ? `${OAUTH_TOKENS_KEY}::${scope}` : OAUTH_TOKENS_KEY;
+};
 
 const getSessionStorage = () => {
   try {
@@ -32,8 +37,12 @@ export function saveTokens(tokenInfo) {
   try {
     const sessionStore = getSessionStorage();
     const localStore = getLocalStorage();
+    const key = getScopedOauthKey();
     const payload = JSON.stringify(tokenInfo);
-    localStore?.setItem(OAUTH_TOKENS_KEY, payload);
+    localStore?.setItem(key, payload);
+    sessionStore?.removeItem(key);
+    // Remove legacy/shared token key to avoid cross-client leakage.
+    localStore?.removeItem(OAUTH_TOKENS_KEY);
     sessionStore?.removeItem(OAUTH_TOKENS_KEY);
   } catch (error) {
     console.error('Failed to save OAuth tokens to localStorage:', error);
@@ -47,14 +56,15 @@ export async function loadTokens() {
   try {
     const sessionStore = getSessionStorage();
     const localStore = getLocalStorage();
-    const localRaw = localStore?.getItem(OAUTH_TOKENS_KEY);
+    const key = getScopedOauthKey();
+    const localRaw = localStore?.getItem(key);
     if (localRaw) return JSON.parse(localRaw);
 
-    const sessionRaw = sessionStore?.getItem(OAUTH_TOKENS_KEY);
+    const sessionRaw = sessionStore?.getItem(key);
     if (sessionRaw) {
       const parsed = JSON.parse(sessionRaw);
-      localStore?.setItem(OAUTH_TOKENS_KEY, sessionRaw);
-      sessionStore?.removeItem(OAUTH_TOKENS_KEY);
+      localStore?.setItem(key, sessionRaw);
+      sessionStore?.removeItem(key);
       return parsed;
     }
   } catch {}
@@ -65,7 +75,8 @@ export async function loadTokens() {
     if (shared?.oauthTokens) {
       // cache lokalt så HAWS blir fornøyd
       const payload = JSON.stringify(shared.oauthTokens);
-      getLocalStorage()?.setItem(OAUTH_TOKENS_KEY, payload);
+      const key = getScopedOauthKey();
+      getLocalStorage()?.setItem(key, payload);
       return shared.oauthTokens;
     }
   } catch {}
@@ -77,6 +88,10 @@ export function clearOAuthTokens(options = {}) {
   const { syncServer = true } = options;
 
   try {
+    const key = getScopedOauthKey();
+    getSessionStorage()?.removeItem(key);
+    getLocalStorage()?.removeItem(key);
+    // Remove legacy/shared token key to avoid cross-client leakage.
     getSessionStorage()?.removeItem(OAUTH_TOKENS_KEY);
     getLocalStorage()?.removeItem(OAUTH_TOKENS_KEY);
   } catch (error) {
@@ -88,7 +103,8 @@ export function clearOAuthTokens(options = {}) {
 
 export function hasOAuthTokens() {
   try {
-    return !!(getSessionStorage()?.getItem(OAUTH_TOKENS_KEY) || getLocalStorage()?.getItem(OAUTH_TOKENS_KEY));
+    const key = getScopedOauthKey();
+    return !!(getSessionStorage()?.getItem(key) || getLocalStorage()?.getItem(key));
   } catch {
     return false;
   }

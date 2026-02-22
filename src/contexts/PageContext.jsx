@@ -200,7 +200,7 @@ export const usePages = () => {
 };
 
 export const PageProvider = ({ children }) => {
-  const cachedState = normalizeDashboardState(readCachedDashboard() || loadLegacyLocalStorageState());
+  const cachedState = normalizeDashboardState(readCachedDashboard() || getDefaultDashboardState());
   const [pagesConfig, setPagesConfig] = useState(cachedState.pagesConfig);
   const [cardSettings, setCardSettings] = useState(cachedState.cardSettings);
   const [customNames, setCustomNames] = useState(cachedState.customNames);

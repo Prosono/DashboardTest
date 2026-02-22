@@ -1,5 +1,6 @@
 import { createContext, useContext, useState, useEffect, useRef } from 'react';
 import { saveTokens, loadTokens, clearOAuthTokens, hasOAuthTokens } from '../services/oauthStorage';
+import { writeStoredHaConfig } from '../services/appAuth';
 
 const HomeAssistantContext = createContext(null);
 
@@ -63,17 +64,24 @@ export const HomeAssistantProvider = ({ children, config }) => {
     const isOAuthCallback = typeof window !== 'undefined' && new URLSearchParams(window.location.search).has('auth_callback');
 
     if (!libLoaded || !config.url) {
+      setConnected(false);
+      setConn(null);
+      setEntities({});
       return;
     }
 
     // For token mode, require token
     if (!isOAuth && !hasToken) {
       if (connected) setConnected(false);
+      setConn(null);
+      setEntities({});
       return;
     }
     // For oauth mode, require stored tokens OR an active callback in the URL
     if (isOAuth && !hasOAuth && !isOAuthCallback) {
       if (connected) setConnected(false);
+      setConn(null);
+      setEntities({});
       return;
     }
 
@@ -91,14 +99,12 @@ export const HomeAssistantProvider = ({ children, config }) => {
     const { createConnection, createLongLivedTokenAuth, subscribeEntities, getAuth } = window.HAWS;
 
     const persistConfig = (urlUsed) => {
-      try {
-        localStorage.setItem('ha_url', urlUsed.replace(/\/$/, ''));
-        if (!isOAuth) localStorage.setItem('ha_token', config.token);
-        localStorage.setItem('ha_auth_method', config.authMethod || 'token');
-        if (config.fallbackUrl) localStorage.setItem('ha_fallback_url', config.fallbackUrl.replace(/\/$/, ''));
-      } catch (error) {
-        console.error('Failed to persist HA config to localStorage:', error);
-      }
+      writeStoredHaConfig({
+        url: urlUsed.replace(/\/$/, ''),
+        fallbackUrl: config.fallbackUrl ? config.fallbackUrl.replace(/\/$/, '') : '',
+        authMethod: config.authMethod || 'token',
+        token: isOAuth ? '' : (config.token || ''),
+      });
     };
 
     async function connectWithToken(url) {
@@ -183,6 +189,8 @@ export const HomeAssistantProvider = ({ children, config }) => {
         if (!cancelled) {
           setConnected(false);
           setHaUnavailable(true);
+          setConn(null);
+          setEntities({});
         }
       }
     }
@@ -190,7 +198,10 @@ export const HomeAssistantProvider = ({ children, config }) => {
     connect();
     return () => { 
       cancelled = true; 
-      if (connection) connection.close(); 
+      if (connection) connection.close();
+      setConnected(false);
+      setConn(null);
+      setEntities({});
     };
   }, [libLoaded, config.url, config.fallbackUrl, config.token, config.authMethod, oauthBootstrapTick]);
 
