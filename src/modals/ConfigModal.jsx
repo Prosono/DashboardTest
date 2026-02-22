@@ -38,6 +38,7 @@ import {
   LogOut,
   Key,
 } from '../icons';
+import { normalizeHaConfig, normalizeConnection, normalizeConnectionId } from '../utils/haConnections';
 
 export default function ConfigModal({
   open,
@@ -149,12 +150,23 @@ export default function ConfigModal({
   const [deleteClientId, setDeleteClientId] = useState('');
   const [deleteClientConfirmText, setDeleteClientConfirmText] = useState('');
   const [connectionManageClientId, setConnectionManageClientId] = useState('');
-  const [managedConnectionConfig, setManagedConnectionConfig] = useState({
+  const [managedConnectionConfig, setManagedConnectionConfig] = useState(() => normalizeHaConfig({
     url: '',
     fallbackUrl: '',
     authMethod: 'oauth',
     token: '',
-  });
+    connections: [{
+      id: 'primary',
+      name: 'Primary',
+      url: '',
+      fallbackUrl: '',
+      authMethod: 'oauth',
+      token: '',
+      oauthTokens: null,
+    }],
+    primaryConnectionId: 'primary',
+  }));
+  const [managedConnectionId, setManagedConnectionId] = useState('primary');
   const [managedConnectionLoading, setManagedConnectionLoading] = useState(false);
   const [managedConnectionSaving, setManagedConnectionSaving] = useState(false);
   const [assignTargetUserId, setAssignTargetUserId] = useState('');
@@ -293,6 +305,10 @@ export default function ConfigModal({
   const canManageClients = currentUser?.isPlatformAdmin === true && typeof userAdminApi?.listClients === 'function';
   const isPlatformAdmin = currentUser?.isPlatformAdmin === true;
   const selectedManagedClient = clients.find((client) => client.id === connectionManageClientId) || null;
+  const managedConnections = Array.isArray(managedConnectionConfig?.connections) ? managedConnectionConfig.connections : [];
+  const selectedManagedConnection = managedConnections.find((connection) => connection.id === managedConnectionId)
+    || managedConnections[0]
+    || null;
   const activeDashboardClientId = canManageClients
     ? String(selectedClientId || '').trim()
     : String(currentUser?.clientId || '').trim();
@@ -390,16 +406,20 @@ export default function ConfigModal({
     userAdminApi.fetchClientHaConfig(connectionManageClientId)
       .then((cfg) => {
         if (cancelled) return;
-        setManagedConnectionConfig({
-          url: cfg?.url || '',
-          fallbackUrl: cfg?.fallbackUrl || '',
-          authMethod: cfg?.authMethod === 'token' ? 'token' : 'oauth',
-          token: cfg?.token || '',
-        });
+        const normalized = normalizeHaConfig(cfg || {});
+        setManagedConnectionConfig(normalized);
+        setManagedConnectionId(normalized.primaryConnectionId || normalized.connections?.[0]?.id || 'primary');
       })
       .catch(() => {
         if (!cancelled) {
-          setManagedConnectionConfig({ url: '', fallbackUrl: '', authMethod: 'oauth', token: '' });
+          const fallback = normalizeHaConfig({
+            url: '',
+            fallbackUrl: '',
+            authMethod: 'oauth',
+            token: '',
+          });
+          setManagedConnectionConfig(fallback);
+          setManagedConnectionId(fallback.primaryConnectionId || 'primary');
         }
       })
       .finally(() => {
@@ -451,7 +471,7 @@ export default function ConfigModal({
       <div className="flex gap-2">
         <button
           type="button"
-          onClick={() => { if (!canManageConnection) return; setConfig({ ...config, authMethod: 'oauth' }); setConnectionTestResult(null); }}
+          onClick={() => { if (!canManageConnection) return; updatePrimaryConnectionConfig({ authMethod: 'oauth', token: '' }); setConnectionTestResult(null); }}
           disabled={!canManageConnection}
           className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-xs font-bold uppercase tracking-wider transition-all relative ${isOAuth ? 'bg-blue-500 text-white shadow-lg shadow-blue-500/20' : 'bg-[var(--glass-bg)] text-[var(--text-secondary)] border border-[var(--glass-border)] hover:bg-[var(--glass-bg-hover)]'} ${!canManageConnection ? 'opacity-50 cursor-not-allowed' : ''}`}
         >
@@ -463,7 +483,7 @@ export default function ConfigModal({
         </button>
         <button
           type="button"
-          onClick={() => { if (!canManageConnection) return; setConfig({ ...config, authMethod: 'token' }); setConnectionTestResult(null); }}
+          onClick={() => { if (!canManageConnection) return; updatePrimaryConnectionConfig({ authMethod: 'token' }); setConnectionTestResult(null); }}
           disabled={!canManageConnection}
           className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-xs font-bold uppercase tracking-wider transition-all ${!isOAuth ? 'bg-blue-500 text-white shadow-lg shadow-blue-500/20' : 'bg-[var(--glass-bg)] text-[var(--text-secondary)] border border-[var(--glass-border)] hover:bg-[var(--glass-bg-hover)]'} ${!canManageConnection ? 'opacity-50 cursor-not-allowed' : ''}`}
         >
@@ -473,6 +493,38 @@ export default function ConfigModal({
       </div>
     </div>
   );
+
+  const updatePrimaryConnectionConfig = (patch = {}) => {
+    setConfig((prev) => {
+      const normalized = normalizeHaConfig(prev || {});
+      const primaryId = normalized.primaryConnectionId || normalized.connections?.[0]?.id || 'primary';
+      const nextConnections = normalized.connections.map((connection) => {
+        if (connection.id !== primaryId) return connection;
+        const nextAuthMethod = Object.prototype.hasOwnProperty.call(patch, 'authMethod')
+          ? (patch.authMethod === 'token' ? 'token' : 'oauth')
+          : connection.authMethod;
+        const nextToken = Object.prototype.hasOwnProperty.call(patch, 'token')
+          ? String(patch.token || '').trim()
+          : connection.token;
+        return {
+          ...connection,
+          ...patch,
+          authMethod: nextAuthMethod,
+          token: nextAuthMethod === 'token' ? nextToken : '',
+        };
+      });
+      return normalizeHaConfig({
+        ...normalized,
+        ...patch,
+        authMethod: patch.authMethod === 'token' ? 'token' : (patch.authMethod === 'oauth' ? 'oauth' : normalized.authMethod),
+        token: patch.authMethod === 'oauth'
+          ? ''
+          : (Object.prototype.hasOwnProperty.call(patch, 'token') ? String(patch.token || '').trim() : normalized.token),
+        connections: nextConnections,
+        primaryConnectionId: primaryId,
+      });
+    });
+  };
 
   const renderOAuthSection = () => {
     const oauthActive = hasOAuthTokens() && connected;
@@ -527,17 +579,83 @@ export default function ConfigModal({
     );
   };
 
+  const updateManagedConnection = (connectionId, updater) => {
+    setManagedConnectionConfig((prev) => {
+      const normalized = normalizeHaConfig(prev || {});
+      const connections = normalized.connections.map((connection, index) => {
+        if (connection.id !== connectionId) return connection;
+        const nextConnection = typeof updater === 'function' ? updater(connection) : { ...connection, ...(updater || {}) };
+        return normalizeConnection(nextConnection, index);
+      });
+      return normalizeHaConfig({
+        ...normalized,
+        connections,
+        primaryConnectionId: normalized.primaryConnectionId,
+      });
+    });
+  };
+
+  const addManagedConnection = () => {
+    const normalized = normalizeHaConfig(managedConnectionConfig || {});
+    const nextId = normalizeConnectionId(`connection-${normalized.connections.length + 1}`);
+    const nextState = normalizeHaConfig({
+      ...normalized,
+      connections: [
+        ...normalized.connections,
+        {
+          id: nextId,
+          name: `Connection ${normalized.connections.length + 1}`,
+          url: '',
+          fallbackUrl: '',
+          authMethod: 'token',
+          token: '',
+          oauthTokens: null,
+        },
+      ],
+    });
+    setManagedConnectionConfig(nextState);
+    setManagedConnectionId(nextState.connections[nextState.connections.length - 1]?.id || nextState.primaryConnectionId || 'primary');
+  };
+
+  const removeManagedConnection = () => {
+    if (!selectedManagedConnection) return;
+    const normalized = normalizeHaConfig(managedConnectionConfig || {});
+    const filtered = normalized.connections.filter((connection) => connection.id !== selectedManagedConnection.id);
+    if (!filtered.length) return;
+    const nextPrimary = normalized.primaryConnectionId === selectedManagedConnection.id
+      ? filtered[0].id
+      : normalized.primaryConnectionId;
+    const nextState = normalizeHaConfig({
+      ...normalized,
+      connections: filtered,
+      primaryConnectionId: nextPrimary,
+    });
+    setManagedConnectionConfig(nextState);
+    setManagedConnectionId(nextState.connections[0]?.id || nextState.primaryConnectionId || 'primary');
+  };
+
+  const setManagedPrimaryConnection = (connectionId) => {
+    setManagedConnectionConfig((prev) => normalizeHaConfig({
+      ...(prev || {}),
+      primaryConnectionId: connectionId,
+    }));
+  };
+
   const handleSaveManagedConnection = async () => {
     if (!isPlatformAdmin || !connectionManageClientId || !userAdminApi?.saveClientHaConfig) return;
     setManagedConnectionSaving(true);
     try {
+      const normalized = normalizeHaConfig(managedConnectionConfig || {});
       await userAdminApi.saveClientHaConfig(connectionManageClientId, {
-        url: String(managedConnectionConfig.url || '').trim(),
-        fallbackUrl: String(managedConnectionConfig.fallbackUrl || '').trim(),
-        authMethod: managedConnectionConfig.authMethod === 'token' ? 'token' : 'oauth',
-        token: managedConnectionConfig.authMethod === 'token'
-          ? String(managedConnectionConfig.token || '').trim()
-          : '',
+        ...normalized,
+        connections: normalized.connections.map((connection) => ({
+          ...connection,
+          id: normalizeConnectionId(connection.id),
+          token: connection.authMethod === 'token' ? String(connection.token || '').trim() : '',
+          url: String(connection.url || '').trim(),
+          fallbackUrl: String(connection.fallbackUrl || '').trim(),
+          authMethod: connection.authMethod === 'token' ? 'token' : 'oauth',
+        })),
       });
       setGlobalActionMessage(`${t('connection.clientConfigSaved')}: ${connectionManageClientId}`);
     } catch (error) {
@@ -1716,10 +1834,87 @@ export default function ConfigModal({
               </select>
             </div>
             <div className="space-y-1">
+              <label className="text-[10px] uppercase tracking-wider font-bold text-[var(--text-secondary)]">Connection</label>
+              <select
+                value={selectedManagedConnection?.id || ''}
+                onChange={(e) => setManagedConnectionId(e.target.value)}
+                className="w-full px-3 py-2 rounded-lg bg-[var(--glass-bg-hover)] border border-[var(--glass-border)] text-sm"
+              >
+                {managedConnections.map((connection) => (
+                  <option key={connection.id} value={connection.id}>
+                    {connection.name || connection.id} ({connection.id}){connection.id === managedConnectionConfig.primaryConnectionId ? ' • Primary' : ''}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="md:col-span-2 flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={addManagedConnection}
+                className="px-3 py-2 rounded-lg border border-[var(--glass-border)] bg-[var(--glass-bg-hover)] text-[11px] font-bold uppercase tracking-wider"
+              >
+                Add connection
+              </button>
+              <button
+                type="button"
+                onClick={removeManagedConnection}
+                disabled={!selectedManagedConnection || managedConnections.length <= 1}
+                className="px-3 py-2 rounded-lg border border-[var(--glass-border)] bg-[var(--glass-bg-hover)] text-[11px] font-bold uppercase tracking-wider disabled:opacity-50"
+              >
+                Remove selected
+              </button>
+              <button
+                type="button"
+                onClick={() => setManagedPrimaryConnection(selectedManagedConnection?.id)}
+                disabled={!selectedManagedConnection || selectedManagedConnection.id === managedConnectionConfig.primaryConnectionId}
+                className="px-3 py-2 rounded-lg border border-[var(--glass-border)] bg-[var(--glass-bg-hover)] text-[11px] font-bold uppercase tracking-wider disabled:opacity-50"
+              >
+                Set as primary
+              </button>
+            </div>
+            <div className="space-y-1">
+              <label className="text-[10px] uppercase tracking-wider font-bold text-[var(--text-secondary)]">Connection ID</label>
+              <input
+                value={selectedManagedConnection?.id || ''}
+                onChange={(e) => {
+                  const nextId = normalizeConnectionId(e.target.value, selectedManagedConnection?.id || 'primary');
+                  if (!selectedManagedConnection) return;
+                  updateManagedConnection(selectedManagedConnection.id, { ...selectedManagedConnection, id: nextId });
+                  setManagedConnectionId(nextId);
+                  if (managedConnectionConfig.primaryConnectionId === selectedManagedConnection.id) {
+                    setManagedPrimaryConnection(nextId);
+                  }
+                }}
+                className="w-full px-3 py-2 rounded-lg bg-[var(--glass-bg-hover)] border border-[var(--glass-border)] text-sm"
+                placeholder="primary"
+              />
+            </div>
+            <div className="space-y-1">
+              <label className="text-[10px] uppercase tracking-wider font-bold text-[var(--text-secondary)]">Connection name</label>
+              <input
+                value={selectedManagedConnection?.name || ''}
+                onChange={(e) => {
+                  if (!selectedManagedConnection) return;
+                  updateManagedConnection(selectedManagedConnection.id, { ...selectedManagedConnection, name: e.target.value });
+                }}
+                className="w-full px-3 py-2 rounded-lg bg-[var(--glass-bg-hover)] border border-[var(--glass-border)] text-sm"
+                placeholder="Main / Sauna 2 / Building B"
+              />
+            </div>
+            <div className="space-y-1">
               <label className="text-[10px] uppercase tracking-wider font-bold text-[var(--text-secondary)]">{t('system.authMethod')}</label>
               <select
-                value={managedConnectionConfig.authMethod}
-                onChange={(e) => setManagedConnectionConfig((prev) => ({ ...prev, authMethod: e.target.value === 'token' ? 'token' : 'oauth' }))}
+                value={selectedManagedConnection?.authMethod || 'oauth'}
+                onChange={(e) => {
+                  if (!selectedManagedConnection) return;
+                  const nextAuthMethod = e.target.value === 'token' ? 'token' : 'oauth';
+                  updateManagedConnection(selectedManagedConnection.id, {
+                    ...selectedManagedConnection,
+                    authMethod: nextAuthMethod,
+                    token: nextAuthMethod === 'token' ? selectedManagedConnection.token : '',
+                    oauthTokens: nextAuthMethod === 'oauth' ? selectedManagedConnection.oauthTokens : null,
+                  });
+                }}
                 className="w-full px-3 py-2 rounded-lg bg-[var(--glass-bg-hover)] border border-[var(--glass-border)] text-sm"
               >
                 <option value="oauth">OAuth2</option>
@@ -1729,8 +1924,11 @@ export default function ConfigModal({
             <div className="space-y-1 md:col-span-2">
               <label className="text-[10px] uppercase tracking-wider font-bold text-[var(--text-secondary)]">{t('system.haUrlPrimary')}</label>
               <input
-                value={managedConnectionConfig.url}
-                onChange={(e) => setManagedConnectionConfig((prev) => ({ ...prev, url: e.target.value }))}
+                value={selectedManagedConnection?.url || ''}
+                onChange={(e) => {
+                  if (!selectedManagedConnection) return;
+                  updateManagedConnection(selectedManagedConnection.id, { ...selectedManagedConnection, url: e.target.value });
+                }}
                 className="w-full px-3 py-2 rounded-lg bg-[var(--glass-bg-hover)] border border-[var(--glass-border)] text-sm"
                 placeholder="https://homeassistant.local:8123"
               />
@@ -1738,18 +1936,24 @@ export default function ConfigModal({
             <div className="space-y-1 md:col-span-2">
               <label className="text-[10px] uppercase tracking-wider font-bold text-[var(--text-secondary)]">{t('system.haUrlFallback')}</label>
               <input
-                value={managedConnectionConfig.fallbackUrl}
-                onChange={(e) => setManagedConnectionConfig((prev) => ({ ...prev, fallbackUrl: e.target.value }))}
+                value={selectedManagedConnection?.fallbackUrl || ''}
+                onChange={(e) => {
+                  if (!selectedManagedConnection) return;
+                  updateManagedConnection(selectedManagedConnection.id, { ...selectedManagedConnection, fallbackUrl: e.target.value });
+                }}
                 className="w-full px-3 py-2 rounded-lg bg-[var(--glass-bg-hover)] border border-[var(--glass-border)] text-sm"
                 placeholder={t('common.optional')}
               />
             </div>
-            {managedConnectionConfig.authMethod === 'token' && (
+            {selectedManagedConnection?.authMethod === 'token' && (
               <div className="space-y-1 md:col-span-2">
                 <label className="text-[10px] uppercase tracking-wider font-bold text-[var(--text-secondary)]">{t('system.token')}</label>
                 <textarea
-                  value={managedConnectionConfig.token}
-                  onChange={(e) => setManagedConnectionConfig((prev) => ({ ...prev, token: e.target.value }))}
+                  value={selectedManagedConnection?.token || ''}
+                  onChange={(e) => {
+                    if (!selectedManagedConnection) return;
+                    updateManagedConnection(selectedManagedConnection.id, { ...selectedManagedConnection, token: e.target.value });
+                  }}
                   className="w-full px-3 py-2 rounded-lg bg-[var(--glass-bg-hover)] border border-[var(--glass-border)] text-sm h-24 resize-none font-mono"
                   placeholder="ey..."
                 />
@@ -1792,7 +1996,7 @@ export default function ConfigModal({
                 className="w-full px-4 py-3 rounded-xl bg-[var(--glass-bg)] border border-[var(--glass-border)] text-[var(--text-primary)] focus:bg-[var(--glass-bg-hover)] focus:border-blue-500/50 outline-none transition-all placeholder:text-[var(--text-muted)]"
                 value={config.url}
                 disabled={!canManageConnection}
-                onChange={(e) => setConfig({ ...config, url: e.target.value.trim() })}
+                onChange={(e) => updatePrimaryConnectionConfig({ url: e.target.value.trim() })}
                 placeholder="https://homeassistant.local:8123"
               />
               <div className="absolute inset-0 rounded-xl bg-blue-500/5 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none" />
@@ -1823,7 +2027,7 @@ export default function ConfigModal({
                     className="w-full px-4 py-3 rounded-xl bg-[var(--glass-bg)] border border-[var(--glass-border)] text-[var(--text-primary)] focus:bg-[var(--glass-bg-hover)] focus:border-blue-500/50 outline-none transition-all placeholder:text-[var(--text-muted)]"
                     value={config.fallbackUrl}
                     disabled={!canManageConnection}
-                    onChange={(e) => setConfig({ ...config, fallbackUrl: e.target.value.trim() })}
+                    onChange={(e) => updatePrimaryConnectionConfig({ fallbackUrl: e.target.value.trim() })}
                     placeholder={t('common.optional')}
                   />
                   <div className="absolute inset-0 rounded-xl bg-blue-500/5 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none" />
@@ -1846,7 +2050,7 @@ export default function ConfigModal({
                     className="w-full px-4 py-3 h-32 rounded-xl bg-[var(--glass-bg)] border border-[var(--glass-border)] text-[var(--text-primary)] focus:bg-[var(--glass-bg-hover)] focus:border-blue-500/50 outline-none transition-all font-mono text-xs leading-relaxed resize-none"
                     value={config.token}
                     disabled={!canManageConnection}
-                    onChange={(e) => setConfig({ ...config, token: e.target.value.trim() })}
+                    onChange={(e) => updatePrimaryConnectionConfig({ token: e.target.value.trim() })}
                     placeholder="ey..."
                   />
                   <div className="absolute inset-0 rounded-xl bg-blue-500/5 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none" />
@@ -2549,7 +2753,7 @@ export default function ConfigModal({
                           className={`w-full px-3 py-2 rounded-xl bg-[var(--glass-bg)] border-2 text-[var(--text-primary)] outline-none transition-all placeholder:text-[var(--text-muted)] text-sm ${onboardingUrlError ? 'border-red-500/50' : 'border-[var(--glass-border)] focus:border-blue-500/50'}`}
                           value={config.url}
                           onChange={(e) => {
-                            setConfig({ ...config, url: e.target.value.trim() });
+                            updatePrimaryConnectionConfig({ url: e.target.value.trim() });
                             setOnboardingUrlError('');
                             setConnectionTestResult(null);
                           }}
@@ -2574,7 +2778,7 @@ export default function ConfigModal({
                               className={`w-full px-3 py-2 h-24 rounded-xl bg-[var(--glass-bg)] border-2 text-[var(--text-primary)] outline-none transition-all placeholder:text-[var(--text-muted)] font-mono text-xs leading-tight ${onboardingTokenError ? 'border-red-500/50' : 'border-[var(--glass-border)] focus:border-blue-500/50'}`}
                               value={config.token}
                               onChange={(e) => {
-                                setConfig({ ...config, token: e.target.value.trim() });
+                                updatePrimaryConnectionConfig({ token: e.target.value.trim() });
                                 setOnboardingTokenError('');
                                 setConnectionTestResult(null);
                               }}
@@ -2589,7 +2793,7 @@ export default function ConfigModal({
                               type="text"
                               className="w-full px-3 py-2 rounded-xl bg-[var(--glass-bg)] border border-[var(--glass-border)] text-[var(--text-primary)] outline-none transition-all placeholder:text-[var(--text-muted)] text-sm focus:border-blue-500/50"
                               value={config.fallbackUrl}
-                              onChange={(e) => setConfig({ ...config, fallbackUrl: e.target.value.trim() })}
+                              onChange={(e) => updatePrimaryConnectionConfig({ fallbackUrl: e.target.value.trim() })}
                               placeholder={t('common.optional')}
                             />
                             <p className="text-[10px] text-[var(--text-muted)] ml-1 leading-tight">{t('onboarding.fallbackHint')}</p>

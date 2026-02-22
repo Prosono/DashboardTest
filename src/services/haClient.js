@@ -1,16 +1,40 @@
 // Lightweight HA WebSocket client helpers
 // All functions assume a valid Home Assistant connection `conn`
 // via window.HAWS createConnection.
+import { parseScopedEntityId } from '../utils/haConnections';
 
-export function callService(conn, domain, service, service_data) {
+const normalizeEntityRef = (value) => {
+  if (typeof value === 'string') return parseScopedEntityId(value).entityId || value;
+  if (Array.isArray(value)) return value.map((entry) => normalizeEntityRef(entry)).filter(Boolean);
+  return value;
+};
+
+const shouldNormalizeLocally = (conn) => !conn?.__haRouter;
+
+export function callService(conn, domain, service, service_data, target) {
   if (!conn || typeof conn.sendMessagePromise !== 'function') {
     return Promise.reject(new Error('Invalid or disconnected HA connection'));
   }
-  return conn.sendMessagePromise({
+  const payload = {
     type: 'call_service',
     domain,
     service,
-    service_data,
+    service_data: {
+      ...(service_data || {}),
+    },
+  };
+  if (shouldNormalizeLocally(conn) && Object.prototype.hasOwnProperty.call(payload.service_data, 'entity_id')) {
+    payload.service_data.entity_id = normalizeEntityRef(payload.service_data.entity_id);
+  }
+  if (target !== undefined) {
+    payload.target = { ...(target || {}) };
+    if (shouldNormalizeLocally(conn) && Object.prototype.hasOwnProperty.call(payload.target, 'entity_id')) {
+      payload.target.entity_id = normalizeEntityRef(payload.target.entity_id);
+    }
+  }
+
+  return conn.sendMessagePromise({
+    ...payload,
   }).catch(error => {
     console.error(`Service call failed (${domain}.${service}):`, error);
     throw error;
@@ -21,11 +45,13 @@ export async function getHistory(conn, { start, end, entityId, minimal_response 
   if (!conn || typeof conn.sendMessagePromise !== 'function') {
     throw new Error('Invalid or disconnected HA connection');
   }
+  const rawEntityId = parseScopedEntityId(entityId).entityId || entityId;
+  const requestEntityId = shouldNormalizeLocally(conn) ? rawEntityId : entityId;
   const res = await conn.sendMessagePromise({
     type: 'history/history_during_period',
     start_time: start.toISOString(),
     end_time: end.toISOString(),
-    entity_ids: [entityId],
+    entity_ids: [requestEntityId],
     minimal_response,
     no_attributes,
   });
@@ -45,7 +71,7 @@ export async function getHistory(conn, { start, end, entityId, minimal_response 
   }
 
   // Support both object keyed by entity_id and array formats
-  let historyData = payload && payload[entityId];
+  let historyData = payload && (payload[entityId] || payload[rawEntityId] || payload[requestEntityId]);
   if (!historyData && Array.isArray(payload) && payload.length > 0) {
     historyData = Array.isArray(payload[0]) ? payload[0] : payload;
   }
@@ -56,8 +82,9 @@ export async function getHistoryRest(baseUrl, token, { start, end: _end, entityI
   if (!baseUrl || !token) throw new Error('Missing HA url or token');
   const root = String(baseUrl).replace(/\/$/, '');
   const startIso = start.toISOString();
+  const resolvedEntityId = parseScopedEntityId(entityId).entityId || entityId;
   const params = new URLSearchParams({
-    filter_entity_id: entityId,
+    filter_entity_id: resolvedEntityId,
     minimal_response: minimal_response ? '1' : '0',
     no_attributes: no_attributes ? '1' : '0',
     significant_changes_only: significant_changes_only ? '1' : '0'
@@ -84,11 +111,13 @@ export async function getStatistics(conn, { start, end, statisticId, period = '5
   if (!conn || typeof conn.sendMessagePromise !== 'function') {
     throw new Error('Invalid or disconnected HA connection');
   }
+  const rawStatisticId = parseScopedEntityId(statisticId).entityId || statisticId;
+  const requestStatisticId = shouldNormalizeLocally(conn) ? rawStatisticId : statisticId;
   const res = await conn.sendMessagePromise({
     type: 'recorder/statistics_during_period',
     start_time: start.toISOString(),
     end_time: end.toISOString(),
-    statistic_ids: [statisticId],
+    statistic_ids: [requestStatisticId],
     period,
   });
 
@@ -105,7 +134,7 @@ export async function getStatistics(conn, { start, end, statisticId, period = '5
     else if (Object.prototype.hasOwnProperty.call(payload, 'data')) payload = payload.data;
   }
 
-  const stats = payload && payload[statisticId];
+  const stats = payload && (payload[statisticId] || payload[rawStatisticId] || payload[requestStatisticId]);
   return Array.isArray(stats) ? stats : [];
 }
 
@@ -113,11 +142,13 @@ export async function getForecast(conn, { entityId, type = 'hourly' }) {
   if (!conn || typeof conn.sendMessagePromise !== 'function') {
     throw new Error('Invalid or disconnected HA connection');
   }
+  const rawEntityId = parseScopedEntityId(entityId).entityId || entityId;
+  const requestEntityId = shouldNormalizeLocally(conn) ? rawEntityId : entityId;
   const res = await conn.sendMessagePromise({
     type: 'call_service',
     domain: 'weather',
     service: 'get_forecasts',
-    target: { entity_id: entityId },
+    target: { entity_id: requestEntityId },
     service_data: { type },
     return_response: true,
   });
@@ -137,6 +168,14 @@ export async function getForecast(conn, { entityId, type = 'hourly' }) {
     res?.result?.[entityId],
     res?.weather?.[entityId],
     res?.[entityId],
+    res?.service_response?.weather?.[rawEntityId],
+    res?.service_response?.[rawEntityId],
+    res?.response?.weather?.[rawEntityId],
+    res?.response?.[rawEntityId],
+    res?.result?.weather?.[rawEntityId],
+    res?.result?.[rawEntityId],
+    res?.weather?.[rawEntityId],
+    res?.[rawEntityId],
     res
   ];
 
@@ -152,11 +191,14 @@ export async function getCalendarEvents(conn, { start, end, entityIds }) {
   if (!conn || typeof conn.sendMessagePromise !== 'function') {
     throw new Error('Invalid or disconnected HA connection');
   }
+  const requestedEntityIds = (Array.isArray(entityIds) ? entityIds : []).filter(Boolean);
+  const resolvedEntityIds = requestedEntityIds.map((entityId) => parseScopedEntityId(entityId).entityId || entityId);
+  const requestEntityIds = shouldNormalizeLocally(conn) ? resolvedEntityIds : requestedEntityIds;
   const res = await conn.sendMessagePromise({
     type: 'call_service',
     domain: 'calendar',
     service: 'get_events',
-    target: { entity_id: entityIds },
+    target: { entity_id: requestEntityIds },
     service_data: {
       start_date_time: start.toISOString(),
       end_date_time: end.toISOString()
@@ -188,8 +230,17 @@ export async function getCalendarEvents(conn, { start, end, entityIds }) {
 
   // If still empty but single calendar returns events directly
   if (!Object.keys(normalized).length && res?.events && Array.isArray(res.events)) {
-    const key = Array.isArray(entityIds) && entityIds.length === 1 ? entityIds[0] : 'calendar';
+    const key = Array.isArray(resolvedEntityIds) && resolvedEntityIds.length === 1 ? resolvedEntityIds[0] : 'calendar';
     normalized[key] = { events: res.events };
+  }
+
+  if (Array.isArray(requestedEntityIds)) {
+    requestedEntityIds.forEach((originalId) => {
+      const resolvedId = parseScopedEntityId(originalId).entityId || originalId;
+      if (resolvedId && normalized[resolvedId] && originalId !== resolvedId) {
+        normalized[originalId] = normalized[resolvedId];
+      }
+    });
   }
 
   return normalized;
@@ -201,12 +252,14 @@ export async function getTodoItems(conn, entityId) {
   if (!conn || typeof conn.sendMessagePromise !== 'function') {
     throw new Error('Invalid or disconnected HA connection');
   }
+  const resolvedEntityId = parseScopedEntityId(entityId).entityId || entityId;
+  const requestEntityId = shouldNormalizeLocally(conn) ? resolvedEntityId : entityId;
 
   // Try the dedicated WebSocket command first (preferred for frontends)
   try {
     const res = await conn.sendMessagePromise({
       type: 'todo/item/list',
-      entity_id: entityId,
+      entity_id: requestEntityId,
     });
     if (res && Array.isArray(res.items)) {
       return res.items;
@@ -219,7 +272,7 @@ export async function getTodoItems(conn, entityId) {
     type: 'call_service',
     domain: 'todo',
     service: 'get_items',
-    target: { entity_id: entityId },
+    target: { entity_id: requestEntityId },
     service_data: { status: ['needs_action', 'completed'] },
     return_response: true,
   });
@@ -229,7 +282,7 @@ export async function getTodoItems(conn, entityId) {
   const extract = (obj) => {
     if (!obj || typeof obj !== 'object') return [];
     if (Array.isArray(obj.items)) return obj.items;
-    const inner = obj[entityId] || obj.response?.[entityId] || obj.service_response?.[entityId];
+    const inner = obj[entityId] || obj[resolvedEntityId] || obj.response?.[entityId] || obj.response?.[resolvedEntityId] || obj.service_response?.[entityId] || obj.service_response?.[resolvedEntityId];
     if (inner && Array.isArray(inner.items)) return inner.items;
     // Walk first level
     for (const val of Object.values(obj)) {
@@ -245,11 +298,13 @@ export async function addTodoItem(conn, entityId, summary) {
   if (!conn || typeof conn.sendMessagePromise !== 'function') {
     throw new Error('Invalid or disconnected HA connection');
   }
+  const resolvedEntityId = parseScopedEntityId(entityId).entityId || entityId;
+  const requestEntityId = shouldNormalizeLocally(conn) ? resolvedEntityId : entityId;
   return conn.sendMessagePromise({
     type: 'call_service',
     domain: 'todo',
     service: 'add_item',
-    target: { entity_id: entityId },
+    target: { entity_id: requestEntityId },
     service_data: { item: summary },
   });
 }
@@ -258,11 +313,13 @@ export async function updateTodoItem(conn, entityId, uid, status) {
   if (!conn || typeof conn.sendMessagePromise !== 'function') {
     throw new Error('Invalid or disconnected HA connection');
   }
+  const resolvedEntityId = parseScopedEntityId(entityId).entityId || entityId;
+  const requestEntityId = shouldNormalizeLocally(conn) ? resolvedEntityId : entityId;
   return conn.sendMessagePromise({
     type: 'call_service',
     domain: 'todo',
     service: 'update_item',
-    target: { entity_id: entityId },
+    target: { entity_id: requestEntityId },
     service_data: { item: uid, status },
   });
 }
@@ -271,11 +328,13 @@ export async function removeTodoItem(conn, entityId, uid) {
   if (!conn || typeof conn.sendMessagePromise !== 'function') {
     throw new Error('Invalid or disconnected HA connection');
   }
+  const resolvedEntityId = parseScopedEntityId(entityId).entityId || entityId;
+  const requestEntityId = shouldNormalizeLocally(conn) ? resolvedEntityId : entityId;
   return conn.sendMessagePromise({
     type: 'call_service',
     domain: 'todo',
     service: 'remove_item',
-    target: { entity_id: entityId },
+    target: { entity_id: requestEntityId },
     service_data: { item: uid },
   });
 }

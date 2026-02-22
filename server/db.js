@@ -302,6 +302,7 @@ const ensureHaConfigTable = () => {
           auth_method TEXT NOT NULL CHECK (auth_method IN ('oauth', 'token')) DEFAULT 'oauth',
           token TEXT NOT NULL DEFAULT '',
           oauth_tokens TEXT,
+          connections_json TEXT,
           updated_by TEXT,
           created_at TEXT NOT NULL,
           updated_at TEXT NOT NULL
@@ -311,7 +312,7 @@ const ensureHaConfigTable = () => {
       if (tableExists) {
         db.exec(`
           INSERT INTO ha_config (
-            client_id, url, fallback_url, auth_method, token, oauth_tokens, updated_by, created_at, updated_at
+            client_id, url, fallback_url, auth_method, token, oauth_tokens, connections_json, updated_by, created_at, updated_at
           )
           SELECT
             '${DEFAULT_CLIENT_ID}',
@@ -320,6 +321,7 @@ const ensureHaConfigTable = () => {
             CASE WHEN auth_method = 'token' THEN 'token' ELSE 'oauth' END,
             COALESCE(token, ''),
             oauth_tokens,
+            NULL,
             updated_by,
             COALESCE(created_at, '${nowIso()}'),
             COALESCE(updated_at, '${nowIso()}')
@@ -336,6 +338,11 @@ const ensureHaConfigTable = () => {
     } finally {
       db.pragma('foreign_keys = ON');
     }
+  }
+
+  const haConfigColumns = db.prepare('PRAGMA table_info(ha_config)').all().map((col) => col.name);
+  if (!haConfigColumns.includes('connections_json')) {
+    db.prepare('ALTER TABLE ha_config ADD COLUMN connections_json TEXT').run();
   }
 };
 
@@ -388,8 +395,8 @@ const ensureHaConfig = (clientId) => {
   const existing = db.prepare('SELECT client_id FROM ha_config WHERE client_id = ?').get(clientId);
   if (existing) return;
   const now = nowIso();
-  db.prepare('INSERT INTO ha_config (client_id, url, fallback_url, auth_method, token, oauth_tokens, updated_by, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)')
-    .run(clientId, '', '', 'oauth', '', null, null, now, now);
+  db.prepare('INSERT INTO ha_config (client_id, url, fallback_url, auth_method, token, oauth_tokens, connections_json, updated_by, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
+    .run(clientId, '', '', 'oauth', '', null, null, null, now, now);
 };
 
 export const provisionClientDefaults = (clientId, name = '') => {

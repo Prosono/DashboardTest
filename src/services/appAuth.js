@@ -1,3 +1,5 @@
+import { normalizeHaConfig } from '../utils/haConnections';
+
 const TOKEN_KEY = 'tunet_app_auth_token';
 const CLIENT_KEY = 'tunet_client_id';
 const API_BASE = (() => {
@@ -62,23 +64,41 @@ const buildScopedKey = (baseKey, clientId = getClientId()) => {
 
 export const readStoredHaConfig = (clientId = getClientId()) => {
   try {
-    return {
+    const legacy = {
       url: localStorage.getItem(buildScopedKey('ha_url', clientId)) || '',
       fallbackUrl: localStorage.getItem(buildScopedKey('ha_fallback_url', clientId)) || '',
       token: localStorage.getItem(buildScopedKey('ha_token', clientId)) || '',
       authMethod: localStorage.getItem(buildScopedKey('ha_auth_method', clientId)) || 'oauth',
     };
+    const connectionsRaw = localStorage.getItem(buildScopedKey('ha_connections', clientId));
+    const primaryConnectionId = localStorage.getItem(buildScopedKey('ha_primary_connection_id', clientId)) || '';
+    if (connectionsRaw) {
+      try {
+        const parsedConnections = JSON.parse(connectionsRaw);
+        return normalizeHaConfig({
+          ...legacy,
+          connections: Array.isArray(parsedConnections) ? parsedConnections : [],
+          primaryConnectionId,
+        });
+      } catch {
+        // fall through to legacy storage
+      }
+    }
+    return normalizeHaConfig(legacy);
   } catch {
-    return { url: '', fallbackUrl: '', token: '', authMethod: 'oauth' };
+    return normalizeHaConfig({ url: '', fallbackUrl: '', token: '', authMethod: 'oauth' });
   }
 };
 
 export const writeStoredHaConfig = (config = {}, clientId = getClientId()) => {
   try {
-    localStorage.setItem(buildScopedKey('ha_url', clientId), String(config.url || ''));
-    localStorage.setItem(buildScopedKey('ha_fallback_url', clientId), String(config.fallbackUrl || ''));
-    localStorage.setItem(buildScopedKey('ha_token', clientId), String(config.token || ''));
-    localStorage.setItem(buildScopedKey('ha_auth_method', clientId), String(config.authMethod || 'oauth'));
+    const normalized = normalizeHaConfig(config || {});
+    localStorage.setItem(buildScopedKey('ha_url', clientId), String(normalized.url || ''));
+    localStorage.setItem(buildScopedKey('ha_fallback_url', clientId), String(normalized.fallbackUrl || ''));
+    localStorage.setItem(buildScopedKey('ha_token', clientId), String(normalized.token || ''));
+    localStorage.setItem(buildScopedKey('ha_auth_method', clientId), String(normalized.authMethod || 'oauth'));
+    localStorage.setItem(buildScopedKey('ha_primary_connection_id', clientId), String(normalized.primaryConnectionId || 'primary'));
+    localStorage.setItem(buildScopedKey('ha_connections', clientId), JSON.stringify(normalized.connections || []));
   } catch {
     // best effort
   }
@@ -90,11 +110,15 @@ export const clearStoredHaConfig = (clientId = getClientId()) => {
     localStorage.removeItem(buildScopedKey('ha_fallback_url', clientId));
     localStorage.removeItem(buildScopedKey('ha_token', clientId));
     localStorage.removeItem(buildScopedKey('ha_auth_method', clientId));
+    localStorage.removeItem(buildScopedKey('ha_primary_connection_id', clientId));
+    localStorage.removeItem(buildScopedKey('ha_connections', clientId));
     // Legacy keys from older builds.
     localStorage.removeItem('ha_url');
     localStorage.removeItem('ha_fallback_url');
     localStorage.removeItem('ha_token');
     localStorage.removeItem('ha_auth_method');
+    localStorage.removeItem('ha_primary_connection_id');
+    localStorage.removeItem('ha_connections');
   } catch {
     // best effort
   }
@@ -243,7 +267,7 @@ export const deleteClient = async (clientId, confirmation) => {
 
 export const fetchClientHaConfig = async (clientId) => {
   const payload = await apiRequest(`/api/clients/${encodeURIComponent(clientId)}/ha-config`, { method: 'GET' });
-  return payload?.config || null;
+  return payload?.config ? normalizeHaConfig(payload.config) : null;
 };
 
 export const saveClientHaConfig = async (clientId, config) => {
@@ -251,7 +275,7 @@ export const saveClientHaConfig = async (clientId, config) => {
     method: 'PUT',
     body: JSON.stringify(config || {}),
   });
-  return payload?.config || null;
+  return payload?.config ? normalizeHaConfig(payload.config) : null;
 };
 
 export const listClientDashboards = async (clientId) => {
@@ -291,7 +315,7 @@ export const restoreClientDashboardVersion = async (clientId, dashboardId, versi
 
 export const fetchSharedHaConfig = async () => {
   const payload = await apiRequest('/api/auth/ha-config', { method: 'GET' });
-  return payload?.config || null;
+  return payload?.config ? normalizeHaConfig(payload.config) : null;
 };
 
 export const saveSharedHaConfig = async (config) => {
@@ -299,7 +323,7 @@ export const saveSharedHaConfig = async (config) => {
     method: 'PUT',
     body: JSON.stringify(config || {}),
   });
-  return payload?.config || null;
+  return payload?.config ? normalizeHaConfig(payload.config) : null;
 };
 
 export const fetchGlobalBranding = async () => {

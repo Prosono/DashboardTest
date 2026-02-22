@@ -9,6 +9,7 @@ import {
   saveDashboardVersionSnapshot,
   toDashboardVersionMeta,
 } from '../dashboardVersions.js';
+import { mergeHaConfigPayload, parseHaConfigRow, serializeHaConnections } from '../haConfig.js';
 
 const router = Router();
 
@@ -146,21 +147,10 @@ router.get('/:clientId/ha-config', (req, res) => {
   if (!client) return res.status(404).json({ error: 'Client not found' });
 
   const row = db.prepare('SELECT * FROM ha_config WHERE client_id = ?').get(clientId);
-  const oauthTokens = row?.oauth_tokens
-    ? (() => {
-      try { return JSON.parse(row.oauth_tokens); } catch { return null; }
-    })()
-    : null;
+  const parsedConfig = parseHaConfigRow(row);
 
   return res.json({
-    config: {
-      url: row?.url || '',
-      fallbackUrl: row?.fallback_url || '',
-      authMethod: row?.auth_method || 'oauth',
-      token: row?.token || '',
-      oauthTokens,
-      updatedAt: row?.updated_at || null,
-    },
+    config: parsedConfig,
   });
 });
 
@@ -172,57 +162,42 @@ router.put('/:clientId/ha-config', (req, res) => {
   if (!client) return res.status(404).json({ error: 'Client not found' });
 
   const existing = db.prepare('SELECT * FROM ha_config WHERE client_id = ?').get(clientId);
-  const currentAuthMethod = existing?.auth_method === 'token' ? 'token' : 'oauth';
-
-  const hasUrl = Object.prototype.hasOwnProperty.call(req.body || {}, 'url');
-  const hasFallbackUrl = Object.prototype.hasOwnProperty.call(req.body || {}, 'fallbackUrl');
-  const hasAuthMethod = Object.prototype.hasOwnProperty.call(req.body || {}, 'authMethod');
-  const hasToken = Object.prototype.hasOwnProperty.call(req.body || {}, 'token');
-  const hasOauthTokens = Object.prototype.hasOwnProperty.call(req.body || {}, 'oauthTokens');
-
-  const url = hasUrl ? String(req.body?.url || '').trim() : (existing?.url || '');
-  const fallbackUrl = hasFallbackUrl ? String(req.body?.fallbackUrl || '').trim() : (existing?.fallback_url || '');
-  const authMethod = hasAuthMethod
-    ? (String(req.body?.authMethod || '').trim() === 'token' ? 'token' : 'oauth')
-    : currentAuthMethod;
-  const token = hasToken ? String(req.body?.token || '').trim() : (existing?.token || '');
-
-  let oauthTokens;
-  if (hasOauthTokens) {
-    oauthTokens = req.body?.oauthTokens ?? null;
-  } else {
-    oauthTokens = existing?.oauth_tokens
-      ? (() => {
-        try { return JSON.parse(existing.oauth_tokens); } catch { return null; }
-      })()
-      : null;
-  }
+  const existingConfig = parseHaConfigRow(existing);
+  const merged = mergeHaConfigPayload(existingConfig, req.body || {});
 
   const now = new Date().toISOString();
-  const oauthTokensJson = oauthTokens ? JSON.stringify(oauthTokens) : null;
+  const oauthTokensJson = merged.oauthTokens ? JSON.stringify(merged.oauthTokens) : null;
+  const connectionsJson = serializeHaConnections(merged);
 
   db.prepare(`
-    INSERT INTO ha_config (client_id, url, fallback_url, auth_method, token, oauth_tokens, updated_by, created_at, updated_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO ha_config (client_id, url, fallback_url, auth_method, token, oauth_tokens, connections_json, updated_by, created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(client_id) DO UPDATE SET
       url = excluded.url,
       fallback_url = excluded.fallback_url,
       auth_method = excluded.auth_method,
       token = excluded.token,
       oauth_tokens = excluded.oauth_tokens,
+      connections_json = excluded.connections_json,
       updated_by = excluded.updated_by,
       updated_at = excluded.updated_at
-  `).run(clientId, url, fallbackUrl, authMethod, token, oauthTokensJson, req.auth.user.id, existing?.created_at || now, now);
+  `).run(
+    clientId,
+    merged.url,
+    merged.fallbackUrl,
+    merged.authMethod,
+    merged.token,
+    oauthTokensJson,
+    connectionsJson,
+    req.auth.user.id,
+    existing?.created_at || now,
+    now,
+  );
+
+  const savedConfig = { ...merged, updatedAt: now };
 
   return res.json({
-    config: {
-      url,
-      fallbackUrl,
-      authMethod,
-      token,
-      oauthTokens,
-      updatedAt: now,
-    },
+    config: savedConfig,
   });
 });
 

@@ -41,7 +41,7 @@ import {
 import { formatDuration } from './utils';
 import './styles/dashboard.css';
 
-import { clearOAuthTokens, loadTokens, saveTokens } from './services/oauthStorage';
+import { clearAllOAuthTokens, clearOAuthTokens, loadTokensForConnection, saveTokens, saveTokensForConnection } from './services/oauthStorage';
 import {
   fetchCurrentUser,
   clearStoredHaConfig,
@@ -90,6 +90,7 @@ import {
   resolveLogoUrl,
   saveStoredLogoOverrides,
 } from './utils/branding';
+import { normalizeHaConfig } from './utils/haConnections';
 
 function AppContent({
   showOnboarding,
@@ -1932,41 +1933,50 @@ export default function App() {
 
   const clearHaRuntimeConfig = useCallback(() => {
     clearStoredHaConfig();
-    clearOAuthTokens({ syncServer: false });
-    setConfig((prev) => ({
+    clearAllOAuthTokens({ syncServer: false });
+    setConfig((prev) => normalizeHaConfig({
       ...prev,
       url: '',
       fallbackUrl: '',
       authMethod: 'oauth',
       token: '',
+      oauthTokens: null,
+      connections: [{
+        id: 'primary',
+        name: '',
+        url: '',
+        fallbackUrl: '',
+        authMethod: 'oauth',
+        token: '',
+        oauthTokens: null,
+        }],
+      primaryConnectionId: 'primary',
     }));
   }, [setConfig]);
 
   const applySharedHaConfig = useCallback((sharedConfig) => {
     if (!sharedConfig) return false;
-    const resolvedAuthMethod = sharedConfig.authMethod === 'token'
-      ? 'token'
-      : (sharedConfig.oauthTokens ? 'oauth' : (sharedConfig.token ? 'token' : 'oauth'));
+    const normalized = normalizeHaConfig(sharedConfig);
 
-    setConfig((prev) => ({
+    setConfig((prev) => normalizeHaConfig({
       ...prev,
-      url: sharedConfig.url || '',
-      fallbackUrl: sharedConfig.fallbackUrl || '',
-      authMethod: resolvedAuthMethod,
-      token: sharedConfig.token || '',
+      ...normalized,
+      updatedAt: sharedConfig.updatedAt || prev.updatedAt || null,
     }));
 
-    writeStoredHaConfig({
-      url: sharedConfig.url || '',
-      fallbackUrl: sharedConfig.fallbackUrl || '',
-      authMethod: resolvedAuthMethod,
-      token: sharedConfig.token || '',
-    });
+    writeStoredHaConfig(normalized);
 
-    if (resolvedAuthMethod === 'oauth' && sharedConfig.oauthTokens) {
-      saveTokens(sharedConfig.oauthTokens);
-    } else {
-      clearOAuthTokens({ syncServer: false });
+    clearAllOAuthTokens({ syncServer: false });
+    normalized.connections.forEach((connection) => {
+      if (connection.authMethod === 'oauth' && connection.oauthTokens) {
+        saveTokensForConnection(connection.id, connection.oauthTokens, { syncServer: false });
+      } else {
+        clearOAuthTokens({ syncServer: false, connectionId: connection.id });
+      }
+    });
+    // Keep legacy primary callback cache in sync for existing oauth flows.
+    if (normalized.authMethod === 'oauth' && normalized.oauthTokens) {
+      saveTokens(normalized.oauthTokens);
     }
     return true;
   }, [setConfig]);
@@ -1990,13 +2000,14 @@ export default function App() {
           if (!mounted) return;
           const applied = applySharedHaConfig(shared);
           if (!applied) {
-            const localScoped = readStoredHaConfig(user.clientId || getClientId());
-            const canUseScopedLocal = Boolean(localScoped.url);
-            if (canUseScopedLocal) {
-              setConfig((prev) => ({ ...prev, ...localScoped }));
-            } else {
-              clearHaRuntimeConfig();
-            }
+          const localScoped = readStoredHaConfig(user.clientId || getClientId());
+          const normalizedLocal = normalizeHaConfig(localScoped || {});
+          const canUseScopedLocal = Boolean(normalizedLocal.connections?.some((connection) => connection.url));
+          if (canUseScopedLocal) {
+            setConfig((prev) => normalizeHaConfig({ ...prev, ...normalizedLocal }));
+          } else {
+            clearHaRuntimeConfig();
+          }
           }
         }
       } catch {
@@ -2028,9 +2039,10 @@ export default function App() {
       const applied = applySharedHaConfig(shared);
       if (!applied) {
         const localScoped = readStoredHaConfig(user?.clientId || getClientId());
-        const canUseScopedLocal = Boolean(localScoped.url);
+        const normalizedLocal = normalizeHaConfig(localScoped || {});
+        const canUseScopedLocal = Boolean(normalizedLocal.connections?.some((connection) => connection.url));
         if (canUseScopedLocal) {
-          setConfig((prev) => ({ ...prev, ...localScoped }));
+          setConfig((prev) => normalizeHaConfig({ ...prev, ...normalizedLocal }));
         } else {
           clearHaRuntimeConfig();
         }
@@ -2063,20 +2075,29 @@ export default function App() {
     if (!currentUser || currentUser.role !== 'admin' || !haConfigHydrated) return undefined;
 
     const timer = setTimeout(async () => {
-      const authMethod = config.authMethod === 'token' ? 'token' : 'oauth';
-      const oauthTokens = authMethod === 'oauth' ? (await loadTokens() || null) : null;
+      const normalized = normalizeHaConfig(config || {});
+      const connectionsWithTokens = await Promise.all(
+        normalized.connections.map(async (connection) => {
+          if (connection.authMethod !== 'oauth') return { ...connection, oauthTokens: null };
+          const oauthTokens = await loadTokensForConnection(connection.id).catch(() => null);
+          return { ...connection, oauthTokens: oauthTokens || null };
+        }),
+      );
+      const prepared = normalizeHaConfig({
+        ...normalized,
+        connections: connectionsWithTokens,
+        primaryConnectionId: normalized.primaryConnectionId,
+      });
 
       saveSharedHaConfig({
-        url: config.url || '',
-        fallbackUrl: config.fallbackUrl || '',
-        authMethod,
-        token: authMethod === 'token' ? (config.token || '') : '',
-        oauthTokens,
+        ...prepared,
+        connections: prepared.connections,
+        primaryConnectionId: prepared.primaryConnectionId,
       }).catch(() => {});
     }, 500);
 
     return () => clearTimeout(timer);
-  }, [currentUser, haConfigHydrated, config.url, config.fallbackUrl, config.authMethod, config.token]);
+  }, [currentUser, haConfigHydrated, config]);
 
   // ✅ showOnboarding styres i AppContent (attempted + !connected)
   const [showOnboarding, setShowOnboarding] = useState(false);

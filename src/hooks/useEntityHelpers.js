@@ -33,12 +33,12 @@ export function useEntityHelpers({ entities, conn, activeUrl, language, now, t }
 
   // ── Service calls ──────────────────────────────────────────────────────
   const callService = useCallback(
-    (domain, service, data) => {
+    (domain, service, data, target) => {
       if (!conn) {
         logger.warn(`Service call attempted while disconnected: ${domain}.${service}`);
         return Promise.reject(new Error('No connection'));
       }
-      return haCallService(conn, domain, service, data).catch((error) => {
+      return haCallService(conn, domain, service, data, target).catch((error) => {
         console.error(`Service call failed: ${domain}.${service}`, error);
         throw error;
       });

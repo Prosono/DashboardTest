@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { validateUrl } from '../config/onboarding';
 import { saveTokens, loadTokens, clearOAuthTokens, hasOAuthTokens } from '../services/oauthStorage';
 import { clearStoredHaConfig, writeStoredHaConfig } from '../services/appAuth';
+import { normalizeHaConfig } from '../utils/haConnections';
 
 /**
  * Centralises connection-testing, OAuth login/logout and onboarding-step state.
@@ -64,11 +65,27 @@ export function useConnectionSetup({
   const startOAuthLogin = () => {
     if (!validateUrl(config.url) || !window.HAWS) return;
     const cleanUrl = config.url.replace(/\/$/, '');
-    writeStoredHaConfig({
+    const normalized = normalizeHaConfig({
+      ...config,
       url: cleanUrl,
       fallbackUrl: config.fallbackUrl || '',
       authMethod: 'oauth',
       token: '',
+    });
+    const primaryId = normalized.primaryConnectionId || normalized.connections?.[0]?.id || 'primary';
+    const nextConnections = normalized.connections.map((connection) => (
+      connection.id === primaryId
+        ? { ...connection, url: cleanUrl, fallbackUrl: config.fallbackUrl || '', authMethod: 'oauth', token: '' }
+        : connection
+    ));
+    writeStoredHaConfig({
+      ...normalized,
+      url: cleanUrl,
+      fallbackUrl: config.fallbackUrl || '',
+      authMethod: 'oauth',
+      token: '',
+      connections: nextConnections,
+      primaryConnectionId: primaryId,
     });
     window.HAWS.getAuth({
       hassUrl: cleanUrl,
@@ -83,13 +100,34 @@ export function useConnectionSetup({
   // ── OAuth logout ───────────────────────────────────────────────────────
   const handleOAuthLogout = () => {
     clearOAuthTokens();
-    setConfig({ ...config, authMethod: 'oauth', token: '' });
-    clearStoredHaConfig();
-    writeStoredHaConfig({
-      url: config.url || '',
-      fallbackUrl: config.fallbackUrl || '',
+    const normalizedForState = normalizeHaConfig(config || {});
+    const primaryIdForState = normalizedForState.primaryConnectionId || normalizedForState.connections?.[0]?.id || 'primary';
+    const stateConnections = normalizedForState.connections.map((connection) => (
+      connection.id === primaryIdForState
+        ? { ...connection, authMethod: 'oauth', token: '' }
+        : connection
+    ));
+    setConfig(normalizeHaConfig({
+      ...normalizedForState,
       authMethod: 'oauth',
       token: '',
+      connections: stateConnections,
+      primaryConnectionId: primaryIdForState,
+    }));
+    clearStoredHaConfig();
+    const normalized = normalizeHaConfig(config || {});
+    const primaryId = normalized.primaryConnectionId || normalized.connections?.[0]?.id || 'primary';
+    const nextConnections = normalized.connections.map((connection) => (
+      connection.id === primaryId
+        ? { ...connection, authMethod: 'oauth', token: '' }
+        : connection
+    ));
+    writeStoredHaConfig({
+      ...normalized,
+      authMethod: 'oauth',
+      token: '',
+      connections: nextConnections,
+      primaryConnectionId: primaryId,
     });
   };
 
