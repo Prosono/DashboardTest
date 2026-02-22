@@ -540,6 +540,7 @@ function AppContent({
   } = useEntityHelpers({ entities, conn, activeUrl, language, now, t });
 
   const canControlDevices = currentUserRole !== 'inspector' && !isPlatformAdmin;
+  const stickyNavAllowed = !(isPlatformAdmin && activePage === SUPER_ADMIN_OVERVIEW_PAGE_ID);
   const isAdminUser = canManageUsersAndClients;
   const profileDisplayName = String(currentUser?.fullName || currentUser?.username || t('profile.userFallback')).trim();
   const [dashboardDirty, setDashboardDirty] = useState(false);
@@ -860,12 +861,18 @@ function AppContent({
 
   const measureNavStickyAnchor = useCallback(() => {
     if (typeof window === 'undefined') return;
+    if (!stickyNavAllowed) return;
     const pinTop = syncNavPinTop();
     if (navStickyOnScrollDown) return;
     const rect = measureNavRowMetrics();
     if (!rect) return;
     navStickyAnchorRef.current = Math.max(0, (window.scrollY || 0) + rect.top - pinTop);
-  }, [navStickyOnScrollDown, measureNavRowMetrics, syncNavPinTop]);
+  }, [stickyNavAllowed, navStickyOnScrollDown, measureNavRowMetrics, syncNavPinTop]);
+
+  useEffect(() => {
+    if (stickyNavAllowed) return;
+    setNavStickyOnScrollDown(false);
+  }, [stickyNavAllowed]);
 
   useEffect(() => {
     if (typeof window === 'undefined') return undefined;
@@ -895,6 +902,7 @@ function AppContent({
         });
 
         setNavStickyOnScrollDown((prev) => {
+          if (!stickyNavAllowed) return false;
           if (!pastAnchor) return false;
           if (delta > 0) return true;
           if (delta < 0) return prev;
@@ -906,6 +914,10 @@ function AppContent({
     };
 
     const onResize = () => {
+      if (!stickyNavAllowed) {
+        setNavStickyOnScrollDown(false);
+        return;
+      }
       measureNavRowMetrics();
       measureNavStickyAnchor();
       if ((window.scrollY || 0) <= navStickyAnchorRef.current) {
@@ -924,7 +936,7 @@ function AppContent({
         navScrollRafRef.current = 0;
       }
     };
-  }, [measureNavStickyAnchor, measureNavRowMetrics, isMobile, syncNavPinTop]);
+  }, [measureNavStickyAnchor, measureNavRowMetrics, isMobile, syncNavPinTop, stickyNavAllowed]);
 
   const triggerPullRefresh = useCallback(() => {
     if (mobilePullRefreshing || typeof window === 'undefined') return;
@@ -1511,14 +1523,14 @@ function AppContent({
         <div
           style={{
             marginBottom: `${isMobile ? Math.min(14, sectionSpacing?.navToGrid ?? 24) : (sectionSpacing?.navToGrid ?? 24)}px`,
-            minHeight: navStickyOnScrollDown && navPinnedMetrics.height > 0 ? `${navPinnedMetrics.height}px` : undefined,
+            minHeight: stickyNavAllowed && navStickyOnScrollDown && navPinnedMetrics.height > 0 ? `${navPinnedMetrics.height}px` : undefined,
           }}
         >
           <div
             ref={navRowRef}
-            className={`${isMobile ? 'flex flex-col items-center gap-1.5' : 'flex flex-nowrap items-center justify-between gap-4'} ${navStickyOnScrollDown ? 'z-30 transition-all duration-200' : ''}`}
+            className={`${isMobile ? 'flex flex-col items-center gap-1.5' : 'flex flex-nowrap items-center justify-between gap-4'} ${stickyNavAllowed && navStickyOnScrollDown ? 'z-30 transition-all duration-200' : ''}`}
             style={{
-              ...(navStickyOnScrollDown
+              ...(stickyNavAllowed && navStickyOnScrollDown
                 ? {
                   position: 'fixed',
                   top: `${navPinTopPx}px`,
