@@ -748,7 +748,7 @@ export default function SaunaCard({
     >
       {controls}
 
-      <div className="relative z-10 h-full min-h-0 flex flex-col overflow-y-auto custom-scrollbar pr-1">
+      <div className="relative z-10 h-full min-h-0 flex flex-col overflow-y-hidden md:overflow-y-auto custom-scrollbar md:pr-1">
         <div className="grid grid-cols-3 items-start gap-4">
           <div className="min-w-0 space-y-2">
             <div className="flex items-center gap-3 min-w-0">
