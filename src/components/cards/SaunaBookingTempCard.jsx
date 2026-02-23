@@ -679,7 +679,7 @@ export default function SaunaBookingTempCard({
                       <div className="text-[10px] uppercase tracking-widest font-bold text-[var(--text-secondary)]">
                         {tr('sauna.bookingTemp.deviation', 'Deviation')}
                       </div>
-                      <div className={`mt-2 text-[1.8rem] leading-none font-semibold tabular-nums ${deviationTone.text}`}>
+                      <div className={`mt-2 text-[1.35rem] leading-none font-semibold tabular-nums ${deviationTone.text}`}>
                         {formatDeviationPercent(avgDeviationPct)}
                       </div>
                     </div>
@@ -741,10 +741,7 @@ export default function SaunaBookingTempCard({
                   <div className="min-w-0 flex flex-col">
                     <div className="flex-1 min-h-0 px-3 py-3 border-b border-[var(--glass-border)] text-right">
                       <div className="text-[11px] text-[var(--text-muted)]">
-                        {summaryHours}h • {recentRegularSnapshots.length} {tr('sauna.bookingTemp.starts', 'samples')}
-                      </div>
-                      <div className="mt-2 text-[11px] uppercase tracking-widest text-[var(--text-secondary)]">
-                        {targetSamples.length ? `${reachedCount}/${targetSamples.length}` : tr('common.unavailable', 'Unavailable')}
+                        {summaryHours}h
                       </div>
                     </div>
                     <div className="flex-1 min-h-0 px-3 py-3 flex flex-col items-end justify-center">
