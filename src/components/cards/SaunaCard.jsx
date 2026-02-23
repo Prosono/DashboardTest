@@ -639,6 +639,14 @@ export default function SaunaCard({
     : 'bg-orange-500/18 border-orange-400/25 text-orange-200';
 
   const minutesShort = tr('sauna.minutesShort', 'min');
+  const hoursShort = tr('sauna.hoursShort', 'h');
+  const formatBookingLeadTime = (totalMinutes) => {
+    const rounded = Number.isFinite(totalMinutes) ? Math.max(0, Math.round(totalMinutes)) : 0;
+    if (rounded <= 60) return `${rounded} ${minutesShort}`;
+    const hours = Math.floor(rounded / 60);
+    const minutes = rounded % 60;
+    return `${hours} ${hoursShort} ${minutes} ${minutesShort}`;
+  };
   const bookingLine = (() => {
     const hasAny =
       settings?.nextBookingInMinutesEntityId ||
@@ -649,8 +657,9 @@ export default function SaunaCard({
     if (!hasAny || settings?.showBookingOverview === false) return null;
 
     const next = Number.isFinite(nextMinutes) ? Math.round(nextMinutes) : -1;
-    const nextBookingText = `${tr('sauna.nextBookingIn', 'Neste booking om')} ${next} ${minutesShort}`;
-    const nextOrdinaryText = `${tr('sauna.nextOrdinaryBookingIn', 'Neste vanlige booking om')} ${next} ${minutesShort}`;
+    const nextDuration = next >= 0 ? formatBookingLeadTime(next) : '';
+    const nextBookingText = `${tr('sauna.nextBookingIn', 'Neste booking om')} ${nextDuration}`;
+    const nextOrdinaryText = `${tr('sauna.nextOrdinaryBookingIn', 'Neste vanlige booking om')} ${nextDuration}`;
 
     if (saunaIsActive && serviceYes) {
       if (next >= 0) return `${tr('sauna.service', 'Service')} (${nextOrdinaryText})`;
