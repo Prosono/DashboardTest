@@ -131,6 +131,38 @@ const formatSince = (timestampMs) => {
   return restHours > 0 ? `${days}d ${restHours}h` : `${days}d`;
 };
 
+const getDeviationBarColor = (startTemp, targetTemp, tolerance = 3) => {
+  const start = toNum(startTemp);
+  const target = toNum(targetTemp);
+  if (start === null || target === null) return '#60a5fa';
+  const delta = start - target;
+  if (Math.abs(delta) <= tolerance) return '#22c55e';
+  if (delta > tolerance) return '#f59e0b';
+  return '#ef4444';
+};
+
+const buildChartRange = (entries = [], fallbackTarget = null) => {
+  const values = [];
+  entries.forEach((entry) => {
+    const start = toNum(entry?.startTemp);
+    const target = toNum(entry?.targetTemp);
+    if (start !== null) values.push(start);
+    if (target !== null) values.push(target);
+  });
+  const fallback = toNum(fallbackTarget);
+  if (fallback !== null) values.push(fallback);
+  if (!values.length) return null;
+
+  const min = Math.min(...values);
+  const max = Math.max(...values);
+  const span = Math.max(1, max - min);
+  const padding = Math.max(1.5, span * 0.25);
+  return {
+    minValue: min - padding,
+    maxValue: max + padding,
+  };
+};
+
 const getTempStats = (entries) => {
   if (!Array.isArray(entries) || entries.length === 0) return null;
   const values = entries
@@ -329,9 +361,22 @@ export default function SaunaBookingTempCard({
   const reachedCount = targetSamples.filter((entry) => entry.startTemp >= (entry.targetTemp - targetToleranceC)).length;
   const reachedRate = targetSamples.length ? Math.round((reachedCount / targetSamples.length) * 100) : null;
 
-  const sparkPoints = recentSorted.slice(-30).map((entry) => ({ value: entry.startTemp }));
+  const trendEntries = recentSorted.slice(-30);
+  const sparkPoints = trendEntries.map((entry) => ({
+    value: entry.startTemp,
+    barColor: getDeviationBarColor(entry.startTemp, entry.targetTemp, 3),
+  }));
+  const trendChartRange = buildChartRange(trendEntries, targetTemp);
   const latestSnapshot = recentSorted.length ? recentSorted[recentSorted.length - 1] : null;
   const modalStats = getTempStats(historyModal?.entries || []);
+  const historyChartEntries = Array.isArray(historyModal?.entries)
+    ? historyModal.entries.slice().reverse()
+    : [];
+  const historyChartPoints = historyChartEntries.map((entry) => ({
+    value: entry.startTemp,
+    barColor: getDeviationBarColor(entry.startTemp, entry.targetTemp, 3),
+  }));
+  const historyChartRange = buildChartRange(historyChartEntries, targetTemp);
   const formatDeviationPercent = (value) => {
     if (!Number.isFinite(Number(value))) return '--';
     const num = Number(value);
@@ -467,6 +512,9 @@ export default function SaunaBookingTempCard({
                 currentIndex={sparkPoints.length - 1}
                 height={62}
                 variant="bar"
+                minValue={trendChartRange?.minValue}
+                maxValue={trendChartRange?.maxValue}
+                barColorAccessor={(point) => point?.barColor}
               />
             </div>
           </div>
@@ -765,10 +813,13 @@ export default function SaunaBookingTempCard({
                     </div>
                     <div className="pl-12">
                       <SparkLine
-                        data={historyModal.entries.slice().reverse().map((entry) => ({ value: entry.startTemp }))}
-                        currentIndex={historyModal.entries.length - 1}
+                        data={historyChartPoints}
+                        currentIndex={historyChartPoints.length - 1}
                         height={72}
                         variant="bar"
+                        minValue={historyChartRange?.minValue}
+                        maxValue={historyChartRange?.maxValue}
+                        barColorAccessor={(point) => point?.barColor}
                       />
                     </div>
                   </div>

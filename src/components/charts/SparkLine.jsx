@@ -31,6 +31,7 @@ export default function SparkLine({
   minValue,
   maxValue,
   variant = 'line',
+  barColorAccessor,
 }) {
   if (!data || data.length === 0) return null;
   
@@ -115,10 +116,14 @@ export default function SparkLine({
         {useBars ? (
           <>
             {values.map((v, i) => {
+              const point = data[i];
               const normalized = (v - min) / range;
               const y = height - (normalized * height);
               const h = Math.max(1.5, height - y);
               const x = points[i][0] - (barWidth / 2);
+              const customBarColor = typeof barColorAccessor === 'function'
+                ? barColorAccessor(point, i)
+                : (point && point.barColor ? point.barColor : null);
               return (
                 <rect
                   key={`bar-${i}`}
@@ -127,7 +132,7 @@ export default function SparkLine({
                   width={barWidth}
                   height={h}
                   rx={Math.min(4, barWidth / 2)}
-                  fill={`url(#${barId})`}
+                  fill={customBarColor || `url(#${barId})`}
                   opacity={i === safeCurrentIndex ? 0.95 : 0.66}
                 />
               );
