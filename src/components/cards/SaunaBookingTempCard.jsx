@@ -143,7 +143,7 @@ const getDeviationBarColor = (startTemp, targetTemp, tolerance = 3) => {
 
 const getBarChartMaxWidth = (pointCount) => {
   const count = Number.isFinite(Number(pointCount)) ? Math.max(1, Number(pointCount)) : 1;
-  return Math.max(320, Math.min(760, Math.round(count * 62)));
+  return Math.max(260, Math.min(520, Math.round(count * 36)));
 };
 
 const buildChartRange = (entries = [], fallbackTarget = null, options = {}) => {
@@ -241,28 +241,14 @@ export default function SaunaBookingTempCard({
   const targetToleranceC = Number.isFinite(Number(settings?.targetToleranceC)) ? Number(settings.targetToleranceC) : 0;
 
   const snapshots = useMemo(() => normalizeSnapshots(settings?.bookingSnapshots), [settings?.bookingSnapshots]);
-  const rootRef = useRef(null);
   const lastLoggedHourRef = useRef(null);
   const [historyModal, setHistoryModal] = useState(null);
   const [showDetailsModal, setShowDetailsModal] = useState(false);
-  const [isCompactCard, setIsCompactCard] = useState(false);
 
   const openHistoryModal = (payload) => {
     if (editMode) return;
     setHistoryModal(payload);
   };
-
-  useEffect(() => {
-    if (typeof ResizeObserver === 'undefined' || !rootRef.current) return undefined;
-    const node = rootRef.current;
-    const observer = new ResizeObserver((entries) => {
-      const entry = entries?.[0];
-      const nextHeight = Number(entry?.contentRect?.height || node.getBoundingClientRect().height || 0);
-      setIsCompactCard(nextHeight > 0 && nextHeight < 520);
-    });
-    observer.observe(node);
-    return () => observer.disconnect();
-  }, []);
 
   const removeSnapshot = (entryId) => {
     if (!settingsKey || typeof saveCardSetting !== 'function') return;
@@ -428,7 +414,7 @@ export default function SaunaBookingTempCard({
   const missingConfig = [];
   if (!tempEntityId) missingConfig.push(tr('sauna.bookingTemp.tempEntity', 'Temperature sensor'));
   if (!activeEntityId) missingConfig.push(tr('sauna.bookingTemp.activeEntity', 'Booking active sensor'));
-  const ringRadius = 42;
+  const ringRadius = 48;
   const ringCircumference = 2 * Math.PI * ringRadius;
   const ringProgress = deviationScore ?? 0;
   const ringDashArray = `${(ringProgress / 100) * ringCircumference} ${ringCircumference}`;
@@ -608,7 +594,6 @@ export default function SaunaBookingTempCard({
   return (
     <div
       {...dragProps}
-      ref={rootRef}
       className={`touch-feedback relative p-5 rounded-[2.2rem] border bg-[var(--glass-bg)] border-[var(--glass-border)] h-full overflow-hidden transition-all duration-300 ${
         editMode ? 'cursor-move' : 'cursor-default'
       }`}
@@ -659,9 +644,7 @@ export default function SaunaBookingTempCard({
                 if (editMode) return;
                 setShowDetailsModal(true);
               }}
-              className={`flex-1 min-h-0 w-full rounded-2xl border border-[var(--glass-border)] bg-[var(--glass-bg)] text-left transition-colors ${
-                isCompactCard ? 'px-3 py-2.5' : 'px-4 py-4'
-              } ${
+              className={`flex-1 min-h-0 w-full rounded-2xl border border-[var(--glass-border)] bg-[var(--glass-bg)] px-4 py-4 text-left transition-colors flex flex-col ${
                 editMode ? 'cursor-default' : 'hover:bg-[var(--glass-bg-hover)] cursor-pointer active:scale-[0.99]'
               }`}
             >
@@ -675,13 +658,13 @@ export default function SaunaBookingTempCard({
                   </div>
                 </div>
 
-                <div className={`${isCompactCard ? 'mt-0.5 text-xl' : 'mt-1 text-2xl'} font-semibold tabular-nums ${deviationTone.text}`}>
+                <div className={`mt-1 text-2xl font-semibold tabular-nums ${deviationTone.text}`}>
                   {formatDeviationPercent(avgDeviationPct)}
                 </div>
               </div>
 
-              <div className={`${isCompactCard ? 'mt-0.5' : 'mt-2.5'} grid grid-cols-[auto,1fr] items-start gap-3`}>
-                <div className={`relative shrink-0 ${isCompactCard ? 'w-24 h-24' : 'w-28 h-28'}`}>
+              <div className="mt-2.5 flex-1 flex flex-col items-center justify-center text-center">
+                <div className="relative w-36 h-36 shrink-0">
                   <svg viewBox="0 0 120 120" className="w-full h-full">
                     <circle
                       cx="60"
@@ -689,7 +672,7 @@ export default function SaunaBookingTempCard({
                       r={ringRadius}
                       fill="none"
                       stroke="rgba(148, 163, 184, 0.2)"
-                      strokeWidth="11"
+                      strokeWidth="12"
                     />
                     <circle
                       cx="60"
@@ -697,7 +680,7 @@ export default function SaunaBookingTempCard({
                       r={ringRadius}
                       fill="none"
                       stroke={deviationTone.ring}
-                      strokeWidth="11"
+                      strokeWidth="12"
                       strokeLinecap="round"
                       strokeDasharray={ringDashArray}
                       style={{
@@ -708,7 +691,7 @@ export default function SaunaBookingTempCard({
                     />
                   </svg>
                   <div className="absolute inset-0 flex flex-col items-center justify-center text-center">
-                    <span className={`${isCompactCard ? 'text-[1.7rem]' : 'text-2xl'} font-semibold tabular-nums text-[var(--text-primary)]`}>
+                    <span className="text-[2.05rem] font-semibold tabular-nums text-[var(--text-primary)]">
                       {deviationScore !== null ? deviationScore : '--'}
                     </span>
                     <span className="text-[10px] uppercase tracking-widest text-[var(--text-muted)]">
@@ -717,17 +700,17 @@ export default function SaunaBookingTempCard({
                   </div>
                 </div>
 
-                <div className="min-w-0 text-left">
+                <div className="min-w-0 mt-3 text-center">
                   <div className="text-[11px] uppercase tracking-widest font-bold text-[var(--text-secondary)]">
                     {tr('sauna.bookingTemp.targetHit', 'Target hit')}
                   </div>
-                  <div className={`${isCompactCard ? 'text-lg' : 'text-xl'} font-semibold tabular-nums text-[var(--text-primary)]`}>
+                  <div className="text-xl font-semibold tabular-nums text-[var(--text-primary)]">
                     {reachedRate !== null ? `${reachedRate}%` : '--'}
                   </div>
                   <div className="text-[11px] text-[var(--text-muted)] mt-1">
                     {targetSamples.length ? `${reachedCount}/${targetSamples.length}` : tr('common.unavailable', 'Unavailable')}
                   </div>
-                  <div className={`${isCompactCard ? 'mt-1' : 'mt-3'} text-[11px] uppercase tracking-widest text-[var(--text-secondary)]`}>
+                  <div className="mt-2 text-[11px] uppercase tracking-widest text-[var(--text-secondary)]">
                     {tr('common.history', 'History')} +
                   </div>
                 </div>
