@@ -579,10 +579,20 @@ export default function SaunaCard({
     if (!hasAny || settings?.showBookingOverview === false) return null;
 
     const next = Number.isFinite(nextMinutes) ? Math.round(nextMinutes) : -1;
+    const nextBookingText = `${tr('sauna.nextBookingIn', 'Neste booking om')} ${next} ${minutesShort}`;
+    const nextOrdinaryText = `${tr('sauna.nextOrdinaryBookingIn', 'Neste vanlige booking om')} ${next} ${minutesShort}`;
 
-    if (serviceYes) return tr('sauna.service', 'Service');
+    if (serviceYes) {
+      if (next >= 0) {
+        if (saunaIsActive) {
+          return `${tr('sauna.service', 'Service')} (${nextOrdinaryText})`;
+        }
+        return `${nextBookingText} (${tr('sauna.service', 'Service')})`;
+      }
+      return tr('sauna.service', 'Service');
+    }
     if (serviceNo) return tr('sauna.normalBooking', 'Vanlig booking');
-    if (next >= 0) return `${tr('sauna.nextBookingIn', 'Neste booking om')} ${next} ${minutesShort}`;
+    if (next >= 0) return nextBookingText;
     return tr('sauna.noUpcomingBookingsToday', 'Ingen kommende bookinger i dag');
   })();
 
