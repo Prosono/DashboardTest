@@ -680,35 +680,35 @@ export default function SaunaBookingTempCard({
               <div className={`flex-1 min-h-0 rounded-2xl border border-[var(--glass-border)] bg-[var(--glass-bg-hover)] overflow-hidden transition-colors ${
                 editMode ? '' : 'hover:bg-[var(--glass-bg)]'
               }`}>
-                <div className="grid grid-cols-[1fr_auto_1fr] min-h-[170px] h-full">
+                <div className="grid grid-cols-[minmax(94px,1fr)_auto_minmax(94px,1fr)] sm:grid-cols-[1fr_auto_1fr] min-h-[152px] sm:min-h-[170px] h-full">
                   <div className="min-w-0 flex flex-col">
-                    <div className="flex-1 min-h-0 px-3 py-3 border-b border-[var(--glass-border)]">
+                    <div className="flex-1 min-h-0 px-2.5 py-2.5 sm:px-3 sm:py-3 border-b border-[var(--glass-border)]">
                       <div className="text-[10px] uppercase tracking-widest font-bold text-[var(--text-secondary)]">
                         {tr('sauna.bookingTemp.deviation', 'Deviation')}
                       </div>
-                      <div className={`mt-2 text-[1.35rem] leading-none font-semibold tabular-nums ${deviationTone.text}`}>
+                      <div className={`mt-2 text-[1.12rem] sm:text-[1.35rem] leading-none font-semibold tabular-nums ${deviationTone.text}`}>
                         {formatDeviationPercent(avgDeviationPct)}
                       </div>
                     </div>
-                    <div className="flex-1 min-h-0 px-3 py-3 flex flex-col items-start justify-center">
+                    <div className="flex-1 min-h-0 px-2.5 py-2.5 sm:px-3 sm:py-3 flex flex-col items-start justify-center">
                       <div className={`inline-flex items-center gap-1.5 ${
                         scoreTrendDirection === 'up'
                           ? 'text-emerald-500'
                           : (scoreTrendDirection === 'down' ? 'text-amber-500' : 'text-[var(--text-secondary)]')
                       }`}>
-                        <TrendingUp className={`w-7 h-7 ${scoreTrendDirection === 'down' ? 'rotate-180' : ''}`} />
-                        <span className="text-[11px] font-semibold tabular-nums">
+                        <TrendingUp className={`w-6 h-6 sm:w-7 sm:h-7 ${scoreTrendDirection === 'down' ? 'rotate-180' : ''}`} />
+                        <span className="text-[10px] sm:text-[11px] font-semibold tabular-nums">
                           {scoreTrendDelta === null ? '--' : `${scoreTrendDelta > 0 ? '+' : ''}${scoreTrendDelta.toFixed(1)}`}
                         </span>
                       </div>
-                      <span className="mt-1 text-[11px] uppercase tracking-widest text-[var(--text-secondary)]">
+                      <span className="mt-1 text-[10px] sm:text-[11px] uppercase tracking-[0.14em] sm:tracking-widest text-[var(--text-secondary)] whitespace-nowrap">
                         {tr('sauna.bookingTemp.trend', 'Trend')}
                       </span>
                     </div>
                   </div>
 
-                  <div className="px-4 py-3 border-x border-[var(--glass-border)] flex items-center justify-center">
-                    <div className="relative w-36 h-36 shrink-0">
+                  <div className="px-2.5 py-2.5 sm:px-4 sm:py-3 border-x border-[var(--glass-border)] flex items-center justify-center">
+                    <div className="relative w-28 h-28 sm:w-36 sm:h-36 shrink-0">
                       <svg viewBox="0 0 120 120" className="w-full h-full">
                         <circle
                           cx="60"
@@ -735,10 +735,10 @@ export default function SaunaBookingTempCard({
                         />
                       </svg>
                       <div className="absolute inset-0 flex flex-col items-center justify-center text-center">
-                        <span className="text-[2.05rem] font-semibold tabular-nums text-[var(--text-primary)]">
+                        <span className="text-[1.78rem] sm:text-[2.05rem] font-semibold tabular-nums text-[var(--text-primary)]">
                           {deviationScore !== null ? deviationScore : '--'}
                         </span>
-                        <span className="text-[10px] uppercase tracking-widest text-[var(--text-muted)]">
+                        <span className="text-[9px] sm:text-[10px] uppercase tracking-[0.16em] sm:tracking-widest text-[var(--text-muted)]">
                           {tr('sauna.bookingTemp.score', 'Score')}
                         </span>
                       </div>
@@ -746,19 +746,19 @@ export default function SaunaBookingTempCard({
                   </div>
 
                   <div className="min-w-0 flex flex-col">
-                    <div className="flex-1 min-h-0 px-3 py-3 border-b border-[var(--glass-border)] text-right">
-                      <div className="text-[11px] text-[var(--text-muted)]">
+                    <div className="flex-1 min-h-0 px-2.5 py-2.5 sm:px-3 sm:py-3 border-b border-[var(--glass-border)] text-right">
+                      <div className="text-[10px] sm:text-[11px] text-[var(--text-muted)]">
                         {summaryHours}h
                       </div>
-                      <div className="mt-1 text-[2rem] leading-none font-semibold tabular-nums text-[var(--text-primary)]">
+                      <div className="mt-1 text-[1.65rem] sm:text-[2rem] leading-none font-semibold tabular-nums text-[var(--text-primary)]">
                         {recentRegularSnapshots.length}
                       </div>
-                      <div className="mt-1 text-[11px] text-[var(--text-secondary)]">
+                      <div className="mt-1 text-[10px] sm:text-[11px] leading-tight text-[var(--text-secondary)]">
                         {tr('sauna.bookingTemp.starts', 'Measurements')}
                       </div>
                     </div>
-                    <div className="flex-1 min-h-0 px-3 py-3 flex flex-col items-end justify-center">
-                      <div className="inline-flex items-end gap-1 h-8">
+                    <div className="flex-1 min-h-0 px-2.5 py-2.5 sm:px-3 sm:py-3 flex flex-col items-end justify-center">
+                      <div className="inline-flex items-end gap-1 h-7 sm:h-8">
                         {lastSevenScoreValues.length > 0 ? (
                           lastSevenScoreSamples.map((sample, index) => {
                             const score = Number(sample?.score) || 0;
@@ -788,8 +788,9 @@ export default function SaunaBookingTempCard({
                           </>
                         )}
                       </div>
-                      <span className="mt-1.5 text-[11px] uppercase tracking-widest text-[var(--text-secondary)]">
-                        {tr('common.history', 'History')} +
+                      <span className="mt-1 text-[10px] sm:text-[11px] uppercase tracking-[0.14em] sm:tracking-widest text-[var(--text-secondary)] whitespace-nowrap">
+                        {tr('common.history', 'History')}
+                        <span className="hidden sm:inline"> +</span>
                       </span>
                     </div>
                   </div>
