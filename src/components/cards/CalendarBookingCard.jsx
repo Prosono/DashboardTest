@@ -4,7 +4,6 @@ import {
   Calendar as CalendarIcon,
   Clock3,
   MapPin,
-  Sparkles,
   User,
   Wrench,
   ShieldCheck,
@@ -72,19 +71,16 @@ const getDayBounds = (nowMs) => {
   todayStart.setHours(0, 0, 0, 0);
   const tomorrowStart = new Date(todayStart);
   tomorrowStart.setDate(tomorrowStart.getDate() + 1);
-  const afterTomorrowStart = new Date(tomorrowStart);
-  afterTomorrowStart.setDate(afterTomorrowStart.getDate() + 1);
   return {
     todayStartMs: todayStart.getTime(),
     tomorrowStartMs: tomorrowStart.getTime(),
-    afterTomorrowStartMs: afterTomorrowStart.getTime(),
   };
 };
 
 const BOOKING_TYPE_PATTERNS = {
   service: ['service', 'vedlikehold', 'maintenance', 'teknisk', 'repair', 'reparasjon'],
-  cleaning: ['clean', 'cleaning', 'rengjor', 'rengjør', 'wash', 'vask'],
-  vip: ['vip', 'privat', 'private', 'premium'],
+  private: ['privat', 'private', 'vip', 'exclusive'],
+  felles: ['felles', 'shared', 'common'],
 };
 
 const getBookingType = (event) => {
@@ -93,9 +89,9 @@ const getBookingType = (event) => {
   const location = String(event?.location || '').toLowerCase();
   const haystack = `${summary} ${description} ${location}`;
   if (BOOKING_TYPE_PATTERNS.service.some((pattern) => haystack.includes(pattern))) return 'service';
-  if (BOOKING_TYPE_PATTERNS.cleaning.some((pattern) => haystack.includes(pattern))) return 'cleaning';
-  if (BOOKING_TYPE_PATTERNS.vip.some((pattern) => haystack.includes(pattern))) return 'vip';
-  return 'standard';
+  if (BOOKING_TYPE_PATTERNS.private.some((pattern) => haystack.includes(pattern))) return 'private';
+  if (BOOKING_TYPE_PATTERNS.felles.some((pattern) => haystack.includes(pattern))) return 'felles';
+  return 'felles';
 };
 
 const getBookingPalette = (type, isOngoing = false) => {
@@ -113,18 +109,11 @@ const getBookingPalette = (type, isOngoing = false) => {
       softBorder: 'rgba(245, 158, 11, 0.38)',
     };
   }
-  if (type === 'cleaning') {
+  if (type === 'private') {
     return {
-      color: '#06b6d4',
-      softBg: 'rgba(6, 182, 212, 0.14)',
-      softBorder: 'rgba(6, 182, 212, 0.38)',
-    };
-  }
-  if (type === 'vip') {
-    return {
-      color: '#a78bfa',
-      softBg: 'rgba(167, 139, 250, 0.14)',
-      softBorder: 'rgba(167, 139, 250, 0.38)',
+      color: '#ec4899',
+      softBg: 'rgba(236, 72, 153, 0.14)',
+      softBorder: 'rgba(236, 72, 153, 0.38)',
     };
   }
   return {
@@ -138,12 +127,12 @@ const getBookingTypeMeta = (type, t) => {
   switch (type) {
     case 'service':
       return { label: t('calendarBooking.type.service') || 'Service', Icon: Wrench };
-    case 'cleaning':
-      return { label: t('calendarBooking.type.cleaning') || 'Cleaning', Icon: Sparkles };
-    case 'vip':
-      return { label: t('calendarBooking.type.vip') || 'VIP', Icon: ShieldCheck };
+    case 'private':
+      return { label: t('calendarBooking.type.private') || 'Private', Icon: ShieldCheck };
+    case 'felles':
+      return { label: t('calendarBooking.type.felles') || 'Felles', Icon: User };
     default:
-      return { label: t('calendarBooking.type.standard') || 'Regular', Icon: User };
+      return { label: t('calendarBooking.type.felles') || 'Felles', Icon: User };
   }
 };
 
@@ -207,8 +196,8 @@ const CalendarBookingCard = ({
       try {
         const nowMs = Date.now();
         const now = new Date(nowMs);
-        const { afterTomorrowStartMs } = getDayBounds(nowMs);
-        const end = new Date(afterTomorrowStartMs);
+        const { tomorrowStartMs } = getDayBounds(nowMs);
+        const end = new Date(tomorrowStartMs);
         const result = await getCalendarEvents(conn, {
           start: now,
           end,
@@ -239,7 +228,7 @@ const CalendarBookingCard = ({
             };
           })
           .filter(Boolean)
-          .filter((event) => event.startMs < afterTomorrowStartMs)
+          .filter((event) => event.startMs < tomorrowStartMs)
           .sort((a, b) => a.startMs - b.startMs);
 
         const visibleEvents = parsed.filter((event) => event.endMs >= (nowMs - (15 * 60 * 1000)));
@@ -268,19 +257,16 @@ const CalendarBookingCard = ({
 
   const {
     todayEvents,
-    tomorrowEvents,
     ongoingEvent,
     nextEvent,
   } = useMemo(() => {
-    const { todayStartMs, tomorrowStartMs, afterTomorrowStartMs } = getDayBounds(clockMs);
+    const { todayStartMs, tomorrowStartMs } = getDayBounds(clockMs);
     const sorted = [...events].sort((a, b) => a.startMs - b.startMs);
     const today = sorted.filter((event) => event.startMs >= todayStartMs && event.startMs < tomorrowStartMs);
-    const tomorrow = sorted.filter((event) => event.startMs >= tomorrowStartMs && event.startMs < afterTomorrowStartMs);
-    const ongoing = sorted.find((event) => event.startMs <= clockMs && clockMs < event.endMs) || null;
-    const upcoming = ongoing || sorted.find((event) => event.startMs > clockMs) || null;
+    const ongoing = today.find((event) => event.startMs <= clockMs && clockMs < event.endMs) || null;
+    const upcoming = ongoing || today.find((event) => event.startMs > clockMs) || null;
     return {
       todayEvents: today,
-      tomorrowEvents: tomorrow,
       ongoingEvent: ongoing,
       nextEvent: upcoming,
     };
@@ -426,7 +412,6 @@ const CalendarBookingCard = ({
               )}
               <div className="flex items-center gap-2 text-[10px] uppercase tracking-widest text-[var(--text-secondary)]">
                 <span className="px-2 py-1 rounded-full border border-[var(--glass-border)] bg-[var(--glass-bg)]">{t('calendar.today') || 'Today'} {todayEvents.length}</span>
-                <span className="px-2 py-1 rounded-full border border-[var(--glass-border)] bg-[var(--glass-bg)]">{t('calendar.tomorrow') || 'Tomorrow'} {tomorrowEvents.length}</span>
               </div>
             </div>
           ) : (
@@ -498,7 +483,7 @@ const CalendarBookingCard = ({
                 )}
               </div>
 
-              <div className="grid grid-cols-2 gap-2">
+              <div className="grid grid-cols-1 gap-2">
                 <div className="rounded-xl border border-[var(--glass-border)] bg-[var(--glass-bg)] px-3 py-2.5">
                   <div className="text-[10px] uppercase tracking-widest text-[var(--text-secondary)] font-bold">
                     {t('calendar.today') || 'Today'}
@@ -507,17 +492,9 @@ const CalendarBookingCard = ({
                     {todayEvents.length}
                   </div>
                 </div>
-                <div className="rounded-xl border border-[var(--glass-border)] bg-[var(--glass-bg)] px-3 py-2.5">
-                  <div className="text-[10px] uppercase tracking-widest text-[var(--text-secondary)] font-bold">
-                    {t('calendar.tomorrow') || 'Tomorrow'}
-                  </div>
-                  <div className="text-2xl leading-none font-semibold tabular-nums text-[var(--text-primary)] mt-1">
-                    {tomorrowEvents.length}
-                  </div>
-                </div>
               </div>
 
-              <div className="grid grid-cols-1 xl:grid-cols-2 gap-3 min-h-0 flex-1">
+              <div className="grid grid-cols-1 gap-3 min-h-0 flex-1">
                 <div className="min-h-0 rounded-2xl border border-[var(--glass-border)] bg-[var(--glass-bg)] p-3 flex flex-col">
                   <div className="text-[10px] uppercase tracking-widest font-bold text-[var(--text-secondary)] mb-2">
                     {t('calendar.today') || 'Today'}
@@ -527,18 +504,6 @@ const CalendarBookingCard = ({
                       <div className="text-xs text-[var(--text-secondary)]">{t('calendar.noEvents') || 'No upcoming events'}</div>
                     ) : (
                       todayEvents.slice(0, maxItemsPerDay).map(renderEventItem)
-                    )}
-                  </div>
-                </div>
-                <div className="min-h-0 rounded-2xl border border-[var(--glass-border)] bg-[var(--glass-bg)] p-3 flex flex-col">
-                  <div className="text-[10px] uppercase tracking-widest font-bold text-[var(--text-secondary)] mb-2">
-                    {t('calendar.tomorrow') || 'Tomorrow'}
-                  </div>
-                  <div className="min-h-0 flex-1 overflow-y-auto custom-scrollbar pr-1 space-y-2">
-                    {tomorrowEvents.length === 0 ? (
-                      <div className="text-xs text-[var(--text-secondary)]">{t('calendar.noEvents') || 'No upcoming events'}</div>
-                    ) : (
-                      tomorrowEvents.slice(0, maxItemsPerDay).map(renderEventItem)
                     )}
                   </div>
                 </div>
