@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { AlertTriangle, Clock, Flame, Thermometer, TrendingUp, Wrench, X, Trash2 } from '../../icons';
+import { AlertTriangle, Clock, Thermometer, TrendingUp, X, Trash2 } from '../../icons';
 import { getIconComponent } from '../../icons';
 import SparkLine from '../charts/SparkLine';
 
@@ -338,7 +338,7 @@ export default function SaunaBookingTempCard({
     return `${num > 0 ? '+' : ''}${num.toFixed(1)}%`;
   };
   const deviationAbs = avgDeviationPct !== null ? Math.abs(avgDeviationPct) : null;
-  const deviationScore = deviationAbs !== null ? Math.max(0, Math.min(100, Math.round(100 - (deviationAbs * 10)))) : null;
+  const deviationScore = deviationAbs !== null ? Math.max(0, Math.min(100, Math.round(100 - deviationAbs))) : null;
   const deviationTone = (() => {
     if (deviationScore === null) {
       return { ring: '#64748b', glow: 'rgba(100, 116, 139, 0.25)', text: 'text-[var(--text-primary)]' };
@@ -355,24 +355,6 @@ export default function SaunaBookingTempCard({
   const missingConfig = [];
   if (!tempEntityId) missingConfig.push(tr('sauna.bookingTemp.tempEntity', 'Temperature sensor'));
   if (!activeEntityId) missingConfig.push(tr('sauna.bookingTemp.activeEntity', 'Booking active sensor'));
-  const loggingState = (() => {
-    if (!bookingActive || currentTemp === null) {
-      return {
-        label: tr('sauna.bookingTemp.waiting', 'Waiting'),
-        cls: 'bg-[var(--glass-bg)] border-[var(--glass-border)] text-[var(--text-secondary)]',
-      };
-    }
-    if (serviceEntityId && serviceActive) {
-      return {
-        label: tr('sauna.bookingTemp.serviceFiltered', 'Service filtered'),
-        cls: 'bg-orange-500/10 border-orange-500/25 text-orange-300',
-      };
-    }
-    return {
-      label: tr('sauna.bookingTemp.sampling', 'Sampling'),
-      cls: 'bg-emerald-500/12 border-emerald-500/30 text-emerald-300',
-    };
-  })();
   const ringRadius = 42;
   const ringCircumference = 2 * Math.PI * ringRadius;
   const ringProgress = deviationScore ?? 0;
@@ -563,26 +545,6 @@ export default function SaunaBookingTempCard({
             <div className="min-w-0">
               <div className="text-sm md:text-base font-semibold truncate text-[var(--text-primary)]">
                 {cardName}
-              </div>
-              <div className="mt-1 flex flex-wrap items-center gap-1.5 text-[10px] uppercase tracking-[0.16em] font-bold text-[var(--text-secondary)]">
-                <span className={`inline-flex items-center gap-1.5 px-2 py-1 rounded-full border ${
-                  bookingActive
-                    ? 'bg-emerald-500/15 border-emerald-500/25 text-emerald-300'
-                    : 'bg-[var(--glass-bg)] border-[var(--glass-border)]'
-                }`}>
-                  <Flame className="w-3 h-3" />
-                  {bookingActive ? tr('sauna.active', 'Active') : tr('sauna.inactive', 'Inactive')}
-                </span>
-                <span className={`inline-flex items-center gap-1.5 px-2 py-1 rounded-full border ${loggingState.cls}`}>
-                  <Clock className="w-3 h-3" />
-                  {loggingState.label}
-                </span>
-                {serviceEntityId && serviceActive && (
-                  <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded-full border bg-orange-500/10 border-orange-500/25 text-orange-300">
-                    <Wrench className="w-3 h-3" />
-                    {tr('sauna.service', 'Service')}
-                  </span>
-                )}
               </div>
             </div>
           </div>
