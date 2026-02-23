@@ -1,5 +1,14 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { AlertCircle, Calendar as CalendarIcon, Clock3, MapPin, Sparkles } from 'lucide-react';
+import {
+  AlertCircle,
+  Calendar as CalendarIcon,
+  Clock3,
+  MapPin,
+  Sparkles,
+  User,
+  Wrench,
+  ShieldCheck,
+} from 'lucide-react';
 import { getIconComponent } from '../../icons';
 import { getCalendarEvents } from '../../services/haClient';
 
@@ -70,6 +79,72 @@ const getDayBounds = (nowMs) => {
     tomorrowStartMs: tomorrowStart.getTime(),
     afterTomorrowStartMs: afterTomorrowStart.getTime(),
   };
+};
+
+const BOOKING_TYPE_PATTERNS = {
+  service: ['service', 'vedlikehold', 'maintenance', 'teknisk', 'repair', 'reparasjon'],
+  cleaning: ['clean', 'cleaning', 'rengjor', 'rengjør', 'wash', 'vask'],
+  vip: ['vip', 'privat', 'private', 'premium'],
+};
+
+const getBookingType = (event) => {
+  const summary = String(event?.summary || '').toLowerCase();
+  const description = String(event?.description || '').toLowerCase();
+  const location = String(event?.location || '').toLowerCase();
+  const haystack = `${summary} ${description} ${location}`;
+  if (BOOKING_TYPE_PATTERNS.service.some((pattern) => haystack.includes(pattern))) return 'service';
+  if (BOOKING_TYPE_PATTERNS.cleaning.some((pattern) => haystack.includes(pattern))) return 'cleaning';
+  if (BOOKING_TYPE_PATTERNS.vip.some((pattern) => haystack.includes(pattern))) return 'vip';
+  return 'standard';
+};
+
+const getBookingPalette = (type, isOngoing = false) => {
+  if (isOngoing) {
+    return {
+      color: '#60a5fa',
+      softBg: 'rgba(96, 165, 250, 0.2)',
+      softBorder: 'rgba(96, 165, 250, 0.46)',
+    };
+  }
+  if (type === 'service') {
+    return {
+      color: '#f59e0b',
+      softBg: 'rgba(245, 158, 11, 0.14)',
+      softBorder: 'rgba(245, 158, 11, 0.38)',
+    };
+  }
+  if (type === 'cleaning') {
+    return {
+      color: '#06b6d4',
+      softBg: 'rgba(6, 182, 212, 0.14)',
+      softBorder: 'rgba(6, 182, 212, 0.38)',
+    };
+  }
+  if (type === 'vip') {
+    return {
+      color: '#a78bfa',
+      softBg: 'rgba(167, 139, 250, 0.14)',
+      softBorder: 'rgba(167, 139, 250, 0.38)',
+    };
+  }
+  return {
+    color: '#22c55e',
+    softBg: 'rgba(34, 197, 94, 0.14)',
+    softBorder: 'rgba(34, 197, 94, 0.38)',
+  };
+};
+
+const getBookingTypeMeta = (type, t) => {
+  switch (type) {
+    case 'service':
+      return { label: t('calendarBooking.type.service') || 'Service', Icon: Wrench };
+    case 'cleaning':
+      return { label: t('calendarBooking.type.cleaning') || 'Cleaning', Icon: Sparkles };
+    case 'vip':
+      return { label: t('calendarBooking.type.vip') || 'VIP', Icon: ShieldCheck };
+    default:
+      return { label: t('calendarBooking.type.standard') || 'Regular', Icon: User };
+  }
 };
 
 const CalendarBookingCard = ({
@@ -156,9 +231,11 @@ const CalendarBookingCard = ({
               id: `${event?.uid || event?.id || event?.summary || 'event'}_${index}`,
               summary: String(event?.summary || event?.title || event?.description || (t('calendar.noEvents') || 'Event')),
               location: event?.location || '',
+              description: event?.description || '',
               startMs: startDate.getTime(),
               endMs: safeEndMs,
               allDay,
+              bookingType: getBookingType(event),
             };
           })
           .filter(Boolean)
@@ -224,21 +301,50 @@ const CalendarBookingCard = ({
     : (t('calendar.noEvents') || 'No upcoming events');
 
   const isSmall = size === 'small';
+  const heroPalette = nextEvent ? getBookingPalette(nextEvent.bookingType, !!ongoingEvent) : null;
+  const heroTypeMeta = nextEvent ? getBookingTypeMeta(nextEvent.bookingType, t) : null;
+  const HeroTypeIcon = heroTypeMeta?.Icon || User;
 
   const renderEventItem = (event) => {
     const live = event.startMs <= clockMs && clockMs < event.endMs;
     const relative = live
       ? (t('calendarBooking.inProgress') || 'In progress')
       : `${t('calendarBooking.startsIn') || 'Starts in'} ${formatRelative(event.startMs, clockMs)}`;
+    const typeMeta = getBookingTypeMeta(event.bookingType, t);
+    const ItemTypeIcon = typeMeta.Icon;
+    const itemPalette = getBookingPalette(event.bookingType, live);
+    const statusLabel = live ? (t('calendarBooking.live') || 'Live') : typeMeta.label;
 
     return (
-      <div key={event.id} className="rounded-xl border border-[var(--glass-border)] bg-[var(--glass-bg-hover)] px-3 py-2.5">
+      <div
+        key={event.id}
+        className="relative rounded-xl border pl-5 pr-3 py-2.5 overflow-hidden"
+        style={{
+          borderColor: itemPalette.softBorder,
+          backgroundColor: 'var(--glass-bg-hover)',
+          backgroundImage: `linear-gradient(130deg, ${itemPalette.softBg} 0%, rgba(0,0,0,0) 58%)`,
+          boxShadow: live ? `0 0 0 1px ${itemPalette.softBorder} inset` : 'none',
+        }}
+      >
+        <span
+          className="absolute left-0 top-2 bottom-2 w-1.5 rounded-r-full"
+          style={{ backgroundColor: itemPalette.color }}
+        />
         <div className="flex items-center justify-between gap-2">
-          <div className="text-[10px] uppercase tracking-widest font-bold text-[var(--text-secondary)] inline-flex items-center gap-1.5">
-            <Clock3 className="w-3.5 h-3.5" />
-            {renderTimeRange(event)}
+          <div className="inline-flex items-center gap-2 text-[10px] uppercase tracking-widest font-bold text-[var(--text-secondary)]">
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full border" style={{ color: itemPalette.color, borderColor: itemPalette.softBorder, backgroundColor: itemPalette.softBg }}>
+              <ItemTypeIcon className="w-3 h-3" />
+              {statusLabel}
+            </span>
+            <span className="inline-flex items-center gap-1.5">
+              <Clock3 className="w-3.5 h-3.5" />
+              {renderTimeRange(event)}
+            </span>
           </div>
-          <div className={`text-[10px] uppercase tracking-widest font-bold ${live ? 'text-emerald-400' : 'text-[var(--text-secondary)]'}`}>
+          <div
+            className="text-[10px] uppercase tracking-widest font-bold"
+            style={{ color: live ? itemPalette.color : 'var(--text-secondary)' }}
+          >
             {relative}
           </div>
         </div>
@@ -303,6 +409,21 @@ const CalendarBookingCard = ({
               <div className="text-sm font-semibold text-[var(--text-primary)] truncate">
                 {nextEvent ? nextEvent.summary : (t('calendar.noEvents') || 'No upcoming events')}
               </div>
+              {nextEvent && (
+                <div className="flex items-center gap-2 text-[10px] uppercase tracking-widest font-bold min-w-0">
+                  <span
+                    className="inline-flex items-center gap-1 px-2 py-1 rounded-full border truncate"
+                    style={{
+                      color: heroPalette?.color || 'var(--text-secondary)',
+                      borderColor: heroPalette?.softBorder || 'var(--glass-border)',
+                      backgroundColor: heroPalette?.softBg || 'var(--glass-bg)',
+                    }}
+                  >
+                    <HeroTypeIcon className="w-3 h-3 shrink-0" />
+                    <span className="truncate">{heroTypeMeta?.label || (t('calendarBooking.type.standard') || 'Regular')}</span>
+                  </span>
+                </div>
+              )}
               <div className="flex items-center gap-2 text-[10px] uppercase tracking-widest text-[var(--text-secondary)]">
                 <span className="px-2 py-1 rounded-full border border-[var(--glass-border)] bg-[var(--glass-bg)]">{t('calendar.today') || 'Today'} {todayEvents.length}</span>
                 <span className="px-2 py-1 rounded-full border border-[var(--glass-border)] bg-[var(--glass-bg)]">{t('calendar.tomorrow') || 'Tomorrow'} {tomorrowEvents.length}</span>
@@ -310,13 +431,45 @@ const CalendarBookingCard = ({
             </div>
           ) : (
             <>
-              <div className="rounded-2xl border border-[var(--glass-border)] bg-[var(--glass-bg)] p-3.5">
+              <div
+                className="relative overflow-hidden rounded-2xl border bg-[var(--glass-bg)] p-3.5"
+                style={heroPalette
+                  ? {
+                    borderColor: heroPalette.softBorder,
+                    backgroundImage: `linear-gradient(130deg, ${heroPalette.softBg} 0%, rgba(0,0,0,0) 56%)`,
+                  }
+                  : undefined}
+              >
                 {nextEvent ? (
                   <>
-                    <div className="flex items-center justify-between gap-2">
-                      <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border border-[var(--glass-border)] bg-[var(--glass-bg-hover)] text-[10px] uppercase tracking-widest font-bold text-[var(--text-secondary)]">
-                        <Sparkles className="w-3.5 h-3.5" />
-                        {ongoingEvent ? (t('calendarBooking.inProgress') || 'In progress') : (t('calendarBooking.next') || 'Next')}
+                    <div className="relative rounded-xl overflow-hidden">
+                      <span
+                        className="absolute -top-8 -right-8 w-28 h-28 rounded-full blur-3xl pointer-events-none"
+                        style={{
+                          backgroundColor: getBookingPalette(nextEvent.bookingType, !!ongoingEvent).softBg,
+                          opacity: 0.95,
+                        }}
+                      />
+                      <div className="relative flex items-center justify-between gap-2">
+                        <div className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-[10px] uppercase tracking-widest font-bold ${
+                          ongoingEvent
+                            ? 'border-blue-400/40 bg-blue-500/15 text-blue-300'
+                            : 'border-[var(--glass-border)] bg-[var(--glass-bg-hover)] text-[var(--text-secondary)]'
+                        }`}>
+                          <Clock3 className="w-3.5 h-3.5" />
+                          {ongoingEvent ? (t('calendarBooking.inProgress') || 'In progress') : (t('calendarBooking.next') || 'Next')}
+                        </div>
+                        <span
+                          className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full border text-[10px] uppercase tracking-widest font-bold"
+                          style={{
+                            color: heroPalette?.color || 'var(--text-secondary)',
+                            borderColor: heroPalette?.softBorder || 'var(--glass-border)',
+                            backgroundColor: heroPalette?.softBg || 'var(--glass-bg-hover)',
+                          }}
+                        >
+                          <HeroTypeIcon className="w-3.5 h-3.5" />
+                          {heroTypeMeta?.label || (t('calendarBooking.type.standard') || 'Regular')}
+                        </span>
                       </div>
                       <div className="text-[10px] uppercase tracking-widest font-bold text-[var(--text-secondary)]">
                         {nextStatus}
