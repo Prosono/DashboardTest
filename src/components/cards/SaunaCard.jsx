@@ -7,6 +7,7 @@ const asArray = (v) => (Array.isArray(v) ? v.filter(Boolean) : []);
 const norm = (s) => String(s ?? '').toLowerCase();
 const STATUS_GRAPH_WINDOW_MS = 6 * 60 * 60 * 1000;
 const OVERLAY_HOUR_BUCKET_MS = 60 * 60 * 1000;
+const STATUS_GRAPH_MAX_POINTS = 72;
 
 const isOn = (state) => ['on', 'true', '1', 'yes'].includes(norm(state));
 const isOnish = (state) => ['on', 'open', 'unlocked', 'heat', 'heating', 'true', '1', 'yes'].includes(norm(state));
@@ -242,6 +243,55 @@ function buildOverlaySegments(stateSeries, startMs, endMs, { normalizeHourly = f
     .filter((segment) => segment.widthPct > 0.05);
 }
 
+function downsampleTimeSeries(series, maxPoints) {
+  if (!Array.isArray(series) || series.length <= maxPoints || maxPoints < 2) return series;
+  const lastIndex = series.length - 1;
+  const step = lastIndex / (maxPoints - 1);
+  const sampled = [];
+  let previousIndex = -1;
+
+  for (let i = 0; i < maxPoints; i += 1) {
+    const index = Math.min(lastIndex, Math.round(i * step));
+    if (index === previousIndex) continue;
+    sampled.push(series[index]);
+    previousIndex = index;
+  }
+
+  if (sampled[sampled.length - 1] !== series[lastIndex]) {
+    sampled.push(series[lastIndex]);
+  }
+
+  return sampled;
+}
+
+function trimStateSeriesToWindow(series, startMs, endMs) {
+  if (!Array.isArray(series) || series.length === 0) return [];
+  if (!Number.isFinite(startMs) || !Number.isFinite(endMs) || endMs <= startMs) return [];
+
+  let lastBeforeStart = null;
+  const inWindow = [];
+  for (const point of series) {
+    if (!Number.isFinite(point?.t) || !Number.isFinite(point?.v)) continue;
+    if (point.t < startMs) {
+      lastBeforeStart = point;
+      continue;
+    }
+    if (point.t > endMs) break;
+    inWindow.push(point);
+  }
+
+  const merged = lastBeforeStart ? [lastBeforeStart, ...inWindow] : inWindow;
+  if (merged.length <= 1) return merged;
+
+  const compact = [merged[0]];
+  for (let i = 1; i < merged.length; i += 1) {
+    if (merged[i].v !== compact[compact.length - 1].v) {
+      compact.push(merged[i]);
+    }
+  }
+  return compact;
+}
+
 export default function SaunaCard({
   cardId,
   settings,
@@ -320,17 +370,22 @@ export default function SaunaCard({
   const imageUrl = useMemo(() => resolveImageUrl(settings, entities), [settings, entities]);
 
   const statusGraphEntityId = settings?.statusGraphEntityId || settings?.tempEntityId;
+  const statusGraphHistoryRaw = statusGraphEntityId ? tempHistoryById?.[statusGraphEntityId] : null;
+  const bookingEntityId = settings?.saunaActiveBooleanEntityId;
+  const bookingHistoryRaw = bookingEntityId ? tempHistoryById?.[bookingEntityId] : null;
+  const serviceEntityId = settings?.serviceEntityId;
+  const serviceHistoryRaw = serviceEntityId ? tempHistoryById?.[serviceEntityId] : null;
 
   const tempSeries = useMemo(() => {
     if (!statusGraphEntityId) return [];
     const windowEnd = Date.now();
     const windowStart = windowEnd - STATUS_GRAPH_WINDOW_MS;
-    const raw = tempHistoryById?.[statusGraphEntityId];
-    const extracted = extractHistorySeries(raw)
+    const extracted = extractHistorySeries(statusGraphHistoryRaw)
       .filter((point) => point.t >= windowStart && point.t <= windowEnd);
-    if (extracted.length > 1) return extracted;
-    if (extracted.length === 1) {
-      const value = extracted[0].v;
+    const sampled = downsampleTimeSeries(extracted, STATUS_GRAPH_MAX_POINTS);
+    if (sampled.length > 1) return sampled;
+    if (sampled.length === 1) {
+      const value = sampled[0].v;
       return [
         { t: windowStart, v: value },
         { t: windowEnd, v: value },
@@ -345,7 +400,7 @@ export default function SaunaCard({
     }
 
     return [];
-  }, [statusGraphEntityId, tempHistoryById, tempIsValid, currentTemp]);
+  }, [statusGraphEntityId, statusGraphHistoryRaw, tempIsValid, currentTemp]);
   const statusWindow = useMemo(() => {
     const end = tempSeries.length > 0
       ? Math.max(tempSeries[tempSeries.length - 1]?.t || 0, tempSeries[0]?.t || 0)
@@ -358,17 +413,15 @@ export default function SaunaCard({
     [tempSeries]
   );
   const bookingStateSeries = useMemo(() => {
-    const bookingEntityId = settings?.saunaActiveBooleanEntityId;
     if (!bookingEntityId) return [];
-    const raw = tempHistoryById?.[bookingEntityId];
-    return extractStateSeries(raw, ['on', 'true', '1', 'yes']);
-  }, [settings?.saunaActiveBooleanEntityId, tempHistoryById]);
+    const allPoints = extractStateSeries(bookingHistoryRaw, ['on', 'true', '1', 'yes']);
+    return trimStateSeriesToWindow(allPoints, statusWindow.start, statusWindow.end);
+  }, [bookingEntityId, bookingHistoryRaw, statusWindow.start, statusWindow.end]);
   const serviceStateSeries = useMemo(() => {
-    const serviceEntityId = settings?.serviceEntityId;
     if (!serviceEntityId) return [];
-    const raw = tempHistoryById?.[serviceEntityId];
-    return extractStateSeries(raw, ['ja', 'yes', 'on', 'true', '1', 'service', 'active']);
-  }, [settings?.serviceEntityId, tempHistoryById]);
+    const allPoints = extractStateSeries(serviceHistoryRaw, ['ja', 'yes', 'on', 'true', '1', 'service', 'active']);
+    return trimStateSeriesToWindow(allPoints, statusWindow.start, statusWindow.end);
+  }, [serviceEntityId, serviceHistoryRaw, statusWindow.start, statusWindow.end]);
   const showBookingChartOverlay = settings?.showBookingChartOverlay !== false;
   const statusOverlaySegments = useMemo(() => {
     if (!showBookingChartOverlay) return [];
