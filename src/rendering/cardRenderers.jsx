@@ -25,6 +25,7 @@ import {
   MediaPlayerCard,
   MediaGroupCard,
   MissingEntityCard,
+  PopupLauncherCard,
   RoomCard,
   SaunaCard,
   SaunaBookingTempCard,
@@ -539,6 +540,30 @@ export function renderSaunaBookingTempCard(cardId, dragProps, getControls, cardS
   );
 }
 
+export function renderPopupLauncherCard(cardId, dragProps, getControls, cardStyle, settingsKey, ctx) {
+  const { editMode, cardSettings, customNames, setShowPopupCardModal, t } = ctx;
+  const settings = cardSettings[settingsKey] || cardSettings[cardId] || {};
+  return (
+    <PopupLauncherCard
+      key={cardId}
+      cardId={cardId}
+      settings={settings}
+      dragProps={dragProps}
+      controls={getControls(cardId)}
+      cardStyle={cardStyle}
+      editMode={editMode}
+      customNames={customNames}
+      onOpenTarget={(payload) => {
+        if (editMode) return;
+        if (!payload?.targetCardId) return;
+        if (payload.targetCardId === cardId) return;
+        setShowPopupCardModal(payload);
+      }}
+      t={t}
+    />
+  );
+}
+
 export function renderDividerCard(cardId, dragProps, getControls, cardStyle, settingsKey, ctx) {
   const { editMode, cardSettings } = ctx;
   const settings = cardSettings[settingsKey] || cardSettings[cardId] || {};
@@ -687,6 +712,10 @@ export function dispatchCardRender(cardId, dragProps, getControls, cardStyle, se
 
   if (cardId.startsWith('sauna_booking_temp_card_')) {
     return renderSaunaBookingTempCard(cardId, dragProps, getControls, cardStyle, settingsKey, ctx);
+  }
+
+  if (cardId.startsWith('popup_launcher_card_')) {
+    return renderPopupLauncherCard(cardId, dragProps, getControls, cardStyle, settingsKey, ctx);
   }
 
   if (cardId.startsWith('divider_card_')) {

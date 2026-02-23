@@ -15,6 +15,7 @@ import {
   Gamepad2,
   Hash,
   Home,
+  LayoutGrid,
   Columns,
   Lightbulb,
   Lock,
@@ -521,6 +522,7 @@ export default function AddCardContent({
                 <TypeButton type="room" icon={Home} label={getLabel('addCard.type.room', 'Room')} isActive={addCardType === 'room'} onSelect={setAddCardType} />
                 <TypeButton type="sauna" icon={Flame} label={getLabel('addCard.type.sauna', 'Sauna')} isActive={addCardType === 'sauna'} onSelect={setAddCardType} />
                 <TypeButton type="saunaBookingTemp" icon={Thermometer} label={getLabel('addCard.type.saunaBookingTemp', 'Sauna Temp Log')} isActive={addCardType === 'saunaBookingTemp'} onSelect={setAddCardType} />
+                <TypeButton type="popupLauncher" icon={LayoutGrid} label={getLabel('addCard.type.popupLauncher', 'Popup Launcher')} isActive={addCardType === 'popupLauncher'} onSelect={setAddCardType} />
                 <TypeButton type="divider" icon={Minus} label={getLabel('addCard.type.divider', 'Divider')} isActive={addCardType === 'divider'} onSelect={setAddCardType} />
                 <TypeButton type="empty" icon={Columns} label={getLabel('addCard.type.empty', 'Empty')} isActive={addCardType === 'empty'} onSelect={setAddCardType} />
                 <TypeButton type="fanCard" icon={Fan} label={getLabel('addCard.type.fans', 'Fans')} isActive={addCardType === 'fanCard'} onSelect={setAddCardType} />
@@ -549,6 +551,7 @@ export default function AddCardContent({
               : addCardType === 'nordpool' ? renderNordpoolSection()
               : addCardType === 'sauna' ? renderSimpleAddSection(Flame, t('addCard.saunaDescription') || 'Add a sauna operator card and then configure all linked entities.', t('addCard.add'))
               : addCardType === 'saunaBookingTemp' ? renderSimpleAddSection(Thermometer, getLabel('addCard.saunaBookingTempDescription', 'Add a sauna booking temperature card. Configure booking-active and temperature sensors after adding.'), t('addCard.add'))
+              : addCardType === 'popupLauncher' ? renderSimpleAddSection(LayoutGrid, getLabel('addCard.popupLauncherDescription', 'Add a popup launcher card with a grid of buttons. Configure each button to open an existing card in a popup.'), getLabel('addCard.popupLauncherCard', 'Add popup launcher card'))
               : addCardType === 'divider' ? renderSimpleAddSection(Minus, getLabel('addCard.dividerDescription', 'Add a divider card to separate sections in the dashboard.'), t('addCard.add'))
               : addCardType === 'empty' ? renderSimpleAddSection(Columns, getLabel('addCard.emptyDescription', 'Add an empty spacer card that only takes up layout space.'), t('addCard.add'))
               : addCardType === 'room' ? (

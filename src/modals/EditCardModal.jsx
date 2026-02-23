@@ -97,12 +97,14 @@ export default function EditCardModal({
   isEditRoom,
   isEditSauna,
   isEditSaunaBookingTemp,
+  isEditPopupLauncher,
   isEditDivider,
   isEditAndroidTV,
   editSettingsKey,
   editSettings,
   isEditWeatherTemp,
   conn,
+  pagesConfig,
   customNames,
   saveCustomName,
   customIcons,
@@ -241,6 +243,50 @@ export default function EditCardModal({
     .map(([id]) => id));
 
   const updateButtonOptions = sortByName(byDomain('button'));
+  const encodeCardTarget = React.useCallback((pageId, cardId) => `${pageId}::${cardId}`, []);
+  const decodeCardTarget = React.useCallback((value) => {
+    if (!value || typeof value !== 'string') return { pageId: null, cardId: null };
+    const separatorIndex = value.indexOf('::');
+    if (separatorIndex === -1) return { pageId: null, cardId: null };
+    const pageId = value.slice(0, separatorIndex);
+    const cardId = value.slice(separatorIndex + 2);
+    if (!pageId || !cardId) return { pageId: null, cardId: null };
+    return { pageId, cardId };
+  }, []);
+  const popupCardTargets = React.useMemo(() => {
+    const configuredPages = Array.isArray(pagesConfig?.pages) ? pagesConfig.pages : [];
+    const fallbackPages = Object.keys(pagesConfig || {}).filter((key) => Array.isArray(pagesConfig?.[key]));
+    const orderedPages = [...configuredPages];
+    fallbackPages.forEach((pageId) => {
+      if (!orderedPages.includes(pageId)) orderedPages.push(pageId);
+    });
+
+    const formatPageLabel = (pageId) => {
+      if (pageId === 'home') return t('page.home');
+      return pageId;
+    };
+
+    const targets = [];
+    orderedPages.forEach((pageId) => {
+      if (pageId === 'header' || pageId === 'settings') return;
+      const pageCards = Array.isArray(pagesConfig?.[pageId]) ? pagesConfig[pageId] : [];
+      pageCards.forEach((cardId) => {
+        if (!cardId || cardId === entityId) return;
+        if (String(cardId).startsWith('popup_launcher_card_')) return;
+        const displayName = customNames?.[cardId]
+          || entities?.[cardId]?.attributes?.friendly_name
+          || cardId;
+        targets.push({
+          value: encodeCardTarget(pageId, cardId),
+          pageId,
+          pageLabel: formatPageLabel(pageId),
+          cardId,
+          label: displayName,
+        });
+      });
+    });
+    return targets;
+  }, [pagesConfig, entityId, customNames, entities, t, encodeCardTarget]);
 
   return (
     <div className="fixed inset-0 z-[120] flex items-center justify-center p-3 sm:p-4" style={{
@@ -1644,6 +1690,164 @@ export default function EditCardModal({
               </div>
             </div>
           )}
+
+          {isEditPopupLauncher && editSettingsKey && (() => {
+            const popupButtons = Array.isArray(editSettings.buttons)
+              ? editSettings.buttons.filter(Boolean)
+              : [];
+            const popupColumns = Number.isFinite(Number(editSettings.columns))
+              ? Math.max(1, Math.min(4, Math.round(Number(editSettings.columns))))
+              : 2;
+            const updateButtons = (nextButtons) => {
+              saveCardSetting(editSettingsKey, 'buttons', nextButtons);
+            };
+
+            return (
+              <div className="space-y-4">
+                <div className="popup-surface rounded-2xl p-4 space-y-3">
+                  <div className="text-xs uppercase font-bold tracking-widest text-gray-500">
+                    {translateText('popupLauncher.editorTitle', 'Popup launcher buttons')}
+                  </div>
+                  <p className="text-[11px] text-[var(--text-secondary)]">
+                    {translateText('popupLauncher.editorHint', 'Each button opens one existing dashboard card in a popup window.')}
+                  </p>
+
+                  <div className="space-y-1">
+                    <label className="text-[10px] uppercase tracking-widest font-bold text-[var(--text-secondary)]">
+                      {translateText('popupLauncher.columns', 'Grid columns')}
+                    </label>
+                    <input
+                      type="number"
+                      min={1}
+                      max={4}
+                      step={1}
+                      className="w-full px-3 py-2 rounded-xl popup-surface text-[var(--text-primary)]"
+                      value={popupColumns}
+                      onChange={(e) => {
+                        const next = Number(e.target.value);
+                        if (!Number.isFinite(next)) return;
+                        saveCardSetting(editSettingsKey, 'columns', Math.max(1, Math.min(4, Math.round(next))));
+                      }}
+                    />
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const firstTarget = popupCardTargets[0];
+                      const nextButton = {
+                        id: `popup_btn_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+                        label: `${translateText('popupLauncher.buttonLabel', 'Button')} ${popupButtons.length + 1}`,
+                        icon: 'LayoutGrid',
+                        targetCardId: firstTarget?.cardId || null,
+                        targetPageId: firstTarget?.pageId || null,
+                      };
+                      updateButtons([...popupButtons, nextButton]);
+                    }}
+                    className="w-full px-3 py-2 rounded-xl border border-blue-400/35 bg-blue-500/10 text-blue-300 text-xs font-bold uppercase tracking-widest hover:bg-blue-500/15 transition-colors flex items-center justify-center gap-2"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    {translateText('popupLauncher.addButton', 'Add button')}
+                  </button>
+                </div>
+
+                {popupButtons.length === 0 && (
+                  <div className="popup-surface rounded-2xl p-4 text-center text-[11px] text-[var(--text-secondary)]">
+                    {translateText('popupLauncher.emptyHint', 'No buttons added yet.')}
+                  </div>
+                )}
+
+                <div className="space-y-3">
+                  {popupButtons.map((button, index) => {
+                    const selectedTargetValue = button.targetCardId && button.targetPageId
+                      ? encodeCardTarget(button.targetPageId, button.targetCardId)
+                      : '';
+                    return (
+                      <div key={button.id || `popup_btn_${index}`} className="popup-surface rounded-2xl p-4 space-y-3">
+                        <div className="flex items-center justify-between">
+                          <span className="text-[10px] uppercase tracking-widest font-bold text-[var(--text-secondary)]">
+                            {translateText('popupLauncher.buttonLabel', 'Button')} {index + 1}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => updateButtons(popupButtons.filter((_, itemIndex) => itemIndex !== index))}
+                            className="px-3 py-1.5 rounded-full border border-red-400/35 bg-red-500/10 text-red-300 text-[10px] font-bold uppercase tracking-widest hover:bg-red-500/15 transition-colors"
+                          >
+                            {translateText('common.remove', 'Remove')}
+                          </button>
+                        </div>
+
+                        <div className="space-y-1">
+                          <label className="text-[10px] uppercase tracking-widest font-bold text-[var(--text-secondary)]">
+                            {translateText('form.name', 'Name')}
+                          </label>
+                          <input
+                            type="text"
+                            value={button.label || ''}
+                            onChange={(e) => {
+                              const next = [...popupButtons];
+                              next[index] = { ...next[index], label: e.target.value };
+                              updateButtons(next);
+                            }}
+                            placeholder={translateText('popupLauncher.buttonTextPlaceholder', 'Button text')}
+                            className="w-full px-3 py-2 rounded-xl bg-[var(--glass-bg)] border border-[var(--glass-border)] text-[var(--text-primary)] text-sm outline-none"
+                          />
+                        </div>
+
+                        <div className="space-y-1">
+                          <label className="text-[10px] uppercase tracking-widest font-bold text-[var(--text-secondary)]">
+                            {translateText('popupLauncher.targetCard', 'Target card')}
+                          </label>
+                          <select
+                            value={selectedTargetValue}
+                            onChange={(e) => {
+                              const decoded = decodeCardTarget(e.target.value);
+                              const next = [...popupButtons];
+                              next[index] = {
+                                ...next[index],
+                                targetPageId: decoded.pageId,
+                                targetCardId: decoded.cardId,
+                              };
+                              updateButtons(next);
+                            }}
+                            className="w-full px-3 py-2 rounded-xl bg-[var(--glass-bg)] border border-[var(--glass-border)] text-[var(--text-primary)] text-sm outline-none"
+                          >
+                            <option value="">{translateText('dropdown.noneSelected', 'None selected')}</option>
+                            {popupCardTargets.map((target) => (
+                              <option key={target.value} value={target.value}>
+                                {target.label} ({target.pageLabel})
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+
+                        <div className="space-y-1">
+                          <label className="text-[10px] uppercase tracking-widest font-bold text-[var(--text-secondary)]">
+                            {translateText('form.chooseIcon', 'Choose icon')}
+                          </label>
+                          <IconPicker
+                            value={button.icon || null}
+                            onSelect={(iconName) => {
+                              const next = [...popupButtons];
+                              next[index] = { ...next[index], icon: iconName };
+                              updateButtons(next);
+                            }}
+                            onClear={() => {
+                              const next = [...popupButtons];
+                              next[index] = { ...next[index], icon: null };
+                              updateButtons(next);
+                            }}
+                            t={t}
+                            maxHeightClass="max-h-40"
+                          />
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })()}
 
           {isEditCost && (
             <div className="space-y-6">

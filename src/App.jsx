@@ -295,6 +295,7 @@ function AppContent({
     setShowCalendarModal,
     setShowTodoModal,
     setShowRoomModal,
+    setShowPopupCardModal,
     setShowWeatherModal,
     setActiveSaunaFieldModal,
     activeMediaModal,
@@ -1386,7 +1387,7 @@ function AppContent({
       setShowAndroidTVModal, setActiveCarModal, setShowWeatherModal,
       setShowNordpoolModal, setShowCalendarModal, setShowTodoModal,
       setShowRoomModal, setShowEditCardModal, setEditCardSettingsKey,
-      setActiveSaunaFieldModal,
+      setActiveSaunaFieldModal, setShowPopupCardModal,
       openMediaModal: (mpId, groupKey, groupIds) => {
         setActiveMediaId(mpId);
         setActiveMediaGroupKey(groupKey);
@@ -1932,6 +1933,7 @@ function AppContent({
         <ModalOrchestrator
           entities={entities} conn={conn} activeUrl={activeUrl}
           connected={connected} authRef={authRef}
+          tempHistoryById={tempHistoryById}
           config={config} setConfig={setConfig}
           t={t} language={language} setLanguage={setLanguage}
           modals={{

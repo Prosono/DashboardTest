@@ -12,6 +12,7 @@ import { themes } from '../config/themes';
 import { formatDuration } from '../utils';
 import { buildOnboardingSteps, validateUrl } from '../config/onboarding';
 import { prepareNordpoolData } from '../services';
+import { dispatchCardRender } from './cardRenderers';
 
 // Lazy load all modals
 const AddPageModal = lazy(() => import('../modals/AddPageModal'));
@@ -43,6 +44,7 @@ const HeaderSidebar = lazy(() => import('../components/sidebars/HeaderSidebar'))
 
 export default function ModalOrchestrator({
   entities, conn, activeUrl, connected, authRef,
+  tempHistoryById,
   config, setConfig,
   t, language, setLanguage,
   modals, appearance, layout, onboarding,
@@ -66,6 +68,7 @@ export default function ModalOrchestrator({
     showCoverModal, setShowCoverModal,
     showWeatherModal, setShowWeatherModal,
     activeSaunaFieldModal, setActiveSaunaFieldModal,
+    showPopupCardModal, setShowPopupCardModal,
     activeMediaModal, setActiveMediaModal,
     activeMediaGroupKey, setActiveMediaGroupKey,
     activeMediaGroupIds, setActiveMediaGroupIds,
@@ -121,7 +124,7 @@ export default function ModalOrchestrator({
     newPageLabel, setNewPageLabel, newPageIcon, setNewPageIcon,
     createPage, createMediaPage, deletePage,
     pageSettings, savePageSetting,
-    pagesConfig, persistConfig,
+    pagesConfig, persistConfig, activePage,
   } = pageManagement;
 
   const {
@@ -192,11 +195,12 @@ export default function ModalOrchestrator({
     const isEditRoom = !!editId && editId.startsWith('room_card_');
     const isEditSauna = !!editId && editId.startsWith('sauna_card_');
     const isEditSaunaBookingTemp = !!editId && editId.startsWith('sauna_booking_temp_card_');
+    const isEditPopupLauncher = !!editId && editId.startsWith('popup_launcher_card_');
     const isEditDivider = !!editId && editId.startsWith('divider_card_');
     const isEditEmpty = !!editId && editId.startsWith('empty_card_');
     const isEditCover = !!editId && editId.startsWith('cover_card_');
     const editSettings = isEditCar ? resolveCarSettings(editId, rawEditSettings) : rawEditSettings;
-    const isEditGenericType = (!!editSettings?.type && (editSettings.type === 'entity' || editSettings.type === 'toggle' || editSettings.type === 'sensor' || editSettings.type === 'divider' || editSettings.type === 'empty' || editSettings.type === 'calendar_booking')) || isEditVacuum || isEditAutomation || isEditCar || isEditAndroidTV || isEditRoom || isEditSauna || isEditSaunaBookingTemp || isEditDivider || isEditEmpty || isEditCalendarBooking;
+    const isEditGenericType = (!!editSettings?.type && (editSettings.type === 'entity' || editSettings.type === 'toggle' || editSettings.type === 'sensor' || editSettings.type === 'divider' || editSettings.type === 'empty' || editSettings.type === 'calendar_booking' || editSettings.type === 'popup_launcher')) || isEditVacuum || isEditAutomation || isEditCar || isEditAndroidTV || isEditRoom || isEditSauna || isEditSaunaBookingTemp || isEditPopupLauncher || isEditDivider || isEditEmpty || isEditCalendarBooking;
     const isEditSensor = !!editSettings?.type && editSettings.type === 'sensor';
     const isEditWeatherTemp = !!editId && editId.startsWith('weather_temp_');
     const canEditName = !!editId && !isEditWeatherTemp && !isEditDivider && !isEditEmpty && editId !== 'media_player' && editId !== 'sonos';
@@ -214,7 +218,7 @@ export default function ModalOrchestrator({
     return {
       canEditName, canEditIcon, canEditStatus,
       isEditLight, isEditCalendar, isEditCalendarBooking, isEditTodo, isEditCost, isEditGenericType,
-      isEditAndroidTV, isEditCar, isEditRoom, isEditSauna, isEditSaunaBookingTemp, isEditDivider, isEditEmpty, isEditSensor, isEditWeatherTemp,
+      isEditAndroidTV, isEditCar, isEditRoom, isEditSauna, isEditSaunaBookingTemp, isEditPopupLauncher, isEditDivider, isEditEmpty, isEditSensor, isEditWeatherTemp,
       editSettingsKey, editSettings,
     };
   }, [showEditCardModal, editSettingsKey, cardSettings, entities]);
@@ -633,6 +637,135 @@ export default function ModalOrchestrator({
         </ModalSuspense>
       )}
 
+      {showPopupCardModal && (() => {
+        const payload = typeof showPopupCardModal === 'string'
+          ? { targetCardId: showPopupCardModal }
+          : (showPopupCardModal || {});
+        const targetCardId = String(payload.targetCardId || '').trim();
+        const sourceCardId = String(payload.sourceCardId || '').trim();
+        if (!targetCardId || targetCardId === sourceCardId) return null;
+
+        const pageCandidates = [];
+        const explicitPageId = String(payload.targetPageId || '').trim();
+        if (explicitPageId) pageCandidates.push(explicitPageId);
+        if (activePage && !pageCandidates.includes(activePage)) pageCandidates.push(activePage);
+
+        const configuredPages = Array.isArray(pagesConfig?.pages) ? pagesConfig.pages : [];
+        configuredPages.forEach((pageId) => {
+          const pageCards = Array.isArray(pagesConfig?.[pageId]) ? pagesConfig[pageId] : [];
+          if (pageCards.includes(targetCardId) && !pageCandidates.includes(pageId)) {
+            pageCandidates.push(pageId);
+          }
+        });
+
+        const resolvedTargetPage = pageCandidates[0] || activePage || 'home';
+        const targetSettingsKey = getCardSettingsKey(targetCardId, resolvedTargetPage);
+        const popupIsMobile = typeof window !== 'undefined'
+          && typeof window.matchMedia === 'function'
+          && window.matchMedia('(max-width: 767px)').matches;
+
+        const popupCtx = {
+          entities,
+          editMode: false,
+          conn,
+          cardSettings,
+          customNames,
+          customIcons,
+          getA,
+          getS,
+          getEntityImageUrl,
+          callService,
+          isMediaActive,
+          saveCardSetting,
+          language,
+          isMobile: popupIsMobile,
+          activePage: resolvedTargetPage,
+          t,
+          optimisticLightBrightness,
+          setOptimisticLightBrightness,
+          tempHistoryById,
+          isCardHiddenByLogic: () => false,
+          setShowLightModal,
+          setShowSensorInfoModal,
+          setActiveClimateEntityModal,
+          setShowCostModal,
+          setActiveVacuumId,
+          setShowVacuumModal,
+          setShowAndroidTVModal,
+          setActiveCarModal,
+          setShowWeatherModal,
+          setShowNordpoolModal,
+          setShowCalendarModal,
+          setShowTodoModal,
+          setShowRoomModal,
+          setShowCoverModal,
+          setShowEditCardModal,
+          setEditCardSettingsKey,
+          setActiveSaunaFieldModal,
+          setShowPopupCardModal,
+          openMediaModal: (mpId, groupKey, groupIds) => {
+            setActiveMediaId(mpId);
+            setActiveMediaGroupKey(groupKey);
+            setActiveMediaGroupIds(groupIds);
+            setActiveMediaModal('media');
+          },
+        };
+
+        const popupCard = dispatchCardRender(
+          targetCardId,
+          {},
+          () => null,
+          {},
+          targetSettingsKey,
+          popupCtx,
+        );
+        const popupTitle = String(payload.buttonLabel || '').trim()
+          || customNames?.[targetCardId]
+          || entities?.[targetCardId]?.attributes?.friendly_name
+          || targetCardId;
+
+        return (
+          <div
+            className="fixed inset-0 z-[140] flex items-center justify-center p-3 sm:p-6"
+            style={{ backdropFilter: 'blur(16px)', backgroundColor: 'rgba(0, 0, 0, 0.45)' }}
+            onClick={() => setShowPopupCardModal(null)}
+            data-disable-pull-refresh="true"
+          >
+            <div
+              className="w-full max-w-6xl max-h-[92vh] rounded-3xl border p-3 sm:p-4 overflow-hidden"
+              style={{
+                background: 'linear-gradient(135deg, var(--card-bg) 0%, var(--modal-bg) 100%)',
+                borderColor: 'var(--glass-border)',
+              }}
+              onClick={(event) => event.stopPropagation()}
+              data-disable-pull-refresh="true"
+            >
+              <div className="flex items-center justify-between gap-3 mb-3 px-1">
+                <p className="text-[11px] uppercase tracking-[0.24em] font-bold text-[var(--text-secondary)] truncate">
+                  {popupTitle}
+                </p>
+                <button
+                  type="button"
+                  onClick={() => setShowPopupCardModal(null)}
+                  className="w-9 h-9 rounded-full border border-[var(--glass-border)] bg-[var(--glass-bg)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors"
+                  aria-label={t('common.close') || 'Close'}
+                >
+                  X
+                </button>
+              </div>
+
+              <div className="max-h-[calc(92vh-72px)] overflow-y-auto custom-scrollbar pr-1" data-disable-pull-refresh="true">
+                {popupCard || (
+                  <div className="rounded-2xl border border-[var(--glass-border)] bg-[var(--glass-bg)] p-5 text-sm text-[var(--text-secondary)]">
+                    {t('popupLauncher.targetUnavailable') || 'Target card is unavailable.'}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
       {/* ── Edit / Add modals ───────────────────────────────────────────── */}
       {showAddCardModal && (
         <ModalSuspense>
@@ -746,6 +879,7 @@ export default function ModalOrchestrator({
             saveCustomIcon={saveCustomIcon}
             saveCardSetting={saveCardSetting}
             gridColumns={gridColumns}
+            pagesConfig={pagesConfig}
             hiddenCards={hiddenCards}
             toggleCardVisibility={toggleCardVisibility}
             {...editModalProps}
