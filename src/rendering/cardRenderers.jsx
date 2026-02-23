@@ -10,6 +10,7 @@
  */
 import {
   CalendarCard,
+  CalendarBookingCard,
   CarCard,
   CoverCard,
   DividerCard,
@@ -313,7 +314,7 @@ export function renderGenericAndroidTVCard(cardId, dragProps, getControls, cardS
 }
 
 export function renderCalendarCard(cardId, dragProps, getControls, cardStyle, settingsKey, ctx) {
-  const { editMode, conn, cardSettings, customNames, customIcons, language, setShowCalendarModal, setShowEditCardModal, setEditCardSettingsKey, t } = ctx;
+  const { editMode, conn, cardSettings, customNames, customIcons, entities, language, setShowCalendarModal, setShowEditCardModal, setEditCardSettingsKey, t } = ctx;
   const sizeSetting = cardSettings[settingsKey]?.size || cardSettings[cardId]?.size;
   return (
     <CalendarCard
@@ -321,6 +322,40 @@ export function renderCalendarCard(cardId, dragProps, getControls, cardStyle, se
       cardId={cardId}
       settings={cardSettings[settingsKey] || cardSettings[cardId] || {}}
       conn={conn}
+      entities={entities}
+      t={t}
+      locale={language === 'en' ? 'en-US' : 'nb-NO'}
+      dragProps={dragProps}
+      getControls={getControls}
+      isEditMode={editMode}
+      className="h-full"
+      style={cardStyle}
+      size={sizeSetting}
+      iconName={customIcons[cardId] || null}
+      customName={customNames[cardId] || null}
+      onClick={(e) => {
+        e.stopPropagation();
+        if (editMode) {
+          setShowEditCardModal(cardId);
+          setEditCardSettingsKey(settingsKey);
+        } else {
+          setShowCalendarModal(true);
+        }
+      }}
+    />
+  );
+}
+
+export function renderCalendarBookingCard(cardId, dragProps, getControls, cardStyle, settingsKey, ctx) {
+  const { editMode, conn, entities, cardSettings, customNames, customIcons, language, setShowCalendarModal, setShowEditCardModal, setEditCardSettingsKey, t } = ctx;
+  const sizeSetting = cardSettings[settingsKey]?.size || cardSettings[cardId]?.size;
+  return (
+    <CalendarBookingCard
+      key={cardId}
+      cardId={cardId}
+      settings={cardSettings[settingsKey] || cardSettings[cardId] || {}}
+      conn={conn}
+      entities={entities}
       t={t}
       locale={language === 'en' ? 'en-US' : 'nb-NO'}
       dragProps={dragProps}
@@ -604,6 +639,10 @@ export function dispatchCardRender(cardId, dragProps, getControls, cardStyle, se
 
   if (cardId.startsWith('calendar_card_')) {
     return renderCalendarCard(cardId, dragProps, getControls, cardStyle, settingsKey, ctx);
+  }
+
+  if (cardId.startsWith('calendar_booking_card_')) {
+    return renderCalendarBookingCard(cardId, dragProps, getControls, cardStyle, settingsKey, ctx);
   }
 
   if (cardId.startsWith('climate_card_')) {

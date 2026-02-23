@@ -1,5 +1,6 @@
 // ── Cards ────────────────────────────────────────────────────────────────
 export { default as CalendarCard } from './cards/CalendarCard';
+export { default as CalendarBookingCard } from './cards/CalendarBookingCard';
 export { default as CarCard } from './cards/CarCard';
 export { default as CoverCard } from './cards/CoverCard';
 export { default as DividerCard } from './cards/DividerCard';

@@ -93,6 +93,18 @@ export const handleAddSelected = (ctx) => {
       return;
     }
 
+    case 'calendarBooking': {
+      const cardId = `calendar_booking_card_${Date.now()}`;
+      commitSingleCard(cardId, {
+        type: 'calendar_booking',
+        calendarEntityId: null,
+        daysAhead: 7,
+        maxItems: 6,
+        size: 'large',
+      }, { openEdit: true });
+      return;
+    }
+
     case 'todo': {
       const cardId = `todo_card_${Date.now()}`;
       commitSingleCard(cardId, { size: 'large' }, { openEdit: true });

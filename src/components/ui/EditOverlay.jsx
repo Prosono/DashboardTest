@@ -21,11 +21,12 @@ import {
 const RESIZABLE_PREFIXES = [
   'light_', 'light.', 'vacuum.', 'automation.', 'climate_card_',
   'cost_card_', 'weather_temp_', 'androidtv_card_', 'calendar_card_',
+  'calendar_booking_card_',
   'todo_card_', 'nordpool_card_', 'car_card_', 'cover_card_',
 ];
 
 /** Prefixes that cycle through 3 sizes (small → medium → large). */
-const TRIPLE_SIZE_PREFIXES = ['calendar_card_', 'todo_card_'];
+const TRIPLE_SIZE_PREFIXES = ['calendar_card_', 'calendar_booking_card_', 'todo_card_'];
 
 function canResize(editId, settings) {
   if (editId) return true;

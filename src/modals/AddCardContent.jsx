@@ -515,6 +515,7 @@ export default function AddCardContent({
                 <TypeButton type="media" icon={Music} label={t('addCard.type.media')} isActive={addCardType === 'media'} onSelect={setAddCardType} />
                 <TypeButton type="weather" icon={CloudSun} label={t('addCard.type.weather')} isActive={addCardType === 'weather'} onSelect={setAddCardType} />
                 <TypeButton type="calendar" icon={Calendar} label={getLabel('addCard.type.calendar', 'Calendar')} isActive={addCardType === 'calendar'} onSelect={setAddCardType} />
+                <TypeButton type="calendarBooking" icon={Calendar} label={getLabel('addCard.type.calendarBooking', 'Calendar Booking')} isActive={addCardType === 'calendarBooking'} onSelect={setAddCardType} />
                 <TypeButton type="todo" icon={ListChecks} label={getLabel('addCard.type.todo', 'Todo')} isActive={addCardType === 'todo'} onSelect={setAddCardType} />
                 <TypeButton type="nordpool" icon={Zap} label={t('addCard.type.nordpool')} isActive={addCardType === 'nordpool'} onSelect={setAddCardType} />
                 <TypeButton type="room" icon={Home} label={getLabel('addCard.type.room', 'Room')} isActive={addCardType === 'room'} onSelect={setAddCardType} />
@@ -542,6 +543,7 @@ export default function AddCardContent({
             {addCardType === 'weather' ? renderWeatherSection()
               : addCardType === 'androidtv' ? renderAndroidTVSection()
               : addCardType === 'calendar' ? renderSimpleAddSection(Calendar, t('addCard.calendarDescription') || 'Add a calendar card. You can select calendars after adding the card.', t('addCard.add'))
+              : addCardType === 'calendarBooking' ? renderSimpleAddSection(Calendar, getLabel('addCard.calendarBookingDescription', 'Add a booking-focused calendar card for one sauna. Pick a single calendar and it will present clear upcoming bookings.'), t('addCard.add'))
               : addCardType === 'todo' ? renderSimpleAddSection(ListChecks, t('addCard.todoDescription') || 'Add a to-do card. You can select which list to use after adding.', t('addCard.add'))
               : addCardType === 'car' ? renderSimpleAddSection(Car, t('addCard.carDescription'), t('addCard.carCard'))
               : addCardType === 'nordpool' ? renderNordpoolSection()

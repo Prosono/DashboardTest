@@ -90,6 +90,7 @@ export default function EditCardModal({
   canEditStatus, 
   isEditSensor,
   isEditCalendar,
+  isEditCalendarBooking,
   isEditTodo,
   isEditCost,
   isEditCar,
@@ -457,6 +458,78 @@ export default function EditCardModal({
                     </button>
                   );
                 })}
+              </div>
+            </div>
+          )}
+
+          {isEditCalendarBooking && editSettingsKey && (
+            <div className="space-y-3">
+              <label className="text-xs uppercase font-bold text-gray-500 ml-1">
+                {t('calendarBooking.selectCalendar') || 'Select one calendar'}
+              </label>
+              <div className="popup-surface rounded-2xl p-4 max-h-56 overflow-y-auto custom-scrollbar space-y-2">
+                {calendarOptions.length === 0 && (
+                  <p className="text-xs text-[var(--text-muted)] text-center py-4">
+                    {t('calendar.noCalendarsFound') || 'No calendars found'}
+                  </p>
+                )}
+                {calendarOptions.map((id) => {
+                  const selected = editSettings.calendarEntityId === id;
+                  return (
+                    <button
+                      key={id}
+                      type="button"
+                      onClick={() => {
+                        saveCardSetting(editSettingsKey, 'calendarEntityId', selected ? null : id);
+                      }}
+                      className={`w-full text-left px-3 py-2 rounded-xl transition-colors border ${
+                        selected
+                          ? 'bg-blue-500/15 border-blue-500/30 text-blue-400'
+                          : 'border-transparent hover:bg-[var(--glass-bg-hover)] text-[var(--text-secondary)]'
+                      }`}
+                    >
+                      <div className="text-sm font-bold truncate">{entities[id]?.attributes?.friendly_name || id}</div>
+                      <div className="text-[10px] text-[var(--text-muted)] truncate">{id}</div>
+                    </button>
+                  );
+                })}
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <label className="text-[10px] uppercase tracking-widest font-bold text-[var(--text-secondary)]">
+                    {t('calendarBooking.daysAhead') || 'Days ahead'}
+                  </label>
+                  <input
+                    type="number"
+                    min={1}
+                    max={30}
+                    className="w-full px-3 py-2 rounded-xl popup-surface text-[var(--text-primary)] text-sm outline-none focus:border-blue-500/50 transition-colors"
+                    value={Number(editSettings.daysAhead) || 7}
+                    onChange={(e) => {
+                      const value = Number(e.target.value);
+                      const next = Number.isFinite(value) ? Math.max(1, Math.min(30, Math.round(value))) : 7;
+                      saveCardSetting(editSettingsKey, 'daysAhead', next);
+                    }}
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[10px] uppercase tracking-widest font-bold text-[var(--text-secondary)]">
+                    {t('calendarBooking.maxItems') || 'Rows shown'}
+                  </label>
+                  <input
+                    type="number"
+                    min={3}
+                    max={12}
+                    className="w-full px-3 py-2 rounded-xl popup-surface text-[var(--text-primary)] text-sm outline-none focus:border-blue-500/50 transition-colors"
+                    value={Number(editSettings.maxItems) || 6}
+                    onChange={(e) => {
+                      const value = Number(e.target.value);
+                      const next = Number.isFinite(value) ? Math.max(3, Math.min(12, Math.round(value))) : 6;
+                      saveCardSetting(editSettingsKey, 'maxItems', next);
+                    }}
+                  />
+                </div>
               </div>
             </div>
           )}
