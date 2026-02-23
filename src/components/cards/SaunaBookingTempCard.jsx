@@ -5,7 +5,7 @@ import { getIconComponent } from '../../icons';
 import SparkLine from '../charts/SparkLine';
 
 const DEFAULT_ACTIVE_STATES = ['on', 'true', '1', 'yes', 'active', 'booked', 'occupied', 'aktiv'];
-const DEFAULT_SERVICE_STATES = ['ja', 'yes', 'service', 'on', 'true', '1', 'active', 'aktiv'];
+const DEFAULT_SERVICE_STATES = ['ja', 'yes', 'service', 'on', 'true', '1'];
 
 const clamp = (value, min, max, fallback) => {
   const parsed = Number(value);
@@ -52,6 +52,8 @@ const parseStateArray = (rawValue, fallback) => {
 };
 
 const isStateActive = (value, states) => parseStateArray(states, DEFAULT_ACTIVE_STATES).includes(normalizeState(value));
+const getServiceStates = (states) => parseStateArray(states, DEFAULT_SERVICE_STATES)
+  .filter((state) => state !== 'active' && state !== 'aktiv');
 
 const normalizeSnapshots = (rawValue) => {
   if (!Array.isArray(rawValue)) return [];
@@ -238,7 +240,7 @@ export default function SaunaBookingTempCard({
   const targetTempSetting = toNum(settings?.targetTempValue);
   const targetTemp = targetTempSetting !== null ? targetTempSetting : toNum(targetEntity?.state);
   const bookingActive = activeEntity ? isStateActive(activeEntity.state, settings?.activeOnStates) : false;
-  const serviceActive = serviceEntity ? isStateActive(serviceEntity.state, settings?.serviceOnStates || DEFAULT_SERVICE_STATES) : false;
+  const serviceActive = serviceEntity ? getServiceStates(settings?.serviceOnStates).includes(normalizeState(serviceEntity.state)) : false;
 
   const summaryHours = clamp(settings?.summaryHours, 6, 168, 24);
   const keepDays = clamp(settings?.keepDays, 7, 365, 120);
@@ -671,11 +673,13 @@ export default function SaunaBookingTempCard({
                 if (editMode) return;
                 setShowDetailsModal(true);
               }}
-              className={`flex-1 min-h-0 w-full rounded-2xl border border-[var(--glass-border)] bg-[var(--glass-bg)] px-4 py-4 text-left transition-colors flex flex-col ${
-                editMode ? 'cursor-default' : 'hover:bg-[var(--glass-bg-hover)] cursor-pointer active:scale-[0.99]'
+              className={`flex-1 min-h-0 w-full text-left transition-all flex flex-col ${
+                editMode ? 'cursor-default' : 'cursor-pointer active:scale-[0.99]'
               }`}
             >
-              <div className="mt-1.5 flex-1 min-h-0 rounded-2xl border border-[var(--glass-border)] bg-[var(--glass-bg-hover)] overflow-hidden">
+              <div className={`flex-1 min-h-0 rounded-2xl border border-[var(--glass-border)] bg-[var(--glass-bg-hover)] overflow-hidden transition-colors ${
+                editMode ? '' : 'hover:bg-[var(--glass-bg)]'
+              }`}>
                 <div className="grid grid-cols-[1fr_auto_1fr] min-h-[170px] h-full">
                   <div className="min-w-0 flex flex-col">
                     <div className="flex-1 min-h-0 px-3 py-3 border-b border-[var(--glass-border)]">

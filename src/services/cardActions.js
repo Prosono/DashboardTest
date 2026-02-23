@@ -211,7 +211,7 @@ export const handleAddSelected = (ctx) => {
         targetTempValue: null,
         targetToleranceC: 0,
         activeOnStates: ['on', 'true', '1', 'yes', 'active', 'booked', 'occupied', 'aktiv'],
-        serviceOnStates: ['ja', 'yes', 'service', 'on', 'true', '1', 'active', 'aktiv'],
+        serviceOnStates: ['ja', 'yes', 'service', 'on', 'true', '1'],
         bookingSnapshots: [],
       }, { openEdit: true });
       return;

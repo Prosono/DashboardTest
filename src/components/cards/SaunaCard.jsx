@@ -35,7 +35,7 @@ function stateHasKeyword(value, keywords = []) {
 function isTruthyBookingState(state) {
   const normalized = norm(state);
   if (!normalized) return false;
-  if (['ja', 'yes', 'on', 'true', '1', 'service', 'active'].includes(normalized)) return true;
+  if (['ja', 'yes', 'on', 'true', '1', 'service'].includes(normalized)) return true;
   const numeric = Number(normalized);
   return Number.isFinite(numeric) && numeric > 0;
 }
@@ -394,8 +394,6 @@ export default function SaunaCard({
     serviceNorm,
     norm(serviceEntity?.attributes?.next_booking_type),
     norm(serviceEntity?.attributes?.booking_type),
-    norm(serviceEntity?.attributes?.type),
-    norm(serviceEntity?.attributes?.status),
   ]
     .filter(Boolean)
     .join(' ');
@@ -415,8 +413,6 @@ export default function SaunaCard({
     nextBookingServiceNorm,
     norm(nextBookingServiceEntity?.attributes?.next_booking_type),
     norm(nextBookingServiceEntity?.attributes?.booking_type),
-    norm(nextBookingServiceEntity?.attributes?.type),
-    norm(nextBookingServiceEntity?.attributes?.status),
   ]
     .filter(Boolean)
     .join(' ');
@@ -488,7 +484,7 @@ export default function SaunaCard({
   }, [bookingEntityId, bookingHistoryRaw, statusWindow.start, statusWindow.end]);
   const serviceStateSeries = useMemo(() => {
     if (!serviceEntityId) return [];
-    const allPoints = extractStateSeries(serviceHistoryRaw, ['ja', 'yes', 'on', 'true', '1', 'service', 'active']);
+    const allPoints = extractStateSeries(serviceHistoryRaw, ['ja', 'yes', 'on', 'true', '1', 'service']);
     return trimStateSeriesToWindow(allPoints, statusWindow.start, statusWindow.end);
   }, [serviceEntityId, serviceHistoryRaw, statusWindow.start, statusWindow.end]);
   const showBookingChartOverlay = settings?.showBookingChartOverlay !== false;
