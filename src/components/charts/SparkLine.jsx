@@ -32,6 +32,7 @@ export default function SparkLine({
   maxValue,
   variant = 'line',
   barColorAccessor,
+  barMaxHeightRatio = 1,
 }) {
   if (!data || data.length === 0) return null;
   
@@ -70,6 +71,9 @@ export default function SparkLine({
   const barWidth = values.length <= 1
     ? 26
     : Math.max(2.8, Math.min(16, (width / values.length) * 0.52));
+  const safeBarHeightRatio = Number.isFinite(Number(barMaxHeightRatio))
+    ? Math.max(0.25, Math.min(1, Number(barMaxHeightRatio)))
+    : 1;
 
   const getDotColor = (val) => {
     const t = (val - min) / range;
@@ -118,7 +122,8 @@ export default function SparkLine({
             {values.map((v, i) => {
               const point = data[i];
               const normalized = (v - min) / range;
-              const y = height - (normalized * height);
+              const barDrawHeight = height * safeBarHeightRatio;
+              const y = height - (normalized * barDrawHeight);
               const h = Math.max(1.5, height - y);
               const x = points[i][0] - (barWidth / 2);
               const customBarColor = typeof barColorAccessor === 'function'

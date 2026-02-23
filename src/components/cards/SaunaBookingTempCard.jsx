@@ -141,7 +141,10 @@ const getDeviationBarColor = (startTemp, targetTemp, tolerance = 3) => {
   return '#ef4444';
 };
 
-const buildChartRange = (entries = [], fallbackTarget = null) => {
+const buildChartRange = (entries = [], fallbackTarget = null, options = {}) => {
+  const minSpan = Number.isFinite(Number(options?.minSpan)) ? Math.max(2, Number(options.minSpan)) : 14;
+  const paddingRatio = Number.isFinite(Number(options?.paddingRatio)) ? Math.max(0, Number(options.paddingRatio)) : 0.18;
+  const paddingMin = Number.isFinite(Number(options?.paddingMin)) ? Math.max(0.5, Number(options.paddingMin)) : 1;
   const values = [];
   entries.forEach((entry) => {
     const start = toNum(entry?.startTemp);
@@ -155,11 +158,15 @@ const buildChartRange = (entries = [], fallbackTarget = null) => {
 
   const min = Math.min(...values);
   const max = Math.max(...values);
-  const span = Math.max(1, max - min);
-  const padding = Math.max(1.5, span * 0.25);
+  const rawSpan = Math.max(1, max - min);
+  const span = Math.max(minSpan, rawSpan);
+  const center = (min + max) / 2;
+  const baseMin = center - (span / 2);
+  const baseMax = center + (span / 2);
+  const padding = Math.max(paddingMin, span * paddingRatio);
   return {
-    minValue: min - padding,
-    maxValue: max + padding,
+    minValue: baseMin - padding,
+    maxValue: baseMax + padding,
   };
 };
 
@@ -229,14 +236,28 @@ export default function SaunaBookingTempCard({
   const targetToleranceC = Number.isFinite(Number(settings?.targetToleranceC)) ? Number(settings.targetToleranceC) : 0;
 
   const snapshots = useMemo(() => normalizeSnapshots(settings?.bookingSnapshots), [settings?.bookingSnapshots]);
+  const rootRef = useRef(null);
   const lastLoggedHourRef = useRef(null);
   const [historyModal, setHistoryModal] = useState(null);
   const [showDetailsModal, setShowDetailsModal] = useState(false);
+  const [isCompactCard, setIsCompactCard] = useState(false);
 
   const openHistoryModal = (payload) => {
     if (editMode) return;
     setHistoryModal(payload);
   };
+
+  useEffect(() => {
+    if (typeof ResizeObserver === 'undefined' || !rootRef.current) return undefined;
+    const node = rootRef.current;
+    const observer = new ResizeObserver((entries) => {
+      const entry = entries?.[0];
+      const nextHeight = Number(entry?.contentRect?.height || node.getBoundingClientRect().height || 0);
+      setIsCompactCard(nextHeight > 0 && nextHeight < 470);
+    });
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, []);
 
   const removeSnapshot = (entryId) => {
     if (!settingsKey || typeof saveCardSetting !== 'function') return;
@@ -366,7 +387,7 @@ export default function SaunaBookingTempCard({
     value: entry.startTemp,
     barColor: getDeviationBarColor(entry.startTemp, entry.targetTemp, 3),
   }));
-  const trendChartRange = buildChartRange(trendEntries, targetTemp);
+  const trendChartRange = buildChartRange(trendEntries, targetTemp, { minSpan: 18, paddingRatio: 0.12, paddingMin: 1 });
   const latestSnapshot = recentSorted.length ? recentSorted[recentSorted.length - 1] : null;
   const modalStats = getTempStats(historyModal?.entries || []);
   const historyChartEntries = Array.isArray(historyModal?.entries)
@@ -376,7 +397,7 @@ export default function SaunaBookingTempCard({
     value: entry.startTemp,
     barColor: getDeviationBarColor(entry.startTemp, entry.targetTemp, 3),
   }));
-  const historyChartRange = buildChartRange(historyChartEntries, targetTemp);
+  const historyChartRange = buildChartRange(historyChartEntries, targetTemp, { minSpan: 18, paddingRatio: 0.12, paddingMin: 1 });
   const formatDeviationPercent = (value) => {
     if (!Number.isFinite(Number(value))) return '--';
     const num = Number(value);
@@ -515,6 +536,7 @@ export default function SaunaBookingTempCard({
                 minValue={trendChartRange?.minValue}
                 maxValue={trendChartRange?.maxValue}
                 barColorAccessor={(point) => point?.barColor}
+                barMaxHeightRatio={0.62}
               />
             </div>
           </div>
@@ -577,6 +599,7 @@ export default function SaunaBookingTempCard({
   return (
     <div
       {...dragProps}
+      ref={rootRef}
       className={`touch-feedback relative p-5 rounded-[2.2rem] border bg-[var(--glass-bg)] border-[var(--glass-border)] h-full overflow-hidden transition-all duration-300 ${
         editMode ? 'cursor-move' : 'cursor-default'
       }`}
@@ -627,7 +650,9 @@ export default function SaunaBookingTempCard({
                 if (editMode) return;
                 setShowDetailsModal(true);
               }}
-              className={`flex-1 min-h-0 w-full rounded-2xl border border-[var(--glass-border)] bg-[var(--glass-bg)] px-4 py-4 text-left transition-colors ${
+              className={`flex-1 min-h-0 w-full rounded-2xl border border-[var(--glass-border)] bg-[var(--glass-bg)] text-left transition-colors ${
+                isCompactCard ? 'px-3 py-2.5' : 'px-4 py-4'
+              } ${
                 editMode ? 'cursor-default' : 'hover:bg-[var(--glass-bg-hover)] cursor-pointer active:scale-[0.99]'
               }`}
             >
@@ -641,13 +666,13 @@ export default function SaunaBookingTempCard({
                   </div>
                 </div>
 
-                <div className={`mt-1 text-2xl font-semibold tabular-nums ${deviationTone.text}`}>
+                <div className={`${isCompactCard ? 'mt-0.5 text-xl' : 'mt-1 text-2xl'} font-semibold tabular-nums ${deviationTone.text}`}>
                   {formatDeviationPercent(avgDeviationPct)}
                 </div>
               </div>
 
-              <div className="mt-4 flex items-center justify-center gap-4">
-                <div className="relative w-28 h-28 shrink-0">
+              <div className={`${isCompactCard ? 'mt-1.5 gap-3' : 'mt-4 gap-4'} flex items-start justify-center`}>
+                <div className={`relative shrink-0 ${isCompactCard ? 'w-20 h-20' : 'w-28 h-28'}`}>
                   <svg viewBox="0 0 120 120" className="w-full h-full">
                     <circle
                       cx="60"
@@ -674,7 +699,7 @@ export default function SaunaBookingTempCard({
                     />
                   </svg>
                   <div className="absolute inset-0 flex flex-col items-center justify-center text-center">
-                    <span className="text-2xl font-semibold tabular-nums text-[var(--text-primary)]">
+                    <span className={`${isCompactCard ? 'text-xl' : 'text-2xl'} font-semibold tabular-nums text-[var(--text-primary)]`}>
                       {deviationScore !== null ? deviationScore : '--'}
                     </span>
                     <span className="text-[10px] uppercase tracking-widest text-[var(--text-muted)]">
@@ -687,13 +712,13 @@ export default function SaunaBookingTempCard({
                   <div className="text-[11px] uppercase tracking-widest font-bold text-[var(--text-secondary)]">
                     {tr('sauna.bookingTemp.targetHit', 'Target hit')}
                   </div>
-                  <div className="text-xl font-semibold tabular-nums text-[var(--text-primary)]">
+                  <div className={`${isCompactCard ? 'text-lg' : 'text-xl'} font-semibold tabular-nums text-[var(--text-primary)]`}>
                     {reachedRate !== null ? `${reachedRate}%` : '--'}
                   </div>
                   <div className="text-[11px] text-[var(--text-muted)] mt-1">
                     {targetSamples.length ? `${reachedCount}/${targetSamples.length}` : tr('common.unavailable', 'Unavailable')}
                   </div>
-                  <div className="mt-3 text-[11px] uppercase tracking-widest text-[var(--text-secondary)]">
+                  <div className={`${isCompactCard ? 'mt-1.5' : 'mt-3'} text-[11px] uppercase tracking-widest text-[var(--text-secondary)]`}>
                     {tr('common.history', 'History')} +
                   </div>
                 </div>
@@ -820,6 +845,7 @@ export default function SaunaBookingTempCard({
                         minValue={historyChartRange?.minValue}
                         maxValue={historyChartRange?.maxValue}
                         barColorAccessor={(point) => point?.barColor}
+                        barMaxHeightRatio={0.62}
                       />
                     </div>
                   </div>
