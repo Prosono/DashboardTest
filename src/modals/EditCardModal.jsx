@@ -1033,6 +1033,7 @@ export default function EditCardModal({
             const saunaToggleOptions = [
               { key: 'showFlame', label: translateText('sauna.showFlame', 'Show flame') },
               { key: 'showManualMode', label: translateText('sauna.showManualMode', 'Show manual/auto mode') },
+              { key: 'showBookingChartOverlay', label: translateText('sauna.showBookingChartOverlay', 'Show bookings in temperature chart') },
               { key: 'showThermostat', label: translateText('sauna.showThermostat', 'Show thermostat') },
               { key: 'showMotion', label: translateText('sauna.showMotion', 'Show motion') },
               { key: 'showLights', label: translateText('sauna.showLights', 'Show lights') },

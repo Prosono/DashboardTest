@@ -369,7 +369,9 @@ export default function SaunaCard({
     const raw = tempHistoryById?.[serviceEntityId];
     return extractStateSeries(raw, ['ja', 'yes', 'on', 'true', '1', 'service', 'active']);
   }, [settings?.serviceEntityId, tempHistoryById]);
+  const showBookingChartOverlay = settings?.showBookingChartOverlay !== false;
   const statusOverlaySegments = useMemo(() => {
+    if (!showBookingChartOverlay) return [];
     const start = statusWindow.start;
     const end = statusWindow.end;
     if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start) return [];
@@ -391,7 +393,7 @@ export default function SaunaCard({
           : 'bg-rose-400/10 border border-rose-300/20',
       }));
     return [...bookingSegments, ...serviceSegments];
-  }, [statusWindow, bookingStateSeries, serviceStateSeries, isLightTheme]);
+  }, [showBookingChartOverlay, statusWindow, bookingStateSeries, serviceStateSeries, isLightTheme]);
   const statusTimeLabels = useMemo(() => {
     const first = statusWindow.start;
     const last = statusWindow.end;
