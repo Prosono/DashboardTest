@@ -883,9 +883,11 @@ export default function SaunaCard({
               aria-label={canOpenStatusGraph ? tr('sensorInfo.title', 'Sensor detaljer') : undefined}
             >
               <div className="relative z-20 flex items-center justify-center mb-2">
-                <div className="flex items-center justify-center gap-2 min-w-0 text-center px-2 py-0.5 rounded-full bg-black/20 shadow-[0_2px_8px_rgba(0,0,0,0.35)]">
+                <div className="flex items-center justify-center gap-2 min-w-0 max-w-[94%] sm:max-w-none text-center px-2 py-0.5 rounded-full bg-black/20 shadow-[0_2px_8px_rgba(0,0,0,0.35)]">
                   <BookingIcon className={cx('w-4 h-4 shrink-0', statusVisual.color)} />
-                  <p className="text-sm font-normal text-[var(--text-primary)] truncate">{bookingLine || tr('sauna.preheat', 'Forvarmer')}</p>
+                  <p className="text-sm font-normal text-[var(--text-primary)] leading-tight whitespace-normal sm:whitespace-nowrap break-words">
+                    {bookingLine || tr('sauna.preheat', 'Forvarmer')}
+                  </p>
                 </div>
               </div>
               {statusHistory.length > 0 && (
