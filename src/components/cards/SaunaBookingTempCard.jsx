@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { AlertTriangle, Clock, Flame, Thermometer, TrendingUp, Wrench, X, Trash2 } from '../../icons';
 import { getIconComponent } from '../../icons';
 import SparkLine from '../charts/SparkLine';
@@ -376,6 +377,10 @@ export default function SaunaBookingTempCard({
   const ringCircumference = 2 * Math.PI * ringRadius;
   const ringProgress = deviationScore ?? 0;
   const ringDashArray = `${(ringProgress / 100) * ringCircumference} ${ringCircumference}`;
+  const renderFullscreenPortal = (content) => {
+    if (typeof document === 'undefined') return null;
+    return createPortal(content, document.body);
+  };
 
   const analysisPanels = (
     <>
@@ -616,26 +621,18 @@ export default function SaunaBookingTempCard({
                 editMode ? 'cursor-default' : 'hover:bg-[var(--glass-bg-hover)] cursor-pointer active:scale-[0.99]'
               }`}
             >
-              <div className="flex items-start justify-between gap-3">
-                <div className="min-w-0">
+              <div className="min-w-0">
+                <div className="flex items-start justify-between gap-3">
                   <div className="text-[10px] uppercase tracking-widest font-bold text-[var(--text-secondary)]">
                     {tr('sauna.bookingTemp.deviation', 'Deviation')}
                   </div>
-                  <div className={`mt-1 text-2xl font-semibold tabular-nums ${deviationTone.text}`}>
-                    {formatDeviationPercent(avgDeviationPct)}
-                  </div>
-                  <div className="text-[11px] text-[var(--text-muted)] mt-1">
+                  <div className="text-[11px] text-[var(--text-muted)] mt-0.5">
                     {summaryHours}h • {recentRegularSnapshots.length} {tr('sauna.bookingTemp.starts', 'samples')}
                   </div>
                 </div>
 
-                <div className="text-right shrink-0">
-                  <div className="text-[10px] uppercase tracking-widest font-bold text-[var(--text-secondary)]">
-                    {tr('sauna.currentTemp', 'Current')}
-                  </div>
-                  <div className="text-2xl font-semibold tabular-nums text-[var(--text-primary)]">
-                    {currentTemp !== null ? `${currentTemp.toFixed(1)}°` : '--'}
-                  </div>
+                <div className={`mt-1 text-2xl font-semibold tabular-nums ${deviationTone.text}`}>
+                  {formatDeviationPercent(avgDeviationPct)}
                 </div>
               </div>
 
@@ -694,198 +691,202 @@ export default function SaunaBookingTempCard({
             </button>
 
             {showDetailsModal && (
-              <div
-                data-disable-pull-refresh="true"
-                className="fixed inset-0 z-[125] flex items-start sm:items-center justify-center p-3 sm:p-4 overflow-y-auto"
-                style={{
-                  background: 'rgba(4, 10, 20, 0.68)',
-                  backdropFilter: 'blur(8px)',
-                  paddingTop: 'calc(env(safe-area-inset-top, 0px) + 12px)',
-                  paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 12px)',
-                }}
-                onClick={() => setShowDetailsModal(false)}
-              >
+              renderFullscreenPortal(
                 <div
                   data-disable-pull-refresh="true"
-                  className="border w-full max-w-5xl rounded-2xl sm:rounded-3xl p-4 sm:p-6 shadow-2xl relative font-sans backdrop-blur-xl popup-anim flex flex-col overflow-hidden my-auto"
+                  className="fixed inset-0 z-[220] flex items-start sm:items-center justify-center p-3 sm:p-4 overflow-y-auto"
                   style={{
-                    background: 'var(--modal-bg)',
-                    borderColor: 'var(--glass-border)',
-                    touchAction: 'pan-y',
-                    maxHeight: 'calc(100dvh - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px) - 24px)',
+                    background: 'rgba(4, 10, 20, 0.68)',
+                    backdropFilter: 'blur(8px)',
+                    paddingTop: 'calc(env(safe-area-inset-top, 0px) + 12px)',
+                    paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 12px)',
                   }}
-                  onClick={(e) => e.stopPropagation()}
+                  onClick={() => setShowDetailsModal(false)}
                 >
-                  <button
-                    type="button"
-                    onClick={() => setShowDetailsModal(false)}
-                    className="absolute top-4 right-4 modal-close"
-                    aria-label={tr('common.close', 'Close')}
+                  <div
+                    data-disable-pull-refresh="true"
+                    className="border w-full max-w-6xl rounded-2xl sm:rounded-3xl p-4 sm:p-6 shadow-2xl relative font-sans backdrop-blur-xl popup-anim flex flex-col overflow-hidden my-auto"
+                    style={{
+                      background: 'var(--modal-bg)',
+                      borderColor: 'var(--glass-border)',
+                      touchAction: 'pan-y',
+                      maxHeight: 'calc(100dvh - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px) - 24px)',
+                    }}
+                    onClick={(e) => e.stopPropagation()}
                   >
-                    <X className="w-4 h-4" />
-                  </button>
+                    <button
+                      type="button"
+                      onClick={() => setShowDetailsModal(false)}
+                      className="absolute top-4 right-4 modal-close"
+                      aria-label={tr('common.close', 'Close')}
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
 
-                  <div className="pr-10 mb-4">
-                    <div className="text-xs uppercase tracking-widest font-bold text-[var(--text-secondary)]">
-                      {tr('sauna.bookingTemp.deviation', 'Deviation')}
+                    <div className="pr-10 mb-4">
+                      <div className="text-xs uppercase tracking-widest font-bold text-[var(--text-secondary)]">
+                        {tr('sauna.bookingTemp.deviation', 'Deviation')}
+                      </div>
+                      <div className="text-lg sm:text-xl font-semibold text-[var(--text-primary)] mt-1">
+                        {cardName}
+                      </div>
                     </div>
-                    <div className="text-lg sm:text-xl font-semibold text-[var(--text-primary)] mt-1">
-                      {cardName}
-                    </div>
-                  </div>
 
-                  <div className="flex-1 min-h-0 overflow-y-auto custom-scrollbar pr-1 space-y-3">
-                    {analysisPanels}
+                    <div className="flex-1 min-h-0 overflow-y-auto custom-scrollbar pr-1 space-y-3">
+                      {analysisPanels}
+                    </div>
                   </div>
                 </div>
-              </div>
+              )
             )}
           </>
         )}
       </div>
 
       {historyModal && (
-        <div
-          data-disable-pull-refresh="true"
-          className="fixed inset-0 z-[130] flex items-start sm:items-center justify-center p-3 sm:p-4 overflow-y-auto"
-          style={{
-            background: 'rgba(4, 10, 20, 0.68)',
-            backdropFilter: 'blur(8px)',
-            paddingTop: 'calc(env(safe-area-inset-top, 0px) + 12px)',
-            paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 12px)',
-          }}
-          onClick={() => setHistoryModal(null)}
-        >
+        renderFullscreenPortal(
           <div
             data-disable-pull-refresh="true"
-            className="border w-full max-w-3xl rounded-2xl sm:rounded-3xl p-4 sm:p-6 shadow-2xl relative font-sans backdrop-blur-xl popup-anim flex flex-col overflow-hidden my-auto"
+            className="fixed inset-0 z-[230] flex items-start sm:items-center justify-center p-3 sm:p-4 overflow-y-auto"
             style={{
-              background: 'var(--modal-bg)',
-              borderColor: 'var(--glass-border)',
-              touchAction: 'pan-y',
-              maxHeight: 'calc(100dvh - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px) - 24px)',
+              background: 'rgba(4, 10, 20, 0.68)',
+              backdropFilter: 'blur(8px)',
+              paddingTop: 'calc(env(safe-area-inset-top, 0px) + 12px)',
+              paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 12px)',
             }}
-            onClick={(e) => e.stopPropagation()}
+            onClick={() => setHistoryModal(null)}
           >
-            <button
-              type="button"
-              onClick={() => setHistoryModal(null)}
-              className="absolute top-4 right-4 modal-close"
-              aria-label={tr('common.close', 'Close')}
+            <div
+              data-disable-pull-refresh="true"
+              className="border w-full max-w-4xl rounded-2xl sm:rounded-3xl p-4 sm:p-6 shadow-2xl relative font-sans backdrop-blur-xl popup-anim flex flex-col overflow-hidden my-auto"
+              style={{
+                background: 'var(--modal-bg)',
+                borderColor: 'var(--glass-border)',
+                touchAction: 'pan-y',
+                maxHeight: 'calc(100dvh - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px) - 24px)',
+              }}
+              onClick={(e) => e.stopPropagation()}
             >
-              <X className="w-4 h-4" />
-            </button>
+              <button
+                type="button"
+                onClick={() => setHistoryModal(null)}
+                className="absolute top-4 right-4 modal-close"
+                aria-label={tr('common.close', 'Close')}
+              >
+                <X className="w-4 h-4" />
+              </button>
 
-            <div className="pr-10">
-              <div className="text-xs uppercase tracking-widest font-bold text-[var(--text-secondary)]">
-                {historyModal.subtitle || tr('common.history', 'History')}
-              </div>
-              <div className="text-lg sm:text-xl font-semibold text-[var(--text-primary)] mt-1">
-                {historyModal.title || tr('common.history', 'History')}
-              </div>
-            </div>
-
-            {historyModal.entries?.length > 1 && (
-              <div className="mt-4 rounded-2xl border border-[var(--glass-border)] bg-[var(--glass-bg)] px-3 py-2">
-                {modalStats && (
-                  <div className="grid grid-cols-3 gap-2 mb-2 text-[10px] uppercase tracking-widest text-[var(--text-muted)]">
-                    <span>{tr('sauna.bookingTemp.minimum', 'Min')}: {modalStats.min.toFixed(1)}°</span>
-                    <span>{tr('sauna.bookingTemp.latest', 'Latest')}: {modalStats.latest.toFixed(1)}°</span>
-                    <span>{tr('sauna.bookingTemp.maximum', 'Max')}: {modalStats.max.toFixed(1)}°</span>
-                  </div>
-                )}
-                <div className="relative">
-                  <div className="absolute left-0 top-0 text-[10px] uppercase tracking-widest text-[var(--text-muted)] tabular-nums">
-                    {modalStats ? `${modalStats.max.toFixed(1)}°` : '--'}
-                  </div>
-                  <div className="absolute left-0 bottom-0 text-[10px] uppercase tracking-widest text-[var(--text-muted)] tabular-nums">
-                    {modalStats ? `${modalStats.min.toFixed(1)}°` : '--'}
-                  </div>
-                  <div className="pl-12">
-                    <SparkLine
-                      data={historyModal.entries.slice().reverse().map((entry) => ({ value: entry.startTemp }))}
-                      currentIndex={historyModal.entries.length - 1}
-                      height={72}
-                      variant="bar"
-                    />
-                  </div>
+              <div className="pr-10">
+                <div className="text-xs uppercase tracking-widest font-bold text-[var(--text-secondary)]">
+                  {historyModal.subtitle || tr('common.history', 'History')}
+                </div>
+                <div className="text-lg sm:text-xl font-semibold text-[var(--text-primary)] mt-1">
+                  {historyModal.title || tr('common.history', 'History')}
                 </div>
               </div>
-            )}
 
-            <div
-              className="mt-4 flex-1 min-h-0 overflow-y-auto custom-scrollbar space-y-2 pr-1 overscroll-contain"
-              style={{ WebkitOverflowScrolling: 'touch', touchAction: 'pan-y' }}
-            >
-              {!historyModal.entries?.length && (
-                <div className="px-2 py-5 text-center text-xs text-[var(--text-muted)]">
-                  {tr('sauna.bookingTemp.noStarts', 'No hourly samples in selected window')}
+              {historyModal.entries?.length > 1 && (
+                <div className="mt-4 rounded-2xl border border-[var(--glass-border)] bg-[var(--glass-bg)] px-3 py-2">
+                  {modalStats && (
+                    <div className="grid grid-cols-3 gap-2 mb-2 text-[10px] uppercase tracking-widest text-[var(--text-muted)]">
+                      <span>{tr('sauna.bookingTemp.minimum', 'Min')}: {modalStats.min.toFixed(1)}°</span>
+                      <span>{tr('sauna.bookingTemp.latest', 'Latest')}: {modalStats.latest.toFixed(1)}°</span>
+                      <span>{tr('sauna.bookingTemp.maximum', 'Max')}: {modalStats.max.toFixed(1)}°</span>
+                    </div>
+                  )}
+                  <div className="relative">
+                    <div className="absolute left-0 top-0 text-[10px] uppercase tracking-widest text-[var(--text-muted)] tabular-nums">
+                      {modalStats ? `${modalStats.max.toFixed(1)}°` : '--'}
+                    </div>
+                    <div className="absolute left-0 bottom-0 text-[10px] uppercase tracking-widest text-[var(--text-muted)] tabular-nums">
+                      {modalStats ? `${modalStats.min.toFixed(1)}°` : '--'}
+                    </div>
+                    <div className="pl-12">
+                      <SparkLine
+                        data={historyModal.entries.slice().reverse().map((entry) => ({ value: entry.startTemp }))}
+                        currentIndex={historyModal.entries.length - 1}
+                        height={72}
+                        variant="bar"
+                      />
+                    </div>
+                  </div>
                 </div>
               )}
 
-              {historyModal.entries?.map((entry) => {
-                const hit = entry.targetTemp !== null
-                  ? entry.startTemp >= (entry.targetTemp - targetToleranceC)
-                  : null;
-                const isHighlighted = historyModal.highlightId && historyModal.highlightId === entry.id;
-                return (
-                  <div
-                    key={entry.id}
-                    className={`rounded-xl border px-3 py-2 ${
-                      isHighlighted
-                        ? 'border-blue-400/50 bg-blue-500/10'
-                        : 'border-[var(--glass-border)] bg-[var(--glass-bg)]'
-                    }`}
-                  >
-                    <div className="flex items-center justify-between gap-2">
-                      <div className="text-sm font-semibold tabular-nums text-[var(--text-primary)] inline-flex items-center gap-1.5">
-                        <Thermometer className="w-3.5 h-3.5 text-[var(--text-secondary)]" />
-                        {entry.startTemp.toFixed(1)}°
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <div className="text-[10px] uppercase tracking-widest text-[var(--text-muted)]">
-                          {formatDateTime(entry.timestampMs)}
-                        </div>
-                        <button
-                          type="button"
-                          className="h-7 w-7 rounded-full border border-red-400/30 bg-red-500/10 text-red-300 hover:bg-red-500/20 inline-flex items-center justify-center"
-                          aria-label={tr('common.delete', 'Delete')}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            const confirmDelete = typeof window === 'undefined'
-                              ? true
-                              : window.confirm(tr('sauna.bookingTemp.deleteSampleConfirm', 'Delete this sample?'));
-                            if (!confirmDelete) return;
-                            removeSnapshot(entry.id);
-                          }}
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
-                    </div>
-                    <div className="mt-1.5 flex flex-wrap items-center gap-2 text-[10px] uppercase tracking-widest">
-                      <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full border border-[var(--glass-border)] bg-[var(--glass-bg-hover)] text-[var(--text-secondary)]">
-                        {tr('sauna.target', 'Target')}: {entry.targetTemp !== null ? `${entry.targetTemp.toFixed(1)}°` : '--'}
-                      </span>
-                      <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full border border-[var(--glass-border)] bg-[var(--glass-bg-hover)] text-[var(--text-secondary)]">
-                        {tr('sauna.bookingTemp.deviation', 'Deviation')}: {formatDeviationPercent(entry.deviationPct)}
-                      </span>
-                      {hit !== null && (
-                        <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full border ${
-                          hit
-                            ? 'border-emerald-400/40 bg-emerald-500/15 text-emerald-300'
-                            : 'border-rose-400/40 bg-rose-500/15 text-rose-300'
-                        }`}>
-                          {tr('sauna.bookingTemp.targetHit', 'Target hit')}: {hit ? tr('common.yes', 'Yes') : tr('common.no', 'No')}
-                        </span>
-                      )}
-                    </div>
+              <div
+                className="mt-4 flex-1 min-h-0 overflow-y-auto custom-scrollbar space-y-2 pr-1 overscroll-contain"
+                style={{ WebkitOverflowScrolling: 'touch', touchAction: 'pan-y' }}
+              >
+                {!historyModal.entries?.length && (
+                  <div className="px-2 py-5 text-center text-xs text-[var(--text-muted)]">
+                    {tr('sauna.bookingTemp.noStarts', 'No hourly samples in selected window')}
                   </div>
-                );
-              })}
+                )}
+
+                {historyModal.entries?.map((entry) => {
+                  const hit = entry.targetTemp !== null
+                    ? entry.startTemp >= (entry.targetTemp - targetToleranceC)
+                    : null;
+                  const isHighlighted = historyModal.highlightId && historyModal.highlightId === entry.id;
+                  return (
+                    <div
+                      key={entry.id}
+                      className={`rounded-xl border px-3 py-2 ${
+                        isHighlighted
+                          ? 'border-blue-400/50 bg-blue-500/10'
+                          : 'border-[var(--glass-border)] bg-[var(--glass-bg)]'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="text-sm font-semibold tabular-nums text-[var(--text-primary)] inline-flex items-center gap-1.5">
+                          <Thermometer className="w-3.5 h-3.5 text-[var(--text-secondary)]" />
+                          {entry.startTemp.toFixed(1)}°
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <div className="text-[10px] uppercase tracking-widest text-[var(--text-muted)]">
+                            {formatDateTime(entry.timestampMs)}
+                          </div>
+                          <button
+                            type="button"
+                            className="h-7 w-7 rounded-full border border-red-400/30 bg-red-500/10 text-red-300 hover:bg-red-500/20 inline-flex items-center justify-center"
+                            aria-label={tr('common.delete', 'Delete')}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              const confirmDelete = typeof window === 'undefined'
+                                ? true
+                                : window.confirm(tr('sauna.bookingTemp.deleteSampleConfirm', 'Delete this sample?'));
+                              if (!confirmDelete) return;
+                              removeSnapshot(entry.id);
+                            }}
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      </div>
+                      <div className="mt-1.5 flex flex-wrap items-center gap-2 text-[10px] uppercase tracking-widest">
+                        <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full border border-[var(--glass-border)] bg-[var(--glass-bg-hover)] text-[var(--text-secondary)]">
+                          {tr('sauna.target', 'Target')}: {entry.targetTemp !== null ? `${entry.targetTemp.toFixed(1)}°` : '--'}
+                        </span>
+                        <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full border border-[var(--glass-border)] bg-[var(--glass-bg-hover)] text-[var(--text-secondary)]">
+                          {tr('sauna.bookingTemp.deviation', 'Deviation')}: {formatDeviationPercent(entry.deviationPct)}
+                        </span>
+                        {hit !== null && (
+                          <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full border ${
+                            hit
+                              ? 'border-emerald-400/40 bg-emerald-500/15 text-emerald-300'
+                              : 'border-rose-400/40 bg-rose-500/15 text-rose-300'
+                          }`}>
+                            {tr('sauna.bookingTemp.targetHit', 'Target hit')}: {hit ? tr('common.yes', 'Yes') : tr('common.no', 'No')}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
             </div>
           </div>
-        </div>
+        )
       )}
     </div>
   );
