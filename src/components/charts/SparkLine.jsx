@@ -84,7 +84,13 @@ export default function SparkLine({
 
   return (
     <div className="mt-1 relative opacity-80 group-hover:opacity-100 transition-all duration-700">
-      <svg width="100%" height={height} viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="none" className="overflow-visible">
+      <svg
+        width="100%"
+        height={height}
+        viewBox={`0 0 ${width} ${height}`}
+        preserveAspectRatio={useBars ? 'xMidYMid meet' : 'none'}
+        className="overflow-visible"
+      >
         <defs>
           {/* Area gradient - more opaque at top */}
           <linearGradient id={areaId} x1="0" y1="0" x2="0" y2="1">

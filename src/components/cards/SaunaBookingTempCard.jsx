@@ -141,6 +141,11 @@ const getDeviationBarColor = (startTemp, targetTemp, tolerance = 3) => {
   return '#ef4444';
 };
 
+const getBarChartMaxWidth = (pointCount) => {
+  const count = Number.isFinite(Number(pointCount)) ? Math.max(1, Number(pointCount)) : 1;
+  return Math.max(320, Math.min(760, Math.round(count * 62)));
+};
+
 const buildChartRange = (entries = [], fallbackTarget = null, options = {}) => {
   const minSpan = Number.isFinite(Number(options?.minSpan)) ? Math.max(2, Number(options.minSpan)) : 14;
   const paddingRatio = Number.isFinite(Number(options?.paddingRatio)) ? Math.max(0, Number(options.paddingRatio)) : 0.18;
@@ -253,7 +258,7 @@ export default function SaunaBookingTempCard({
     const observer = new ResizeObserver((entries) => {
       const entry = entries?.[0];
       const nextHeight = Number(entry?.contentRect?.height || node.getBoundingClientRect().height || 0);
-      setIsCompactCard(nextHeight > 0 && nextHeight < 470);
+      setIsCompactCard(nextHeight > 0 && nextHeight < 520);
     });
     observer.observe(node);
     return () => observer.disconnect();
@@ -398,6 +403,8 @@ export default function SaunaBookingTempCard({
     barColor: getDeviationBarColor(entry.startTemp, entry.targetTemp, 3),
   }));
   const historyChartRange = buildChartRange(historyChartEntries, targetTemp, { minSpan: 18, paddingRatio: 0.12, paddingMin: 1 });
+  const trendChartMaxWidth = getBarChartMaxWidth(sparkPoints.length);
+  const historyChartMaxWidth = getBarChartMaxWidth(historyChartPoints.length);
   const formatDeviationPercent = (value) => {
     if (!Number.isFinite(Number(value))) return '--';
     const num = Number(value);
@@ -528,16 +535,18 @@ export default function SaunaBookingTempCard({
               {trendStats ? `${trendStats.min.toFixed(1)}°` : '--'}
             </div>
             <div className="pl-12">
-              <SparkLine
-                data={sparkPoints}
-                currentIndex={sparkPoints.length - 1}
-                height={62}
-                variant="bar"
-                minValue={trendChartRange?.minValue}
-                maxValue={trendChartRange?.maxValue}
-                barColorAccessor={(point) => point?.barColor}
-                barMaxHeightRatio={0.62}
-              />
+              <div className="w-full mx-auto" style={{ maxWidth: `${trendChartMaxWidth}px` }}>
+                <SparkLine
+                  data={sparkPoints}
+                  currentIndex={sparkPoints.length - 1}
+                  height={62}
+                  variant="bar"
+                  minValue={trendChartRange?.minValue}
+                  maxValue={trendChartRange?.maxValue}
+                  barColorAccessor={(point) => point?.barColor}
+                  barMaxHeightRatio={0.56}
+                />
+              </div>
             </div>
           </div>
         </button>
@@ -671,8 +680,8 @@ export default function SaunaBookingTempCard({
                 </div>
               </div>
 
-              <div className={`${isCompactCard ? 'mt-1.5 gap-3' : 'mt-4 gap-4'} flex items-start justify-center`}>
-                <div className={`relative shrink-0 ${isCompactCard ? 'w-20 h-20' : 'w-28 h-28'}`}>
+              <div className={`${isCompactCard ? 'mt-0.5' : 'mt-2.5'} grid grid-cols-[auto,1fr] items-start gap-3`}>
+                <div className={`relative shrink-0 ${isCompactCard ? 'w-24 h-24' : 'w-28 h-28'}`}>
                   <svg viewBox="0 0 120 120" className="w-full h-full">
                     <circle
                       cx="60"
@@ -699,7 +708,7 @@ export default function SaunaBookingTempCard({
                     />
                   </svg>
                   <div className="absolute inset-0 flex flex-col items-center justify-center text-center">
-                    <span className={`${isCompactCard ? 'text-xl' : 'text-2xl'} font-semibold tabular-nums text-[var(--text-primary)]`}>
+                    <span className={`${isCompactCard ? 'text-[1.7rem]' : 'text-2xl'} font-semibold tabular-nums text-[var(--text-primary)]`}>
                       {deviationScore !== null ? deviationScore : '--'}
                     </span>
                     <span className="text-[10px] uppercase tracking-widest text-[var(--text-muted)]">
@@ -718,7 +727,7 @@ export default function SaunaBookingTempCard({
                   <div className="text-[11px] text-[var(--text-muted)] mt-1">
                     {targetSamples.length ? `${reachedCount}/${targetSamples.length}` : tr('common.unavailable', 'Unavailable')}
                   </div>
-                  <div className={`${isCompactCard ? 'mt-1.5' : 'mt-3'} text-[11px] uppercase tracking-widest text-[var(--text-secondary)]`}>
+                  <div className={`${isCompactCard ? 'mt-1' : 'mt-3'} text-[11px] uppercase tracking-widest text-[var(--text-secondary)]`}>
                     {tr('common.history', 'History')} +
                   </div>
                 </div>
@@ -836,7 +845,8 @@ export default function SaunaBookingTempCard({
                     <div className="absolute left-0 bottom-0 text-[10px] uppercase tracking-widest text-[var(--text-muted)] tabular-nums">
                       {modalStats ? `${modalStats.min.toFixed(1)}°` : '--'}
                     </div>
-                    <div className="pl-12">
+                  <div className="pl-12">
+                    <div className="w-full mx-auto" style={{ maxWidth: `${historyChartMaxWidth}px` }}>
                       <SparkLine
                         data={historyChartPoints}
                         currentIndex={historyChartPoints.length - 1}
@@ -845,9 +855,10 @@ export default function SaunaBookingTempCard({
                         minValue={historyChartRange?.minValue}
                         maxValue={historyChartRange?.maxValue}
                         barColorAccessor={(point) => point?.barColor}
-                        barMaxHeightRatio={0.62}
+                        barMaxHeightRatio={0.56}
                       />
                     </div>
+                  </div>
                   </div>
                 </div>
               )}
