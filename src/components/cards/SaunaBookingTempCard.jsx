@@ -136,13 +136,14 @@ const formatSince = (timestampMs) => {
   return restHours > 0 ? `${days}d ${restHours}h` : `${days}d`;
 };
 
-const getDeviationBarColor = (startTemp, targetTemp, tolerance = 3) => {
+const getDeviationBarColor = (startTemp, targetTemp, tolerance = 0) => {
   const start = toNum(startTemp);
   const target = toNum(targetTemp);
   if (start === null || target === null) return '#60a5fa';
+  const safeTolerance = Number.isFinite(Number(tolerance)) ? Math.max(0, Number(tolerance)) : 0;
   const delta = start - target;
-  if (Math.abs(delta) <= tolerance) return '#22c55e';
-  if (delta > tolerance) return '#f59e0b';
+  if (Math.abs(delta) <= safeTolerance) return '#22c55e'; // On target
+  if (delta > safeTolerance) return '#f59e0b'; // Above target
   return '#ef4444';
 };
 
@@ -377,11 +378,12 @@ export default function SaunaBookingTempCard({
     : null;
   const reachedCount = targetSamples.filter((entry) => entry.startTemp >= (entry.targetTemp - targetToleranceC)).length;
   const reachedRate = targetSamples.length ? Math.round((reachedCount / targetSamples.length) * 100) : null;
+  const chartTargetTolerance = Number.isFinite(Number(targetToleranceC)) ? Math.max(0, Number(targetToleranceC)) : 0;
 
   const trendEntries = recentSorted.slice(-30);
   const sparkPoints = trendEntries.map((entry) => ({
     value: entry.startTemp,
-    barColor: getDeviationBarColor(entry.startTemp, entry.targetTemp, 3),
+    barColor: getDeviationBarColor(entry.startTemp, entry.targetTemp, chartTargetTolerance),
   }));
   const trendChartRange = buildChartRange(trendEntries, targetTemp, { minSpan: 18, paddingRatio: 0.12, paddingMin: 1 });
   const latestSnapshot = recentSorted.length ? recentSorted[recentSorted.length - 1] : null;
@@ -391,7 +393,7 @@ export default function SaunaBookingTempCard({
     : [];
   const historyChartPoints = historyChartEntries.map((entry) => ({
     value: entry.startTemp,
-    barColor: getDeviationBarColor(entry.startTemp, entry.targetTemp, 3),
+    barColor: getDeviationBarColor(entry.startTemp, entry.targetTemp, chartTargetTolerance),
   }));
   const historyChartRange = buildChartRange(historyChartEntries, targetTemp, { minSpan: 18, paddingRatio: 0.12, paddingMin: 1 });
   const trendChartMaxWidth = getBarChartMaxWidth(sparkPoints.length);
