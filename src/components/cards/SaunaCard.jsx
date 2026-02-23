@@ -4,7 +4,7 @@ import { getIconComponent } from '../../icons';
 import SparkLine from '../charts/SparkLine';
 
 const asArray = (v) => (Array.isArray(v) ? v.filter(Boolean) : []);
-const norm = (s) => String(s ?? '').toLowerCase();
+const norm = (s) => String(s ?? '').trim().toLowerCase();
 const STATUS_GRAPH_WINDOW_MS = 6 * 60 * 60 * 1000;
 const OVERLAY_HOUR_BUCKET_MS = 60 * 60 * 1000;
 const STATUS_GRAPH_MAX_POINTS = 72;
@@ -30,6 +30,22 @@ function stateHasKeyword(value, keywords = []) {
   if (!escapedKeywords.length) return false;
   const pattern = new RegExp(`(^|[^a-z0-9])(${escapedKeywords.join('|')})([^a-z0-9]|$)`, 'i');
   return pattern.test(source);
+}
+
+function isTruthyBookingState(state) {
+  const normalized = norm(state);
+  if (!normalized) return false;
+  if (['ja', 'yes', 'on', 'true', '1', 'service', 'active'].includes(normalized)) return true;
+  const numeric = Number(normalized);
+  return Number.isFinite(numeric) && numeric > 0;
+}
+
+function isFalsyBookingState(state) {
+  const normalized = norm(state);
+  if (!normalized) return false;
+  if (['nei', 'no', 'off', 'false', '0', 'inactive'].includes(normalized)) return true;
+  const numeric = Number(normalized);
+  return Number.isFinite(numeric) && numeric <= 0;
 }
 
 function parseHistoryTimestamp(value) {
@@ -383,14 +399,14 @@ export default function SaunaCard({
   ]
     .filter(Boolean)
     .join(' ');
-  const serviceNumeric = Number(serviceState);
+  const serviceIsTruthy = isTruthyBookingState(serviceState);
+  const serviceIsFalsy = isFalsyBookingState(serviceState);
   const serviceYes = (
-    ['ja', 'yes', 'on', 'true', '1', 'service', 'active'].includes(serviceNorm)
+    serviceIsTruthy
     || stateHasKeyword(serviceStateContext, ['service', 'servicetime', 'maintenance', 'vedlikehold'])
-    || (Number.isFinite(serviceNumeric) && serviceNumeric > 0)
   );
   const serviceNo = (
-    ['nei', 'no', 'off', 'false', '0', 'inactive'].includes(serviceNorm)
+    serviceIsFalsy
     || stateHasKeyword(serviceStateContext, ['normal', 'ordinary', 'regular', 'vanlig'])
   );
   const nextBookingServiceState = nextBookingServiceEntity?.state ?? '';
@@ -404,11 +420,15 @@ export default function SaunaCard({
   ]
     .filter(Boolean)
     .join(' ');
-  const nextBookingServiceNumeric = Number(nextBookingServiceState);
+  const nextBookingServiceIsTruthy = isTruthyBookingState(nextBookingServiceState);
+  const nextBookingServiceIsFalsy = isFalsyBookingState(nextBookingServiceState);
   const nextBookingIsService = (
-    ['ja', 'yes', 'on', 'true', '1', 'service', 'active'].includes(nextBookingServiceNorm)
+    nextBookingServiceIsTruthy
     || stateHasKeyword(nextBookingServiceContext, ['service', 'servicetime', 'maintenance', 'vedlikehold'])
-    || (Number.isFinite(nextBookingServiceNumeric) && nextBookingServiceNumeric > 0)
+  ) && !nextBookingServiceIsFalsy;
+  const nextBookingIsNotService = (
+    nextBookingServiceIsFalsy
+    || stateHasKeyword(nextBookingServiceContext, ['normal', 'ordinary', 'regular', 'vanlig'])
   );
   const nextMinutes = toNum(nextBookingEntity?.state);
   const hasNext = nextMinutes != null && nextMinutes >= 0;
@@ -638,6 +658,7 @@ export default function SaunaCard({
     }
     if (next >= 0) {
       if (nextBookingIsService) return `${nextBookingText} (${tr('sauna.service', 'Service')})`;
+      if (nextBookingIsNotService) return nextBookingText;
       return nextBookingText;
     }
     if (serviceNo) return tr('sauna.normalBooking', 'Vanlig booking');
