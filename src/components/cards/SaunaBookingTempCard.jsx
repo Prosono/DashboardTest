@@ -648,70 +648,93 @@ export default function SaunaBookingTempCard({
                 editMode ? 'cursor-default' : 'hover:bg-[var(--glass-bg-hover)] cursor-pointer active:scale-[0.99]'
               }`}
             >
-              <div className="min-w-0">
-                <div className="flex items-start justify-between gap-3">
-                  <div className="text-[10px] uppercase tracking-widest font-bold text-[var(--text-secondary)]">
-                    {tr('sauna.bookingTemp.deviation', 'Deviation')}
+              <div className="mt-1.5 flex-1 min-h-0 rounded-2xl border border-[var(--glass-border)] bg-[var(--glass-bg-hover)] overflow-hidden">
+                <div className="grid grid-cols-[1fr_auto_1fr] min-h-[170px] h-full">
+                  <div className="min-w-0 flex flex-col">
+                    <div className="flex-1 min-h-0 px-3 py-3 border-b border-[var(--glass-border)]">
+                      <div className="text-[10px] uppercase tracking-widest font-bold text-[var(--text-secondary)]">
+                        {tr('sauna.bookingTemp.deviation', 'Deviation')}
+                      </div>
+                      <div className={`mt-2 text-[2rem] leading-none font-semibold tabular-nums ${deviationTone.text}`}>
+                        {formatDeviationPercent(avgDeviationPct)}
+                      </div>
+                    </div>
+                    <div className="flex-1 min-h-0 px-3 py-3 flex flex-col items-start justify-center">
+                      <svg viewBox="0 0 48 28" className="w-14 h-8 text-[var(--text-secondary)]/90" aria-hidden="true">
+                        <polyline
+                          points="2,22 12,14 20,19 30,8 38,16 46,6"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="2.8"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                        />
+                      </svg>
+                      <span className="mt-1.5 text-[11px] uppercase tracking-widest text-[var(--text-secondary)]">
+                        {tr('sauna.bookingTemp.trend', 'Trend')}
+                      </span>
+                    </div>
                   </div>
-                  <div className="text-[11px] text-[var(--text-muted)] mt-0.5">
-                    {summaryHours}h • {recentRegularSnapshots.length} {tr('sauna.bookingTemp.starts', 'samples')}
-                  </div>
-                </div>
 
-                <div className={`mt-1 text-2xl font-semibold tabular-nums ${deviationTone.text}`}>
-                  {formatDeviationPercent(avgDeviationPct)}
-                </div>
-              </div>
+                  <div className="px-4 py-3 border-x border-[var(--glass-border)] flex items-center justify-center">
+                    <div className="relative w-36 h-36 shrink-0">
+                      <svg viewBox="0 0 120 120" className="w-full h-full">
+                        <circle
+                          cx="60"
+                          cy="60"
+                          r={ringRadius}
+                          fill="none"
+                          stroke="rgba(148, 163, 184, 0.2)"
+                          strokeWidth="12"
+                        />
+                        <circle
+                          cx="60"
+                          cy="60"
+                          r={ringRadius}
+                          fill="none"
+                          stroke={deviationTone.ring}
+                          strokeWidth="12"
+                          strokeLinecap="round"
+                          strokeDasharray={ringDashArray}
+                          style={{
+                            transform: 'rotate(-90deg)',
+                            transformOrigin: '50% 50%',
+                            filter: `drop-shadow(0 0 8px ${deviationTone.glow})`,
+                          }}
+                        />
+                      </svg>
+                      <div className="absolute inset-0 flex flex-col items-center justify-center text-center">
+                        <span className="text-[2.05rem] font-semibold tabular-nums text-[var(--text-primary)]">
+                          {deviationScore !== null ? deviationScore : '--'}
+                        </span>
+                        <span className="text-[10px] uppercase tracking-widest text-[var(--text-muted)]">
+                          {tr('sauna.bookingTemp.score', 'Score')}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
 
-              <div className="mt-2.5 flex-1 flex flex-col items-center justify-center text-center">
-                <div className="relative w-36 h-36 shrink-0">
-                  <svg viewBox="0 0 120 120" className="w-full h-full">
-                    <circle
-                      cx="60"
-                      cy="60"
-                      r={ringRadius}
-                      fill="none"
-                      stroke="rgba(148, 163, 184, 0.2)"
-                      strokeWidth="12"
-                    />
-                    <circle
-                      cx="60"
-                      cy="60"
-                      r={ringRadius}
-                      fill="none"
-                      stroke={deviationTone.ring}
-                      strokeWidth="12"
-                      strokeLinecap="round"
-                      strokeDasharray={ringDashArray}
-                      style={{
-                        transform: 'rotate(-90deg)',
-                        transformOrigin: '50% 50%',
-                        filter: `drop-shadow(0 0 8px ${deviationTone.glow})`,
-                      }}
-                    />
-                  </svg>
-                  <div className="absolute inset-0 flex flex-col items-center justify-center text-center">
-                    <span className="text-[2.05rem] font-semibold tabular-nums text-[var(--text-primary)]">
-                      {deviationScore !== null ? deviationScore : '--'}
-                    </span>
-                    <span className="text-[10px] uppercase tracking-widest text-[var(--text-muted)]">
-                      {tr('sauna.bookingTemp.score', 'Score')}
-                    </span>
-                  </div>
-                </div>
-
-                <div className="min-w-0 mt-3 text-center">
-                  <div className="text-[11px] uppercase tracking-widest font-bold text-[var(--text-secondary)]">
-                    {tr('sauna.bookingTemp.targetHit', 'Target hit')}
-                  </div>
-                  <div className="text-xl font-semibold tabular-nums text-[var(--text-primary)]">
-                    {reachedRate !== null ? `${reachedRate}%` : '--'}
-                  </div>
-                  <div className="text-[11px] text-[var(--text-muted)] mt-1">
-                    {targetSamples.length ? `${reachedCount}/${targetSamples.length}` : tr('common.unavailable', 'Unavailable')}
-                  </div>
-                  <div className="mt-2 text-[11px] uppercase tracking-widest text-[var(--text-secondary)]">
-                    {tr('common.history', 'History')} +
+                  <div className="min-w-0 flex flex-col">
+                    <div className="flex-1 min-h-0 px-3 py-3 border-b border-[var(--glass-border)] text-right">
+                      <div className="text-[11px] text-[var(--text-muted)]">
+                        {summaryHours}h • {recentRegularSnapshots.length} {tr('sauna.bookingTemp.starts', 'samples')}
+                      </div>
+                      <div className="mt-2 text-[11px] uppercase tracking-widest text-[var(--text-secondary)]">
+                        {targetSamples.length ? `${reachedCount}/${targetSamples.length}` : tr('common.unavailable', 'Unavailable')}
+                      </div>
+                    </div>
+                    <div className="flex-1 min-h-0 px-3 py-3 flex flex-col items-end justify-center">
+                      <div className="inline-flex items-end gap-1 h-8">
+                        <span className="w-1.5 h-3 rounded-sm bg-[var(--text-primary)]/85" />
+                        <span className="w-1.5 h-5 rounded-sm bg-[var(--text-primary)]/85" />
+                        <span className="w-1.5 h-7 rounded-sm bg-[var(--text-primary)]/85" />
+                        <span className="w-1.5 h-4 rounded-sm bg-[var(--text-primary)]/85" />
+                        <span className="w-1.5 h-6 rounded-sm bg-[var(--text-primary)]/85" />
+                      </div>
+                      <span className="mt-1.5 text-[11px] uppercase tracking-widest text-[var(--text-secondary)]">
+                        {tr('common.history', 'History')} +
+                      </span>
+                    </div>
                   </div>
                 </div>
               </div>
