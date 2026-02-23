@@ -19,6 +19,11 @@ const toNum = (value) => {
 };
 
 const roundToOne = (value) => Math.round(Number(value) * 10) / 10;
+const calcScoreFromDeviationPct = (deviationPct) => {
+  const parsed = toNum(deviationPct);
+  if (parsed === null) return null;
+  return Math.max(0, Math.min(100, Math.round(100 - Math.abs(parsed))));
+};
 const calcDeviationPct = (startTemp, targetTemp) => {
   const start = toNum(startTemp);
   const target = toNum(targetTemp);
@@ -398,6 +403,25 @@ export default function SaunaBookingTempCard({
   };
   const deviationAbs = avgDeviationPct !== null ? Math.abs(avgDeviationPct) : null;
   const deviationScore = deviationAbs !== null ? Math.max(0, Math.min(100, Math.round(100 - deviationAbs))) : null;
+  const allScoreSamples = snapshots
+    .filter((entry) => entry.bookingType !== 'service' && entry.deviationPct !== null)
+    .map((entry) => ({
+      ...entry,
+      score: calcScoreFromDeviationPct(entry.deviationPct),
+    }))
+    .filter((entry) => entry.score !== null);
+  const latestScoreSample = allScoreSamples.length ? allScoreSamples[allScoreSamples.length - 1] : null;
+  const previousScoreSample = allScoreSamples.length > 1 ? allScoreSamples[allScoreSamples.length - 2] : null;
+  const scoreTrendDelta = latestScoreSample && previousScoreSample
+    ? roundToOne((latestScoreSample.score ?? 0) - (previousScoreSample.score ?? 0))
+    : null;
+  const scoreTrendDirection = scoreTrendDelta === null
+    ? 'flat'
+    : (scoreTrendDelta > 0 ? 'up' : (scoreTrendDelta < 0 ? 'down' : 'flat'));
+  const lastSevenScoreValues = allScoreSamples.slice(-7).map((entry) => entry.score);
+  const lastSevenScoreMin = lastSevenScoreValues.length ? Math.min(...lastSevenScoreValues) : 0;
+  const lastSevenScoreMax = lastSevenScoreValues.length ? Math.max(...lastSevenScoreValues) : 0;
+  const lastSevenScoreSpan = Math.max(1, lastSevenScoreMax - lastSevenScoreMin);
   const deviationTone = (() => {
     if (deviationScore === null) {
       return { ring: '#64748b', glow: 'rgba(100, 116, 139, 0.25)', text: 'text-[var(--text-primary)]' };
@@ -655,22 +679,22 @@ export default function SaunaBookingTempCard({
                       <div className="text-[10px] uppercase tracking-widest font-bold text-[var(--text-secondary)]">
                         {tr('sauna.bookingTemp.deviation', 'Deviation')}
                       </div>
-                      <div className={`mt-2 text-[2rem] leading-none font-semibold tabular-nums ${deviationTone.text}`}>
+                      <div className={`mt-2 text-[1.8rem] leading-none font-semibold tabular-nums ${deviationTone.text}`}>
                         {formatDeviationPercent(avgDeviationPct)}
                       </div>
                     </div>
                     <div className="flex-1 min-h-0 px-3 py-3 flex flex-col items-start justify-center">
-                      <svg viewBox="0 0 48 28" className="w-14 h-8 text-[var(--text-secondary)]/90" aria-hidden="true">
-                        <polyline
-                          points="2,22 12,14 20,19 30,8 38,16 46,6"
-                          fill="none"
-                          stroke="currentColor"
-                          strokeWidth="2.8"
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                        />
-                      </svg>
-                      <span className="mt-1.5 text-[11px] uppercase tracking-widest text-[var(--text-secondary)]">
+                      <div className={`inline-flex items-center gap-1.5 ${
+                        scoreTrendDirection === 'up'
+                          ? 'text-emerald-500'
+                          : (scoreTrendDirection === 'down' ? 'text-amber-500' : 'text-[var(--text-secondary)]')
+                      }`}>
+                        <TrendingUp className={`w-7 h-7 ${scoreTrendDirection === 'down' ? 'rotate-180' : ''}`} />
+                        <span className="text-[11px] font-semibold tabular-nums">
+                          {scoreTrendDelta === null ? '--' : `${scoreTrendDelta > 0 ? '+' : ''}${scoreTrendDelta.toFixed(1)}`}
+                        </span>
+                      </div>
+                      <span className="mt-1 text-[11px] uppercase tracking-widest text-[var(--text-secondary)]">
                         {tr('sauna.bookingTemp.trend', 'Trend')}
                       </span>
                     </div>
@@ -725,11 +749,29 @@ export default function SaunaBookingTempCard({
                     </div>
                     <div className="flex-1 min-h-0 px-3 py-3 flex flex-col items-end justify-center">
                       <div className="inline-flex items-end gap-1 h-8">
-                        <span className="w-1.5 h-3 rounded-sm bg-[var(--text-primary)]/85" />
-                        <span className="w-1.5 h-5 rounded-sm bg-[var(--text-primary)]/85" />
-                        <span className="w-1.5 h-7 rounded-sm bg-[var(--text-primary)]/85" />
-                        <span className="w-1.5 h-4 rounded-sm bg-[var(--text-primary)]/85" />
-                        <span className="w-1.5 h-6 rounded-sm bg-[var(--text-primary)]/85" />
+                        {lastSevenScoreValues.length > 0 ? (
+                          lastSevenScoreValues.map((score, index) => {
+                            const normalized = (score - lastSevenScoreMin) / lastSevenScoreSpan;
+                            const heightRatio = lastSevenScoreValues.length === 1
+                              ? 0.65
+                              : (0.35 + (normalized * 0.65));
+                            return (
+                              <span
+                                key={`${score}_${index}`}
+                                className="w-1.5 rounded-sm bg-[var(--text-primary)]/85"
+                                style={{ height: `${Math.round(heightRatio * 100)}%` }}
+                              />
+                            );
+                          })
+                        ) : (
+                          <>
+                            <span className="w-1.5 h-3 rounded-sm bg-[var(--text-primary)]/40" />
+                            <span className="w-1.5 h-5 rounded-sm bg-[var(--text-primary)]/40" />
+                            <span className="w-1.5 h-6 rounded-sm bg-[var(--text-primary)]/40" />
+                            <span className="w-1.5 h-4 rounded-sm bg-[var(--text-primary)]/40" />
+                            <span className="w-1.5 h-5 rounded-sm bg-[var(--text-primary)]/40" />
+                          </>
+                        )}
                       </div>
                       <span className="mt-1.5 text-[11px] uppercase tracking-widest text-[var(--text-secondary)]">
                         {tr('common.history', 'History')} +
