@@ -420,7 +420,8 @@ export default function SaunaBookingTempCard({
   const scoreTrendDirection = scoreTrendDelta === null
     ? 'flat'
     : (scoreTrendDelta > 0 ? 'up' : (scoreTrendDelta < 0 ? 'down' : 'flat'));
-  const lastSevenScoreValues = allScoreSamples.slice(-7).map((entry) => entry.score);
+  const lastSevenScoreSamples = allScoreSamples.slice(-7);
+  const lastSevenScoreValues = lastSevenScoreSamples.map((entry) => entry.score);
   const lastSevenScoreMin = lastSevenScoreValues.length ? Math.min(...lastSevenScoreValues) : 0;
   const lastSevenScoreMax = lastSevenScoreValues.length ? Math.max(...lastSevenScoreValues) : 0;
   const lastSevenScoreSpan = Math.max(1, lastSevenScoreMax - lastSevenScoreMin);
@@ -745,20 +746,31 @@ export default function SaunaBookingTempCard({
                       <div className="text-[11px] text-[var(--text-muted)]">
                         {summaryHours}h
                       </div>
+                      <div className="mt-1 text-[2rem] leading-none font-semibold tabular-nums text-[var(--text-primary)]">
+                        {recentRegularSnapshots.length}
+                      </div>
+                      <div className="mt-1 text-[11px] text-[var(--text-secondary)]">
+                        {tr('sauna.bookingTemp.starts', 'Measurements')}
+                      </div>
                     </div>
                     <div className="flex-1 min-h-0 px-3 py-3 flex flex-col items-end justify-center">
                       <div className="inline-flex items-end gap-1 h-8">
                         {lastSevenScoreValues.length > 0 ? (
-                          lastSevenScoreValues.map((score, index) => {
+                          lastSevenScoreSamples.map((sample, index) => {
+                            const score = Number(sample?.score) || 0;
                             const normalized = (score - lastSevenScoreMin) / lastSevenScoreSpan;
                             const heightRatio = lastSevenScoreValues.length === 1
                               ? 0.65
                               : (0.35 + (normalized * 0.65));
+                            const barColor = getDeviationBarColor(sample?.startTemp, sample?.targetTemp, chartTargetTolerance);
                             return (
                               <span
-                                key={`${score}_${index}`}
-                                className="w-1.5 rounded-sm bg-[var(--text-primary)]/85"
-                                style={{ height: `${Math.round(heightRatio * 100)}%` }}
+                                key={`${sample?.id || score}_${index}`}
+                                className="w-1.5 rounded-sm"
+                                style={{
+                                  height: `${Math.round(heightRatio * 100)}%`,
+                                  backgroundColor: barColor,
+                                }}
                               />
                             );
                           })
