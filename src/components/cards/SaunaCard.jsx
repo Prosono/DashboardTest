@@ -5,7 +5,7 @@ import SparkLine from '../charts/SparkLine';
 
 const asArray = (v) => (Array.isArray(v) ? v.filter(Boolean) : []);
 const norm = (s) => String(s ?? '').toLowerCase();
-const STATUS_GRAPH_WINDOW_MS = 12 * 60 * 60 * 1000;
+const STATUS_GRAPH_WINDOW_MS = 6 * 60 * 60 * 1000;
 const OVERLAY_HOUR_BUCKET_MS = 60 * 60 * 1000;
 
 const isOn = (state) => ['on', 'true', '1', 'yes'].includes(norm(state));

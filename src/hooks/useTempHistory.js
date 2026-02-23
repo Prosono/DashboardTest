@@ -37,7 +37,7 @@ export default function useTempHistory(conn, cardSettings) {
     const fetchHistoryFor = async (tempId) => {
       const end = new Date();
       const start = new Date();
-      start.setHours(start.getHours() - 12);
+      start.setHours(start.getHours() - 6);
 
       let historyFromStats = null;
       try {

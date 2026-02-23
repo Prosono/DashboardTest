@@ -12,7 +12,7 @@ export const MEDIA_TICK_INTERVAL = 1000; // 1 second - media player state check 
 export const INITIAL_FETCH_DELAY = 500; // 500ms - delay before initial history fetch
 export const FETCH_STAGGER_BASE = 500; // 500ms - base delay for staggered fetches
 export const FETCH_STAGGER_RANDOM = 200; // 200ms - random component for staggered fetches
-export const HISTORY_REFRESH_INTERVAL = 300000; // 5 minutes - how often to refresh history data
+export const HISTORY_REFRESH_INTERVAL = 180000; // 3 minutes - how often to refresh history data
 
 // Layout breakpoints
 export const MOBILE_BREAKPOINT = 480; // px - screen width threshold for mobile layout
