@@ -98,7 +98,7 @@ export const handleAddSelected = (ctx) => {
       commitSingleCard(cardId, {
         type: 'calendar_booking',
         calendarEntityId: null,
-        daysAhead: 7,
+        daysAhead: 2,
         maxItems: 6,
         size: 'large',
       }, { openEdit: true });

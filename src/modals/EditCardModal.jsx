@@ -495,24 +495,7 @@ export default function EditCardModal({
                 })}
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1">
-                  <label className="text-[10px] uppercase tracking-widest font-bold text-[var(--text-secondary)]">
-                    {t('calendarBooking.daysAhead') || 'Days ahead'}
-                  </label>
-                  <input
-                    type="number"
-                    min={1}
-                    max={30}
-                    className="w-full px-3 py-2 rounded-xl popup-surface text-[var(--text-primary)] text-sm outline-none focus:border-blue-500/50 transition-colors"
-                    value={Number(editSettings.daysAhead) || 7}
-                    onChange={(e) => {
-                      const value = Number(e.target.value);
-                      const next = Number.isFinite(value) ? Math.max(1, Math.min(30, Math.round(value))) : 7;
-                      saveCardSetting(editSettingsKey, 'daysAhead', next);
-                    }}
-                  />
-                </div>
+              <div className="grid grid-cols-1 gap-3">
                 <div className="space-y-1">
                   <label className="text-[10px] uppercase tracking-widest font-bold text-[var(--text-secondary)]">
                     {t('calendarBooking.maxItems') || 'Rows shown'}
@@ -529,6 +512,9 @@ export default function EditCardModal({
                       saveCardSetting(editSettingsKey, 'maxItems', next);
                     }}
                   />
+                </div>
+                <div className="text-[10px] uppercase tracking-widest text-[var(--text-muted)]">
+                  {t('calendarBooking.fixedWindow') || 'Fixed window: Today + Tomorrow'}
                 </div>
               </div>
             </div>

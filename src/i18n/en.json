@@ -120,6 +120,7 @@
   "calendar.today": "Today",
   "calendar.tomorrow": "Tomorrow",
   "calendarBooking.daysAhead": "Days ahead",
+  "calendarBooking.fixedWindow": "Fixed window: Today + Tomorrow",
   "calendarBooking.inProgress": "In progress",
   "calendarBooking.maxItems": "Rows shown",
   "calendarBooking.next": "Next",

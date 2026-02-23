@@ -702,6 +702,7 @@
   "calendar.removeAll": "Fjern alle",
   "calendar.selectAll": "Vel alle",
   "calendarBooking.daysAhead": "Dagar fram",
+  "calendarBooking.fixedWindow": "Fast vising: I dag + I morgon",
   "calendarBooking.inProgress": "Pågår",
   "calendarBooking.maxItems": "Rader viste",
   "calendarBooking.next": "Neste",
