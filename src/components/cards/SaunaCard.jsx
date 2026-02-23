@@ -341,6 +341,7 @@ export default function SaunaCard({
 
   const serviceEntity = settings?.serviceEntityId ? entities?.[settings.serviceEntityId] : null;
   const nextBookingEntity = settings?.nextBookingInMinutesEntityId ? entities?.[settings.nextBookingInMinutesEntityId] : null;
+  const nextBookingServiceEntity = settings?.nextBookingServiceEntityId ? entities?.[settings.nextBookingServiceEntityId] : null;
   const peopleNowEntity = settings?.peopleNowEntityId ? entities?.[settings.peopleNowEntityId] : null;
   const preheatWindowEntity = settings?.preheatWindowEntityId ? entities?.[settings.preheatWindowEntityId] : null;
 
@@ -391,6 +392,23 @@ export default function SaunaCard({
   const serviceNo = (
     ['nei', 'no', 'off', 'false', '0', 'inactive'].includes(serviceNorm)
     || stateHasKeyword(serviceStateContext, ['normal', 'ordinary', 'regular', 'vanlig'])
+  );
+  const nextBookingServiceState = nextBookingServiceEntity?.state ?? '';
+  const nextBookingServiceNorm = norm(nextBookingServiceState);
+  const nextBookingServiceContext = [
+    nextBookingServiceNorm,
+    norm(nextBookingServiceEntity?.attributes?.next_booking_type),
+    norm(nextBookingServiceEntity?.attributes?.booking_type),
+    norm(nextBookingServiceEntity?.attributes?.type),
+    norm(nextBookingServiceEntity?.attributes?.status),
+  ]
+    .filter(Boolean)
+    .join(' ');
+  const nextBookingServiceNumeric = Number(nextBookingServiceState);
+  const nextBookingIsService = (
+    ['ja', 'yes', 'on', 'true', '1', 'service', 'active'].includes(nextBookingServiceNorm)
+    || stateHasKeyword(nextBookingServiceContext, ['service', 'servicetime', 'maintenance', 'vedlikehold'])
+    || (Number.isFinite(nextBookingServiceNumeric) && nextBookingServiceNumeric > 0)
   );
   const nextMinutes = toNum(nextBookingEntity?.state);
   const hasNext = nextMinutes != null && nextMinutes >= 0;
@@ -604,6 +622,7 @@ export default function SaunaCard({
   const bookingLine = (() => {
     const hasAny =
       settings?.nextBookingInMinutesEntityId ||
+      settings?.nextBookingServiceEntityId ||
       settings?.serviceEntityId ||
       settings?.preheatWindowEntityId;
 
@@ -613,17 +632,16 @@ export default function SaunaCard({
     const nextBookingText = `${tr('sauna.nextBookingIn', 'Neste booking om')} ${next} ${minutesShort}`;
     const nextOrdinaryText = `${tr('sauna.nextOrdinaryBookingIn', 'Neste vanlige booking om')} ${next} ${minutesShort}`;
 
-    if (serviceYes) {
-      if (next >= 0) {
-        if (saunaIsActive) {
-          return `${tr('sauna.service', 'Service')} (${nextOrdinaryText})`;
-        }
-        return `${nextBookingText} (${tr('sauna.service', 'Service')})`;
-      }
+    if (saunaIsActive && serviceYes) {
+      if (next >= 0) return `${tr('sauna.service', 'Service')} (${nextOrdinaryText})`;
       return tr('sauna.service', 'Service');
     }
+    if (next >= 0) {
+      if (nextBookingIsService) return `${nextBookingText} (${tr('sauna.service', 'Service')})`;
+      return nextBookingText;
+    }
     if (serviceNo) return tr('sauna.normalBooking', 'Vanlig booking');
-    if (next >= 0) return nextBookingText;
+    if (serviceYes) return tr('sauna.service', 'Service');
     return tr('sauna.noUpcomingBookingsToday', 'Ingen kommende bookinger i dag');
   })();
 

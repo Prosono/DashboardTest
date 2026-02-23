@@ -1081,6 +1081,11 @@ export default function EditCardModal({
                 filter: (id) => id.startsWith('sensor.') || id.startsWith('input_number.') || id.startsWith('number.'),
               },
               {
+                key: 'nextBookingServiceEntityId',
+                label: translateText('sauna.nextBookingServiceEntity', 'Neste booking er service - binærsensor'),
+                filter: (id) => id.startsWith('binary_sensor.') || id.startsWith('input_boolean.') || id.startsWith('sensor.'),
+              },
+              {
                 key: 'preheatWindowEntityId',
                 label: translateText('sauna.preheatWindowEntity', 'Forvarmingsvindu - binærsensor'),
                 filter: (id) => id.startsWith('binary_sensor.') || id.startsWith('input_boolean.'),
