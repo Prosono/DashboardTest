@@ -1,5 +1,5 @@
 import React, { useMemo } from 'react';
-import { Flame, Thermometer, Lock, DoorOpen, Activity, Lightbulb, Shield, Fan, Hash, ToggleRight, Wrench, Power } from '../../icons';
+import { Flame, Thermometer, Lock, DoorOpen, Activity, Lightbulb, Shield, Fan, Hash, ToggleRight, Wrench, Power, User } from '../../icons';
 import { getIconComponent } from '../../icons';
 import SparkLine from '../charts/SparkLine';
 
@@ -19,6 +19,18 @@ const toNum = (v) => {
 };
 
 const cx = (...p) => p.filter(Boolean).join(' ');
+
+function stateHasKeyword(value, keywords = []) {
+  const source = norm(value);
+  if (!source) return false;
+  const escapedKeywords = keywords
+    .map((keyword) => String(keyword || '').trim().toLowerCase())
+    .filter(Boolean)
+    .map((keyword) => keyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+  if (!escapedKeywords.length) return false;
+  const pattern = new RegExp(`(^|[^a-z0-9])(${escapedKeywords.join('|')})([^a-z0-9]|$)`, 'i');
+  return pattern.test(source);
+}
 
 function parseHistoryTimestamp(value) {
   if (typeof value === 'number' && Number.isFinite(value)) {
@@ -361,11 +373,30 @@ export default function SaunaCard({
 
   const serviceState = serviceEntity?.state ?? '';
   const serviceNorm = norm(serviceState);
-  const serviceYes = ['ja', 'yes', 'on', 'true', '1', 'service', 'active'].includes(serviceNorm);
-  const serviceNo = ['nei', 'no', 'off', 'false', '0', 'inactive'].includes(serviceNorm);
+  const serviceStateContext = [
+    serviceNorm,
+    norm(serviceEntity?.attributes?.next_booking_type),
+    norm(serviceEntity?.attributes?.booking_type),
+    norm(serviceEntity?.attributes?.type),
+    norm(serviceEntity?.attributes?.status),
+  ]
+    .filter(Boolean)
+    .join(' ');
+  const serviceNumeric = Number(serviceState);
+  const serviceYes = (
+    ['ja', 'yes', 'on', 'true', '1', 'service', 'active'].includes(serviceNorm)
+    || stateHasKeyword(serviceStateContext, ['service', 'servicetime', 'maintenance', 'vedlikehold'])
+    || (Number.isFinite(serviceNumeric) && serviceNumeric > 0)
+  );
+  const serviceNo = (
+    ['nei', 'no', 'off', 'false', '0', 'inactive'].includes(serviceNorm)
+    || stateHasKeyword(serviceStateContext, ['normal', 'ordinary', 'regular', 'vanlig'])
+  );
   const nextMinutes = toNum(nextBookingEntity?.state);
   const hasNext = nextMinutes != null && nextMinutes >= 0;
   const preheatOn = isOn(preheatWindowEntity?.state);
+  const peopleNowNumeric = Number.parseFloat(String(peopleNow).replace(',', '.'));
+  const peopleNowIsZero = Number.isFinite(peopleNowNumeric) && peopleNowNumeric <= 0;
 
   const imageUrl = useMemo(() => resolveImageUrl(settings, entities), [settings, entities]);
 
@@ -739,7 +770,16 @@ export default function SaunaCard({
                         : 'border-emerald-400/25 bg-emerald-500/20 text-emerald-100 shadow-emerald-900/30')
                   )}
                 >
-                  {serviceYes ? <Wrench className="w-5 h-5" /> : peopleNow}
+                  {serviceYes ? (
+                    <Wrench className="w-5 h-5" />
+                  ) : (
+                    peopleNowIsZero ? (
+                      <div className="relative w-5 h-5" aria-label={tr('sauna.noPeople', 'Ingen personer')}>
+                        <User className="w-5 h-5" />
+                        <span className="absolute left-1/2 top-1/2 w-6 h-[2px] -translate-x-1/2 -translate-y-1/2 -rotate-[36deg] rounded-full bg-current" />
+                      </div>
+                    ) : peopleNow
+                  )}
                 </button>
               )}
               <div className={cx(
