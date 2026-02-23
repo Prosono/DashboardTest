@@ -243,7 +243,8 @@ export default function SaunaBookingTempCard({
     const maybeCaptureHourlySnapshot = () => {
       const now = new Date();
       if (now.getMinutes() < 1) return;
-      if (!(bookingActive || serviceActive) || currentTemp === null) return;
+      if (!bookingActive || currentTemp === null) return;
+      if (serviceEntityId && serviceActive) return;
 
       const nowMs = now.getTime();
       const hourKey = toHourKey(nowMs);
@@ -270,7 +271,7 @@ export default function SaunaBookingTempCard({
         targetTemp: targetTemp !== null ? roundToOne(targetTemp) : null,
         deviation: targetTemp !== null ? roundToOne(currentTemp - targetTemp) : null,
         deviationPct: calcDeviationPct(currentTemp, targetTemp),
-        bookingType: serviceActive ? 'service' : 'regular',
+        bookingType: 'regular',
         sampleMode: 'hourly',
         serviceRaw: serviceEntity?.state ?? null,
         activeRaw: activeEntity?.state ?? null,
@@ -290,6 +291,7 @@ export default function SaunaBookingTempCard({
     currentTemp,
     targetTemp,
     serviceActive,
+    serviceEntityId,
     serviceEntity?.state,
     activeEntity?.state,
     settings?.bookingSnapshots,
@@ -304,28 +306,29 @@ export default function SaunaBookingTempCard({
   const nowMs = Date.now();
   const windowStart = nowMs - (summaryHours * 60 * 60 * 1000);
   const recentSnapshots = snapshots.filter((entry) => entry.timestampMs >= windowStart);
-  const recentSorted = recentSnapshots.slice().sort((a, b) => a.timestampMs - b.timestampMs);
+  const recentRegularSnapshots = recentSnapshots.filter((entry) => entry.bookingType !== 'service');
+  const recentSorted = recentRegularSnapshots.slice().sort((a, b) => a.timestampMs - b.timestampMs);
   const recentVisible = recentSorted.slice(-recentRows).reverse();
-  const allSnapshotsDesc = snapshots.slice().sort((a, b) => b.timestampMs - a.timestampMs);
+  const allSnapshotsDesc = snapshots
+    .filter((entry) => entry.bookingType !== 'service')
+    .sort((a, b) => b.timestampMs - a.timestampMs);
   const trendStats = getTempStats(recentSorted);
 
-  const startTemps = recentSnapshots.map((entry) => entry.startTemp);
+  const startTemps = recentRegularSnapshots.map((entry) => entry.startTemp);
   const averageStart = startTemps.length ? roundToOne(startTemps.reduce((sum, value) => sum + value, 0) / startTemps.length) : null;
   const minStart = startTemps.length ? roundToOne(Math.min(...startTemps)) : null;
   const maxStart = startTemps.length ? roundToOne(Math.max(...startTemps)) : null;
 
-  const targetSamples = recentSnapshots.filter((entry) => entry.targetTemp !== null);
+  const targetSamples = recentRegularSnapshots.filter((entry) => entry.targetTemp !== null);
   const targetSamplesWithPct = targetSamples.filter((entry) => entry.deviationPct !== null);
   const avgDeviationPct = targetSamplesWithPct.length
     ? roundToOne(targetSamplesWithPct.reduce((sum, entry) => sum + (entry.deviationPct ?? 0), 0) / targetSamplesWithPct.length)
     : null;
   const reachedCount = targetSamples.filter((entry) => entry.startTemp >= (entry.targetTemp - targetToleranceC)).length;
-  const serviceCount = recentSnapshots.filter((entry) => entry.bookingType === 'service').length;
-  const regularCount = recentSnapshots.length - serviceCount;
   const reachedRate = targetSamples.length ? Math.round((reachedCount / targetSamples.length) * 100) : null;
 
   const sparkPoints = recentSorted.slice(-30).map((entry) => ({ value: entry.startTemp }));
-  const latestSnapshot = snapshots.length ? snapshots[snapshots.length - 1] : null;
+  const latestSnapshot = recentSorted.length ? recentSorted[recentSorted.length - 1] : null;
   const modalStats = getTempStats(historyModal?.entries || []);
   const formatDeviationPercent = (value) => {
     if (!Number.isFinite(Number(value))) return '--';
@@ -336,6 +339,24 @@ export default function SaunaBookingTempCard({
   const missingConfig = [];
   if (!tempEntityId) missingConfig.push(tr('sauna.bookingTemp.tempEntity', 'Temperature sensor'));
   if (!activeEntityId) missingConfig.push(tr('sauna.bookingTemp.activeEntity', 'Booking active sensor'));
+  const loggingState = (() => {
+    if (!bookingActive || currentTemp === null) {
+      return {
+        label: tr('sauna.bookingTemp.waiting', 'Waiting'),
+        cls: 'bg-[var(--glass-bg)] border-[var(--glass-border)] text-[var(--text-secondary)]',
+      };
+    }
+    if (serviceEntityId && serviceActive) {
+      return {
+        label: tr('sauna.bookingTemp.serviceFiltered', 'Service filtered'),
+        cls: 'bg-orange-500/10 border-orange-500/25 text-orange-300',
+      };
+    }
+    return {
+      label: tr('sauna.bookingTemp.sampling', 'Sampling'),
+      cls: 'bg-emerald-500/12 border-emerald-500/30 text-emerald-300',
+    };
+  })();
 
   return (
     <div
@@ -347,17 +368,17 @@ export default function SaunaBookingTempCard({
     >
       {controls}
 
-      <div className="relative z-10 h-full flex flex-col gap-4">
+      <div className="relative z-10 h-full flex flex-col gap-3">
         <div className="flex items-start justify-between gap-3">
           <div className="flex items-start gap-3 min-w-0">
-            <div className="w-11 h-11 rounded-2xl border border-[var(--glass-border)] bg-[var(--glass-bg-hover)] flex items-center justify-center shrink-0">
-              <CardIcon className="w-5 h-5 text-[var(--text-secondary)]" />
+            <div className="w-10 h-10 rounded-xl border border-[var(--glass-border)] bg-[var(--glass-bg-hover)] flex items-center justify-center shrink-0">
+              <CardIcon className="w-4.5 h-4.5 text-[var(--text-secondary)]" />
             </div>
             <div className="min-w-0">
-              <div className="text-sm md:text-base font-semibold uppercase tracking-wider truncate text-[var(--text-primary)]">
+              <div className="text-sm md:text-base font-semibold truncate text-[var(--text-primary)]">
                 {cardName}
               </div>
-              <div className="mt-1 flex items-center gap-2 text-[10px] uppercase tracking-widest font-bold text-[var(--text-secondary)]">
+              <div className="mt-1 flex flex-wrap items-center gap-1.5 text-[10px] uppercase tracking-[0.16em] font-bold text-[var(--text-secondary)]">
                 <span className={`inline-flex items-center gap-1.5 px-2 py-1 rounded-full border ${
                   bookingActive
                     ? 'bg-emerald-500/15 border-emerald-500/25 text-emerald-300'
@@ -366,14 +387,14 @@ export default function SaunaBookingTempCard({
                   <Flame className="w-3 h-3" />
                   {bookingActive ? tr('sauna.active', 'Active') : tr('sauna.inactive', 'Inactive')}
                 </span>
-                {serviceEntityId && (
-                  <span className={`inline-flex items-center gap-1.5 px-2 py-1 rounded-full border ${
-                    serviceActive
-                      ? 'bg-orange-500/15 border-orange-500/25 text-orange-300'
-                      : 'bg-[var(--glass-bg)] border-[var(--glass-border)]'
-                  }`}>
+                <span className={`inline-flex items-center gap-1.5 px-2 py-1 rounded-full border ${loggingState.cls}`}>
+                  <Clock className="w-3 h-3" />
+                  {loggingState.label}
+                </span>
+                {serviceEntityId && serviceActive && (
+                  <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded-full border bg-orange-500/10 border-orange-500/25 text-orange-300">
                     <Wrench className="w-3 h-3" />
-                    {serviceActive ? tr('sauna.service', 'Service') : tr('sauna.regularBooking', 'Regular')}
+                    {tr('sauna.service', 'Service')}
                   </span>
                 )}
               </div>
@@ -407,7 +428,7 @@ export default function SaunaBookingTempCard({
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-2">
               <button
                 type="button"
-                className="text-left rounded-2xl border border-[var(--glass-border)] bg-[var(--glass-bg)] px-3 py-2 transition-colors hover:bg-[var(--glass-bg-hover)]"
+                className="text-left rounded-xl border border-[var(--glass-border)] bg-[var(--glass-bg)] px-3 py-2.5 transition-colors hover:bg-[var(--glass-bg-hover)]"
                 onClick={() => openHistoryModal({
                   title: tr('sauna.bookingTemp.starts', 'Samples'),
                   subtitle: `${summaryHours}h`,
@@ -416,15 +437,15 @@ export default function SaunaBookingTempCard({
                 })}
               >
                 <div className="text-[10px] uppercase tracking-widest text-[var(--text-secondary)] font-bold">{summaryHours}h</div>
-                <div className="text-lg font-semibold tabular-nums text-[var(--text-primary)]">{recentSnapshots.length}</div>
+                <div className="text-lg font-semibold tabular-nums text-[var(--text-primary)]">{recentRegularSnapshots.length}</div>
                 <div className="text-[10px] text-[var(--text-muted)]">{tr('sauna.bookingTemp.starts', 'samples')}</div>
               </button>
               <button
                 type="button"
-                className="text-left rounded-2xl border border-[var(--glass-border)] bg-[var(--glass-bg)] px-3 py-2 transition-colors hover:bg-[var(--glass-bg-hover)]"
+                className="text-left rounded-xl border border-[var(--glass-border)] bg-[var(--glass-bg)] px-3 py-2.5 transition-colors hover:bg-[var(--glass-bg-hover)]"
                 onClick={() => openHistoryModal({
                   title: tr('sauna.bookingTemp.avgStart', 'Avg start'),
-                  subtitle: `${recentSnapshots.length} ${tr('sauna.bookingTemp.starts', 'samples')}`,
+                  subtitle: `${recentRegularSnapshots.length} ${tr('sauna.bookingTemp.starts', 'samples')}`,
                   entries: recentSorted.slice().reverse(),
                   highlightId: null,
                 })}
@@ -435,7 +456,7 @@ export default function SaunaBookingTempCard({
               </button>
               <button
                 type="button"
-                className="text-left rounded-2xl border border-[var(--glass-border)] bg-[var(--glass-bg)] px-3 py-2 transition-colors hover:bg-[var(--glass-bg-hover)]"
+                className="text-left rounded-xl border border-[var(--glass-border)] bg-[var(--glass-bg)] px-3 py-2.5 transition-colors hover:bg-[var(--glass-bg-hover)]"
                 onClick={() => openHistoryModal({
                   title: tr('sauna.bookingTemp.targetHit', 'Target hit'),
                   subtitle: targetSamples.length ? `${reachedCount}/${targetSamples.length}` : tr('common.unavailable', 'Unavailable'),
@@ -449,7 +470,7 @@ export default function SaunaBookingTempCard({
               </button>
               <button
                 type="button"
-                className="text-left rounded-2xl border border-[var(--glass-border)] bg-[var(--glass-bg)] px-3 py-2 transition-colors hover:bg-[var(--glass-bg-hover)]"
+                className="text-left rounded-xl border border-[var(--glass-border)] bg-[var(--glass-bg)] px-3 py-2.5 transition-colors hover:bg-[var(--glass-bg-hover)]"
                 onClick={() => openHistoryModal({
                   title: tr('sauna.bookingTemp.deviation', 'Deviation'),
                   subtitle: formatDeviationPercent(avgDeviationPct),
@@ -461,17 +482,19 @@ export default function SaunaBookingTempCard({
                 <div className={`text-lg font-semibold tabular-nums ${avgDeviationPct !== null && avgDeviationPct < 0 ? 'text-rose-300' : 'text-[var(--text-primary)]'}`}>
                   {formatDeviationPercent(avgDeviationPct)}
                 </div>
-                <div className="text-[10px] text-[var(--text-muted)]">{tr('sauna.bookingTemp.regularService', 'R/S')}: {regularCount}/{serviceCount}</div>
+                <div className="text-[10px] text-[var(--text-muted)]">
+                  {targetSamples.length ? `${targetSamples.length} ${tr('sauna.bookingTemp.starts', 'samples')}` : tr('common.unavailable', 'Unavailable')}
+                </div>
               </button>
             </div>
 
             {sparkPoints.length > 1 && (
               <button
                 type="button"
-                className="w-full text-left rounded-2xl border border-[var(--glass-border)] bg-[var(--glass-bg)] px-3 py-2 transition-colors hover:bg-[var(--glass-bg-hover)]"
+                className="w-full text-left rounded-xl border border-[var(--glass-border)] bg-[var(--glass-bg)] px-3 py-2.5 transition-colors hover:bg-[var(--glass-bg-hover)]"
                 onClick={() => openHistoryModal({
                   title: tr('sauna.bookingTemp.startTrend', 'Start temperature trend'),
-                  subtitle: `${recentSnapshots.length} ${tr('sauna.bookingTemp.starts', 'samples')}`,
+                  subtitle: `${recentRegularSnapshots.length} ${tr('sauna.bookingTemp.starts', 'samples')}`,
                   entries: recentSorted.slice().reverse(),
                   highlightId: null,
                 })}
@@ -509,7 +532,7 @@ export default function SaunaBookingTempCard({
               </button>
             )}
 
-            <div className="flex-1 min-h-0 rounded-2xl border border-[var(--glass-border)] bg-[var(--glass-bg)] p-2.5 overflow-y-auto custom-scrollbar">
+            <div className="flex-1 min-h-0 rounded-xl border border-[var(--glass-border)] bg-[var(--glass-bg)] p-2.5 overflow-y-auto custom-scrollbar">
               <div className="flex items-center justify-between px-1 pb-2">
                 <div className="text-[10px] uppercase tracking-widest font-bold text-[var(--text-secondary)]">
                   {tr('common.history', 'History')}
@@ -531,7 +554,7 @@ export default function SaunaBookingTempCard({
                   <button
                     key={entry.id}
                     type="button"
-                    className="w-full text-left rounded-xl border border-[var(--glass-border)] bg-[var(--glass-bg-hover)] px-3 py-2 transition-colors hover:bg-[var(--glass-bg)]"
+                    className="w-full text-left rounded-lg border border-[var(--glass-border)] bg-[var(--glass-bg-hover)] px-3 py-2 transition-colors hover:bg-[var(--glass-bg)]"
                     onClick={() => openHistoryModal({
                       title: formatDateTime(entry.timestampMs),
                       subtitle: tr('common.history', 'History'),
@@ -549,13 +572,6 @@ export default function SaunaBookingTempCard({
                       </div>
                     </div>
                     <div className="mt-1.5 flex items-center justify-between gap-2 text-[10px] uppercase tracking-widest">
-                      <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full border ${
-                        entry.bookingType === 'service'
-                          ? 'border-orange-500/30 bg-orange-500/15 text-orange-300'
-                          : 'border-blue-500/30 bg-blue-500/15 text-blue-300'
-                      }`}>
-                        {entry.bookingType === 'service' ? tr('sauna.service', 'Service') : tr('sauna.regularBooking', 'Regular')}
-                      </span>
                       <span className="text-[var(--text-secondary)] tabular-nums">
                         {entry.targetTemp !== null
                           ? `${tr('sauna.target', 'Target')}: ${entry.targetTemp.toFixed(1)}° (${formatDeviationPercent(entry.deviationPct)})`
