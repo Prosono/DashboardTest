@@ -208,25 +208,26 @@ function AppContent({
     if (value === 'inspector' || value === 'inspektør') return 'inspector';
     return 'user';
   }, []);
-  const isVisibleForRole = useCallback((visibleRoles, role) => {
-    let rawTargets = [];
-    if (Array.isArray(visibleRoles)) {
-      rawTargets = visibleRoles;
-    } else if (typeof visibleRoles === 'string') {
-      const str = visibleRoles.trim();
+  const parseVisibilityTargets = useCallback((value) => {
+    if (Array.isArray(value)) return value;
+    if (typeof value === 'string') {
+      const str = value.trim();
+      if (!str) return [];
       if (str.startsWith('[') && str.endsWith(']')) {
         try {
           const parsed = JSON.parse(str);
-          rawTargets = Array.isArray(parsed) ? parsed : [];
+          return Array.isArray(parsed) ? parsed : [];
         } catch {
-          rawTargets = str.split(',');
+          return str.split(',');
         }
-      } else {
-        rawTargets = str ? str.split(',') : [];
       }
-    } else if (visibleRoles && typeof visibleRoles === 'object') {
-      rawTargets = Object.values(visibleRoles);
+      return str.split(',');
     }
+    if (value && typeof value === 'object') return Object.values(value);
+    return [];
+  }, []);
+  const isVisibleForRole = useCallback((visibleRoles, role) => {
+    const rawTargets = parseVisibilityTargets(visibleRoles);
 
     if (rawTargets.length === 0) {
       if (visibleRoles === null || visibleRoles === undefined || visibleRoles === '') return true;
@@ -240,7 +241,21 @@ function AppContent({
     if (normalizedTargets.length === 0) return false;
     if (normalizedTargets.includes('all')) return true;
     return normalizedTargets.some((target) => normalizeRole(target) === normalizedRole);
-  }, [normalizeRole]);
+  }, [normalizeRole, parseVisibilityTargets]);
+  const isVisibleForDevice = useCallback((visibleDevices, mobileDevice) => {
+    const rawTargets = parseVisibilityTargets(visibleDevices);
+    if (rawTargets.length === 0) {
+      if (visibleDevices === null || visibleDevices === undefined || visibleDevices === '') return true;
+      return false;
+    }
+    const normalizedTargets = rawTargets
+      .map((item) => String(item || '').trim().toLowerCase())
+      .filter(Boolean);
+    if (normalizedTargets.length === 0) return false;
+    if (normalizedTargets.includes('all')) return true;
+    if (mobileDevice) return normalizedTargets.includes('mobile');
+    return normalizedTargets.includes('desktop') || normalizedTargets.includes('non-mobile') || normalizedTargets.includes('nonmobile');
+  }, [parseVisibilityTargets]);
 
   const globalHeaderTitle = String(globalBranding?.title || '').trim();
   const globalBrandingVersion = Date.parse(String(globalBranding?.updatedAt || '')) || 0;
@@ -1166,8 +1181,9 @@ function AppContent({
       ...(cardSettings[cardId] || {}),
       ...(cardSettings[settingsKey] || {}),
     };
-    return isVisibleForRole(settings.visibleRoles, currentUserRole);
-  }, [editMode, canEditDashboard, activePage, cardSettings, currentUserRole, isVisibleForRole]);
+    if (!isVisibleForRole(settings.visibleRoles, currentUserRole)) return false;
+    return isVisibleForDevice(settings.visibleDevices, isMobile);
+  }, [editMode, canEditDashboard, activePage, cardSettings, currentUserRole, isVisibleForRole, isVisibleForDevice, isMobile]);
 
   const cardUtilCtx = { getCardSettingsKey, cardSettings, entities, activePage };
   const isCardRemovable = (cardId, pageId = activePage) => _isCardRemovable(cardId, pageId, cardUtilCtx);

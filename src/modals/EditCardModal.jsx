@@ -120,13 +120,38 @@ export default function EditCardModal({
     if (!str || str === key || str.toLowerCase() === key.toLowerCase()) return fallback;
     return str;
   }, [t]);
+  const parseSelectionList = React.useCallback((value) => {
+    if (Array.isArray(value)) return value.map((item) => String(item || '').trim()).filter(Boolean);
+    if (typeof value === 'string') {
+      const str = value.trim();
+      if (!str) return [];
+      if (str.startsWith('[') && str.endsWith(']')) {
+        try {
+          const parsed = JSON.parse(str);
+          return Array.isArray(parsed) ? parsed.map((item) => String(item || '').trim()).filter(Boolean) : [];
+        } catch {
+          return str.split(',').map((item) => item.trim()).filter(Boolean);
+        }
+      }
+      return str.split(',').map((item) => item.trim()).filter(Boolean);
+    }
+    if (value && typeof value === 'object') {
+      return Object.values(value).map((item) => String(item || '').trim()).filter(Boolean);
+    }
+    return [];
+  }, []);
 
   if (!isOpen) return null;
-  const visibleRoles = Array.isArray(editSettings?.visibleRoles) ? editSettings.visibleRoles : [];
+  const visibleRoles = parseSelectionList(editSettings?.visibleRoles);
+  const visibleDevices = parseSelectionList(editSettings?.visibleDevices).map((item) => item.toLowerCase());
   const roleOptions = [
     { id: 'admin', label: t('role.admin') || 'Admin' },
     { id: 'user', label: t('role.user') || 'User' },
     { id: 'inspector', label: t('role.inspector') || 'Inspector' },
+  ];
+  const deviceOptions = [
+    { id: 'mobile', label: t('form.visibilityDevice.mobile') || 'Mobile' },
+    { id: 'desktop', label: t('form.visibilityDevice.desktop') || 'Desktop' },
   ];
   const toggleVisibleRole = (roleId) => {
     if (!editSettingsKey) return;
@@ -134,6 +159,13 @@ export default function EditCardModal({
       ? visibleRoles.filter((id) => id !== roleId)
       : [...visibleRoles, roleId];
     saveCardSetting(editSettingsKey, 'visibleRoles', next.length ? next : null);
+  };
+  const toggleVisibleDevice = (deviceId) => {
+    if (!editSettingsKey) return;
+    const next = visibleDevices.includes(deviceId)
+      ? visibleDevices.filter((id) => id !== deviceId)
+      : [...visibleDevices, deviceId];
+    saveCardSetting(editSettingsKey, 'visibleDevices', next.length ? next : null);
   };
 
   const isPerson = entityId?.startsWith('person.');
@@ -398,6 +430,42 @@ export default function EditCardModal({
                 </button>
                 <p className="text-[10px] text-[var(--text-secondary)]">
                   {t('form.visibilityHint') || 'If nothing is selected, all roles can see this card.'}
+                </p>
+              </div>
+            </div>
+          )}
+          {editSettingsKey && (
+            <div className="space-y-2">
+              <label className="text-xs uppercase font-bold text-gray-500 ml-1">{t('form.visibilityDevices') || 'Visible on devices'}</label>
+              <div className="rounded-2xl popup-surface p-3 space-y-2">
+                <div className="flex flex-wrap gap-2">
+                  {deviceOptions.map((device) => {
+                    const selected = visibleDevices.includes(device.id);
+                    return (
+                      <button
+                        key={device.id}
+                        type="button"
+                        onClick={() => toggleVisibleDevice(device.id)}
+                        className={`px-3 py-1.5 rounded-full text-[11px] uppercase tracking-widest font-bold border transition-all ${
+                          selected
+                            ? 'bg-blue-500/15 border-blue-500/35 text-blue-400'
+                            : 'bg-[var(--glass-bg)] border-[var(--glass-border)] text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
+                        }`}
+                      >
+                        {device.label}
+                      </button>
+                    );
+                  })}
+                </div>
+                <button
+                  type="button"
+                  onClick={() => saveCardSetting(editSettingsKey, 'visibleDevices', null)}
+                  className="text-[10px] uppercase tracking-widest font-bold text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
+                >
+                  {t('form.visibilityAllDevices') || 'Show on both'}
+                </button>
+                <p className="text-[10px] text-[var(--text-secondary)]">
+                  {t('form.visibilityDevicesHint') || 'If nothing is selected, this is visible on both mobile and desktop.'}
                 </p>
               </div>
             </div>
