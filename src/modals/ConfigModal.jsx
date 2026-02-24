@@ -302,6 +302,7 @@ export default function ConfigModal({
   const [notificationRuleSearch, setNotificationRuleSearch] = useState({});
   const [notificationRuleDomain, setNotificationRuleDomain] = useState({});
   const [notificationRuleReferenceEntity, setNotificationRuleReferenceEntity] = useState({});
+  const [notificationRuleExpanded, setNotificationRuleExpanded] = useState({});
   const notificationEntityOptions = useMemo(() => (
     Object.entries(entities || {})
       .map(([id, entity]) => {
@@ -383,6 +384,7 @@ export default function ConfigModal({
     setNotificationRuleSearch({});
     setNotificationRuleDomain({});
     setNotificationRuleReferenceEntity({});
+    setNotificationRuleExpanded({});
   }, [notificationConfig]);
 
   useEffect(() => {
@@ -2258,10 +2260,12 @@ export default function ConfigModal({
   });
 
   const addNotificationRule = () => {
+    const nextRule = createNotificationRule();
     updateNotificationDraft((prev) => ({
       ...prev,
-      rules: [...(Array.isArray(prev.rules) ? prev.rules : []), createNotificationRule()],
+      rules: [...(Array.isArray(prev.rules) ? prev.rules : []), nextRule],
     }));
+    setNotificationRuleExpanded((prev) => ({ ...prev, [nextRule.id]: true }));
   };
 
   const updateNotificationRule = (ruleId, patch) => {
@@ -2304,6 +2308,18 @@ export default function ConfigModal({
       delete next[normalizedRuleId];
       return next;
     });
+    setNotificationRuleExpanded((prev) => {
+      if (!Object.prototype.hasOwnProperty.call(prev, normalizedRuleId)) return prev;
+      const next = { ...prev };
+      delete next[normalizedRuleId];
+      return next;
+    });
+  };
+
+  const toggleNotificationRuleExpanded = (ruleId) => {
+    const normalizedRuleId = String(ruleId || '').trim();
+    if (!normalizedRuleId) return;
+    setNotificationRuleExpanded((prev) => ({ ...prev, [normalizedRuleId]: !Boolean(prev[normalizedRuleId]) }));
   };
 
   const toggleNotificationRuleChannel = (ruleId, channelKey) => {
@@ -2612,12 +2628,42 @@ export default function ConfigModal({
                 .filter((option) => !searchQuery || option.searchKey.includes(searchQuery) || option.id === selectedEntityId)
                 .slice(0, 40);
               const referenceEntityId = String(notificationRuleReferenceEntity[ruleId] || selectedEntityId).trim();
+              const isExpanded = Boolean(notificationRuleExpanded[ruleId]);
+              const conditionSummary = t(`notifications.condition.${String(normalizedRule.conditionType || 'is_active').trim()}`);
+              const severitySummary = t(`notifications.severity.${String(normalizedRule.level || 'warning').trim()}`);
+              const headerTitle = String(normalizedRule.title || '').trim()
+                || selectedOption?.friendlyName
+                || selectedEntityId
+                || t('notifications.ruleTitlePlaceholder');
               return (
                 <div key={ruleId} className="rounded-xl border border-[var(--glass-border)] bg-[var(--glass-bg-hover)] p-3 space-y-2.5">
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="text-[10px] uppercase tracking-wider font-bold text-[var(--text-secondary)]">
-                      {t('notifications.ruleLabel')} {idx + 1}
-                    </span>
+                  <div className="flex items-start justify-between gap-2">
+                    <button
+                      type="button"
+                      onClick={() => toggleNotificationRuleExpanded(ruleId)}
+                      className="flex-1 min-w-0 text-left rounded-lg border border-[var(--glass-border)] bg-[var(--glass-bg)] px-2.5 py-2 hover:bg-[var(--glass-bg-hover)] transition-colors"
+                    >
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-[10px] uppercase tracking-wider font-bold text-[var(--text-secondary)]">
+                          {t('notifications.ruleLabel')} {idx + 1}
+                        </span>
+                        {isExpanded ? (
+                          <ChevronUp className="w-4 h-4 text-[var(--text-secondary)]" />
+                        ) : (
+                          <ChevronDown className="w-4 h-4 text-[var(--text-secondary)]" />
+                        )}
+                      </div>
+                      <div className="mt-0.5 text-xs font-semibold text-[var(--text-primary)] truncate">
+                        {headerTitle}
+                      </div>
+                      <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[10px] text-[var(--text-secondary)]">
+                        <span className="truncate max-w-full">{selectedOption?.id || selectedEntityId || '-'}</span>
+                        <span className="opacity-70">•</span>
+                        <span>{conditionSummary}</span>
+                        <span className="opacity-70">•</span>
+                        <span>{severitySummary}</span>
+                      </div>
+                    </button>
                     <div className="flex items-center gap-2">
                       <button
                         type="button"
@@ -2636,7 +2682,8 @@ export default function ConfigModal({
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                  {isExpanded && (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
                     <div className="space-y-1">
                       <label className="text-[10px] uppercase tracking-wider font-bold text-[var(--text-secondary)] flex items-center gap-1.5">
                         <Type className="w-3 h-3" />
@@ -2850,6 +2897,7 @@ export default function ConfigModal({
                       </div>
                     </div>
                   </div>
+                  )}
                 </div>
               );
             })}
