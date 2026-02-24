@@ -95,8 +95,14 @@ const getBookingType = (event) => {
   const location = normalizeText(event?.location);
   const haystack = `${summary} ${description} ${location}`.trim();
 
-  if (BOOKING_TYPE_PATTERNS.service.some((pattern) => haystack.includes(pattern))) return 'service';
+  const hasServiceFlagTrue = /\bservice\s*[:=]\s*(ja|yes|true|1)\b/.test(haystack);
+  const hasServiceFlagFalse = /\bservice\s*[:=]\s*(nei|no|false|0)\b/.test(haystack);
+  const hasServiceInTitle = BOOKING_TYPE_PATTERNS.service.some((pattern) =>
+    summary.includes(pattern) || location.includes(pattern),
+  );
+
   if (BOOKING_TYPE_PATTERNS.aufguss.some((pattern) => haystack.includes(pattern))) return 'aufguss';
+  if (hasServiceFlagTrue || (!hasServiceFlagFalse && hasServiceInTitle)) return 'service';
   if (BOOKING_TYPE_PATTERNS.private.some((pattern) => haystack.includes(pattern))) return 'private';
   if (BOOKING_TYPE_PATTERNS.felles.some((pattern) => haystack.includes(pattern))) return 'felles';
   return 'felles';
@@ -179,7 +185,7 @@ const CalendarBookingCard = ({
 
   const selectedCalendarId = settings?.calendarEntityId
     || (Array.isArray(settings?.calendars) && settings.calendars.length ? settings.calendars[0] : null);
-  const maxItemsPerDay = clamp(settings?.maxItems, 2, 10, 4);
+  const daysAhead = clamp(settings?.daysAhead, 1, 7, 2);
 
   useEffect(() => {
     const observer = new IntersectionObserver(
@@ -213,8 +219,9 @@ const CalendarBookingCard = ({
       try {
         const nowMs = Date.now();
         const now = new Date(nowMs);
-        const { tomorrowStartMs } = getDayBounds(nowMs);
-        const end = new Date(tomorrowStartMs);
+        const { todayStartMs } = getDayBounds(nowMs);
+        const windowEndMs = todayStartMs + (daysAhead * 24 * 60 * 60 * 1000);
+        const end = new Date(windowEndMs);
         const result = await getCalendarEvents(conn, {
           start: now,
           end,
@@ -245,7 +252,7 @@ const CalendarBookingCard = ({
             };
           })
           .filter(Boolean)
-          .filter((event) => event.startMs < tomorrowStartMs)
+          .filter((event) => event.startMs < windowEndMs)
           .sort((a, b) => a.startMs - b.startMs);
 
         const visibleEvents = parsed.filter((event) => event.endMs >= (nowMs - (15 * 60 * 1000)));
@@ -264,7 +271,7 @@ const CalendarBookingCard = ({
       cancelled = true;
       window.clearInterval(intervalId);
     };
-  }, [conn, selectedCalendarId, isVisible, t]);
+  }, [conn, selectedCalendarId, isVisible, t, daysAhead]);
 
   const selectedCalendarName = selectedCalendarId
     ? (entities?.[selectedCalendarId]?.attributes?.friendly_name || selectedCalendarId)
@@ -274,20 +281,27 @@ const CalendarBookingCard = ({
 
   const {
     todayEvents,
+    tomorrowEvents,
     ongoingEvent,
     nextEvent,
+    upcomingEvents,
   } = useMemo(() => {
     const { todayStartMs, tomorrowStartMs } = getDayBounds(clockMs);
+    const windowEndMs = todayStartMs + (daysAhead * 24 * 60 * 60 * 1000);
     const sorted = [...events].sort((a, b) => a.startMs - b.startMs);
-    const today = sorted.filter((event) => event.startMs >= todayStartMs && event.startMs < tomorrowStartMs);
+    const windowEvents = sorted.filter((event) => event.startMs >= todayStartMs && event.startMs < windowEndMs);
+    const today = windowEvents.filter((event) => event.startMs < tomorrowStartMs);
+    const tomorrow = windowEvents.filter((event) => event.startMs >= tomorrowStartMs);
     const ongoing = today.find((event) => event.startMs <= clockMs && clockMs < event.endMs) || null;
-    const upcoming = ongoing || today.find((event) => event.startMs > clockMs) || null;
+    const upcoming = ongoing || windowEvents.find((event) => event.startMs > clockMs) || null;
     return {
       todayEvents: today,
+      tomorrowEvents: tomorrow,
       ongoingEvent: ongoing,
       nextEvent: upcoming,
+      upcomingEvents: windowEvents,
     };
-  }, [events, clockMs]);
+  }, [events, clockMs, daysAhead]);
 
   const renderTimeRange = (event) => {
     if (!event) return '';
@@ -517,10 +531,27 @@ const CalendarBookingCard = ({
                     {t('calendar.today') || 'Today'}
                   </div>
                   <div className="min-h-0 flex-1 overflow-y-auto custom-scrollbar pr-1 space-y-2">
-                    {todayEvents.length === 0 ? (
+                    {upcomingEvents.length === 0 ? (
                       <div className="text-xs text-[var(--text-secondary)]">{t('calendar.noEvents') || 'No upcoming events'}</div>
                     ) : (
-                      todayEvents.slice(0, maxItemsPerDay).map(renderEventItem)
+                      <>
+                        {todayEvents.length > 0 && (
+                          <>
+                            <div className="text-[10px] uppercase tracking-widest font-bold text-[var(--text-secondary)]">
+                              {t('calendar.today') || 'Today'}
+                            </div>
+                            {todayEvents.map(renderEventItem)}
+                          </>
+                        )}
+                        {tomorrowEvents.length > 0 && (
+                          <>
+                            <div className="pt-1 text-[10px] uppercase tracking-widest font-bold text-[var(--text-secondary)]">
+                              {t('calendar.tomorrow') || 'Tomorrow'}
+                            </div>
+                            {tomorrowEvents.map(renderEventItem)}
+                          </>
+                        )}
+                      </>
                     )}
                   </div>
                 </div>
