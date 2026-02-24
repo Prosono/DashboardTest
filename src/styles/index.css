@@ -56,12 +56,15 @@ body {
 }
 
 /* Keep native mobile bounce behavior. */
-@media (max-width: 768px) {
+@media (max-width: 1024px) {
   html,
-  body,
-  #root {
-    overscroll-behavior-y: auto;
+  body {
+    overscroll-behavior-y: auto !important;
     -webkit-overflow-scrolling: touch;
+  }
+  #root {
+    overflow-y: visible;
+    overscroll-behavior-y: auto !important;
   }
   body {
     overflow-y: auto;

@@ -591,6 +591,8 @@ function AppContent({
   const mobilePageSwipeTrackingRef = useRef(false);
   const mobilePageSwipeHorizontalRef = useRef(false);
   const mobilePageSwipeStartRef = useRef({ x: 0, y: 0 });
+  const [mobilePageTransitionDirection, setMobilePageTransitionDirection] = useState('');
+  const mobilePageTransitionTimerRef = useRef(0);
   const [profileState, setProfileState] = useState({
     username: '',
     fullName: '',
@@ -608,6 +610,27 @@ function AppContent({
       avatarUrl: currentUser?.avatarUrl || '',
     });
   }, [currentUser?.username, currentUser?.fullName, currentUser?.email, currentUser?.phone, currentUser?.avatarUrl]);
+
+  const triggerMobilePageTransition = useCallback((direction) => {
+    if (!isMobile || typeof window === 'undefined') return;
+    const resolvedDirection = direction === 'right' ? 'right' : 'left';
+    setMobilePageTransitionDirection(resolvedDirection);
+    if (mobilePageTransitionTimerRef.current) {
+      window.clearTimeout(mobilePageTransitionTimerRef.current);
+    }
+    mobilePageTransitionTimerRef.current = window.setTimeout(() => {
+      setMobilePageTransitionDirection('');
+      mobilePageTransitionTimerRef.current = 0;
+    }, 300);
+  }, [isMobile]);
+
+  useEffect(() => () => {
+    if (typeof window === 'undefined') return;
+    if (mobilePageTransitionTimerRef.current) {
+      window.clearTimeout(mobilePageTransitionTimerRef.current);
+      mobilePageTransitionTimerRef.current = 0;
+    }
+  }, []);
 
   const saveProfile = useCallback(async (e) => {
     e?.preventDefault?.();
@@ -1129,6 +1152,7 @@ function AppContent({
         ? Math.min(visiblePageIds.length - 1, currentIndex + 1)
         : Math.max(0, currentIndex - 1);
       if (targetIndex === currentIndex) return;
+      triggerMobilePageTransition(dx < 0 ? 'left' : 'right');
       setActivePage(visiblePageIds[targetIndex]);
     };
 
@@ -1148,7 +1172,7 @@ function AppContent({
       window.removeEventListener('touchcancel', onTouchCancel);
       resetSwipe();
     };
-  }, [isMobile, shouldLockMobileScroll, editMode, mobilePullRefreshing, visiblePageIds, activePage, setActivePage]);
+  }, [isMobile, shouldLockMobileScroll, editMode, mobilePullRefreshing, visiblePageIds, activePage, setActivePage, triggerMobilePageTransition]);
 
   const getCardSettingsKey = useCallback((cardId, pageId = activePage) => `${pageId}::${cardId}`, [activePage]);
 
@@ -1402,6 +1426,7 @@ function AppContent({
   const mobileGridGapV = Math.max(12, Math.min(24, Number(gridGapV) || 20));
   const mobileGridGapH = Math.max(10, Math.min(20, Number(gridGapH) || 20));
   const mobileGridAutoRow = 96;
+  const pageTransitionClass = `page-transition${isMobile && mobilePageTransitionDirection ? ` page-transition-swipe-${mobilePageTransitionDirection}` : ''}`;
   const pullRefreshProgress = Math.min(1, mobilePullDistance / 52);
   const pullRefreshVisible = isMobile && (mobilePullDistance > 0.5 || mobilePullRefreshing);
   const safeAreaTop = 'max(var(--safe-area-top, 0px), var(--safe-area-top-fallback, 0px))';
@@ -1734,7 +1759,7 @@ function AppContent({
             </p>
           </div>
         ) : isMediaPage(activePage) ? (
-          <div key={activePage} className="page-transition">
+          <div key={activePage} className={pageTransitionClass}>
             <MediaPage
               pageId={activePage}
               entities={entities}
@@ -1752,7 +1777,7 @@ function AppContent({
             />
           </div>
         ) : activePage === SUPER_ADMIN_OVERVIEW_PAGE_ID && isPlatformAdmin ? (
-          <div key={activePage} className="page-transition">
+          <div key={activePage} className={pageTransitionClass}>
             <SuperAdminOverview
               t={t}
               language={language}
@@ -1788,7 +1813,7 @@ function AppContent({
         ) : (
           <div
             key={activePage}
-            className="grid font-sans page-transition items-start"
+            className={`grid font-sans items-start ${pageTransitionClass}`}
             data-dashboard-grid
             style={{
               gap: isMobile ? `${mobileGridGapV}px ${mobileGridGapH}px` : `${gridGapV}px ${gridGapH}px`,
