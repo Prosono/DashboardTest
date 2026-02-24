@@ -557,26 +557,25 @@ const CalendarBookingCard = ({
                         </div>
                       </div>
 
-                      <div className="mt-3 grid grid-cols-1 md:grid-cols-3 gap-2">
+                      <div className="mt-3 flex flex-wrap items-center justify-center gap-2">
                         {typeCountRows.map((row) => {
                           const rowMeta = getBookingTypeMeta(row.type, t);
                           const rowPalette = getBookingPalette(row.type, false);
                           const RowIcon = rowMeta.Icon;
                           return (
-                            <div key={row.type} className="rounded-xl border border-[var(--glass-border)] bg-[var(--glass-bg-hover)] px-2.5 py-2 inline-flex items-center justify-between gap-2 min-w-0">
-                              <span className="text-[12px] font-semibold tabular-nums text-[var(--text-secondary)] shrink-0">{row.count}x</span>
-                              <span
-                                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full border text-[10px] uppercase tracking-[0.1em] font-bold min-w-0"
-                                style={{
-                                  color: rowPalette.color,
-                                  borderColor: rowPalette.softBorder,
-                                  backgroundColor: rowPalette.softBg,
-                                }}
-                              >
-                                <RowIcon className="w-3 h-3 shrink-0" />
-                                <span className="truncate">{rowMeta.label}</span>
-                              </span>
-                            </div>
+                            <span
+                              key={row.type}
+                              className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-[10px] uppercase tracking-[0.1em] font-bold min-w-0"
+                              style={{
+                                color: rowPalette.color,
+                                borderColor: rowPalette.softBorder,
+                                backgroundColor: rowPalette.softBg,
+                              }}
+                            >
+                              <span className="text-[12px] leading-none font-semibold tabular-nums text-[var(--text-secondary)] shrink-0">{row.count}x</span>
+                              <RowIcon className="w-3.5 h-3.5 shrink-0" />
+                              <span className="truncate max-w-[110px]">{rowMeta.label}</span>
+                            </span>
                           );
                         })}
                       </div>
