@@ -17,6 +17,7 @@ import {
   Wifi,
   Settings,
   AlertCircle,
+  Bell,
   Lock,
   Server,
   RefreshCw,
@@ -39,6 +40,7 @@ import {
   Key,
 } from '../icons';
 import { normalizeHaConfig, normalizeConnection, normalizeConnectionId } from '../utils/haConnections';
+import { DEFAULT_NOTIFICATION_CONFIG, normalizeNotificationConfig } from '../utils/notificationConfig';
 
 export default function ConfigModal({
   open,
@@ -106,6 +108,12 @@ export default function ConfigModal({
   currentUser,
   canEditDashboard,
   canManageAdministration = false,
+  canManageNotifications = false,
+  notificationConfig = DEFAULT_NOTIFICATION_CONFIG,
+  notificationConfigLoading = false,
+  notificationConfigSaving = false,
+  notificationConfigMessage = '',
+  onSaveNotificationConfig,
   onLogout,
   userAdminApi,
   onClose,
@@ -175,6 +183,9 @@ export default function ConfigModal({
   const [selectedDashboardVersionId, setSelectedDashboardVersionId] = useState('');
   const [loadingDashboardVersions, setLoadingDashboardVersions] = useState(false);
   const [restoringDashboardVersion, setRestoringDashboardVersion] = useState(false);
+  const [notificationDraft, setNotificationDraft] = useState(() => normalizeNotificationConfig(notificationConfig || DEFAULT_NOTIFICATION_CONFIG));
+  const [notificationDirty, setNotificationDirty] = useState(false);
+  const [notificationSaveMessage, setNotificationSaveMessage] = useState('');
 
   const normalizeRole = (role) => {
     const value = String(role || '').trim();
@@ -219,6 +230,11 @@ export default function ConfigModal({
       refreshGlobalDashboards();
     }
   }, [configTab, refreshGlobalDashboards]);
+
+  useEffect(() => {
+    setNotificationDraft(normalizeNotificationConfig(notificationConfig || DEFAULT_NOTIFICATION_CONFIG));
+    setNotificationDirty(false);
+  }, [notificationConfig]);
 
   useEffect(() => {
     if (configTab !== 'storage' || !canManageAdministration || !userAdminApi?.listUsers) return;
@@ -290,10 +306,12 @@ export default function ConfigModal({
   const isInspector = currentUser?.role === 'inspector';
   const canManageConnection = currentUser?.isPlatformAdmin === true;
   const canAccessStorage = canManageAdministration;
+  const canAccessNotifications = canManageNotifications && isAdmin;
   const canAccessUpdates = isAdmin && !currentUser?.isPlatformAdmin;
 
   const TABS = [
     { key: 'connection', icon: Wifi, label: t('system.tabConnection') },
+    ...(canAccessNotifications ? [{ key: 'notifications', icon: Bell, label: t('system.tabNotifications') }] : []),
     ...(canAccessStorage ? [{ key: 'storage', icon: Server, label: t('userMgmt.menu') }] : []),
     ...(canAccessUpdates ? [{ key: 'updates', icon: Download, label: t('updates.title') }] : []),
   ];
@@ -2063,6 +2081,206 @@ export default function ConfigModal({
     </div>
   );
 
+  const updateNotificationDraft = (updater) => {
+    setNotificationDraft((prev) => {
+      const base = normalizeNotificationConfig(prev || DEFAULT_NOTIFICATION_CONFIG);
+      const next = typeof updater === 'function' ? updater(base) : { ...base, ...(updater || {}) };
+      setNotificationDirty(true);
+      setNotificationSaveMessage('');
+      return normalizeNotificationConfig(next);
+    });
+  };
+
+  const handleSaveNotifications = async () => {
+    if (!canAccessNotifications || typeof onSaveNotificationConfig !== 'function') return;
+    const result = await onSaveNotificationConfig(normalizeNotificationConfig(notificationDraft || DEFAULT_NOTIFICATION_CONFIG));
+    if (result?.ok) {
+      setNotificationDirty(false);
+      setNotificationSaveMessage(t('notifications.saved'));
+      if (result?.config) setNotificationDraft(normalizeNotificationConfig(result.config));
+    } else {
+      setNotificationSaveMessage(result?.error || t('notifications.saveFailed'));
+    }
+  };
+
+  const renderNotificationsTab = () => {
+    const draft = normalizeNotificationConfig(notificationDraft || DEFAULT_NOTIFICATION_CONFIG);
+    const warningChannelsEnabled = Boolean(draft.warning.inApp || draft.warning.browser || draft.warning.native);
+    const criticalChannelsEnabled = Boolean(draft.critical.inApp || draft.critical.browser || draft.critical.native);
+    const saveBlocked = !notificationDirty || notificationConfigSaving || notificationConfigLoading;
+
+    return (
+      <div className="space-y-4 font-sans animate-in fade-in slide-in-from-right-4 duration-300">
+        <div className="rounded-2xl border border-[var(--glass-border)] bg-[var(--glass-bg)] p-4 space-y-3">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <h4 className="text-xs uppercase tracking-wider font-bold text-[var(--text-secondary)]">
+                {t('notifications.panelTitle')}
+              </h4>
+              <p className="text-xs text-[var(--text-secondary)] mt-1">
+                {t('notifications.panelDescription')}
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => updateNotificationDraft((prev) => ({ ...prev, enabled: !prev.enabled }))}
+              className={`w-10 h-6 rounded-full p-1 transition-colors relative ${draft.enabled ? 'bg-emerald-500' : 'bg-gray-500/30'}`}
+            >
+              <div className={`w-4 h-4 rounded-full bg-white shadow-sm transition-transform ${draft.enabled ? 'translate-x-4' : 'translate-x-0'}`} />
+            </button>
+          </div>
+
+          {!draft.enabled && (
+            <div className="rounded-lg border border-amber-500/20 bg-amber-500/10 px-3 py-2 text-xs text-amber-300">
+              {t('notifications.disabledHint')}
+            </div>
+          )}
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <div className="space-y-1">
+              <label className="text-[10px] uppercase tracking-wider font-bold text-[var(--text-secondary)]">
+                {t('notifications.warningSensor')}
+              </label>
+              <input
+                value={draft.warningSensorEntityId}
+                onChange={(e) => updateNotificationDraft((prev) => ({ ...prev, warningSensorEntityId: e.target.value }))}
+                className="w-full px-3 py-2 rounded-lg bg-[var(--glass-bg-hover)] border border-[var(--glass-border)] text-sm"
+                placeholder="sensor.system_warning_details"
+              />
+            </div>
+            <div className="space-y-1">
+              <label className="text-[10px] uppercase tracking-wider font-bold text-[var(--text-secondary)]">
+                {t('notifications.criticalSensor')}
+              </label>
+              <input
+                value={draft.criticalSensorEntityId}
+                onChange={(e) => updateNotificationDraft((prev) => ({ ...prev, criticalSensorEntityId: e.target.value }))}
+                className="w-full px-3 py-2 rounded-lg bg-[var(--glass-bg-hover)] border border-[var(--glass-border)] text-sm"
+                placeholder="sensor.system_critical_details"
+              />
+            </div>
+            <div className="space-y-1">
+              <label className="text-[10px] uppercase tracking-wider font-bold text-[var(--text-secondary)]">
+                {t('notifications.inAppDurationSeconds')}
+              </label>
+              <input
+                type="number"
+                min={1}
+                max={120}
+                value={Math.max(1, Math.round(Number(draft.inAppDurationMs || 7000) / 1000))}
+                onChange={(e) => updateNotificationDraft((prev) => ({
+                  ...prev,
+                  inAppDurationMs: Math.max(1000, Math.min(120000, (Number.parseInt(e.target.value || '7', 10) || 7) * 1000)),
+                }))}
+                className="w-full px-3 py-2 rounded-lg bg-[var(--glass-bg-hover)] border border-[var(--glass-border)] text-sm"
+              />
+            </div>
+            <div className="space-y-1">
+              <label className="text-[10px] uppercase tracking-wider font-bold text-[var(--text-secondary)]">
+                {t('notifications.browserBehavior')}
+              </label>
+              <button
+                type="button"
+                onClick={() => updateNotificationDraft((prev) => ({ ...prev, browserOnlyWhenBackground: !prev.browserOnlyWhenBackground }))}
+                className="w-full px-3 py-2 rounded-lg bg-[var(--glass-bg-hover)] border border-[var(--glass-border)] text-sm text-left"
+              >
+                {draft.browserOnlyWhenBackground
+                  ? t('notifications.browserOnlyBackground')
+                  : t('notifications.browserAlsoForeground')}
+              </button>
+            </div>
+          </div>
+
+          <div className="flex items-center justify-between gap-3 rounded-lg border border-[var(--glass-border)] bg-[var(--glass-bg-hover)] px-3 py-2">
+            <span className="text-xs font-semibold text-[var(--text-secondary)]">{t('notifications.inAppPersistent')}</span>
+            <button
+              type="button"
+              onClick={() => updateNotificationDraft((prev) => ({ ...prev, inAppPersistent: !prev.inAppPersistent }))}
+              className={`w-10 h-6 rounded-full p-1 transition-colors relative ${draft.inAppPersistent ? 'bg-emerald-500' : 'bg-gray-500/30'}`}
+            >
+              <div className={`w-4 h-4 rounded-full bg-white shadow-sm transition-transform ${draft.inAppPersistent ? 'translate-x-4' : 'translate-x-0'}`} />
+            </button>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+          {[
+            { key: 'warning', title: t('notifications.warningChannels'), channels: draft.warning, hasAny: warningChannelsEnabled },
+            { key: 'critical', title: t('notifications.criticalChannels'), channels: draft.critical, hasAny: criticalChannelsEnabled },
+          ].map((entry) => (
+            <div key={entry.key} className="rounded-2xl border border-[var(--glass-border)] bg-[var(--glass-bg)] p-4 space-y-3">
+              <h4 className="text-[11px] uppercase tracking-wider font-bold text-[var(--text-secondary)]">{entry.title}</h4>
+              <div className="space-y-2">
+                {['inApp', 'browser', 'native'].map((channel) => (
+                  <button
+                    key={`${entry.key}_${channel}`}
+                    type="button"
+                    onClick={() => updateNotificationDraft((prev) => ({
+                      ...prev,
+                      [entry.key]: {
+                        ...prev[entry.key],
+                        [channel]: !prev[entry.key][channel],
+                      },
+                    }))}
+                    className={`w-full flex items-center justify-between px-3 py-2 rounded-lg border transition-colors ${
+                      entry.channels[channel]
+                        ? 'border-emerald-400/35 bg-emerald-500/10 text-emerald-300'
+                        : 'border-[var(--glass-border)] bg-[var(--glass-bg-hover)] text-[var(--text-secondary)]'
+                    }`}
+                  >
+                    <span className="text-xs font-semibold">{t(`notifications.channel.${channel}`)}</span>
+                    <span className="text-[10px] uppercase tracking-widest font-bold">
+                      {entry.channels[channel] ? t('common.on') : t('common.off')}
+                    </span>
+                  </button>
+                ))}
+              </div>
+              <div className="space-y-1">
+                <label className="text-[10px] uppercase tracking-wider font-bold text-[var(--text-secondary)]">
+                  {t('notifications.cooldownSeconds')}
+                </label>
+                <input
+                  type="number"
+                  min={0}
+                  max={86400}
+                  value={Number(entry.channels.cooldownSeconds) || 0}
+                  onChange={(e) => updateNotificationDraft((prev) => ({
+                    ...prev,
+                    [entry.key]: {
+                      ...prev[entry.key],
+                      cooldownSeconds: Math.max(0, Math.min(86400, Number.parseInt(e.target.value || '0', 10) || 0)),
+                    },
+                  }))}
+                  className="w-full px-3 py-2 rounded-lg bg-[var(--glass-bg-hover)] border border-[var(--glass-border)] text-sm"
+                />
+              </div>
+              {!entry.hasAny && (
+                <p className="text-[11px] text-amber-300">{t('notifications.noChannelWarning')}</p>
+              )}
+            </div>
+          ))}
+        </div>
+
+        {(notificationSaveMessage || notificationConfigMessage) && (
+          <div className="rounded-xl p-3 text-xs font-semibold bg-[var(--glass-bg)] border border-[var(--glass-border)]">
+            {notificationSaveMessage || notificationConfigMessage}
+          </div>
+        )}
+
+        <div className="flex justify-end">
+          <button
+            type="button"
+            onClick={handleSaveNotifications}
+            disabled={saveBlocked}
+            className="px-4 py-2 rounded-lg bg-indigo-500 hover:bg-indigo-600 text-white text-xs font-bold uppercase tracking-wider disabled:opacity-50"
+          >
+            {notificationConfigSaving ? t('common.saving') : t('notifications.saveConfig')}
+          </button>
+        </div>
+      </div>
+    );
+  };
+
   // ─── Appearance Tab (moved to ThemeSidebar) ───
   const _renderAppearanceTab = () => {
     const bgModes = [
@@ -2975,6 +3193,7 @@ export default function ConfigModal({
                 )}
 
                 {activeConfigTab === 'connection' && renderConnectionTab()}
+                {canAccessNotifications && activeConfigTab === 'notifications' && renderNotificationsTab()}
                 {canAccessStorage && activeConfigTab === 'storage' && renderStorageTab()}
                 {/* {configTab === 'appearance' && renderAppearanceTab()} */}
                 {/* {configTab === 'layout' && renderLayoutTab()} */}

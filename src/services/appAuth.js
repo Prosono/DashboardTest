@@ -1,4 +1,5 @@
 import { normalizeHaConfig } from '../utils/haConnections';
+import { normalizeNotificationConfig } from '../utils/notificationConfig';
 
 const TOKEN_KEY = 'tunet_app_auth_token';
 const CLIENT_KEY = 'tunet_client_id';
@@ -343,4 +344,17 @@ export const saveGlobalBranding = async (branding) => {
     body: JSON.stringify(branding || {}),
   });
   return payload?.branding || null;
+};
+
+export const fetchNotificationConfig = async () => {
+  const payload = await apiRequest('/api/auth/notification-config', { method: 'GET' });
+  return normalizeNotificationConfig(payload?.config || {});
+};
+
+export const saveNotificationConfig = async (config) => {
+  const payload = await apiRequest('/api/auth/notification-config', {
+    method: 'PUT',
+    body: JSON.stringify(config || {}),
+  });
+  return normalizeNotificationConfig(payload?.config || {});
 };

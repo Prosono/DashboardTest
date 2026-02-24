@@ -167,6 +167,12 @@ export default function ModalOrchestrator({
     currentUser,
     canEditDashboard,
     canManageAdministration,
+    canManageNotifications,
+    notificationConfig,
+    notificationConfigLoading,
+    notificationConfigSaving,
+    notificationConfigMessage,
+    onSaveNotificationConfig,
     onLogout,
     userAdminApi,
   } = cardConfig;
@@ -296,6 +302,12 @@ export default function ModalOrchestrator({
             currentUser={currentUser}
             canEditDashboard={canEditDashboard}
             canManageAdministration={canManageAdministration}
+            canManageNotifications={canManageNotifications}
+            notificationConfig={notificationConfig}
+            notificationConfigLoading={notificationConfigLoading}
+            notificationConfigSaving={notificationConfigSaving}
+            notificationConfigMessage={notificationConfigMessage}
+            onSaveNotificationConfig={onSaveNotificationConfig}
             onLogout={onLogout}
             userAdminApi={userAdminApi}
             onClose={() => setShowConfigModal(false)}

@@ -4,6 +4,11 @@ import db, { normalizeClientId, provisionClientDefaults } from '../db.js';
 import { adminRequired, authRequired, createScopedSession, createSession, deleteSession, getTokenFromRequest, safeUser } from '../auth.js';
 import { hashPassword, verifyPassword } from '../password.js';
 import { mergeHaConfigPayload, parseHaConfigRow, serializeHaConnections } from '../haConfig.js';
+import {
+  getNotificationConfigKey,
+  normalizeNotificationConfig,
+  parseStoredNotificationConfig,
+} from '../notificationConfig.js';
 
 const SUPER_ADMIN_CLIENT_ID = normalizeClientId(process.env.SUPER_ADMIN_CLIENT_ID || 'AdministratorClient') || 'administratorclient';
 const PLATFORM_ADMIN_CLIENT_ID = normalizeClientId(process.env.PLATFORM_ADMIN_CLIENT_ID || SUPER_ADMIN_CLIENT_ID) || SUPER_ADMIN_CLIENT_ID;
@@ -234,6 +239,42 @@ router.put('/ha-config', authRequired, adminRequired, (req, res) => {
 
   return res.json({
     config: savedConfig,
+  });
+});
+
+router.get('/notification-config', authRequired, (req, res) => {
+  const key = getNotificationConfigKey(req.auth?.user?.clientId);
+  const row = db.prepare('SELECT value, updated_at FROM system_settings WHERE key = ?').get(key);
+  const parsed = parseStoredNotificationConfig(row?.value || '');
+  const normalized = normalizeNotificationConfig(parsed);
+
+  return res.json({
+    config: {
+      ...normalized,
+      updatedAt: row?.updated_at || parsed?.updatedAt || null,
+    },
+  });
+});
+
+router.put('/notification-config', authRequired, adminRequired, (req, res) => {
+  const key = getNotificationConfigKey(req.auth?.user?.clientId);
+  const now = new Date().toISOString();
+  const normalized = normalizeNotificationConfig(req.body || {});
+  const payload = JSON.stringify({ ...normalized, updatedAt: now });
+
+  db.prepare(`
+    INSERT INTO system_settings (key, value, updated_at)
+    VALUES (?, ?, ?)
+    ON CONFLICT(key) DO UPDATE SET
+      value = excluded.value,
+      updated_at = excluded.updated_at
+  `).run(key, payload, now);
+
+  return res.json({
+    config: {
+      ...normalized,
+      updatedAt: now,
+    },
   });
 });
 

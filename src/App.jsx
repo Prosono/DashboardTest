@@ -32,7 +32,8 @@ import {
   HomeAssistantProvider,
   useConfig,
   useHomeAssistant,
-  usePages
+  usePages,
+  useNotifications,
 } from './contexts';
 
 import {
@@ -74,6 +75,8 @@ import {
   restoreClientDashboardVersion as restoreServerClientDashboardVersion,
   fetchGlobalBranding as fetchServerGlobalBranding,
   saveGlobalBranding as saveServerGlobalBranding,
+  fetchNotificationConfig as fetchServerNotificationConfig,
+  saveNotificationConfig as saveServerNotificationConfig,
   fetchSharedHaConfig,
   saveSharedHaConfig,
   writeStoredHaConfig,
@@ -96,6 +99,7 @@ import {
   saveStoredLogoOverrides,
 } from './utils/branding';
 import { normalizeHaConfig } from './utils/haConnections';
+import { DEFAULT_NOTIFICATION_CONFIG, normalizeNotificationConfig } from './utils/notificationConfig';
 
 const SUPER_ADMIN_OVERVIEW_PAGE_ID = '__super_admin_overview';
 
@@ -109,6 +113,7 @@ function AppContent({
   onSaveGlobalBranding,
   userAdminApi,
 }) {
+  const { notify } = useNotifications();
   const {
     currentTheme,
     setCurrentTheme,
@@ -333,9 +338,62 @@ function AppContent({
   const canEditGlobalBranding = isPlatformAdmin;
   const canEditClientSubtitle = isLocalClientAdmin;
   const canManageUsersAndClients = currentUserRole === 'admin' || isPlatformAdmin;
-  const WARNING_SENSOR_ID = 'sensor.system_warning_details';
-  const CRITICAL_SENSOR_ID = 'sensor.system_critical_details';
+  const canManageNotifications = currentUserRole === 'admin' || isPlatformAdmin;
+  const [notificationConfig, setNotificationConfig] = useState(() => normalizeNotificationConfig(DEFAULT_NOTIFICATION_CONFIG));
+  const [notificationConfigLoading, setNotificationConfigLoading] = useState(true);
+  const [notificationConfigSaving, setNotificationConfigSaving] = useState(false);
+  const [notificationConfigMessage, setNotificationConfigMessage] = useState('');
+  const WARNING_SENSOR_ID = String(
+    notificationConfig?.warningSensorEntityId || DEFAULT_NOTIFICATION_CONFIG.warningSensorEntityId,
+  ).trim() || DEFAULT_NOTIFICATION_CONFIG.warningSensorEntityId;
+  const CRITICAL_SENSOR_ID = String(
+    notificationConfig?.criticalSensorEntityId || DEFAULT_NOTIFICATION_CONFIG.criticalSensorEntityId,
+  ).trim() || DEFAULT_NOTIFICATION_CONFIG.criticalSensorEntityId;
   const { gridColCount, isCompactCards, isMobile } = useResponsiveGrid(gridColumns);
+
+  useEffect(() => {
+    let cancelled = false;
+    setNotificationConfigLoading(true);
+    setNotificationConfigMessage('');
+    const loadConfig = async () => {
+      try {
+        if (typeof userAdminApi?.fetchNotificationConfig !== 'function') {
+          if (!cancelled) setNotificationConfig(normalizeNotificationConfig(DEFAULT_NOTIFICATION_CONFIG));
+          return;
+        }
+        const remote = await userAdminApi.fetchNotificationConfig();
+        if (!cancelled) setNotificationConfig(normalizeNotificationConfig(remote || DEFAULT_NOTIFICATION_CONFIG));
+      } catch {
+        if (!cancelled) setNotificationConfig(normalizeNotificationConfig(DEFAULT_NOTIFICATION_CONFIG));
+      } finally {
+        if (!cancelled) setNotificationConfigLoading(false);
+      }
+    };
+    void loadConfig();
+    return () => { cancelled = true; };
+  }, [currentUser?.id, userAdminApi]);
+
+  const handleSaveNotificationConfig = useCallback(async (nextConfig) => {
+    if (!canManageNotifications || typeof userAdminApi?.saveNotificationConfig !== 'function') {
+      return { ok: false, error: t('notifications.adminOnly') };
+    }
+    setNotificationConfigSaving(true);
+    setNotificationConfigMessage('');
+    try {
+      const normalized = normalizeNotificationConfig(nextConfig || DEFAULT_NOTIFICATION_CONFIG);
+      const saved = await userAdminApi.saveNotificationConfig(normalized);
+      const merged = normalizeNotificationConfig(saved || normalized);
+      setNotificationConfig(merged);
+      setNotificationConfigMessage(t('notifications.saved'));
+      return { ok: true, config: merged };
+    } catch (error) {
+      const message = error?.message || t('notifications.saveFailed');
+      setNotificationConfigMessage(message);
+      return { ok: false, error: message };
+    } finally {
+      setNotificationConfigSaving(false);
+    }
+  }, [canManageNotifications, userAdminApi, t]);
 
   useEffect(() => {
     if (!canEditDashboard && editMode) setEditMode(false);
@@ -343,11 +401,17 @@ function AppContent({
 
   useEffect(() => {
     if (!entities?.[WARNING_SENSOR_ID]) return;
-    const exists = Array.isArray(statusPillsConfig) && statusPillsConfig.some((pill) => pill?.entityId === WARNING_SENSOR_ID);
-    if (exists) return;
+    const warningPrefix = 'pill_notification_warning_';
+    const base = Array.isArray(statusPillsConfig) ? statusPillsConfig : [];
+    const pruned = base.filter((pill) => {
+      const pillId = String(pill?.id || '');
+      if (!pillId.startsWith(warningPrefix)) return true;
+      return String(pill?.entityId || '') === WARNING_SENSOR_ID;
+    });
+    const exists = pruned.some((pill) => pill?.entityId === WARNING_SENSOR_ID);
 
     const warningPill = {
-      id: 'pill_system_warning_details',
+      id: `pill_notification_warning_${WARNING_SENSOR_ID.replace(/[^a-z0-9_]+/gi, '_').toLowerCase()}`,
       type: 'conditional',
       entityId: WARNING_SENSOR_ID,
       label: 'Systemvarsel',
@@ -369,16 +433,26 @@ function AppContent({
       sessionSensorIds: [],
     };
 
-    saveStatusPillsConfig([...(statusPillsConfig || []), warningPill]);
+    if (exists) {
+      if (pruned.length !== base.length) saveStatusPillsConfig(pruned);
+      return;
+    }
+    saveStatusPillsConfig([...pruned, warningPill]);
   }, [entities, statusPillsConfig, saveStatusPillsConfig, WARNING_SENSOR_ID]);
 
   useEffect(() => {
     if (!entities?.[CRITICAL_SENSOR_ID]) return;
-    const exists = Array.isArray(statusPillsConfig) && statusPillsConfig.some((pill) => pill?.entityId === CRITICAL_SENSOR_ID);
-    if (exists) return;
+    const criticalPrefix = 'pill_notification_critical_';
+    const base = Array.isArray(statusPillsConfig) ? statusPillsConfig : [];
+    const pruned = base.filter((pill) => {
+      const pillId = String(pill?.id || '');
+      if (!pillId.startsWith(criticalPrefix)) return true;
+      return String(pill?.entityId || '') === CRITICAL_SENSOR_ID;
+    });
+    const exists = pruned.some((pill) => pill?.entityId === CRITICAL_SENSOR_ID);
 
     const criticalPill = {
-      id: 'pill_system_critical_details',
+      id: `pill_notification_critical_${CRITICAL_SENSOR_ID.replace(/[^a-z0-9_]+/gi, '_').toLowerCase()}`,
       type: 'conditional',
       entityId: CRITICAL_SENSOR_ID,
       label: 'Kritisk varsel',
@@ -400,7 +474,11 @@ function AppContent({
       sessionSensorIds: [],
     };
 
-    saveStatusPillsConfig([...(statusPillsConfig || []), criticalPill]);
+    if (exists) {
+      if (pruned.length !== base.length) saveStatusPillsConfig(pruned);
+      return;
+    }
+    saveStatusPillsConfig([...pruned, criticalPill]);
   }, [entities, statusPillsConfig, saveStatusPillsConfig, CRITICAL_SENSOR_ID]);
 
   const parseAlertCountFromState = useCallback((rawState) => {
@@ -415,10 +493,81 @@ function AppContent({
   const criticalAlertCount = parseAlertCountFromState(entities?.[CRITICAL_SENSOR_ID]?.state);
   const mobileAlertCount = warningAlertCount + criticalAlertCount;
   const mobileAlertTargetId = criticalAlertCount > 0 ? CRITICAL_SENSOR_ID : WARNING_SENSOR_ID;
+  const alertNotificationSeededRef = useRef(false);
+  const alertNotificationPrevRef = useRef({ warning: 0, critical: 0 });
+  const alertNotificationLastSentRef = useRef({ warning: 0, critical: 0 });
   const statusPillsForBar = useMemo(() => {
     if (!isMobile) return statusPillsConfig;
-    return (statusPillsConfig || []).filter((pill) => !String(pill?.entityId || '').includes('system_warning_details'));
-  }, [isMobile, statusPillsConfig]);
+    return (statusPillsConfig || []).filter((pill) => String(pill?.entityId || '') !== WARNING_SENSOR_ID);
+  }, [isMobile, statusPillsConfig, WARNING_SENSOR_ID]);
+
+  useEffect(() => {
+    const current = {
+      warning: Number(warningAlertCount) || 0,
+      critical: Number(criticalAlertCount) || 0,
+    };
+    if (!alertNotificationSeededRef.current) {
+      alertNotificationSeededRef.current = true;
+      alertNotificationPrevRef.current = current;
+      return;
+    }
+
+    const prev = alertNotificationPrevRef.current || { warning: 0, critical: 0 };
+    const criticalIncrease = current.critical - prev.critical;
+    const warningIncrease = current.warning - prev.warning;
+    const now = Date.now();
+
+    if (!notificationConfig?.enabled) {
+      alertNotificationPrevRef.current = current;
+      return;
+    }
+
+    const criticalConfig = notificationConfig?.critical || DEFAULT_NOTIFICATION_CONFIG.critical;
+    const warningConfig = notificationConfig?.warning || DEFAULT_NOTIFICATION_CONFIG.warning;
+    const browserOnlyWhenBackground = notificationConfig?.browserOnlyWhenBackground !== false;
+    const inAppDurationMs = Number(notificationConfig?.inAppDurationMs) || DEFAULT_NOTIFICATION_CONFIG.inAppDurationMs;
+    const inAppPersistent = Boolean(notificationConfig?.inAppPersistent);
+
+    if (criticalIncrease > 0) {
+      const cooldownMs = Math.max(0, Number(criticalConfig.cooldownSeconds) || 0) * 1000;
+      const canSend = cooldownMs <= 0 || (now - Number(alertNotificationLastSentRef.current.critical || 0)) >= cooldownMs;
+      const hasChannel = Boolean(criticalConfig.inApp || criticalConfig.browser || criticalConfig.native);
+      if (canSend && hasChannel) {
+        void notify({
+          title: t('notifications.criticalTitle') || 'Critical warning',
+          message: `${current.critical} ${t('notifications.activeIssues') || 'active issues'}`,
+          level: 'critical',
+          inApp: Boolean(criticalConfig.inApp),
+          browser: Boolean(criticalConfig.browser),
+          native: Boolean(criticalConfig.native),
+          durationMs: inAppDurationMs,
+          persistent: inAppPersistent,
+          browserOnlyWhenBackground,
+        });
+        alertNotificationLastSentRef.current.critical = now;
+      }
+    } else if (warningIncrease > 0) {
+      const cooldownMs = Math.max(0, Number(warningConfig.cooldownSeconds) || 0) * 1000;
+      const canSend = cooldownMs <= 0 || (now - Number(alertNotificationLastSentRef.current.warning || 0)) >= cooldownMs;
+      const hasChannel = Boolean(warningConfig.inApp || warningConfig.browser || warningConfig.native);
+      if (canSend && hasChannel) {
+        void notify({
+          title: t('notifications.warningTitle') || 'Warning',
+          message: `${current.warning} ${t('notifications.activeIssues') || 'active issues'}`,
+          level: 'warning',
+          inApp: Boolean(warningConfig.inApp),
+          browser: Boolean(warningConfig.browser),
+          native: Boolean(warningConfig.native),
+          durationMs: inAppDurationMs,
+          persistent: inAppPersistent,
+          browserOnlyWhenBackground,
+        });
+        alertNotificationLastSentRef.current.warning = now;
+      }
+    }
+
+    alertNotificationPrevRef.current = current;
+  }, [warningAlertCount, criticalAlertCount, notify, t, notificationConfig]);
 
   const saveHeaderLogos = useCallback(async ({ title, logoUrl, logoUrlLight, logoUrlDark, updatedAt: updatedAtInput }) => {
     if (!canEditGlobalBranding || typeof onSaveGlobalBranding !== 'function') {
@@ -2123,6 +2272,12 @@ function AppContent({
             currentUser,
             canEditDashboard,
             canManageAdministration: canManageUsersAndClients,
+            canManageNotifications,
+            notificationConfig,
+            notificationConfigLoading,
+            notificationConfigSaving,
+            notificationConfigMessage,
+            onSaveNotificationConfig: handleSaveNotificationConfig,
             onLogout,
             userAdminApi,
           }}
@@ -2513,7 +2668,7 @@ export default function App() {
     return <div className="min-h-screen flex items-center justify-center text-[var(--text-secondary)]">Loading shared connection…</div>;
   }
 
-  const userAdminApi = {
+  const userAdminApi = useMemo(() => ({
     listUsers: listServerUsers,
     createUser: createServerUser,
     updateUser: async (id, user) => {
@@ -2542,7 +2697,9 @@ export default function App() {
     listClientDashboardVersions: listServerClientDashboardVersions,
     restoreClientDashboardVersion: restoreServerClientDashboardVersion,
     fetchPlatformOverview: fetchServerPlatformOverview,
-  };
+    fetchNotificationConfig: fetchServerNotificationConfig,
+    saveNotificationConfig: saveServerNotificationConfig,
+  }), [currentUser?.id]);
 
   return (
     <HomeAssistantProvider config={haConfig}>

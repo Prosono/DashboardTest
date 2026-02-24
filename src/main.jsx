@@ -4,6 +4,7 @@ import './styles/index.css'
 import App from './App.jsx'
 import { ConfigProvider } from './contexts/ConfigContext'
 import { PageProvider } from './contexts/PageContext'
+import { NotificationProvider } from './contexts/NotificationContext'
 
 const CHUNK_RELOAD_TS_KEY = '__smart_sauna_chunk_reload_ts__';
 const CHUNK_RELOAD_WINDOW_MS = 15000;
@@ -117,7 +118,9 @@ ReactDOM.createRoot(document.getElementById('root')).render(
     <ErrorBoundary>
       <ConfigProvider>
         <PageProvider>
-          <App />
+          <NotificationProvider>
+            <App />
+          </NotificationProvider>
         </PageProvider>
       </ConfigProvider>
     </ErrorBoundary>
