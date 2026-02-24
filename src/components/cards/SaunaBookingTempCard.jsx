@@ -19,10 +19,19 @@ const toNum = (value) => {
 };
 
 const roundToOne = (value) => Math.round(Number(value) * 10) / 10;
-const calcScoreFromDeviationPct = (deviationPct) => {
+const SCORE_MISS_PENALTY = 10;
+const SCORE_HITRATE_WEIGHT = 0.25;
+const SCORE_TREND_WINDOW = 3;
+
+const calcScoreFromDeviationPct = (deviationPct, options = {}) => {
+  const { hit = null, missPenalty = SCORE_MISS_PENALTY } = options;
   const parsed = toNum(deviationPct);
   if (parsed === null) return null;
-  return Math.max(0, Math.min(100, Math.round(100 - Math.abs(parsed))));
+  const baseScore = Math.max(0, Math.min(100, Math.round(100 - Math.abs(parsed))));
+  if (hit === false) {
+    return Math.max(0, baseScore - Math.max(0, Number(missPenalty) || 0));
+  }
+  return baseScore;
 };
 const calcDeviationPct = (startTemp, targetTemp) => {
   const start = toNum(startTemp);
@@ -30,6 +39,13 @@ const calcDeviationPct = (startTemp, targetTemp) => {
   if (start === null || target === null) return null;
   if (Math.abs(target) < 0.001) return null;
   return roundToOne(((start - target) / target) * 100);
+};
+const isTargetReached = (startTemp, targetTemp, toleranceC = 0) => {
+  const start = toNum(startTemp);
+  const target = toNum(targetTemp);
+  if (start === null || target === null) return null;
+  const safeTolerance = Number.isFinite(Number(toleranceC)) ? Number(toleranceC) : 0;
+  return start >= (target - safeTolerance);
 };
 const toHourKey = (timestampMs) => {
   const date = new Date(timestampMs);
@@ -405,20 +421,49 @@ export default function SaunaBookingTempCard({
     const num = Number(value);
     return `${num > 0 ? '+' : ''}${num.toFixed(1)}%`;
   };
-  const deviationAbs = avgDeviationPct !== null ? Math.abs(avgDeviationPct) : null;
-  const deviationScore = deviationAbs !== null ? Math.max(0, Math.min(100, Math.round(100 - deviationAbs))) : null;
+  const recentScoreSamples = targetSamplesWithPct
+    .map((entry) => ({
+      ...entry,
+      hit: isTargetReached(entry.startTemp, entry.targetTemp, targetToleranceC),
+      score: calcScoreFromDeviationPct(entry.deviationPct, {
+        hit: isTargetReached(entry.startTemp, entry.targetTemp, targetToleranceC),
+      }),
+    }))
+    .filter((entry) => entry.score !== null);
+  const avgRecentScore = recentScoreSamples.length
+    ? roundToOne(recentScoreSamples.reduce((sum, entry) => sum + (entry.score ?? 0), 0) / recentScoreSamples.length)
+    : null;
+  const overallScore = avgRecentScore !== null
+    ? (reachedRate !== null
+      ? Math.max(0, Math.min(100, Math.round((avgRecentScore * (1 - SCORE_HITRATE_WEIGHT)) + (reachedRate * SCORE_HITRATE_WEIGHT))))
+      : Math.round(avgRecentScore))
+    : null;
+
   const allScoreSamples = snapshots
     .filter((entry) => entry.bookingType !== 'service' && entry.deviationPct !== null)
     .map((entry) => ({
       ...entry,
-      score: calcScoreFromDeviationPct(entry.deviationPct),
+      hit: isTargetReached(entry.startTemp, entry.targetTemp, targetToleranceC),
+      score: calcScoreFromDeviationPct(entry.deviationPct, {
+        hit: isTargetReached(entry.startTemp, entry.targetTemp, targetToleranceC),
+      }),
     }))
     .filter((entry) => entry.score !== null);
-  const latestScoreSample = allScoreSamples.length ? allScoreSamples[allScoreSamples.length - 1] : null;
-  const previousScoreSample = allScoreSamples.length > 1 ? allScoreSamples[allScoreSamples.length - 2] : null;
-  const scoreTrendDelta = latestScoreSample && previousScoreSample
-    ? roundToOne((latestScoreSample.score ?? 0) - (previousScoreSample.score ?? 0))
+  const latestWindow = allScoreSamples.slice(-SCORE_TREND_WINDOW);
+  const previousWindow = allScoreSamples.slice(-(SCORE_TREND_WINDOW * 2), -SCORE_TREND_WINDOW);
+  const latestWindowAvg = latestWindow.length
+    ? (latestWindow.reduce((sum, entry) => sum + (entry.score ?? 0), 0) / latestWindow.length)
     : null;
+  const previousWindowAvg = previousWindow.length
+    ? (previousWindow.reduce((sum, entry) => sum + (entry.score ?? 0), 0) / previousWindow.length)
+    : null;
+  const fallbackLatest = allScoreSamples.length ? allScoreSamples[allScoreSamples.length - 1] : null;
+  const fallbackPrevious = allScoreSamples.length > 1 ? allScoreSamples[allScoreSamples.length - 2] : null;
+  const scoreTrendDelta = latestWindowAvg !== null && previousWindowAvg !== null
+    ? roundToOne(latestWindowAvg - previousWindowAvg)
+    : (fallbackLatest && fallbackPrevious
+      ? roundToOne((fallbackLatest.score ?? 0) - (fallbackPrevious.score ?? 0))
+      : null);
   const scoreTrendDirection = scoreTrendDelta === null
     ? 'flat'
     : (scoreTrendDelta > 0 ? 'up' : (scoreTrendDelta < 0 ? 'down' : 'flat'));
@@ -428,13 +473,13 @@ export default function SaunaBookingTempCard({
   const lastSevenScoreMax = lastSevenScoreValues.length ? Math.max(...lastSevenScoreValues) : 0;
   const lastSevenScoreSpan = Math.max(1, lastSevenScoreMax - lastSevenScoreMin);
   const deviationTone = (() => {
-    if (deviationScore === null) {
+    if (overallScore === null) {
       return { ring: '#64748b', glow: 'rgba(100, 116, 139, 0.25)', text: 'text-[var(--text-primary)]' };
     }
-    if (deviationScore >= 85) {
+    if (overallScore >= 85) {
       return { ring: '#10b981', glow: 'rgba(16, 185, 129, 0.35)', text: 'text-emerald-300' };
     }
-    if (deviationScore >= 65) {
+    if (overallScore >= 65) {
       return { ring: '#f59e0b', glow: 'rgba(245, 158, 11, 0.35)', text: 'text-amber-300' };
     }
     return { ring: '#f43f5e', glow: 'rgba(244, 63, 94, 0.35)', text: 'text-rose-300' };
@@ -445,7 +490,7 @@ export default function SaunaBookingTempCard({
   if (!activeEntityId) missingConfig.push(tr('sauna.bookingTemp.activeEntity', 'Booking active sensor'));
   const ringRadius = 48;
   const ringCircumference = 2 * Math.PI * ringRadius;
-  const ringProgress = deviationScore ?? 0;
+  const ringProgress = overallScore ?? 0;
   const ringDashArray = `${(ringProgress / 100) * ringCircumference} ${ringCircumference}`;
   const renderFullscreenPortal = (content) => {
     if (typeof document === 'undefined') return null;
@@ -736,7 +781,7 @@ export default function SaunaBookingTempCard({
                       </svg>
                       <div className="absolute inset-0 flex flex-col items-center justify-center text-center">
                         <span className="text-[1.78rem] sm:text-[2.05rem] font-semibold tabular-nums text-[var(--text-primary)]">
-                          {deviationScore !== null ? deviationScore : '--'}
+                          {overallScore !== null ? overallScore : '--'}
                         </span>
                         <span className="text-[9px] sm:text-[10px] uppercase tracking-[0.16em] sm:tracking-widest text-[var(--text-muted)]">
                           {tr('sauna.bookingTemp.score', 'Score')}
