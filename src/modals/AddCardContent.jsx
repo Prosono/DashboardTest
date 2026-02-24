@@ -5,6 +5,7 @@ import {
   Camera,
   DoorOpen,
   Bot,
+  Bell,
   Calendar,
   Car,
   Check,
@@ -522,6 +523,7 @@ export default function AddCardContent({
                 <TypeButton type="room" icon={Home} label={getLabel('addCard.type.room', 'Room')} isActive={addCardType === 'room'} onSelect={setAddCardType} />
                 <TypeButton type="sauna" icon={Flame} label={getLabel('addCard.type.sauna', 'Sauna')} isActive={addCardType === 'sauna'} onSelect={setAddCardType} />
                 <TypeButton type="saunaBookingTemp" icon={Thermometer} label={getLabel('addCard.type.saunaBookingTemp', 'Sauna Temp Log')} isActive={addCardType === 'saunaBookingTemp'} onSelect={setAddCardType} />
+                <TypeButton type="notificationTimeline" icon={Bell} label={getLabel('addCard.type.notificationTimeline', 'Notification Timeline')} isActive={addCardType === 'notificationTimeline'} onSelect={setAddCardType} />
                 <TypeButton type="popupLauncher" icon={LayoutGrid} label={getLabel('addCard.type.popupLauncher', 'Popup Launcher')} isActive={addCardType === 'popupLauncher'} onSelect={setAddCardType} />
                 <TypeButton type="divider" icon={Minus} label={getLabel('addCard.type.divider', 'Divider')} isActive={addCardType === 'divider'} onSelect={setAddCardType} />
                 <TypeButton type="empty" icon={Columns} label={getLabel('addCard.type.empty', 'Empty')} isActive={addCardType === 'empty'} onSelect={setAddCardType} />
@@ -551,6 +553,7 @@ export default function AddCardContent({
               : addCardType === 'nordpool' ? renderNordpoolSection()
               : addCardType === 'sauna' ? renderSimpleAddSection(Flame, t('addCard.saunaDescription') || 'Add a sauna operator card and then configure all linked entities.', t('addCard.add'))
               : addCardType === 'saunaBookingTemp' ? renderSimpleAddSection(Thermometer, getLabel('addCard.saunaBookingTempDescription', 'Add a sauna booking temperature card. Configure booking-active and temperature sensors after adding.'), t('addCard.add'))
+              : addCardType === 'notificationTimeline' ? renderSimpleAddSection(Bell, getLabel('addCard.notificationTimelineDescription', 'Add a timeline card showing notification history (newest first, max 200).'), getLabel('addCard.notificationTimelineCard', 'Add notification timeline card'))
               : addCardType === 'popupLauncher' ? renderSimpleAddSection(LayoutGrid, getLabel('addCard.popupLauncherDescription', 'Add a popup launcher card with a grid of buttons. Configure each button to open an existing card in a popup.'), getLabel('addCard.popupLauncherCard', 'Add popup launcher card'))
               : addCardType === 'divider' ? renderSimpleAddSection(Minus, getLabel('addCard.dividerDescription', 'Add a divider card to separate sections in the dashboard.'), t('addCard.add'))
               : addCardType === 'empty' ? renderSimpleAddSection(Columns, getLabel('addCard.emptyDescription', 'Add an empty spacer card that only takes up layout space.'), t('addCard.add'))
@@ -599,6 +602,11 @@ export default function AddCardContent({
           {addCardType === 'saunaBookingTemp' && (
             <button onClick={onAddSelected} className="w-full py-4 rounded-2xl bg-blue-500 text-white font-bold uppercase tracking-widest hover:bg-blue-600 transition-colors shadow-lg shadow-blue-500/20 flex items-center justify-center gap-2">
               <Plus className="w-5 h-5" /> {getLabel('addCard.saunaBookingTempCard', 'Sauna temp log card')}
+            </button>
+          )}
+          {addCardType === 'notificationTimeline' && (
+            <button onClick={onAddSelected} className="w-full py-4 rounded-2xl bg-blue-500 text-white font-bold uppercase tracking-widest hover:bg-blue-600 transition-colors shadow-lg shadow-blue-500/20 flex items-center justify-center gap-2">
+              <Plus className="w-5 h-5" /> {getLabel('addCard.notificationTimelineCard', 'Notification timeline card')}
             </button>
           )}
           {addCardType === 'empty' && (

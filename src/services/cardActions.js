@@ -217,6 +217,15 @@ export const handleAddSelected = (ctx) => {
       return;
     }
 
+    case 'notificationTimeline': {
+      const cardId = `notification_timeline_card_${Date.now()}`;
+      commitSingleCard(cardId, {
+        type: 'notification_timeline',
+        maxEntries: 200,
+      }, { openEdit: true });
+      return;
+    }
+
     case 'popupLauncher': {
       const cardId = `popup_launcher_card_${Date.now()}`;
       commitSingleCard(cardId, {

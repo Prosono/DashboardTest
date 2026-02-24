@@ -67,6 +67,7 @@ const normalizeRuleCondition = (value, fallback = null) => {
     ? conditionTypeRaw
     : String(fallback?.conditionType || 'is_active');
   return {
+    entityId: String(input.entityId ?? fallback?.entityId ?? '').trim(),
     conditionType,
     compareValue: String(input.compareValue ?? fallback?.compareValue ?? '').trim(),
   };
@@ -84,10 +85,18 @@ const normalizeRule = (value, index) => {
   const sourceConditions = Array.isArray(input.conditions) ? input.conditions : [];
   const conditions = [];
   for (let i = 0; i < sourceConditions.length && conditions.length < MAX_RULE_CONDITIONS; i += 1) {
-    conditions.push(normalizeRuleCondition(sourceConditions[i], { conditionType, compareValue: input.compareValue }));
+    conditions.push(normalizeRuleCondition(sourceConditions[i], {
+      entityId: input.entityId,
+      conditionType,
+      compareValue: input.compareValue,
+    }));
   }
   if (conditions.length === 0) {
-    conditions.push(normalizeRuleCondition(input, { conditionType, compareValue: input.compareValue }));
+    conditions.push(normalizeRuleCondition(input, {
+      entityId: input.entityId,
+      conditionType,
+      compareValue: input.compareValue,
+    }));
   }
   const primaryCondition = conditions[0] || { conditionType: 'is_active', compareValue: '' };
   return {

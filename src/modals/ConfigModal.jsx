@@ -2248,6 +2248,7 @@ export default function ConfigModal({
     entityId: '',
     conditionOperator: 'and',
     conditions: [{
+      entityId: '',
       conditionType: 'is_active',
       compareValue: '',
     }],
@@ -2268,11 +2269,13 @@ export default function ConfigModal({
     const source = rule && typeof rule === 'object' ? rule : {};
     if (Array.isArray(source.conditions) && source.conditions.length > 0) {
       return source.conditions.map((condition) => ({
+        entityId: String(condition?.entityId ?? source.entityId ?? '').trim(),
         conditionType: String(condition?.conditionType || 'is_active').trim() || 'is_active',
         compareValue: String(condition?.compareValue ?? ''),
       }));
     }
     return [{
+      entityId: String(source.entityId || '').trim(),
       conditionType: String(source.conditionType || 'is_active').trim() || 'is_active',
       compareValue: String(source.compareValue ?? ''),
     }];
@@ -2281,12 +2284,13 @@ export default function ConfigModal({
   const applyRuleConditionsPatch = (rule, nextConditionsInput, nextOperatorInput = null) => {
     const nextConditions = (Array.isArray(nextConditionsInput) ? nextConditionsInput : [])
       .map((condition) => ({
+        entityId: String(condition?.entityId ?? rule?.entityId ?? '').trim(),
         conditionType: String(condition?.conditionType || 'is_active').trim() || 'is_active',
         compareValue: String(condition?.compareValue ?? ''),
       }))
       .slice(0, 8);
     if (nextConditions.length === 0) {
-      nextConditions.push({ conditionType: 'is_active', compareValue: '' });
+      nextConditions.push({ entityId: String(rule?.entityId || '').trim(), conditionType: 'is_active', compareValue: '' });
     }
     const primary = nextConditions[0];
     const nextOperator = String(nextOperatorInput ?? (rule?.conditionOperator || 'and')).trim().toLowerCase() === 'or'
@@ -2344,7 +2348,11 @@ export default function ConfigModal({
       rules: (Array.isArray(prev.rules) ? prev.rules : []).map((rule) => {
         if (String(rule?.id || '').trim() !== normalizedRuleId) return rule;
         const current = getRuleConditions(rule);
-        const next = [...current, { conditionType: 'is_active', compareValue: '' }].slice(0, 8);
+        const next = [...current, {
+          entityId: String(rule?.entityId || '').trim(),
+          conditionType: 'is_active',
+          compareValue: '',
+        }].slice(0, 8);
         return applyRuleConditionsPatch(rule, next, rule?.conditionOperator);
       }),
     }));
@@ -2884,6 +2892,8 @@ export default function ConfigModal({
                           const showClauseCompareValue = condition.conditionType === 'greater_than'
                             || condition.conditionType === 'less_than'
                             || condition.conditionType === 'equals';
+                          const clauseEntityId = String(condition.entityId || selectedEntityId).trim();
+                          const clauseEntityOption = notificationEntityOptions.find((option) => option.id === clauseEntityId) || null;
                           return (
                             <div
                               key={`${ruleId}_condition_${conditionIdx}`}
@@ -2902,7 +2912,14 @@ export default function ConfigModal({
                                   {t('common.delete')}
                                 </button>
                               </div>
-                              <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                              <div className="grid grid-cols-1 md:grid-cols-[minmax(0,1fr)_12rem_12rem] gap-2">
+                                <input
+                                  value={String(condition.entityId ?? '')}
+                                  onChange={(e) => updateNotificationRuleCondition(ruleId, conditionIdx, { entityId: e.target.value })}
+                                  list="notification-entity-options"
+                                  className="w-full px-3 py-2 rounded-lg bg-[var(--glass-bg-hover)] border border-[var(--glass-border)] text-sm"
+                                  placeholder={t('notifications.ruleClauseEntityPlaceholder')}
+                                />
                                 <select
                                   value={String(condition.conditionType || 'is_active')}
                                   onChange={(e) => updateNotificationRuleCondition(ruleId, conditionIdx, { conditionType: e.target.value })}
@@ -2925,6 +2942,9 @@ export default function ConfigModal({
                                     {t('notifications.ruleValueNotRequired')}
                                   </div>
                                 )}
+                              </div>
+                              <div className="text-[10px] text-[var(--text-secondary)]">
+                                {t('notifications.ruleEntitySelected')}: <span className="font-semibold text-[var(--text-primary)]">{clauseEntityOption?.friendlyName || clauseEntityId || '-'}</span>
                               </div>
                             </div>
                           );

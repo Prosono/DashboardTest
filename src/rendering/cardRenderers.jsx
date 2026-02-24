@@ -25,6 +25,7 @@ import {
   MediaPlayerCard,
   MediaGroupCard,
   MissingEntityCard,
+  NotificationTimelineCard,
   PopupLauncherCard,
   RoomCard,
   SaunaCard,
@@ -564,6 +565,25 @@ export function renderPopupLauncherCard(cardId, dragProps, getControls, cardStyl
   );
 }
 
+export function renderNotificationTimelineCard(cardId, dragProps, getControls, cardStyle, settingsKey, ctx) {
+  const { editMode, cardSettings, customNames, language, t } = ctx;
+  const settings = cardSettings[settingsKey] || cardSettings[cardId] || {};
+  return (
+    <NotificationTimelineCard
+      key={cardId}
+      cardId={cardId}
+      settings={settings}
+      dragProps={dragProps}
+      controls={getControls(cardId)}
+      cardStyle={cardStyle}
+      editMode={editMode}
+      customNames={customNames}
+      locale={language === 'en' ? 'en-US' : 'nb-NO'}
+      t={t}
+    />
+  );
+}
+
 export function renderDividerCard(cardId, dragProps, getControls, cardStyle, settingsKey, ctx) {
   const { editMode, cardSettings } = ctx;
   const settings = cardSettings[settingsKey] || cardSettings[cardId] || {};
@@ -716,6 +736,10 @@ export function dispatchCardRender(cardId, dragProps, getControls, cardStyle, se
 
   if (cardId.startsWith('popup_launcher_card_')) {
     return renderPopupLauncherCard(cardId, dragProps, getControls, cardStyle, settingsKey, ctx);
+  }
+
+  if (cardId.startsWith('notification_timeline_card_')) {
+    return renderNotificationTimelineCard(cardId, dragProps, getControls, cardStyle, settingsKey, ctx);
   }
 
   if (cardId.startsWith('divider_card_')) {

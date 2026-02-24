@@ -520,20 +520,49 @@ function AppContent({
     return false;
   }, [isStateActive]);
 
-  const evaluateCustomNotificationRule = useCallback((rule, entityState) => {
+  const getNotificationRuleConditions = useCallback((rule) => {
     const fallbackCondition = {
+      entityId: String(rule?.entityId || '').trim(),
       conditionType: String(rule?.conditionType || 'is_active').trim().toLowerCase(),
       compareValue: String(rule?.compareValue ?? '').trim(),
     };
-    const conditions = Array.isArray(rule?.conditions) && rule.conditions.length > 0
+    const sourceConditions = Array.isArray(rule?.conditions) && rule.conditions.length > 0
       ? rule.conditions
       : [fallbackCondition];
+    return sourceConditions.map((condition) => ({
+      entityId: String(condition?.entityId || fallbackCondition.entityId).trim(),
+      conditionType: String(condition?.conditionType || fallbackCondition.conditionType).trim().toLowerCase() || 'is_active',
+      compareValue: String(condition?.compareValue ?? fallbackCondition.compareValue ?? '').trim(),
+    }));
+  }, []);
+
+  const getNotificationRulePrimaryEntityId = useCallback((rule) => {
+    const fallbackEntityId = String(rule?.entityId || '').trim();
+    const conditions = getNotificationRuleConditions(rule);
+    const firstWithEntity = conditions.find((condition) => String(condition?.entityId || '').trim());
+    return String(firstWithEntity?.entityId || fallbackEntityId).trim();
+  }, [getNotificationRuleConditions]);
+
+  const ruleHasConfiguredEntity = useCallback((rule) => {
+    if (String(rule?.entityId || '').trim()) return true;
+    const conditions = getNotificationRuleConditions(rule);
+    return conditions.some((condition) => String(condition?.entityId || '').trim());
+  }, [getNotificationRuleConditions]);
+
+  const evaluateCustomNotificationRule = useCallback((rule, allEntities = {}) => {
+    const fallbackEntityId = String(rule?.entityId || '').trim();
+    const conditions = getNotificationRuleConditions(rule);
     const operator = String(rule?.conditionOperator || 'and').trim().toLowerCase() === 'or' ? 'or' : 'and';
-    const rawState = entityState?.state;
-    const results = conditions.map((condition) => evaluateCustomNotificationCondition(condition, rawState));
+    const results = conditions.map((condition) => {
+      const entityId = String(condition?.entityId || fallbackEntityId).trim();
+      if (!entityId) return false;
+      const entityState = allEntities?.[entityId];
+      const rawState = entityState?.state;
+      return evaluateCustomNotificationCondition(condition, rawState);
+    });
     if (results.length === 0) return false;
     return operator === 'or' ? results.some(Boolean) : results.every(Boolean);
-  }, [evaluateCustomNotificationCondition]);
+  }, [evaluateCustomNotificationCondition, getNotificationRuleConditions]);
 
   const renderRuleMessage = useCallback((template, context = {}, allEntities = {}) => {
     const safeTemplate = String(template || '').trim();
@@ -648,15 +677,13 @@ function AppContent({
 
   useEffect(() => {
     const rules = Array.isArray(notificationConfig?.rules) ? notificationConfig.rules : [];
-    const activeRules = rules.filter((rule) => Boolean(rule?.enabled) && String(rule?.entityId || '').trim());
+    const activeRules = rules.filter((rule) => Boolean(rule?.enabled) && ruleHasConfiguredEntity(rule));
     const currentMatches = {};
 
     activeRules.forEach((rule) => {
       const ruleId = String(rule.id || '').trim();
       if (!ruleId) return;
-      const entityId = String(rule.entityId || '').trim();
-      const entityState = entities?.[entityId];
-      currentMatches[ruleId] = evaluateCustomNotificationRule(rule, entityState);
+      currentMatches[ruleId] = evaluateCustomNotificationRule(rule, entities);
     });
 
     if (!customRuleSeededRef.current) {
@@ -693,16 +720,20 @@ function AppContent({
         const canSend = cooldownMs <= 0 || (now - lastSent) >= cooldownMs;
         if (!canSend) return;
 
-        const entityId = String(rule.entityId || '').trim();
+        const entityId = getNotificationRulePrimaryEntityId(rule);
         const entityState = entities?.[entityId];
         const entityName = String(entityState?.attributes?.friendly_name || entityId || t('notifications.customRuleFallbackTitle')).trim();
         const title = String(rule?.title || '').trim() || entityName;
+        const primaryCondition = getNotificationRuleConditions(rule)[0] || {
+          conditionType: String(rule?.conditionType || 'is_active').trim().toLowerCase(),
+          compareValue: String(rule?.compareValue ?? '').trim(),
+        };
         const message = renderRuleMessage(String(rule?.message || '').trim(), {
           entityId,
           entityName,
           state: entityState?.state ?? '',
-          conditionType: rule?.conditionType || '',
-          compareValue: rule?.compareValue ?? '',
+          conditionType: primaryCondition.conditionType || '',
+          compareValue: primaryCondition.compareValue ?? '',
         }, entities) || `${entityName}: ${String(entityState?.state ?? '-')}`;
 
         void notify({
@@ -725,7 +756,10 @@ function AppContent({
     notificationConfig,
     entities,
     evaluateCustomNotificationRule,
+    getNotificationRuleConditions,
+    getNotificationRulePrimaryEntityId,
     notify,
+    ruleHasConfiguredEntity,
     t,
     renderRuleMessage,
   ]);

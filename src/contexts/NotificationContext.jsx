@@ -1,14 +1,62 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { Capacitor, registerPlugin } from '@capacitor/core';
 import { AlertTriangle, AlertCircle, Bell, Check, X, ChevronDown, ChevronUp } from '../icons';
+import { getClientId } from '../services/appAuth';
 
 const MAX_NOTIFICATIONS = 40;
+const MAX_NOTIFICATION_HISTORY = 200;
 const DEFAULT_DURATION_MS = 7000;
 const LocalNotifications = registerPlugin('LocalNotifications');
 
 const NotificationContext = createContext(null);
 
 const nowIso = () => new Date().toISOString();
+
+const getNotificationHistoryStorageKey = () => {
+  const scope = String(getClientId?.() || '').trim().toLowerCase() || 'default';
+  return `tunet_notification_history_${scope}`;
+};
+
+const readStoredNotificationHistory = () => {
+  if (typeof window === 'undefined') return [];
+  try {
+    const raw = window.localStorage.getItem(getNotificationHistoryStorageKey());
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    return parsed
+      .map((entry) => ({
+        id: String(entry?.id || ''),
+        title: String(entry?.title || 'Notification'),
+        message: String(entry?.message || ''),
+        level: String(entry?.level || 'info'),
+        createdAt: String(entry?.createdAt || nowIso()),
+      }))
+      .filter((entry) => Boolean(entry.id))
+      .slice(0, MAX_NOTIFICATION_HISTORY);
+  } catch {
+    return [];
+  }
+};
+
+const writeStoredNotificationHistory = (entries) => {
+  if (typeof window === 'undefined') return;
+  try {
+    const normalized = (Array.isArray(entries) ? entries : [])
+      .slice(0, MAX_NOTIFICATION_HISTORY)
+      .map((entry) => ({
+        id: String(entry?.id || ''),
+        title: String(entry?.title || 'Notification'),
+        message: String(entry?.message || ''),
+        level: String(entry?.level || 'info'),
+        createdAt: String(entry?.createdAt || nowIso()),
+      }))
+      .filter((entry) => Boolean(entry.id));
+    window.localStorage.setItem(getNotificationHistoryStorageKey(), JSON.stringify(normalized));
+  } catch {
+    // noop
+  }
+};
 
 const levelTone = (level) => {
   switch (String(level || '').toLowerCase()) {
@@ -367,7 +415,22 @@ const NotificationViewport = ({ notifications, onDismiss }) => {
 
 export const NotificationProvider = ({ children }) => {
   const [notifications, setNotifications] = useState([]);
+  const [notificationHistory, setNotificationHistory] = useState(() => readStoredNotificationHistory());
   const timersRef = useRef(new Map());
+  const historyScopeRef = useRef(getNotificationHistoryStorageKey());
+
+  useEffect(() => {
+    const syncHistory = () => {
+      historyScopeRef.current = getNotificationHistoryStorageKey();
+      setNotificationHistory(readStoredNotificationHistory());
+    };
+    window.addEventListener('storage', syncHistory);
+    window.addEventListener('focus', syncHistory);
+    return () => {
+      window.removeEventListener('storage', syncHistory);
+      window.removeEventListener('focus', syncHistory);
+    };
+  }, []);
 
   const dismissNotification = useCallback((id) => {
     setNotifications((prev) => prev.filter((entry) => entry.id !== id));
@@ -397,6 +460,16 @@ export const NotificationProvider = ({ children }) => {
       level,
       createdAt: nowIso(),
     };
+
+    setNotificationHistory((prev) => {
+      const currentScopeKey = getNotificationHistoryStorageKey();
+      const shouldReseed = currentScopeKey !== historyScopeRef.current;
+      historyScopeRef.current = currentScopeKey;
+      const base = shouldReseed ? readStoredNotificationHistory() : (Array.isArray(prev) ? prev : []);
+      const next = [payload, ...base].slice(0, MAX_NOTIFICATION_HISTORY);
+      writeStoredNotificationHistory(next);
+      return next;
+    });
 
     if (inApp) {
       setNotifications((prev) => [payload, ...prev].slice(0, MAX_NOTIFICATIONS));
@@ -428,12 +501,20 @@ export const NotificationProvider = ({ children }) => {
     timersRef.current.clear();
   }, []);
 
+  const clearNotificationHistory = useCallback(() => {
+    historyScopeRef.current = getNotificationHistoryStorageKey();
+    setNotificationHistory([]);
+    writeStoredNotificationHistory([]);
+  }, []);
+
   const value = useMemo(() => ({
     notifications,
+    notificationHistory,
     notify,
     dismissNotification,
     clearNotifications,
-  }), [notifications, notify, dismissNotification, clearNotifications]);
+    clearNotificationHistory,
+  }), [notifications, notificationHistory, notify, dismissNotification, clearNotifications, clearNotificationHistory]);
 
   return (
     <NotificationContext.Provider value={value}>
