@@ -186,9 +186,38 @@ export default function ConfigModal({
   const [notificationDraft, setNotificationDraft] = useState(() => normalizeNotificationConfig(notificationConfig || DEFAULT_NOTIFICATION_CONFIG));
   const [notificationDirty, setNotificationDirty] = useState(false);
   const [notificationSaveMessage, setNotificationSaveMessage] = useState('');
+  const [notificationRuleSearch, setNotificationRuleSearch] = useState({});
+  const [notificationRuleDomain, setNotificationRuleDomain] = useState({});
+  const [notificationRuleReferenceEntity, setNotificationRuleReferenceEntity] = useState({});
+  const notificationEntityOptions = useMemo(() => (
+    Object.entries(entities || {})
+      .map(([id, entity]) => {
+        const domain = String(id || '').split('.')[0] || 'other';
+        const friendlyName = String(entity?.attributes?.friendly_name || '').trim();
+        const state = String(entity?.state ?? '').trim();
+        return {
+          id,
+          domain,
+          friendlyName,
+          state,
+          searchKey: `${id} ${domain} ${friendlyName} ${state}`.toLowerCase(),
+        };
+      })
+      .sort((a, b) => {
+        const domainCmp = a.domain.localeCompare(b.domain);
+        if (domainCmp !== 0) return domainCmp;
+        const labelA = a.friendlyName || a.id;
+        const labelB = b.friendlyName || b.id;
+        return labelA.localeCompare(labelB);
+      })
+  ), [entities]);
   const notificationEntityIds = useMemo(
-    () => Object.keys(entities || {}).sort((a, b) => a.localeCompare(b)),
-    [entities],
+    () => notificationEntityOptions.map((option) => option.id),
+    [notificationEntityOptions],
+  );
+  const notificationEntityDomains = useMemo(
+    () => Array.from(new Set(notificationEntityOptions.map((option) => option.domain))).sort((a, b) => a.localeCompare(b)),
+    [notificationEntityOptions],
   );
 
   const normalizeRole = (role) => {
@@ -238,6 +267,9 @@ export default function ConfigModal({
   useEffect(() => {
     setNotificationDraft(normalizeNotificationConfig(notificationConfig || DEFAULT_NOTIFICATION_CONFIG));
     setNotificationDirty(false);
+    setNotificationRuleSearch({});
+    setNotificationRuleDomain({});
+    setNotificationRuleReferenceEntity({});
   }, [notificationConfig]);
 
   useEffect(() => {
@@ -2141,6 +2173,24 @@ export default function ConfigModal({
         (rule) => String(rule?.id || '').trim() !== normalizedRuleId,
       ),
     }));
+    setNotificationRuleSearch((prev) => {
+      if (!Object.prototype.hasOwnProperty.call(prev, normalizedRuleId)) return prev;
+      const next = { ...prev };
+      delete next[normalizedRuleId];
+      return next;
+    });
+    setNotificationRuleDomain((prev) => {
+      if (!Object.prototype.hasOwnProperty.call(prev, normalizedRuleId)) return prev;
+      const next = { ...prev };
+      delete next[normalizedRuleId];
+      return next;
+    });
+    setNotificationRuleReferenceEntity((prev) => {
+      if (!Object.prototype.hasOwnProperty.call(prev, normalizedRuleId)) return prev;
+      const next = { ...prev };
+      delete next[normalizedRuleId];
+      return next;
+    });
   };
 
   const toggleNotificationRuleChannel = (ruleId, channelKey) => {
@@ -2160,6 +2210,20 @@ export default function ConfigModal({
             [channelKey]: !Boolean(channels[channelKey]),
           },
         };
+      }),
+    }));
+  };
+
+  const appendNotificationRuleMessage = (ruleId, snippet) => {
+    const normalizedRuleId = String(ruleId || '').trim();
+    if (!normalizedRuleId || !snippet) return;
+    const addition = String(snippet);
+    updateNotificationDraft((prev) => ({
+      ...prev,
+      rules: (Array.isArray(prev.rules) ? prev.rules : []).map((rule) => {
+        if (String(rule?.id || '').trim() !== normalizedRuleId) return rule;
+        const current = String(rule?.message || '');
+        return { ...rule, message: `${current}${addition}` };
       }),
     }));
   };
@@ -2217,6 +2281,7 @@ export default function ConfigModal({
               <input
                 value={draft.warningSensorEntityId}
                 onChange={(e) => updateNotificationDraft((prev) => ({ ...prev, warningSensorEntityId: e.target.value }))}
+                list="notification-entity-options"
                 className="w-full px-3 py-2 rounded-lg bg-[var(--glass-bg-hover)] border border-[var(--glass-border)] text-sm"
                 placeholder="sensor.system_warning_details"
               />
@@ -2228,6 +2293,7 @@ export default function ConfigModal({
               <input
                 value={draft.criticalSensorEntityId}
                 onChange={(e) => updateNotificationDraft((prev) => ({ ...prev, criticalSensorEntityId: e.target.value }))}
+                list="notification-entity-options"
                 className="w-full px-3 py-2 rounded-lg bg-[var(--glass-bg-hover)] border border-[var(--glass-border)] text-sm"
                 placeholder="sensor.system_critical_details"
               />
@@ -2368,14 +2434,24 @@ export default function ConfigModal({
           <div className="space-y-3">
             {(Array.isArray(draft.rules) ? draft.rules : []).map((rule, idx) => {
               const normalizedRule = rule && typeof rule === 'object' ? rule : {};
+              const ruleId = String(normalizedRule.id || '').trim() || `rule_${idx}`;
               const channels = normalizedRule.channels && typeof normalizedRule.channels === 'object'
                 ? normalizedRule.channels
                 : { inApp: true, browser: true, native: true };
               const showCompareValue = normalizedRule.conditionType === 'greater_than'
                 || normalizedRule.conditionType === 'less_than'
                 || normalizedRule.conditionType === 'equals';
+              const selectedEntityId = String(normalizedRule.entityId || '').trim();
+              const selectedOption = notificationEntityOptions.find((option) => option.id === selectedEntityId) || null;
+              const selectedDomain = String(notificationRuleDomain[ruleId] || 'all').trim() || 'all';
+              const searchQuery = String(notificationRuleSearch[ruleId] || '').toLowerCase().trim();
+              const filteredEntityOptions = notificationEntityOptions
+                .filter((option) => selectedDomain === 'all' || option.domain === selectedDomain)
+                .filter((option) => !searchQuery || option.searchKey.includes(searchQuery) || option.id === selectedEntityId)
+                .slice(0, 40);
+              const referenceEntityId = String(notificationRuleReferenceEntity[ruleId] || selectedEntityId).trim();
               return (
-                <div key={normalizedRule.id || `rule_${idx}`} className="rounded-xl border border-[var(--glass-border)] bg-[var(--glass-bg-hover)] p-3 space-y-2.5">
+                <div key={ruleId} className="rounded-xl border border-[var(--glass-border)] bg-[var(--glass-bg-hover)] p-3 space-y-2.5">
                   <div className="flex items-center justify-between gap-2">
                     <span className="text-[10px] uppercase tracking-wider font-bold text-[var(--text-secondary)]">
                       {t('notifications.ruleLabel')} {idx + 1}
@@ -2383,14 +2459,14 @@ export default function ConfigModal({
                     <div className="flex items-center gap-2">
                       <button
                         type="button"
-                        onClick={() => updateNotificationRule(normalizedRule.id, { enabled: !normalizedRule.enabled })}
+                        onClick={() => updateNotificationRule(ruleId, { enabled: !normalizedRule.enabled })}
                         className={`w-10 h-6 rounded-full p-1 transition-colors relative ${normalizedRule.enabled ? 'bg-emerald-500' : 'bg-gray-500/30'}`}
                       >
                         <div className={`w-4 h-4 rounded-full bg-white shadow-sm transition-transform ${normalizedRule.enabled ? 'translate-x-4' : 'translate-x-0'}`} />
                       </button>
                       <button
                         type="button"
-                        onClick={() => removeNotificationRule(normalizedRule.id)}
+                        onClick={() => removeNotificationRule(ruleId)}
                         className="px-2 py-1 rounded-lg border border-red-500/25 bg-red-500/10 text-red-300 text-[10px] uppercase tracking-wider font-bold"
                       >
                         {t('common.delete')}
@@ -2405,22 +2481,63 @@ export default function ConfigModal({
                       </label>
                       <input
                         value={String(normalizedRule.title || '')}
-                        onChange={(e) => updateNotificationRule(normalizedRule.id, { title: e.target.value })}
+                        onChange={(e) => updateNotificationRule(ruleId, { title: e.target.value })}
                         className="w-full px-3 py-2 rounded-lg bg-[var(--glass-bg)] border border-[var(--glass-border)] text-sm"
                         placeholder={t('notifications.ruleTitlePlaceholder')}
                       />
                     </div>
-                    <div className="space-y-1">
+                    <div className="space-y-1 md:col-span-2">
                       <label className="text-[10px] uppercase tracking-wider font-bold text-[var(--text-secondary)]">
                         {t('notifications.ruleEntity')}
                       </label>
-                      <input
-                        value={String(normalizedRule.entityId || '')}
-                        onChange={(e) => updateNotificationRule(normalizedRule.id, { entityId: e.target.value })}
-                        list="notification-entity-options"
-                        className="w-full px-3 py-2 rounded-lg bg-[var(--glass-bg)] border border-[var(--glass-border)] text-sm"
-                        placeholder="sensor.temperature"
-                      />
+                      <div className="grid grid-cols-1 md:grid-cols-[minmax(0,1fr)_12rem] gap-2">
+                        <input
+                          value={String(notificationRuleSearch[ruleId] || '')}
+                          onChange={(e) => setNotificationRuleSearch((prev) => ({ ...prev, [ruleId]: e.target.value }))}
+                          className="w-full px-3 py-2 rounded-lg bg-[var(--glass-bg)] border border-[var(--glass-border)] text-sm"
+                          placeholder={t('notifications.ruleEntitySearchPlaceholder')}
+                        />
+                        <select
+                          value={selectedDomain}
+                          onChange={(e) => setNotificationRuleDomain((prev) => ({ ...prev, [ruleId]: e.target.value }))}
+                          className="w-full px-3 py-2 rounded-lg bg-[var(--glass-bg)] border border-[var(--glass-border)] text-sm"
+                        >
+                          <option value="all">{t('notifications.ruleEntityDomainAll')}</option>
+                          {notificationEntityDomains.map((domain) => (
+                            <option key={`${ruleId}_domain_${domain}`} value={domain}>{domain}</option>
+                          ))}
+                        </select>
+                      </div>
+                      <div className="rounded-xl border border-[var(--glass-border)] bg-[var(--glass-bg)] max-h-36 overflow-y-auto custom-scrollbar">
+                        {filteredEntityOptions.length === 0 && (
+                          <div className="px-3 py-2 text-[11px] text-[var(--text-muted)]">{t('form.noResults')}</div>
+                        )}
+                        {filteredEntityOptions.map((option) => {
+                          const isSelected = option.id === selectedEntityId;
+                          return (
+                            <button
+                              key={`${ruleId}_${option.id}`}
+                              type="button"
+                              onClick={() => updateNotificationRule(ruleId, { entityId: option.id })}
+                              className={`w-full text-left px-3 py-2 border-b border-[var(--glass-border)] last:border-b-0 transition-colors ${
+                                isSelected ? 'bg-blue-500/15 text-blue-300' : 'text-[var(--text-secondary)] hover:bg-[var(--glass-bg-hover)]'
+                              }`}
+                            >
+                              <div className="text-xs font-bold truncate">
+                                {option.friendlyName || option.id}
+                              </div>
+                              <div className="text-[10px] text-[var(--text-muted)] truncate">
+                                {option.id} • {option.domain} • {option.state || '-'}
+                              </div>
+                            </button>
+                          );
+                        })}
+                      </div>
+                      {selectedOption && (
+                        <div className="text-[10px] text-[var(--text-secondary)]">
+                          {t('notifications.ruleEntitySelected')}: <span className="font-semibold text-[var(--text-primary)]">{selectedOption.friendlyName || selectedOption.id}</span>
+                        </div>
+                      )}
                     </div>
                     <div className="space-y-1">
                       <label className="text-[10px] uppercase tracking-wider font-bold text-[var(--text-secondary)]">
@@ -2428,7 +2545,7 @@ export default function ConfigModal({
                       </label>
                       <select
                         value={String(normalizedRule.conditionType || 'is_active')}
-                        onChange={(e) => updateNotificationRule(normalizedRule.id, { conditionType: e.target.value })}
+                        onChange={(e) => updateNotificationRule(ruleId, { conditionType: e.target.value })}
                         className="w-full px-3 py-2 rounded-lg bg-[var(--glass-bg)] border border-[var(--glass-border)] text-sm"
                       >
                         <option value="is_active">{t('notifications.condition.is_active')}</option>
@@ -2443,7 +2560,7 @@ export default function ConfigModal({
                       </label>
                       <select
                         value={String(normalizedRule.level || 'warning')}
-                        onChange={(e) => updateNotificationRule(normalizedRule.id, { level: e.target.value })}
+                        onChange={(e) => updateNotificationRule(ruleId, { level: e.target.value })}
                         className="w-full px-3 py-2 rounded-lg bg-[var(--glass-bg)] border border-[var(--glass-border)] text-sm"
                       >
                         <option value="info">{t('notifications.severity.info')}</option>
@@ -2459,7 +2576,7 @@ export default function ConfigModal({
                         </label>
                         <input
                           value={String(normalizedRule.compareValue ?? '')}
-                          onChange={(e) => updateNotificationRule(normalizedRule.id, { compareValue: e.target.value })}
+                          onChange={(e) => updateNotificationRule(ruleId, { compareValue: e.target.value })}
                           className="w-full px-3 py-2 rounded-lg bg-[var(--glass-bg)] border border-[var(--glass-border)] text-sm"
                           placeholder={t('notifications.ruleValuePlaceholder')}
                         />
@@ -2469,12 +2586,88 @@ export default function ConfigModal({
                       <label className="text-[10px] uppercase tracking-wider font-bold text-[var(--text-secondary)]">
                         {t('notifications.ruleMessage')}
                       </label>
-                      <input
+                      <textarea
                         value={String(normalizedRule.message || '')}
-                        onChange={(e) => updateNotificationRule(normalizedRule.id, { message: e.target.value })}
-                        className="w-full px-3 py-2 rounded-lg bg-[var(--glass-bg)] border border-[var(--glass-border)] text-sm"
+                        onChange={(e) => updateNotificationRule(ruleId, { message: e.target.value })}
+                        className="w-full px-3 py-2 rounded-lg bg-[var(--glass-bg)] border border-[var(--glass-border)] text-sm resize-y min-h-[88px]"
                         placeholder={t('notifications.ruleMessagePlaceholder')}
                       />
+                      <div className="text-[10px] text-[var(--text-secondary)]">
+                        {t('notifications.ruleMessageFormattingHint')}
+                      </div>
+                      <div className="flex flex-wrap gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() => appendNotificationRuleMessage(ruleId, '**bold**')}
+                          className="px-2 py-1 rounded-md border border-[var(--glass-border)] bg-[var(--glass-bg)] text-[10px] font-bold uppercase tracking-wider"
+                        >
+                          {t('notifications.formatBold')}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => appendNotificationRuleMessage(ruleId, '*italic*')}
+                          className="px-2 py-1 rounded-md border border-[var(--glass-border)] bg-[var(--glass-bg)] text-[10px] font-bold uppercase tracking-wider"
+                        >
+                          {t('notifications.formatItalic')}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => appendNotificationRuleMessage(ruleId, '\n')}
+                          className="px-2 py-1 rounded-md border border-[var(--glass-border)] bg-[var(--glass-bg)] text-[10px] font-bold uppercase tracking-wider"
+                        >
+                          {t('notifications.formatLineBreak')}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => appendNotificationRuleMessage(ruleId, '{entityName}')}
+                          className="px-2 py-1 rounded-md border border-[var(--glass-border)] bg-[var(--glass-bg)] text-[10px] font-bold uppercase tracking-wider"
+                        >
+                          {t('notifications.tokenEntityName')}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => appendNotificationRuleMessage(ruleId, '{state}')}
+                          className="px-2 py-1 rounded-md border border-[var(--glass-border)] bg-[var(--glass-bg)] text-[10px] font-bold uppercase tracking-wider"
+                        >
+                          {t('notifications.tokenState')}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => appendNotificationRuleMessage(ruleId, '{threshold}')}
+                          className="px-2 py-1 rounded-md border border-[var(--glass-border)] bg-[var(--glass-bg)] text-[10px] font-bold uppercase tracking-wider"
+                        >
+                          {t('notifications.tokenThreshold')}
+                        </button>
+                      </div>
+                      <div className="grid grid-cols-1 md:grid-cols-[minmax(0,1fr)_auto_auto] gap-1.5">
+                        <input
+                          value={referenceEntityId}
+                          onChange={(e) => setNotificationRuleReferenceEntity((prev) => ({ ...prev, [ruleId]: e.target.value }))}
+                          list="notification-entity-options"
+                          className="w-full px-3 py-2 rounded-lg bg-[var(--glass-bg)] border border-[var(--glass-border)] text-xs"
+                          placeholder={t('notifications.referenceEntityPlaceholder')}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (!referenceEntityId) return;
+                            appendNotificationRuleMessage(ruleId, `{{state:${referenceEntityId}}}`);
+                          }}
+                          className="px-2 py-2 rounded-md border border-[var(--glass-border)] bg-[var(--glass-bg)] text-[10px] font-bold uppercase tracking-wider whitespace-nowrap"
+                        >
+                          {t('notifications.insertStateToken')}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (!referenceEntityId) return;
+                            appendNotificationRuleMessage(ruleId, `{{name:${referenceEntityId}}}`);
+                          }}
+                          className="px-2 py-2 rounded-md border border-[var(--glass-border)] bg-[var(--glass-bg)] text-[10px] font-bold uppercase tracking-wider whitespace-nowrap"
+                        >
+                          {t('notifications.insertNameToken')}
+                        </button>
+                      </div>
                     </div>
                     <div className="space-y-1">
                       <label className="text-[10px] uppercase tracking-wider font-bold text-[var(--text-secondary)]">
@@ -2485,7 +2678,7 @@ export default function ConfigModal({
                         min={0}
                         max={86400}
                         value={Number(normalizedRule.cooldownSeconds) || 0}
-                        onChange={(e) => updateNotificationRule(normalizedRule.id, {
+                        onChange={(e) => updateNotificationRule(ruleId, {
                           cooldownSeconds: Math.max(0, Math.min(86400, Number.parseInt(e.target.value || '0', 10) || 0)),
                         })}
                         className="w-full px-3 py-2 rounded-lg bg-[var(--glass-bg)] border border-[var(--glass-border)] text-sm"
@@ -2498,9 +2691,9 @@ export default function ConfigModal({
                       <div className="grid grid-cols-3 gap-1.5">
                         {['inApp', 'browser', 'native'].map((channel) => (
                           <button
-                            key={`${normalizedRule.id}_${channel}`}
+                            key={`${ruleId}_${channel}`}
                             type="button"
-                            onClick={() => toggleNotificationRuleChannel(normalizedRule.id, channel)}
+                            onClick={() => toggleNotificationRuleChannel(ruleId, channel)}
                             className={`px-2 py-2 rounded-md border text-[10px] uppercase tracking-wider font-bold transition-colors ${
                               channels[channel]
                                 ? 'border-emerald-400/35 bg-emerald-500/10 text-emerald-300'

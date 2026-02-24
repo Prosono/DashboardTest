@@ -524,16 +524,32 @@ function AppContent({
     return false;
   }, [isStateActive]);
 
-  const renderRuleMessage = useCallback((template, context = {}) => {
+  const renderRuleMessage = useCallback((template, context = {}, allEntities = {}) => {
     const safeTemplate = String(template || '').trim();
     if (!safeTemplate) return '';
-    return safeTemplate
+    const withBasicTokens = safeTemplate
       .replaceAll('{entityId}', String(context.entityId || ''))
       .replaceAll('{entityName}', String(context.entityName || ''))
       .replaceAll('{state}', String(context.state ?? ''))
       .replaceAll('{value}', String(context.state ?? ''))
       .replaceAll('{condition}', String(context.conditionType || ''))
       .replaceAll('{threshold}', String(context.compareValue || ''));
+    return withBasicTokens.replace(/\{\{(state|name|attr):([^}:]+)(?::([^}]+))?\}\}/gi, (_, typeRaw, entityIdRaw, attributeRaw) => {
+      const type = String(typeRaw || '').toLowerCase();
+      const entityId = String(entityIdRaw || '').trim();
+      if (!entityId) return '-';
+      const entity = allEntities?.[entityId];
+      if (!entity) return '-';
+      if (type === 'state') return String(entity.state ?? '-');
+      if (type === 'name') return String(entity.attributes?.friendly_name || entityId);
+      if (type === 'attr') {
+        const attributeKey = String(attributeRaw || '').trim();
+        if (!attributeKey) return '-';
+        const value = entity.attributes?.[attributeKey];
+        return value === undefined || value === null ? '-' : String(value);
+      }
+      return '-';
+    });
   }, []);
 
   const warningAlertCount = parseAlertCountFromState(entities?.[WARNING_SENSOR_ID]?.state);
@@ -676,7 +692,7 @@ function AppContent({
           state: entityState?.state ?? '',
           conditionType: rule?.conditionType || '',
           compareValue: rule?.compareValue ?? '',
-        }) || `${entityName}: ${String(entityState?.state ?? '-')}`;
+        }, entities) || `${entityName}: ${String(entityState?.state ?? '-')}`;
 
         void notify({
           title,

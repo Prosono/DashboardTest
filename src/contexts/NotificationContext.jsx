@@ -54,6 +54,37 @@ const isNativePlatform = () => {
 
 const canUseBrowserNotification = () => typeof window !== 'undefined' && typeof Notification !== 'undefined';
 
+const toPlainTextMessage = (value) => String(value || '')
+  .replace(/\*\*(.*?)\*\*/g, '$1')
+  .replace(/\*(.*?)\*/g, '$1')
+  .replace(/\r/g, '');
+
+const renderInlineFormatting = (line, keyPrefix) => {
+  const text = String(line || '');
+  const regex = /(\*\*[^*]+\*\*|\*[^*]+\*)/g;
+  const parts = text.split(regex).filter((part) => part !== '');
+  return parts.map((part, index) => {
+    if (part.startsWith('**') && part.endsWith('**') && part.length > 4) {
+      return <strong key={`${keyPrefix}_bold_${index}`}>{part.slice(2, -2)}</strong>;
+    }
+    if (part.startsWith('*') && part.endsWith('*') && part.length > 2) {
+      return <em key={`${keyPrefix}_italic_${index}`}>{part.slice(1, -1)}</em>;
+    }
+    return <span key={`${keyPrefix}_text_${index}`}>{part}</span>;
+  });
+};
+
+const RichMessage = ({ message, className = '' }) => {
+  const lines = String(message || '').split('\n');
+  return (
+    <div className={className}>
+      {lines.map((line, index) => (
+        <div key={`line_${index}`}>{renderInlineFormatting(line, `line_${index}`)}</div>
+      ))}
+    </div>
+  );
+};
+
 const maybeSendBrowserNotification = async ({ title, message, browserOnlyWhenBackground = true }) => {
   if (!canUseBrowserNotification()) return false;
   try {
@@ -141,37 +172,64 @@ const NotificationViewport = ({ notifications, onDismiss }) => {
   if (!notifications.length) return null;
 
   if (isMobileViewport) {
-    const entry = notifications[0];
-    const tone = levelTone(entry.level);
-    const IconComp = tone.IconComp || Bell;
-    const overflowCount = Math.max(0, notifications.length - 1);
-    const dismissLabel = String(entry.title || 'Notification');
     return (
-      <div className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-[90] pointer-events-none">
-        <button
-          type="button"
-          onClick={() => onDismiss(entry.id)}
-          className="pointer-events-auto relative w-16 h-16 rounded-full border shadow-xl backdrop-blur-xl flex items-center justify-center transition-transform active:scale-95"
-          style={{
-            borderColor: tone.border,
-            backgroundColor: 'color-mix(in srgb, var(--card-bg) 90%, transparent)',
-            boxShadow: '0 10px 30px rgba(0,0,0,0.28)',
-          }}
-          aria-label={`Dismiss notification: ${dismissLabel}`}
-          title={dismissLabel}
-        >
-          <div
-            className="w-10 h-10 rounded-full border flex items-center justify-center"
-            style={{ borderColor: tone.border, backgroundColor: tone.bg }}
-          >
-            <IconComp className={`w-5 h-5 ${tone.icon}`} />
-          </div>
-          {overflowCount > 0 ? (
-            <span className="absolute -top-1 -right-1 min-w-[1.25rem] h-5 px-1 rounded-full bg-rose-500 text-white text-[10px] font-bold leading-5">
-              +{overflowCount}
-            </span>
+      <div
+        className="fixed left-3 right-3 z-[90] pointer-events-none"
+        style={{
+          bottom: 'calc(max(var(--safe-area-bottom, 0px), var(--safe-area-bottom-fallback, 0px)) + 12px)',
+        }}
+      >
+        <div className="space-y-2 max-h-[42vh] overflow-y-auto custom-scrollbar">
+          {notifications.slice(0, 4).map((entry) => {
+            const tone = levelTone(entry.level);
+            const IconComp = tone.IconComp || Bell;
+            return (
+              <div
+                key={entry.id}
+                className="pointer-events-auto rounded-xl border px-3 py-2.5 shadow-xl backdrop-blur-lg"
+                style={{
+                  borderColor: tone.border,
+                  backgroundColor: 'color-mix(in srgb, var(--card-bg) 90%, transparent)',
+                  boxShadow: '0 10px 30px rgba(0,0,0,0.28)',
+                }}
+              >
+                <div className="flex items-start gap-2.5">
+                  <div
+                    className="shrink-0 w-8 h-8 rounded-lg border flex items-center justify-center"
+                    style={{ borderColor: tone.border, backgroundColor: tone.bg }}
+                  >
+                    <IconComp className={`w-4 h-4 ${tone.icon}`} />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <div className="text-[11px] uppercase tracking-widest font-bold text-[var(--text-secondary)] truncate">
+                      {entry.title}
+                    </div>
+                    {entry.message ? (
+                      <RichMessage
+                        message={entry.message}
+                        className="mt-0.5 text-sm leading-snug text-[var(--text-primary)] break-words"
+                      />
+                    ) : null}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => onDismiss(entry.id)}
+                    className="shrink-0 text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors"
+                    aria-label="Dismiss notification"
+                    title="Dismiss"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+            );
+          })}
+          {notifications.length > 4 ? (
+            <div className="pointer-events-none text-center text-[10px] uppercase tracking-widest font-bold text-[var(--text-secondary)]">
+              +{notifications.length - 4}
+            </div>
           ) : null}
-        </button>
+        </div>
       </div>
     );
   }
@@ -203,9 +261,10 @@ const NotificationViewport = ({ notifications, onDismiss }) => {
                   {entry.title}
                 </div>
                 {entry.message ? (
-                  <div className="mt-0.5 text-sm leading-snug text-[var(--text-primary)] break-words">
-                    {entry.message}
-                  </div>
+                  <RichMessage
+                    message={entry.message}
+                    className="mt-0.5 text-sm leading-snug text-[var(--text-primary)] break-words"
+                  />
                 ) : null}
               </div>
               <button
@@ -267,10 +326,17 @@ export const NotificationProvider = ({ children }) => {
     }
 
     if (browser) {
-      void maybeSendBrowserNotification({ ...payload, browserOnlyWhenBackground });
+      void maybeSendBrowserNotification({
+        ...payload,
+        message: toPlainTextMessage(payload.message),
+        browserOnlyWhenBackground,
+      });
     }
     if (native) {
-      void maybeSendNativeNotification(payload);
+      void maybeSendNativeNotification({
+        ...payload,
+        message: toPlainTextMessage(payload.message),
+      });
     }
     return id;
   }, [dismissNotification]);
