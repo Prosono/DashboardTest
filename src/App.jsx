@@ -2514,6 +2514,39 @@ export default function App() {
   // Send alltid config inn; HA-provider får forsøke
   const haConfig = config;
 
+  const userAdminApi = useMemo(() => ({
+    listUsers: listServerUsers,
+    createUser: createServerUser,
+    updateUser: async (id, user) => {
+      const updated = await updateServerUser(id, user);
+      if (updated?.id && currentUser?.id && updated.id === currentUser.id) {
+        try {
+          const me = await fetchCurrentUser();
+          setCurrentUser(me || null);
+        } catch {
+          setCurrentUser(null);
+        }
+      }
+      return updated;
+    },
+    deleteUser: deleteServerUser,
+    listClients: listServerClients,
+    createClient: createServerClient,
+    createClientAdmin: createServerClientAdmin,
+    updateClient: updateServerClient,
+    deleteClient: deleteServerClient,
+    fetchClientHaConfig: fetchServerClientHaConfig,
+    saveClientHaConfig: saveServerClientHaConfig,
+    listClientDashboards: listServerClientDashboards,
+    fetchClientDashboard: fetchServerClientDashboard,
+    saveClientDashboard: saveServerClientDashboard,
+    listClientDashboardVersions: listServerClientDashboardVersions,
+    restoreClientDashboardVersion: restoreServerClientDashboardVersion,
+    fetchPlatformOverview: fetchServerPlatformOverview,
+    fetchNotificationConfig: fetchServerNotificationConfig,
+    saveNotificationConfig: saveServerNotificationConfig,
+  }), [currentUser?.id]);
+
   if (!authReady) {
     return <div className="min-h-screen flex items-center justify-center text-[var(--text-secondary)]">Loading…</div>;
   }
@@ -2667,39 +2700,6 @@ export default function App() {
   if (!haConfigHydrated) {
     return <div className="min-h-screen flex items-center justify-center text-[var(--text-secondary)]">Loading shared connection…</div>;
   }
-
-  const userAdminApi = useMemo(() => ({
-    listUsers: listServerUsers,
-    createUser: createServerUser,
-    updateUser: async (id, user) => {
-      const updated = await updateServerUser(id, user);
-      if (updated?.id && currentUser?.id && updated.id === currentUser.id) {
-        try {
-          const me = await fetchCurrentUser();
-          setCurrentUser(me || null);
-        } catch {
-          setCurrentUser(null);
-        }
-      }
-      return updated;
-    },
-    deleteUser: deleteServerUser,
-    listClients: listServerClients,
-    createClient: createServerClient,
-    createClientAdmin: createServerClientAdmin,
-    updateClient: updateServerClient,
-    deleteClient: deleteServerClient,
-    fetchClientHaConfig: fetchServerClientHaConfig,
-    saveClientHaConfig: saveServerClientHaConfig,
-    listClientDashboards: listServerClientDashboards,
-    fetchClientDashboard: fetchServerClientDashboard,
-    saveClientDashboard: saveServerClientDashboard,
-    listClientDashboardVersions: listServerClientDashboardVersions,
-    restoreClientDashboardVersion: restoreServerClientDashboardVersion,
-    fetchPlatformOverview: fetchServerPlatformOverview,
-    fetchNotificationConfig: fetchServerNotificationConfig,
-    saveNotificationConfig: saveServerNotificationConfig,
-  }), [currentUser?.id]);
 
   return (
     <HomeAssistantProvider config={haConfig}>
