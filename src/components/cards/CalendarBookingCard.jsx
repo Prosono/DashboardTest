@@ -120,36 +120,36 @@ const getBookingType = (event) => {
 const getBookingPalette = (type, isOngoing = false) => {
   if (isOngoing) {
     return {
-      color: '#60a5fa',
-      softBg: 'rgba(96, 165, 250, 0.2)',
-      softBorder: 'rgba(96, 165, 250, 0.46)',
+      color: '#7ea8dc',
+      softBg: 'rgba(126, 168, 220, 0.12)',
+      softBorder: 'rgba(126, 168, 220, 0.26)',
     };
   }
   if (type === 'service') {
     return {
-      color: '#f59e0b',
-      softBg: 'rgba(245, 158, 11, 0.14)',
-      softBorder: 'rgba(245, 158, 11, 0.38)',
+      color: '#cfa14a',
+      softBg: 'rgba(207, 161, 74, 0.1)',
+      softBorder: 'rgba(207, 161, 74, 0.25)',
     };
   }
   if (type === 'aufguss') {
     return {
-      color: '#a855f7',
-      softBg: 'rgba(168, 85, 247, 0.14)',
-      softBorder: 'rgba(168, 85, 247, 0.4)',
+      color: '#9a78d3',
+      softBg: 'rgba(154, 120, 211, 0.1)',
+      softBorder: 'rgba(154, 120, 211, 0.24)',
     };
   }
   if (type === 'private') {
     return {
-      color: '#ec4899',
-      softBg: 'rgba(236, 72, 153, 0.14)',
-      softBorder: 'rgba(236, 72, 153, 0.38)',
+      color: '#c56f9f',
+      softBg: 'rgba(197, 111, 159, 0.1)',
+      softBorder: 'rgba(197, 111, 159, 0.24)',
     };
   }
   return {
-    color: '#3b82f6',
-    softBg: 'rgba(59, 130, 246, 0.14)',
-    softBorder: 'rgba(59, 130, 246, 0.38)',
+    color: '#7098d9',
+    softBg: 'rgba(112, 152, 217, 0.1)',
+    softBorder: 'rgba(112, 152, 217, 0.24)',
   };
 };
 
@@ -442,18 +442,27 @@ const CalendarBookingCard = ({
     >
       {getControls && getControls(cardId)}
 
-      <div className={`h-full ${isSmall ? 'flex items-center gap-3 p-4' : 'flex flex-col p-5 gap-3'} min-w-0`}>
-        <div className={`${isSmall ? 'shrink-0' : ''} w-12 h-12 rounded-2xl border border-[var(--glass-border)] bg-[var(--glass-bg-hover)] flex items-center justify-center`}>
-          <IconComp className="w-6 h-6 text-[var(--text-secondary)]" />
-        </div>
+      <div className={`h-full ${isSmall ? 'flex items-center gap-3 p-4' : 'flex flex-col p-4 gap-2'} min-w-0`}>
+        {isSmall && (
+          <div className="shrink-0 w-12 h-12 rounded-2xl border border-[var(--glass-border)] bg-[var(--glass-bg-hover)] flex items-center justify-center">
+            <IconComp className="w-6 h-6 text-[var(--text-secondary)]" />
+          </div>
+        )}
 
-        <div className={`${isSmall ? 'min-w-0 flex-1' : 'min-h-0 h-full flex flex-col gap-3'}`}>
-          <div className="min-w-0">
-            <div className="text-[10px] uppercase tracking-[0.28em] text-[var(--text-secondary)] font-bold truncate">
-              {selectedCalendarName || (t('calendar.selectCalendars') || 'Select calendars')}
-            </div>
-            <div className="text-base md:text-lg font-semibold text-[var(--text-primary)] truncate">
-              {displayName}
+        <div className={`${isSmall ? 'min-w-0 flex-1' : 'min-h-0 h-full flex flex-col gap-2'}`}>
+          <div className={`min-w-0 ${isSmall ? '' : 'flex items-center gap-3'}`}>
+            {!isSmall && (
+              <div className="shrink-0 w-12 h-12 rounded-2xl border border-[var(--glass-border)] bg-[var(--glass-bg-hover)] flex items-center justify-center">
+                <IconComp className="w-6 h-6 text-[var(--text-secondary)]" />
+              </div>
+            )}
+            <div className={`min-w-0 ${isSmall ? '' : 'flex-1 text-center'}`}>
+              <div className="text-[10px] uppercase tracking-[0.28em] text-[var(--text-secondary)] font-bold truncate">
+                {selectedCalendarName || (t('calendar.selectCalendars') || 'Select calendars')}
+              </div>
+              <div className="text-base md:text-lg font-semibold text-[var(--text-primary)] truncate">
+                {displayName}
+              </div>
             </div>
           </div>
 
@@ -499,7 +508,7 @@ const CalendarBookingCard = ({
           ) : (
             <>
               {summaryEvent && (
-                <div className="rounded-xl border border-[var(--glass-border)] bg-[var(--glass-bg)] px-3 py-2.5">
+                <div className="rounded-xl border border-[var(--glass-border)] bg-[var(--glass-bg)] px-3 py-2">
                   <div className="text-[10px] uppercase tracking-widest text-[var(--text-secondary)] font-bold mb-1">
                     {summaryDayLabel}
                   </div>
@@ -530,11 +539,11 @@ const CalendarBookingCard = ({
               )}
 
               <div
-                className="relative overflow-hidden rounded-2xl border bg-[var(--glass-bg)] p-3.5"
+                className="relative overflow-hidden rounded-2xl border bg-[var(--glass-bg)] p-3"
                 style={summaryEvent
                   ? {
                     borderColor: summaryPalette.softBorder,
-                    backgroundImage: `linear-gradient(130deg, ${summaryPalette.softBg} 0%, rgba(0,0,0,0) 56%)`,
+                    backgroundImage: `linear-gradient(130deg, ${summaryPalette.softBg} 0%, rgba(0,0,0,0) 50%)`,
                   }
                   : undefined}
               >
@@ -557,7 +566,7 @@ const CalendarBookingCard = ({
                         </div>
                       </div>
 
-                      <div className="mt-3 flex flex-wrap items-center justify-center gap-2">
+                      <div className="mt-2.5 flex flex-wrap items-center justify-center gap-1.5">
                         {typeCountRows.map((row) => {
                           const rowMeta = getBookingTypeMeta(row.type, t);
                           const rowPalette = getBookingPalette(row.type, false);
@@ -588,8 +597,8 @@ const CalendarBookingCard = ({
                 )}
               </div>
 
-              <div className="grid grid-cols-1 gap-3 min-h-0 flex-1">
-                <div className="min-h-0 rounded-2xl border border-[var(--glass-border)] bg-[var(--glass-bg)] p-3 flex flex-col">
+              <div className="grid grid-cols-1 gap-2 min-h-0 flex-1">
+                <div className="min-h-0 rounded-2xl border border-[var(--glass-border)] bg-[var(--glass-bg)] p-2.5 flex flex-col">
                   <div className="min-h-0 flex-1 overflow-y-auto custom-scrollbar pr-1 space-y-2">
                     {upcomingEvents.length === 0 ? (
                       <div className="text-xs text-[var(--text-secondary)]">{t('calendar.noEvents') || 'No upcoming events'}</div>
