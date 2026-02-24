@@ -57,6 +57,14 @@ function CalendarCard({
   const [isVisible, setIsVisible] = useState(false);
   const cardRef = useRef(null);
 
+  const normalizePaxLabel = (value) => {
+    if (value == null) return '';
+    const text = String(value);
+    const normalizedLocale = String(locale || '').toLowerCase();
+    const peopleWord = normalizedLocale.startsWith('en') ? 'People' : 'Personer';
+    return text.replace(/\bpax\b/gi, peopleWord);
+  };
+
   // Parse check status ("It should be checked when the card is selected")
   // So settings.calendars = ['calendar.personal', 'calendar.work']
   const selectedCalendars = settings?.calendars || [];
@@ -221,7 +229,7 @@ function CalendarCard({
 
   const nextEvent = events.length > 0 ? events[0] : null;
   const nextEventTitle = nextEvent
-    ? (nextEvent.summary || nextEvent.title || nextEvent.description || t('calendar.noEvents') || 'Event')
+    ? normalizePaxLabel(nextEvent.summary || nextEvent.title || nextEvent.description || t('calendar.noEvents') || 'Event')
     : '';
   const nextEventStartRaw = nextEvent ? getEventDateValue(nextEvent.start) : null;
   const nextEventStart = nextEventStartRaw ? new Date(nextEventStartRaw) : null;
@@ -383,17 +391,17 @@ function CalendarCard({
                                     <div className={`relative pl-4 pr-3 py-2.5 rounded-xl border transition-colors ${isLightTheme ? 'bg-white/90 border-slate-200 hover:border-blue-300 hover:bg-blue-50/80' : 'bg-[var(--glass-bg)] border-[var(--glass-border)] hover:bg-[var(--glass-bg-hover)]'}`}>
                                       <span className={`absolute left-0 top-2 bottom-2 w-1 rounded-full ${isAllDay ? (isLightTheme ? 'bg-blue-700/80' : 'bg-blue-400/70') : 'bg-[var(--glass-border)] group-hover:bg-blue-400/70 transition-colors'}`} />
                                       <p className="text-sm font-medium text-[var(--text-primary)] leading-snug">
-                                        {evt.summary}
+                                        {normalizePaxLabel(evt.summary)}
                                       </p>
                                       {evt.location && (
                                         <div className="flex items-center gap-1.5 mt-1.5 text-[10px] text-[var(--text-secondary)]">
                                           <MapPin className="w-3 h-3" />
-                                          <span className="truncate opacity-80">{evt.location}</span>
+                                          <span className="truncate opacity-80">{normalizePaxLabel(evt.location)}</span>
                                         </div>
                                       )}
                                       {evt.description && (
                                         <p className="text-[10px] text-[var(--text-secondary)] mt-1.5 line-clamp-1 opacity-60">
-                                          {evt.description}
+                                          {normalizePaxLabel(evt.description)}
                                         </p>
                                       )}
                                     </div>

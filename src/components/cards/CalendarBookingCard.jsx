@@ -78,6 +78,14 @@ const getDayBounds = (nowMs) => {
   };
 };
 
+const normalizePaxLabel = (value, locale = 'nb-NO') => {
+  if (value == null) return '';
+  const text = String(value);
+  const normalizedLocale = String(locale || '').toLowerCase();
+  const peopleWord = normalizedLocale.startsWith('en') ? 'People' : 'Personer';
+  return text.replace(/\bpax\b/gi, peopleWord);
+};
+
 const BOOKING_TYPE_PATTERNS = {
   service: ['service'],
   aufguss: ['aufguss'],
@@ -243,9 +251,9 @@ const CalendarBookingCard = ({
               : (allDay ? (startDate.getTime() + (24 * 60 * 60 * 1000)) : startDate.getTime());
             return {
               id: `${event?.uid || event?.id || event?.summary || 'event'}_${index}`,
-              summary: String(event?.summary || event?.title || event?.description || (t('calendar.noEvents') || 'Event')),
-              location: event?.location || '',
-              description: event?.description || '',
+              summary: normalizePaxLabel((event?.summary || event?.title || event?.description || (t('calendar.noEvents') || 'Event')), locale),
+              location: normalizePaxLabel(event?.location || '', locale),
+              description: normalizePaxLabel(event?.description || '', locale),
               startMs: startDate.getTime(),
               endMs: safeEndMs,
               allDay,
