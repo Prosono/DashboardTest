@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { Capacitor, registerPlugin } from '@capacitor/core';
-import { AlertTriangle, AlertCircle, Bell, Check, X } from '../icons';
+import { AlertTriangle, AlertCircle, Bell, Check, X, ChevronDown, ChevronUp } from '../icons';
 
 const MAX_NOTIFICATIONS = 40;
 const DEFAULT_DURATION_MS = 7000;
@@ -175,6 +175,7 @@ const NotificationViewport = ({ notifications, onDismiss }) => {
     if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return false;
     return window.matchMedia('(max-width: 639px)').matches;
   });
+  const [expandedById, setExpandedById] = useState({});
 
   useEffect(() => {
     if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return () => {};
@@ -192,6 +193,23 @@ const NotificationViewport = ({ notifications, onDismiss }) => {
     return () => {};
   }, []);
 
+  useEffect(() => {
+    setExpandedById((prev) => {
+      const activeIds = new Set((notifications || []).map((entry) => String(entry?.id || '')));
+      const next = {};
+      Object.entries(prev || {}).forEach(([id, isExpanded]) => {
+        if (activeIds.has(id)) next[id] = Boolean(isExpanded);
+      });
+      return next;
+    });
+  }, [notifications]);
+
+  const toggleExpanded = useCallback((id) => {
+    const normalizedId = String(id || '').trim();
+    if (!normalizedId) return;
+    setExpandedById((prev) => ({ ...prev, [normalizedId]: !Boolean(prev[normalizedId]) }));
+  }, []);
+
   if (!notifications.length) return null;
 
   if (isMobileViewport) {
@@ -206,14 +224,25 @@ const NotificationViewport = ({ notifications, onDismiss }) => {
           {notifications.slice(0, 4).map((entry) => {
             const tone = levelTone(entry.level);
             const IconComp = tone.IconComp || Bell;
+            const isExpanded = Boolean(expandedById[String(entry.id || '')]);
+            const plainPreview = toPlainTextMessage(entry.message).replace(/\s+/g, ' ').trim();
             return (
               <div
                 key={entry.id}
-                className="pointer-events-auto rounded-xl border px-3 py-2.5 shadow-xl backdrop-blur-lg"
+                className="pointer-events-auto rounded-xl border px-3 py-2.5 shadow-xl backdrop-blur-lg cursor-pointer"
                 style={{
                   borderColor: tone.border,
                   backgroundColor: 'color-mix(in srgb, var(--card-bg) 90%, transparent)',
                   boxShadow: '0 10px 30px rgba(0,0,0,0.28)',
+                }}
+                role="button"
+                tabIndex={0}
+                onClick={() => toggleExpanded(entry.id)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    toggleExpanded(entry.id);
+                  }
                 }}
               >
                 <div className="flex items-start gap-2.5">
@@ -224,19 +253,28 @@ const NotificationViewport = ({ notifications, onDismiss }) => {
                     <IconComp className={`w-4 h-4 ${tone.icon}`} />
                   </div>
                   <div className="min-w-0 flex-1">
-                    <div className="text-[11px] uppercase tracking-widest font-bold text-[var(--text-secondary)] truncate">
-                      {entry.title}
+                    <div className="text-[11px] uppercase tracking-widest font-bold text-[var(--text-secondary)] truncate flex items-center gap-1.5">
+                      <span className="truncate">{entry.title}</span>
+                      {isExpanded ? <ChevronUp className="w-3.5 h-3.5 shrink-0" /> : <ChevronDown className="w-3.5 h-3.5 shrink-0" />}
                     </div>
-                    {entry.message ? (
+                    {entry.message && isExpanded ? (
                       <RichMessage
                         message={entry.message}
                         className="mt-0.5 text-sm leading-snug text-[var(--text-primary)] break-words"
                       />
                     ) : null}
+                    {entry.message && !isExpanded ? (
+                      <div className="mt-0.5 text-xs leading-snug text-[var(--text-secondary)] truncate">
+                        {plainPreview || '-'}
+                      </div>
+                    ) : null}
                   </div>
                   <button
                     type="button"
-                    onClick={() => onDismiss(entry.id)}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onDismiss(entry.id);
+                    }}
                     className="shrink-0 text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors"
                     aria-label="Dismiss notification"
                     title="Dismiss"
@@ -262,14 +300,25 @@ const NotificationViewport = ({ notifications, onDismiss }) => {
       {notifications.map((entry) => {
         const tone = levelTone(entry.level);
         const IconComp = tone.IconComp || Bell;
+        const isExpanded = Boolean(expandedById[String(entry.id || '')]);
+        const plainPreview = toPlainTextMessage(entry.message).replace(/\s+/g, ' ').trim();
         return (
           <div
             key={entry.id}
-            className="pointer-events-auto rounded-xl border px-3 py-2.5 shadow-xl backdrop-blur-lg"
+            className="pointer-events-auto rounded-xl border px-3 py-2.5 shadow-xl backdrop-blur-lg cursor-pointer"
             style={{
               borderColor: tone.border,
               backgroundColor: 'color-mix(in srgb, var(--card-bg) 88%, transparent)',
               boxShadow: '0 10px 30px rgba(0,0,0,0.26)',
+            }}
+            role="button"
+            tabIndex={0}
+            onClick={() => toggleExpanded(entry.id)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                toggleExpanded(entry.id);
+              }
             }}
           >
             <div className="flex items-start gap-2.5">
@@ -280,19 +329,28 @@ const NotificationViewport = ({ notifications, onDismiss }) => {
                 <IconComp className={`w-4 h-4 ${tone.icon}`} />
               </div>
               <div className="min-w-0 flex-1">
-                <div className="text-xs uppercase tracking-widest font-bold text-[var(--text-secondary)] truncate">
-                  {entry.title}
+                <div className="text-xs uppercase tracking-widest font-bold text-[var(--text-secondary)] truncate flex items-center gap-1.5">
+                  <span className="truncate">{entry.title}</span>
+                  {isExpanded ? <ChevronUp className="w-3.5 h-3.5 shrink-0" /> : <ChevronDown className="w-3.5 h-3.5 shrink-0" />}
                 </div>
-                {entry.message ? (
+                {entry.message && isExpanded ? (
                   <RichMessage
                     message={entry.message}
                     className="mt-0.5 text-sm leading-snug text-[var(--text-primary)] break-words"
                   />
                 ) : null}
+                {entry.message && !isExpanded ? (
+                  <div className="mt-0.5 text-xs leading-snug text-[var(--text-secondary)] truncate">
+                    {plainPreview || '-'}
+                  </div>
+                ) : null}
               </div>
               <button
                 type="button"
-                onClick={() => onDismiss(entry.id)}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onDismiss(entry.id);
+                }}
                 className="shrink-0 text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors"
                 aria-label="Dismiss notification"
                 title="Dismiss"
