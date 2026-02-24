@@ -1796,7 +1796,7 @@ function AppContent({
             <button
               type="button"
               onClick={goToPreviousPage}
-              className="fixed left-5 top-1/2 -translate-y-1/2 z-40 w-11 h-11 rounded-full border flex items-center justify-center transition-all duration-200 shadow-lg shadow-black/20"
+              className="fixed left-10 top-1/2 -translate-y-1/2 z-40 w-11 h-11 rounded-full border flex items-center justify-center transition-all duration-200 shadow-lg shadow-black/20"
               style={{
                 borderColor: 'var(--glass-border)',
                 backgroundColor: 'color-mix(in srgb, var(--card-bg) 82%, transparent)',
@@ -1813,7 +1813,7 @@ function AppContent({
             <button
               type="button"
               onClick={goToNextPage}
-              className="fixed right-5 top-1/2 -translate-y-1/2 z-40 w-11 h-11 rounded-full border flex items-center justify-center transition-all duration-200 shadow-lg shadow-black/20"
+              className="fixed right-10 top-1/2 -translate-y-1/2 z-40 w-11 h-11 rounded-full border flex items-center justify-center transition-all duration-200 shadow-lg shadow-black/20"
               style={{
                 borderColor: 'var(--glass-border)',
                 backgroundColor: 'color-mix(in srgb, var(--card-bg) 82%, transparent)',
