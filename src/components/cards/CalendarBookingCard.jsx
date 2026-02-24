@@ -530,24 +530,29 @@ const CalendarBookingCard = ({
                           {summaryTypeMeta.label}
                         </span>
                       </div>
-                      <div className="mt-2 text-center">
-                        <div className="text-[52px] leading-none font-semibold tabular-nums text-[var(--text-primary)]">
+                      <div className="mt-2 text-center hidden sm:block">
+                        <div className="text-[50px] leading-none font-semibold tabular-nums text-[var(--text-secondary)]">
                           {todayEvents.length}
                         </div>
                         <div className="mt-1 text-[13px] text-[var(--text-secondary)]">
                           {t('calendarBooking.todayCountLabel') || 'Bookings today'}
                         </div>
                       </div>
-                      <div className="mt-3 grid grid-cols-3 gap-2">
+
+                      <div className="mt-3 flex flex-wrap items-center justify-center gap-2">
+                        <span className="sm:hidden inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border border-[var(--glass-border)] bg-[var(--glass-bg-hover)] text-[10px] uppercase tracking-widest font-bold text-[var(--text-secondary)]">
+                          <span className="text-[12px] font-semibold tabular-nums text-[var(--text-primary)]">{todayEvents.length}</span>
+                          <span>{t('calendar.today') || 'Today'}</span>
+                        </span>
                         {typeCountRows.map((row) => {
                           const rowMeta = getBookingTypeMeta(row.type, t);
                           const rowPalette = getBookingPalette(row.type, false);
                           const RowIcon = rowMeta.Icon;
                           return (
-                            <div key={row.type} className="rounded-xl border border-[var(--glass-border)] bg-[var(--glass-bg-hover)] px-2 py-1.5 flex items-center justify-center gap-2 min-w-0">
+                            <div key={row.type} className="rounded-xl border border-[var(--glass-border)] bg-[var(--glass-bg-hover)] px-2 py-1.5 inline-flex items-center justify-center gap-2 min-w-0">
                               <span className="text-[11px] font-semibold tabular-nums text-[var(--text-secondary)]">{row.count}x</span>
                               <span
-                                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full border text-[10px] uppercase tracking-[0.18em] font-bold min-w-0"
+                                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full border text-[9px] sm:text-[10px] uppercase tracking-[0.15em] sm:tracking-[0.18em] font-bold min-w-0"
                                 style={{
                                   color: rowPalette.color,
                                   borderColor: rowPalette.softBorder,
