@@ -58,4 +58,8 @@
   animation: pageSlideInFromLeft 0.26s cubic-bezier(0.22, 0.61, 0.36, 1) forwards;
 }
 
+.mobile-page-swipe-stage {
+  width: 100%;
+}
+
 /* Update older fade-in-anim if needed, but keeping it for compatibility */

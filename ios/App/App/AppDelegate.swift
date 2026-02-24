@@ -6,8 +6,68 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
 
     var window: UIWindow?
 
+    private func currentRootViewController() -> UIViewController? {
+        if let root = window?.rootViewController {
+            return root
+        }
+        for scene in UIApplication.shared.connectedScenes {
+            guard let windowScene = scene as? UIWindowScene else { continue }
+            if let keyRoot = windowScene.windows.first(where: { $0.isKeyWindow })?.rootViewController {
+                return keyRoot
+            }
+            if let firstRoot = windowScene.windows.first?.rootViewController {
+                return firstRoot
+            }
+        }
+        return nil
+    }
+
+    private func findBridgeViewController(from controller: UIViewController?) -> CAPBridgeViewController? {
+        guard let controller = controller else { return nil }
+        if let bridge = controller as? CAPBridgeViewController {
+            return bridge
+        }
+        if let navigation = controller as? UINavigationController {
+            for child in navigation.viewControllers {
+                if let bridge = findBridgeViewController(from: child) {
+                    return bridge
+                }
+            }
+        }
+        if let tab = controller as? UITabBarController {
+            for child in tab.viewControllers ?? [] {
+                if let bridge = findBridgeViewController(from: child) {
+                    return bridge
+                }
+            }
+        }
+        if let presented = controller.presentedViewController,
+           let bridge = findBridgeViewController(from: presented) {
+            return bridge
+        }
+        for child in controller.children {
+            if let bridge = findBridgeViewController(from: child) {
+                return bridge
+            }
+        }
+        return nil
+    }
+
+    private func configureWebViewScrolling() {
+        let root = currentRootViewController()
+        guard let bridgeVC = findBridgeViewController(from: root) else { return }
+        guard let scrollView = bridgeVC.webView?.scrollView else { return }
+        scrollView.isScrollEnabled = true
+        scrollView.bounces = true
+        scrollView.alwaysBounceVertical = true
+        scrollView.alwaysBounceHorizontal = false
+        scrollView.contentInsetAdjustmentBehavior = .never
+    }
+
     func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?) -> Bool {
-        // Override point for customization after application launch.
+        DispatchQueue.main.async { [weak self] in
+            self?.configureWebViewScrolling()
+        }
         return true
     }
 
@@ -27,6 +87,7 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
 
     func applicationDidBecomeActive(_ application: UIApplication) {
         // Restart any tasks that were paused (or not yet started) while the application was inactive. If the application was previously in the background, optionally refresh the user interface.
+        configureWebViewScrolling()
     }
 
     func applicationWillTerminate(_ application: UIApplication) {

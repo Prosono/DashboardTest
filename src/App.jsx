@@ -591,6 +591,9 @@ function AppContent({
   const mobilePageSwipeTrackingRef = useRef(false);
   const mobilePageSwipeHorizontalRef = useRef(false);
   const mobilePageSwipeStartRef = useRef({ x: 0, y: 0 });
+  const mobilePageSwipeCommitTimerRef = useRef(0);
+  const [mobilePageSwipeOffsetX, setMobilePageSwipeOffsetX] = useState(0);
+  const [mobilePageSwipePreviewActive, setMobilePageSwipePreviewActive] = useState(false);
   const [mobilePageTransitionDirection, setMobilePageTransitionDirection] = useState('');
   const mobilePageTransitionTimerRef = useRef(0);
   const [profileState, setProfileState] = useState({
@@ -629,6 +632,10 @@ function AppContent({
     if (mobilePageTransitionTimerRef.current) {
       window.clearTimeout(mobilePageTransitionTimerRef.current);
       mobilePageTransitionTimerRef.current = 0;
+    }
+    if (mobilePageSwipeCommitTimerRef.current) {
+      window.clearTimeout(mobilePageSwipeCommitTimerRef.current);
+      mobilePageSwipeCommitTimerRef.current = 0;
     }
   }, []);
 
@@ -1089,6 +1096,14 @@ function AppContent({
     const SWIPE_MIN_PX = 64;
     const SWIPE_MAX_VERTICAL_DRIFT_PX = 56;
     const SWIPE_DIRECTION_LOCK_PX = 14;
+    const SWIPE_PREVIEW_MAX_OFFSET_PX = 220;
+    const SWIPE_PREVIEW_RESISTANCE = 0.9;
+    const SWIPE_COMMIT_DURATION_MS = 90;
+
+    const resetSwipeVisual = () => {
+      setMobilePageSwipePreviewActive(false);
+      setMobilePageSwipeOffsetX((prev) => (Math.abs(prev) < 0.5 ? prev : 0));
+    };
 
     const resetSwipe = () => {
       mobilePageSwipeTrackingRef.current = false;
@@ -1104,6 +1119,12 @@ function AppContent({
         if (target.closest('[data-disable-page-swipe="true"]')) return;
         if (target.closest('input, textarea, select, [contenteditable="true"]')) return;
       }
+      if (mobilePageSwipeCommitTimerRef.current) {
+        window.clearTimeout(mobilePageSwipeCommitTimerRef.current);
+        mobilePageSwipeCommitTimerRef.current = 0;
+      }
+      setMobilePageSwipePreviewActive(false);
+      setMobilePageSwipeOffsetX(0);
       const touch = event.touches[0];
       mobilePageSwipeTrackingRef.current = true;
       mobilePageSwipeHorizontalRef.current = false;
@@ -1114,6 +1135,7 @@ function AppContent({
       if (!mobilePageSwipeTrackingRef.current) return;
       if (!event.touches || event.touches.length !== 1) {
         resetSwipe();
+        resetSwipeVisual();
         return;
       }
       const touch = event.touches[0];
@@ -1128,6 +1150,17 @@ function AppContent({
 
       if (absY > SWIPE_MAX_VERTICAL_DRIFT_PX && absY > absX) {
         resetSwipe();
+        resetSwipeVisual();
+        return;
+      }
+
+      if (mobilePageSwipeHorizontalRef.current) {
+        const offset = Math.max(
+          -SWIPE_PREVIEW_MAX_OFFSET_PX,
+          Math.min(SWIPE_PREVIEW_MAX_OFFSET_PX, dx * SWIPE_PREVIEW_RESISTANCE),
+        );
+        setMobilePageSwipePreviewActive(true);
+        setMobilePageSwipeOffsetX((prev) => (Math.abs(prev - offset) < 0.5 ? prev : offset));
       }
     };
 
@@ -1137,27 +1170,53 @@ function AppContent({
       const startX = mobilePageSwipeStartRef.current.x;
       const startY = mobilePageSwipeStartRef.current.y;
       resetSwipe();
-      if (!wasHorizontal) return;
-      if (!event.changedTouches || event.changedTouches.length !== 1) return;
+      if (!wasHorizontal) {
+        resetSwipeVisual();
+        return;
+      }
+      if (!event.changedTouches || event.changedTouches.length !== 1) {
+        resetSwipeVisual();
+        return;
+      }
 
       const touch = event.changedTouches[0];
       const dx = touch.clientX - startX;
       const dy = touch.clientY - startY;
-      if (Math.abs(dx) < SWIPE_MIN_PX || Math.abs(dy) > SWIPE_MAX_VERTICAL_DRIFT_PX) return;
+      if (Math.abs(dx) < SWIPE_MIN_PX || Math.abs(dy) > SWIPE_MAX_VERTICAL_DRIFT_PX) {
+        resetSwipeVisual();
+        return;
+      }
 
       const currentIndex = visiblePageIds.indexOf(activePage);
-      if (currentIndex < 0) return;
+      if (currentIndex < 0) {
+        resetSwipeVisual();
+        return;
+      }
 
       const targetIndex = dx < 0
         ? Math.min(visiblePageIds.length - 1, currentIndex + 1)
         : Math.max(0, currentIndex - 1);
-      if (targetIndex === currentIndex) return;
-      triggerMobilePageTransition(dx < 0 ? 'left' : 'right');
-      setActivePage(visiblePageIds[targetIndex]);
+      if (targetIndex === currentIndex) {
+        resetSwipeVisual();
+        return;
+      }
+      const direction = dx < 0 ? 'left' : 'right';
+      setMobilePageSwipePreviewActive(false);
+      setMobilePageSwipeOffsetX(direction === 'left' ? -SWIPE_PREVIEW_MAX_OFFSET_PX : SWIPE_PREVIEW_MAX_OFFSET_PX);
+      triggerMobilePageTransition(direction);
+      if (mobilePageSwipeCommitTimerRef.current) {
+        window.clearTimeout(mobilePageSwipeCommitTimerRef.current);
+      }
+      mobilePageSwipeCommitTimerRef.current = window.setTimeout(() => {
+        setActivePage(visiblePageIds[targetIndex]);
+        setMobilePageSwipeOffsetX(0);
+        mobilePageSwipeCommitTimerRef.current = 0;
+      }, SWIPE_COMMIT_DURATION_MS);
     };
 
     const onTouchCancel = () => {
       resetSwipe();
+      resetSwipeVisual();
     };
 
     window.addEventListener('touchstart', onTouchStart, { passive: true });
@@ -1171,6 +1230,11 @@ function AppContent({
       window.removeEventListener('touchend', onTouchEnd);
       window.removeEventListener('touchcancel', onTouchCancel);
       resetSwipe();
+      resetSwipeVisual();
+      if (mobilePageSwipeCommitTimerRef.current) {
+        window.clearTimeout(mobilePageSwipeCommitTimerRef.current);
+        mobilePageSwipeCommitTimerRef.current = 0;
+      }
     };
   }, [isMobile, shouldLockMobileScroll, editMode, mobilePullRefreshing, visiblePageIds, activePage, setActivePage, triggerMobilePageTransition]);
 
@@ -1427,6 +1491,15 @@ function AppContent({
   const mobileGridGapH = Math.max(10, Math.min(20, Number(gridGapH) || 20));
   const mobileGridAutoRow = 96;
   const pageTransitionClass = `page-transition${isMobile && mobilePageTransitionDirection ? ` page-transition-swipe-${mobilePageTransitionDirection}` : ''}`;
+  const mobilePageStageStyle = isMobile
+    ? {
+      transform: `translate3d(${Math.round(mobilePageSwipeOffsetX)}px, 0, 0)`,
+      transition: mobilePageSwipePreviewActive
+        ? 'none'
+        : 'transform 220ms cubic-bezier(0.22, 0.61, 0.36, 1)',
+      willChange: mobilePageSwipePreviewActive ? 'transform' : undefined,
+    }
+    : undefined;
   const pullRefreshProgress = Math.min(1, mobilePullDistance / 52);
   const pullRefreshVisible = isMobile && (mobilePullDistance > 0.5 || mobilePullRefreshing);
   const safeAreaTop = 'max(var(--safe-area-top, 0px), var(--safe-area-top-fallback, 0px))';
@@ -1748,133 +1821,135 @@ function AppContent({
           </div>
         </div>
 
-        {!visiblePageIds.includes(activePage) ? (
-          <div key={`${activePage}-restricted`} className="flex flex-col items-center justify-center min-h-[45vh] text-center p-8 opacity-90 animate-in fade-in zoom-in duration-300 font-sans">
-            <div className="bg-[var(--glass-bg)] border border-[var(--glass-border)] p-5 rounded-full mb-4 shadow-lg shadow-black/5">
-              <Lock className="w-10 h-10 text-[var(--text-secondary)]" />
-            </div>
-            <h2 className="text-2xl font-light mb-2 text-[var(--text-primary)] uppercase tracking-tight">{t('common.noAccess') || 'Ingen tilgang'}</h2>
-            <p className="text-sm text-[var(--text-secondary)] max-w-md">
-              {t('form.visibilityHint') || 'Denne siden er ikke synlig for din rolle.'}
-            </p>
-          </div>
-        ) : isMediaPage(activePage) ? (
-          <div key={activePage} className={pageTransitionClass}>
-            <MediaPage
-              pageId={activePage}
-              entities={entities}
-              pageSettings={pageSettings}
-              editMode={editMode}
-              isSonosActive={isSonosActive}
-              activeMediaId={activeMediaId}
-              setActiveMediaId={setActiveMediaId}
-              getA={getA}
-              getEntityImageUrl={getEntityImageUrl}
-              callService={callService}
-              savePageSetting={savePageSetting}
-              formatDuration={formatDuration}
-              t={t}
-            />
-          </div>
-        ) : activePage === SUPER_ADMIN_OVERVIEW_PAGE_ID && isPlatformAdmin ? (
-          <div key={activePage} className={pageTransitionClass}>
-            <SuperAdminOverview
-              t={t}
-              language={language}
-              userAdminApi={userAdminApi}
-              isMobile={isMobile}
-            />
-          </div>
-        ) : (pagesConfig[activePage] || []).filter(id => gridLayout[id]).length === 0 ? (
-          <div key={`${activePage}-empty`} className="flex flex-col items-center justify-center min-h-[60vh] text-center p-8 opacity-90 animate-in fade-in zoom-in duration-500 font-sans">
-            <div className="bg-[var(--glass-bg)] border border-[var(--glass-border)] p-5 rounded-full mb-6 shadow-lg shadow-black/5">
-              <LayoutGrid className="w-12 h-12 text-[var(--text-primary)] opacity-80" />
-            </div>
-
-            <h2 className="text-3xl font-light mb-3 text-[var(--text-primary)] uppercase tracking-tight">{t('welcome.title')}</h2>
-            <p className="text-lg text-[var(--text-secondary)] mb-8 max-w-md leading-relaxed">{t('welcome.subtitle')}</p>
-
-            <div className="flex gap-4">
-              <button
-                onClick={() => setShowAddCardModal(true)}
-                className="flex items-center gap-3 px-8 py-4 bg-blue-500 hover:bg-blue-600 active:scale-95 text-white rounded-2xl shadow-lg shadow-blue-500/20 transition-all duration-200 font-bold uppercase tracking-widest text-sm"
-              >
-                <Plus className="w-5 h-5" />
-                {t('welcome.addCard')}
-              </button>
-            </div>
-
-            <div className="mt-12 max-w-xs mx-auto p-4 rounded-2xl bg-[var(--glass-bg)] border border-[var(--glass-border)]">
-              <p className="text-[10px] text-[var(--text-muted)] uppercase tracking-widest leading-relaxed">
-                {t('welcome.editHint')}
+        <div className={isMobile ? 'mobile-page-swipe-stage overflow-x-hidden' : ''} style={mobilePageStageStyle}>
+          {!visiblePageIds.includes(activePage) ? (
+            <div key={`${activePage}-restricted`} className="flex flex-col items-center justify-center min-h-[45vh] text-center p-8 opacity-90 animate-in fade-in zoom-in duration-300 font-sans">
+              <div className="bg-[var(--glass-bg)] border border-[var(--glass-border)] p-5 rounded-full mb-4 shadow-lg shadow-black/5">
+                <Lock className="w-10 h-10 text-[var(--text-secondary)]" />
+              </div>
+              <h2 className="text-2xl font-light mb-2 text-[var(--text-primary)] uppercase tracking-tight">{t('common.noAccess') || 'Ingen tilgang'}</h2>
+              <p className="text-sm text-[var(--text-secondary)] max-w-md">
+                {t('form.visibilityHint') || 'Denne siden er ikke synlig for din rolle.'}
               </p>
             </div>
-          </div>
-        ) : (
-          <div
-            key={activePage}
-            className={`grid font-sans items-start ${pageTransitionClass}`}
-            data-dashboard-grid
-            style={{
-              gap: isMobile ? `${mobileGridGapV}px ${mobileGridGapH}px` : `${gridGapV}px ${gridGapH}px`,
-              gridAutoRows: isMobile ? `${mobileGridAutoRow}px` : '100px',
-              gridTemplateColumns: `repeat(${gridColCount}, minmax(0, 1fr))`,
-            }}
-          >
-            {(pagesConfig[activePage] || [])
-              .map((id) => ({ id, placement: gridLayout[id] }))
-              .filter(({ placement }) => placement)
-              .sort((a, b) => {
-                if (a.placement.row !== b.placement.row) return a.placement.row - b.placement.row;
-                return a.placement.col - b.placement.col;
-              })
-              .map(({ id }) => {
-                const index = (pagesConfig[activePage] || []).indexOf(id);
-                const placement = gridLayout[id];
-                const settingsKey = getCardSettingsKey(id);
-                const settings = cardSettings[settingsKey] || cardSettings[id] || {};
-                const defaultLegacyRowSpan = placement?.rowSpan || 1;
-                const defaultLegacyColSpan = placement?.colSpan || 1;
-                const rowSpan = Number.isFinite(Number(settings.gridRowSpan))
-                  ? Math.max(1, Math.round(Number(settings.gridRowSpan)))
-                  : defaultLegacyRowSpan;
-                const colSpan = Number.isFinite(Number(settings.gridColSpan))
-                  ? Math.max(1, Math.min(gridColCount, Math.round(Number(settings.gridColSpan))))
-                  : defaultLegacyColSpan;
-                const heading = cardSettings[settingsKey]?.heading;
+          ) : isMediaPage(activePage) ? (
+            <div key={activePage} className={pageTransitionClass}>
+              <MediaPage
+                pageId={activePage}
+                entities={entities}
+                pageSettings={pageSettings}
+                editMode={editMode}
+                isSonosActive={isSonosActive}
+                activeMediaId={activeMediaId}
+                setActiveMediaId={setActiveMediaId}
+                getA={getA}
+                getEntityImageUrl={getEntityImageUrl}
+                callService={callService}
+                savePageSetting={savePageSetting}
+                formatDuration={formatDuration}
+                t={t}
+              />
+            </div>
+          ) : activePage === SUPER_ADMIN_OVERVIEW_PAGE_ID && isPlatformAdmin ? (
+            <div key={activePage} className={pageTransitionClass}>
+              <SuperAdminOverview
+                t={t}
+                language={language}
+                userAdminApi={userAdminApi}
+                isMobile={isMobile}
+              />
+            </div>
+          ) : (pagesConfig[activePage] || []).filter(id => gridLayout[id]).length === 0 ? (
+            <div key={`${activePage}-empty`} className="flex flex-col items-center justify-center min-h-[60vh] text-center p-8 opacity-90 animate-in fade-in zoom-in duration-500 font-sans">
+              <div className="bg-[var(--glass-bg)] border border-[var(--glass-border)] p-5 rounded-full mb-6 shadow-lg shadow-black/5">
+                <LayoutGrid className="w-12 h-12 text-[var(--text-primary)] opacity-80" />
+              </div>
 
-                if (!editMode && (hiddenCards.includes(id) || isCardHiddenByLogic(id) || !isCardVisibleForCurrentRole(id))) return null;
+              <h2 className="text-3xl font-light mb-3 text-[var(--text-primary)] uppercase tracking-tight">{t('welcome.title')}</h2>
+              <p className="text-lg text-[var(--text-secondary)] mb-8 max-w-md leading-relaxed">{t('welcome.subtitle')}</p>
 
-                const cardContent = renderCard(id, index);
-                if (!cardContent) return null;
+              <div className="flex gap-4">
+                <button
+                  onClick={() => setShowAddCardModal(true)}
+                  className="flex items-center gap-3 px-8 py-4 bg-blue-500 hover:bg-blue-600 active:scale-95 text-white rounded-2xl shadow-lg shadow-blue-500/20 transition-all duration-200 font-bold uppercase tracking-widest text-sm"
+                >
+                  <Plus className="w-5 h-5" />
+                  {t('welcome.addCard')}
+                </button>
+              </div>
 
-                return (
-                  <div
-                    key={id}
-                    className={`h-full relative ${isCompactCards ? 'card-compact' : ''}`}
-                    data-grid-card
-                    style={{
-                      gridRowStart: placement.row,
-                      gridColumnStart: placement.col,
-                      gridColumnEnd: `span ${colSpan}`,
-                      gridRowEnd: `span ${rowSpan}`,
-                    }}
-                  >
-                    {heading && (
-                      <div className="absolute -top-4 left-2 text-[10px] uppercase tracking-[0.2em] font-bold text-[var(--text-secondary)]">
-                        {heading}
+              <div className="mt-12 max-w-xs mx-auto p-4 rounded-2xl bg-[var(--glass-bg)] border border-[var(--glass-border)]">
+                <p className="text-[10px] text-[var(--text-muted)] uppercase tracking-widest leading-relaxed">
+                  {t('welcome.editHint')}
+                </p>
+              </div>
+            </div>
+          ) : (
+            <div
+              key={activePage}
+              className={`grid font-sans items-start ${pageTransitionClass}`}
+              data-dashboard-grid
+              style={{
+                gap: isMobile ? `${mobileGridGapV}px ${mobileGridGapH}px` : `${gridGapV}px ${gridGapH}px`,
+                gridAutoRows: isMobile ? `${mobileGridAutoRow}px` : '100px',
+                gridTemplateColumns: `repeat(${gridColCount}, minmax(0, 1fr))`,
+              }}
+            >
+              {(pagesConfig[activePage] || [])
+                .map((id) => ({ id, placement: gridLayout[id] }))
+                .filter(({ placement }) => placement)
+                .sort((a, b) => {
+                  if (a.placement.row !== b.placement.row) return a.placement.row - b.placement.row;
+                  return a.placement.col - b.placement.col;
+                })
+                .map(({ id }) => {
+                  const index = (pagesConfig[activePage] || []).indexOf(id);
+                  const placement = gridLayout[id];
+                  const settingsKey = getCardSettingsKey(id);
+                  const settings = cardSettings[settingsKey] || cardSettings[id] || {};
+                  const defaultLegacyRowSpan = placement?.rowSpan || 1;
+                  const defaultLegacyColSpan = placement?.colSpan || 1;
+                  const rowSpan = Number.isFinite(Number(settings.gridRowSpan))
+                    ? Math.max(1, Math.round(Number(settings.gridRowSpan)))
+                    : defaultLegacyRowSpan;
+                  const colSpan = Number.isFinite(Number(settings.gridColSpan))
+                    ? Math.max(1, Math.min(gridColCount, Math.round(Number(settings.gridColSpan))))
+                    : defaultLegacyColSpan;
+                  const heading = cardSettings[settingsKey]?.heading;
+
+                  if (!editMode && (hiddenCards.includes(id) || isCardHiddenByLogic(id) || !isCardVisibleForCurrentRole(id))) return null;
+
+                  const cardContent = renderCard(id, index);
+                  if (!cardContent) return null;
+
+                  return (
+                    <div
+                      key={id}
+                      className={`h-full relative ${isCompactCards ? 'card-compact' : ''}`}
+                      data-grid-card
+                      style={{
+                        gridRowStart: placement.row,
+                        gridColumnStart: placement.col,
+                        gridColumnEnd: `span ${colSpan}`,
+                        gridRowEnd: `span ${rowSpan}`,
+                      }}
+                    >
+                      {heading && (
+                        <div className="absolute -top-4 left-2 text-[10px] uppercase tracking-[0.2em] font-bold text-[var(--text-secondary)]">
+                          {heading}
+                        </div>
+                      )}
+                      <div className="h-full">
+                        <CardErrorBoundary cardId={id} t={t}>
+                          {cardContent}
+                        </CardErrorBoundary>
                       </div>
-                    )}
-                    <div className="h-full">
-                      <CardErrorBoundary cardId={id} t={t}>
-                        {cardContent}
-                      </CardErrorBoundary>
                     </div>
-                  </div>
-                );
-              })}
-          </div>
-        )}
+                  );
+                })}
+            </div>
+          )}
+        </div>
 
         {showProfileModal && (
           <div className="fixed inset-0 z-[120] bg-black/60 backdrop-blur-md flex items-start md:items-center justify-center p-4 overflow-y-auto overscroll-contain">
