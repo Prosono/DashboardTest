@@ -490,91 +490,6 @@ const CalendarBookingCard = ({
             </div>
           ) : (
             <>
-              <div
-                className="relative overflow-hidden rounded-2xl border bg-[var(--glass-bg)] p-3.5"
-                style={summaryEvent
-                  ? {
-                    borderColor: summaryPalette.softBorder,
-                    backgroundImage: `linear-gradient(130deg, ${summaryPalette.softBg} 0%, rgba(0,0,0,0) 56%)`,
-                  }
-                  : undefined}
-              >
-                {summaryEvent ? (
-                  <>
-                    <div className="relative rounded-xl overflow-hidden">
-                      <span
-                        className="absolute -top-8 -right-8 w-28 h-28 rounded-full blur-3xl pointer-events-none"
-                        style={{
-                          backgroundColor: summaryPalette.softBg,
-                          opacity: 0.95,
-                        }}
-                      />
-                      <div className="relative flex items-center justify-between gap-2">
-                        <div className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-[10px] uppercase tracking-widest font-bold ${
-                          summaryIsLive
-                            ? 'border-blue-400/40 bg-blue-500/15 text-blue-300'
-                            : 'border-[var(--glass-border)] bg-[var(--glass-bg-hover)] text-[var(--text-secondary)]'
-                        }`}>
-                          <Clock3 className="w-3.5 h-3.5" />
-                          {summaryIsLive ? (t('calendarBooking.inProgress') || 'In progress') : (t('calendarBooking.next') || 'Next')}
-                        </div>
-                        <span
-                          className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full border text-[10px] uppercase tracking-widest font-bold"
-                          style={{
-                            color: summaryPalette.color,
-                            borderColor: summaryPalette.softBorder,
-                            backgroundColor: summaryPalette.softBg,
-                          }}
-                        >
-                          <SummaryTypeIcon className="w-3.5 h-3.5" />
-                          {summaryTypeMeta.label}
-                        </span>
-                      </div>
-                      <div className="mt-2 text-center hidden sm:block">
-                        <div className="text-[50px] leading-none font-semibold tabular-nums text-[var(--text-secondary)]">
-                          {todayEvents.length}
-                        </div>
-                        <div className="mt-1 text-[13px] text-[var(--text-secondary)]">
-                          {t('calendarBooking.todayCountLabel') || 'Bookings today'}
-                        </div>
-                      </div>
-
-                      <div className="mt-3 flex flex-wrap items-center justify-center gap-2">
-                        <span className="sm:hidden inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border border-[var(--glass-border)] bg-[var(--glass-bg-hover)] text-[10px] uppercase tracking-widest font-bold text-[var(--text-secondary)]">
-                          <span className="text-[12px] font-semibold tabular-nums text-[var(--text-primary)]">{todayEvents.length}</span>
-                          <span>{t('calendar.today') || 'Today'}</span>
-                        </span>
-                        {typeCountRows.map((row) => {
-                          const rowMeta = getBookingTypeMeta(row.type, t);
-                          const rowPalette = getBookingPalette(row.type, false);
-                          const RowIcon = rowMeta.Icon;
-                          return (
-                            <div key={row.type} className="rounded-xl border border-[var(--glass-border)] bg-[var(--glass-bg-hover)] px-2 py-1.5 inline-flex items-center justify-center gap-2 min-w-0">
-                              <span className="text-[11px] font-semibold tabular-nums text-[var(--text-secondary)]">{row.count}x</span>
-                              <span
-                                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full border text-[9px] sm:text-[10px] uppercase tracking-[0.15em] sm:tracking-[0.18em] font-bold min-w-0"
-                                style={{
-                                  color: rowPalette.color,
-                                  borderColor: rowPalette.softBorder,
-                                  backgroundColor: rowPalette.softBg,
-                                }}
-                              >
-                                <RowIcon className="w-3 h-3 shrink-0" />
-                                <span className="truncate">{rowMeta.label}</span>
-                              </span>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  </>
-                ) : (
-                  <div className="text-sm text-[var(--text-secondary)]">
-                    {loading ? (t('common.loading') || 'Loading...') : (t('calendar.noEvents') || 'No upcoming events')}
-                  </div>
-                )}
-              </div>
-
               {summaryEvent && (
                 <div className="rounded-xl border border-[var(--glass-border)] bg-[var(--glass-bg)] px-3 py-2.5">
                   <div className="text-[10px] uppercase tracking-widest text-[var(--text-secondary)] font-bold mb-1">
@@ -605,6 +520,66 @@ const CalendarBookingCard = ({
                   </div>
                 </div>
               )}
+
+              <div
+                className="relative overflow-hidden rounded-2xl border bg-[var(--glass-bg)] p-3.5"
+                style={summaryEvent
+                  ? {
+                    borderColor: summaryPalette.softBorder,
+                    backgroundImage: `linear-gradient(130deg, ${summaryPalette.softBg} 0%, rgba(0,0,0,0) 56%)`,
+                  }
+                  : undefined}
+              >
+                {summaryEvent ? (
+                  <>
+                    <div className="relative rounded-xl overflow-hidden">
+                      <span
+                        className="absolute -top-8 -right-8 w-28 h-28 rounded-full blur-3xl pointer-events-none"
+                        style={{
+                          backgroundColor: summaryPalette.softBg,
+                          opacity: 0.95,
+                        }}
+                      />
+                      <div className="mt-1 text-center">
+                        <div className="text-[50px] leading-none font-semibold tabular-nums text-[var(--text-secondary)]">
+                          {todayEvents.length}
+                        </div>
+                        <div className="mt-1 text-[13px] text-[var(--text-secondary)]">
+                          {t('calendarBooking.todayCountLabel') || 'Bookings today'}
+                        </div>
+                      </div>
+
+                      <div className="mt-3 grid grid-cols-1 md:grid-cols-3 gap-2">
+                        {typeCountRows.map((row) => {
+                          const rowMeta = getBookingTypeMeta(row.type, t);
+                          const rowPalette = getBookingPalette(row.type, false);
+                          const RowIcon = rowMeta.Icon;
+                          return (
+                            <div key={row.type} className="rounded-xl border border-[var(--glass-border)] bg-[var(--glass-bg-hover)] px-2.5 py-2 inline-flex items-center justify-between gap-2 min-w-0">
+                              <span className="text-[12px] font-semibold tabular-nums text-[var(--text-secondary)] shrink-0">{row.count}x</span>
+                              <span
+                                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full border text-[10px] uppercase tracking-[0.1em] font-bold min-w-0"
+                                style={{
+                                  color: rowPalette.color,
+                                  borderColor: rowPalette.softBorder,
+                                  backgroundColor: rowPalette.softBg,
+                                }}
+                              >
+                                <RowIcon className="w-3 h-3 shrink-0" />
+                                <span className="truncate">{rowMeta.label}</span>
+                              </span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  </>
+                ) : (
+                  <div className="text-sm text-[var(--text-secondary)]">
+                    {loading ? (t('common.loading') || 'Loading...') : (t('calendar.noEvents') || 'No upcoming events')}
+                  </div>
+                )}
+              </div>
 
               <div className="grid grid-cols-1 gap-3 min-h-0 flex-1">
                 <div className="min-h-0 rounded-2xl border border-[var(--glass-border)] bg-[var(--glass-bg)] p-3 flex flex-col">
