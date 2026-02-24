@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import ModernDropdown from '../components/ui/ModernDropdown';
 import M3Slider from '../components/ui/M3Slider';
 import { GRADIENT_PRESETS } from '../contexts/ConfigContext';
@@ -186,6 +186,10 @@ export default function ConfigModal({
   const [notificationDraft, setNotificationDraft] = useState(() => normalizeNotificationConfig(notificationConfig || DEFAULT_NOTIFICATION_CONFIG));
   const [notificationDirty, setNotificationDirty] = useState(false);
   const [notificationSaveMessage, setNotificationSaveMessage] = useState('');
+  const notificationEntityIds = useMemo(
+    () => Object.keys(entities || {}).sort((a, b) => a.localeCompare(b)),
+    [entities],
+  );
 
   const normalizeRole = (role) => {
     const value = String(role || '').trim();
@@ -2091,6 +2095,75 @@ export default function ConfigModal({
     });
   };
 
+  const createNotificationRule = () => ({
+    id: `rule_${Date.now()}_${Math.random().toString(16).slice(2, 8)}`,
+    enabled: true,
+    entityId: '',
+    conditionType: 'is_active',
+    compareValue: '',
+    title: '',
+    message: '',
+    level: 'warning',
+    channels: {
+      inApp: true,
+      browser: true,
+      native: true,
+    },
+    cooldownSeconds: 300,
+  });
+
+  const addNotificationRule = () => {
+    updateNotificationDraft((prev) => ({
+      ...prev,
+      rules: [...(Array.isArray(prev.rules) ? prev.rules : []), createNotificationRule()],
+    }));
+  };
+
+  const updateNotificationRule = (ruleId, patch) => {
+    const normalizedRuleId = String(ruleId || '').trim();
+    if (!normalizedRuleId) return;
+    updateNotificationDraft((prev) => ({
+      ...prev,
+      rules: (Array.isArray(prev.rules) ? prev.rules : []).map((rule) => (
+        String(rule?.id || '').trim() === normalizedRuleId
+          ? { ...rule, ...(patch || {}) }
+          : rule
+      )),
+    }));
+  };
+
+  const removeNotificationRule = (ruleId) => {
+    const normalizedRuleId = String(ruleId || '').trim();
+    if (!normalizedRuleId) return;
+    updateNotificationDraft((prev) => ({
+      ...prev,
+      rules: (Array.isArray(prev.rules) ? prev.rules : []).filter(
+        (rule) => String(rule?.id || '').trim() !== normalizedRuleId,
+      ),
+    }));
+  };
+
+  const toggleNotificationRuleChannel = (ruleId, channelKey) => {
+    const normalizedRuleId = String(ruleId || '').trim();
+    if (!normalizedRuleId) return;
+    updateNotificationDraft((prev) => ({
+      ...prev,
+      rules: (Array.isArray(prev.rules) ? prev.rules : []).map((rule) => {
+        if (String(rule?.id || '').trim() !== normalizedRuleId) return rule;
+        const channels = rule?.channels && typeof rule.channels === 'object' ? rule.channels : {};
+        return {
+          ...rule,
+          channels: {
+            inApp: Boolean(channels.inApp),
+            browser: Boolean(channels.browser),
+            native: Boolean(channels.native),
+            [channelKey]: !Boolean(channels[channelKey]),
+          },
+        };
+      }),
+    }));
+  };
+
   const handleSaveNotifications = async () => {
     if (!canAccessNotifications || typeof onSaveNotificationConfig !== 'function') return;
     const result = await onSaveNotificationConfig(normalizeNotificationConfig(notificationDraft || DEFAULT_NOTIFICATION_CONFIG));
@@ -2259,6 +2332,191 @@ export default function ConfigModal({
               )}
             </div>
           ))}
+        </div>
+
+        <div className="rounded-2xl border border-[var(--glass-border)] bg-[var(--glass-bg)] p-4 space-y-3">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <h4 className="text-[11px] uppercase tracking-wider font-bold text-[var(--text-secondary)]">
+                {t('notifications.customRulesTitle')}
+              </h4>
+              <p className="text-xs text-[var(--text-secondary)] mt-1">
+                {t('notifications.customRulesDescription')}
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={addNotificationRule}
+              className="px-3 py-2 rounded-lg border border-[var(--glass-border)] bg-[var(--glass-bg-hover)] text-[11px] font-bold uppercase tracking-wider"
+            >
+              {t('notifications.addRule')}
+            </button>
+          </div>
+
+          {(!Array.isArray(draft.rules) || draft.rules.length === 0) && (
+            <div className="rounded-lg border border-[var(--glass-border)] bg-[var(--glass-bg-hover)] px-3 py-2 text-xs text-[var(--text-secondary)]">
+              {t('notifications.noRules')}
+            </div>
+          )}
+
+          <datalist id="notification-entity-options">
+            {notificationEntityIds.map((entityId) => (
+              <option key={entityId} value={entityId} />
+            ))}
+          </datalist>
+
+          <div className="space-y-3">
+            {(Array.isArray(draft.rules) ? draft.rules : []).map((rule, idx) => {
+              const normalizedRule = rule && typeof rule === 'object' ? rule : {};
+              const channels = normalizedRule.channels && typeof normalizedRule.channels === 'object'
+                ? normalizedRule.channels
+                : { inApp: true, browser: true, native: true };
+              const showCompareValue = normalizedRule.conditionType === 'greater_than'
+                || normalizedRule.conditionType === 'less_than'
+                || normalizedRule.conditionType === 'equals';
+              return (
+                <div key={normalizedRule.id || `rule_${idx}`} className="rounded-xl border border-[var(--glass-border)] bg-[var(--glass-bg-hover)] p-3 space-y-2.5">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-[10px] uppercase tracking-wider font-bold text-[var(--text-secondary)]">
+                      {t('notifications.ruleLabel')} {idx + 1}
+                    </span>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => updateNotificationRule(normalizedRule.id, { enabled: !normalizedRule.enabled })}
+                        className={`w-10 h-6 rounded-full p-1 transition-colors relative ${normalizedRule.enabled ? 'bg-emerald-500' : 'bg-gray-500/30'}`}
+                      >
+                        <div className={`w-4 h-4 rounded-full bg-white shadow-sm transition-transform ${normalizedRule.enabled ? 'translate-x-4' : 'translate-x-0'}`} />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => removeNotificationRule(normalizedRule.id)}
+                        className="px-2 py-1 rounded-lg border border-red-500/25 bg-red-500/10 text-red-300 text-[10px] uppercase tracking-wider font-bold"
+                      >
+                        {t('common.delete')}
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                    <div className="space-y-1">
+                      <label className="text-[10px] uppercase tracking-wider font-bold text-[var(--text-secondary)]">
+                        {t('notifications.ruleTitle')}
+                      </label>
+                      <input
+                        value={String(normalizedRule.title || '')}
+                        onChange={(e) => updateNotificationRule(normalizedRule.id, { title: e.target.value })}
+                        className="w-full px-3 py-2 rounded-lg bg-[var(--glass-bg)] border border-[var(--glass-border)] text-sm"
+                        placeholder={t('notifications.ruleTitlePlaceholder')}
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-[10px] uppercase tracking-wider font-bold text-[var(--text-secondary)]">
+                        {t('notifications.ruleEntity')}
+                      </label>
+                      <input
+                        value={String(normalizedRule.entityId || '')}
+                        onChange={(e) => updateNotificationRule(normalizedRule.id, { entityId: e.target.value })}
+                        list="notification-entity-options"
+                        className="w-full px-3 py-2 rounded-lg bg-[var(--glass-bg)] border border-[var(--glass-border)] text-sm"
+                        placeholder="sensor.temperature"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-[10px] uppercase tracking-wider font-bold text-[var(--text-secondary)]">
+                        {t('notifications.ruleCondition')}
+                      </label>
+                      <select
+                        value={String(normalizedRule.conditionType || 'is_active')}
+                        onChange={(e) => updateNotificationRule(normalizedRule.id, { conditionType: e.target.value })}
+                        className="w-full px-3 py-2 rounded-lg bg-[var(--glass-bg)] border border-[var(--glass-border)] text-sm"
+                      >
+                        <option value="is_active">{t('notifications.condition.is_active')}</option>
+                        <option value="greater_than">{t('notifications.condition.greater_than')}</option>
+                        <option value="less_than">{t('notifications.condition.less_than')}</option>
+                        <option value="equals">{t('notifications.condition.equals')}</option>
+                      </select>
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-[10px] uppercase tracking-wider font-bold text-[var(--text-secondary)]">
+                        {t('notifications.ruleSeverity')}
+                      </label>
+                      <select
+                        value={String(normalizedRule.level || 'warning')}
+                        onChange={(e) => updateNotificationRule(normalizedRule.id, { level: e.target.value })}
+                        className="w-full px-3 py-2 rounded-lg bg-[var(--glass-bg)] border border-[var(--glass-border)] text-sm"
+                      >
+                        <option value="info">{t('notifications.severity.info')}</option>
+                        <option value="warning">{t('notifications.severity.warning')}</option>
+                        <option value="critical">{t('notifications.severity.critical')}</option>
+                        <option value="success">{t('notifications.severity.success')}</option>
+                      </select>
+                    </div>
+                    {showCompareValue && (
+                      <div className="space-y-1 md:col-span-2">
+                        <label className="text-[10px] uppercase tracking-wider font-bold text-[var(--text-secondary)]">
+                          {t('notifications.ruleValue')}
+                        </label>
+                        <input
+                          value={String(normalizedRule.compareValue ?? '')}
+                          onChange={(e) => updateNotificationRule(normalizedRule.id, { compareValue: e.target.value })}
+                          className="w-full px-3 py-2 rounded-lg bg-[var(--glass-bg)] border border-[var(--glass-border)] text-sm"
+                          placeholder={t('notifications.ruleValuePlaceholder')}
+                        />
+                      </div>
+                    )}
+                    <div className="space-y-1 md:col-span-2">
+                      <label className="text-[10px] uppercase tracking-wider font-bold text-[var(--text-secondary)]">
+                        {t('notifications.ruleMessage')}
+                      </label>
+                      <input
+                        value={String(normalizedRule.message || '')}
+                        onChange={(e) => updateNotificationRule(normalizedRule.id, { message: e.target.value })}
+                        className="w-full px-3 py-2 rounded-lg bg-[var(--glass-bg)] border border-[var(--glass-border)] text-sm"
+                        placeholder={t('notifications.ruleMessagePlaceholder')}
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-[10px] uppercase tracking-wider font-bold text-[var(--text-secondary)]">
+                        {t('notifications.cooldownSeconds')}
+                      </label>
+                      <input
+                        type="number"
+                        min={0}
+                        max={86400}
+                        value={Number(normalizedRule.cooldownSeconds) || 0}
+                        onChange={(e) => updateNotificationRule(normalizedRule.id, {
+                          cooldownSeconds: Math.max(0, Math.min(86400, Number.parseInt(e.target.value || '0', 10) || 0)),
+                        })}
+                        className="w-full px-3 py-2 rounded-lg bg-[var(--glass-bg)] border border-[var(--glass-border)] text-sm"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-[10px] uppercase tracking-wider font-bold text-[var(--text-secondary)]">
+                        {t('notifications.ruleChannels')}
+                      </label>
+                      <div className="grid grid-cols-3 gap-1.5">
+                        {['inApp', 'browser', 'native'].map((channel) => (
+                          <button
+                            key={`${normalizedRule.id}_${channel}`}
+                            type="button"
+                            onClick={() => toggleNotificationRuleChannel(normalizedRule.id, channel)}
+                            className={`px-2 py-2 rounded-md border text-[10px] uppercase tracking-wider font-bold transition-colors ${
+                              channels[channel]
+                                ? 'border-emerald-400/35 bg-emerald-500/10 text-emerald-300'
+                                : 'border-[var(--glass-border)] bg-[var(--glass-bg)] text-[var(--text-secondary)]'
+                            }`}
+                          >
+                            {t(`notifications.channel.${channel}`)}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
         </div>
 
         {(notificationSaveMessage || notificationConfigMessage) && (

@@ -489,6 +489,53 @@ function AppContent({
     return 1;
   }, []);
 
+  const isStateActive = useCallback((rawState) => {
+    const normalized = String(rawState ?? '').trim().toLowerCase();
+    if (!normalized) return false;
+    const numeric = Number(normalized);
+    if (Number.isFinite(numeric)) return numeric > 0;
+    if (['on', 'active', 'open', 'true', 'yes', 'ja', 'running', 'home', 'heat', 'heating'].includes(normalized)) {
+      return true;
+    }
+    if (['off', 'inactive', 'closed', 'false', 'no', 'nei', 'unavailable', 'unknown', 'idle', 'none'].includes(normalized)) {
+      return false;
+    }
+    return false;
+  }, []);
+
+  const evaluateCustomNotificationRule = useCallback((rule, entityState) => {
+    const conditionType = String(rule?.conditionType || 'is_active').trim().toLowerCase();
+    const compareValue = String(rule?.compareValue ?? '').trim();
+    const rawState = entityState?.state;
+    if (conditionType === 'is_active') {
+      return isStateActive(rawState);
+    }
+
+    if (conditionType === 'equals') {
+      return String(rawState ?? '').trim().toLowerCase() === compareValue.toLowerCase();
+    }
+
+    const stateNum = Number(rawState);
+    const compareNum = Number(compareValue);
+    if (!Number.isFinite(stateNum) || !Number.isFinite(compareNum)) return false;
+
+    if (conditionType === 'greater_than') return stateNum > compareNum;
+    if (conditionType === 'less_than') return stateNum < compareNum;
+    return false;
+  }, [isStateActive]);
+
+  const renderRuleMessage = useCallback((template, context = {}) => {
+    const safeTemplate = String(template || '').trim();
+    if (!safeTemplate) return '';
+    return safeTemplate
+      .replaceAll('{entityId}', String(context.entityId || ''))
+      .replaceAll('{entityName}', String(context.entityName || ''))
+      .replaceAll('{state}', String(context.state ?? ''))
+      .replaceAll('{value}', String(context.state ?? ''))
+      .replaceAll('{condition}', String(context.conditionType || ''))
+      .replaceAll('{threshold}', String(context.compareValue || ''));
+  }, []);
+
   const warningAlertCount = parseAlertCountFromState(entities?.[WARNING_SENSOR_ID]?.state);
   const criticalAlertCount = parseAlertCountFromState(entities?.[CRITICAL_SENSOR_ID]?.state);
   const mobileAlertCount = warningAlertCount + criticalAlertCount;
@@ -496,6 +543,9 @@ function AppContent({
   const alertNotificationSeededRef = useRef(false);
   const alertNotificationPrevRef = useRef({ warning: 0, critical: 0 });
   const alertNotificationLastSentRef = useRef({ warning: 0, critical: 0 });
+  const customRuleSeededRef = useRef(false);
+  const customRulePrevMatchRef = useRef({});
+  const customRuleLastSentRef = useRef({});
   const statusPillsForBar = useMemo(() => {
     if (!isMobile) return statusPillsConfig;
     return (statusPillsConfig || []).filter((pill) => String(pill?.entityId || '') !== WARNING_SENSOR_ID);
@@ -568,6 +618,90 @@ function AppContent({
 
     alertNotificationPrevRef.current = current;
   }, [warningAlertCount, criticalAlertCount, notify, t, notificationConfig]);
+
+  useEffect(() => {
+    const rules = Array.isArray(notificationConfig?.rules) ? notificationConfig.rules : [];
+    const activeRules = rules.filter((rule) => Boolean(rule?.enabled) && String(rule?.entityId || '').trim());
+    const currentMatches = {};
+
+    activeRules.forEach((rule) => {
+      const ruleId = String(rule.id || '').trim();
+      if (!ruleId) return;
+      const entityId = String(rule.entityId || '').trim();
+      const entityState = entities?.[entityId];
+      currentMatches[ruleId] = evaluateCustomNotificationRule(rule, entityState);
+    });
+
+    if (!customRuleSeededRef.current) {
+      customRuleSeededRef.current = true;
+      customRulePrevMatchRef.current = currentMatches;
+      return;
+    }
+
+    const browserOnlyWhenBackground = notificationConfig?.browserOnlyWhenBackground !== false;
+    const inAppDurationMs = Number(notificationConfig?.inAppDurationMs) || DEFAULT_NOTIFICATION_CONFIG.inAppDurationMs;
+    const inAppPersistent = Boolean(notificationConfig?.inAppPersistent);
+    const prevMatches = customRulePrevMatchRef.current || {};
+    const now = Date.now();
+
+    if (notificationConfig?.enabled !== false) {
+      activeRules.forEach((rule) => {
+        const ruleId = String(rule.id || '').trim();
+        if (!ruleId) return;
+        const hasPrev = Object.prototype.hasOwnProperty.call(prevMatches, ruleId);
+        if (!hasPrev) return;
+
+        const matchedNow = Boolean(currentMatches[ruleId]);
+        const matchedBefore = Boolean(prevMatches[ruleId]);
+        if (!matchedNow || matchedBefore) return;
+
+        const channels = rule?.channels && typeof rule.channels === 'object'
+          ? rule.channels
+          : { inApp: true, browser: true, native: true };
+        const hasChannel = Boolean(channels.inApp || channels.browser || channels.native);
+        if (!hasChannel) return;
+
+        const cooldownMs = Math.max(0, Number(rule?.cooldownSeconds) || 0) * 1000;
+        const lastSent = Number(customRuleLastSentRef.current[ruleId] || 0);
+        const canSend = cooldownMs <= 0 || (now - lastSent) >= cooldownMs;
+        if (!canSend) return;
+
+        const entityId = String(rule.entityId || '').trim();
+        const entityState = entities?.[entityId];
+        const entityName = String(entityState?.attributes?.friendly_name || entityId || t('notifications.customRuleFallbackTitle')).trim();
+        const title = String(rule?.title || '').trim() || entityName;
+        const message = renderRuleMessage(String(rule?.message || '').trim(), {
+          entityId,
+          entityName,
+          state: entityState?.state ?? '',
+          conditionType: rule?.conditionType || '',
+          compareValue: rule?.compareValue ?? '',
+        }) || `${entityName}: ${String(entityState?.state ?? '-')}`;
+
+        void notify({
+          title,
+          message,
+          level: String(rule?.level || 'warning').trim().toLowerCase(),
+          inApp: Boolean(channels.inApp),
+          browser: Boolean(channels.browser),
+          native: Boolean(channels.native),
+          durationMs: inAppDurationMs,
+          persistent: inAppPersistent,
+          browserOnlyWhenBackground,
+        });
+        customRuleLastSentRef.current[ruleId] = now;
+      });
+    }
+
+    customRulePrevMatchRef.current = currentMatches;
+  }, [
+    notificationConfig,
+    entities,
+    evaluateCustomNotificationRule,
+    notify,
+    t,
+    renderRuleMessage,
+  ]);
 
   const saveHeaderLogos = useCallback(async ({ title, logoUrl, logoUrlLight, logoUrlDark, updatedAt: updatedAtInput }) => {
     if (!canEditGlobalBranding || typeof onSaveGlobalBranding !== 'function') {

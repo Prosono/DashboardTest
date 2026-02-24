@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useMemo, useRef, useState } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { Capacitor, registerPlugin } from '@capacitor/core';
 import { AlertTriangle, AlertCircle, Bell, Check, X } from '../icons';
 
@@ -117,7 +117,65 @@ const maybeSendNativeNotification = async ({ title, message }) => {
 };
 
 const NotificationViewport = ({ notifications, onDismiss }) => {
+  const [isMobileViewport, setIsMobileViewport] = useState(() => {
+    if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return false;
+    return window.matchMedia('(max-width: 639px)').matches;
+  });
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return () => {};
+    const mediaQuery = window.matchMedia('(max-width: 639px)');
+    const update = () => setIsMobileViewport(Boolean(mediaQuery.matches));
+    update();
+    if (typeof mediaQuery.addEventListener === 'function') {
+      mediaQuery.addEventListener('change', update);
+      return () => mediaQuery.removeEventListener('change', update);
+    }
+    if (typeof mediaQuery.addListener === 'function') {
+      mediaQuery.addListener(update);
+      return () => mediaQuery.removeListener(update);
+    }
+    return () => {};
+  }, []);
+
   if (!notifications.length) return null;
+
+  if (isMobileViewport) {
+    const entry = notifications[0];
+    const tone = levelTone(entry.level);
+    const IconComp = tone.IconComp || Bell;
+    const overflowCount = Math.max(0, notifications.length - 1);
+    const dismissLabel = String(entry.title || 'Notification');
+    return (
+      <div className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-[90] pointer-events-none">
+        <button
+          type="button"
+          onClick={() => onDismiss(entry.id)}
+          className="pointer-events-auto relative w-16 h-16 rounded-full border shadow-xl backdrop-blur-xl flex items-center justify-center transition-transform active:scale-95"
+          style={{
+            borderColor: tone.border,
+            backgroundColor: 'color-mix(in srgb, var(--card-bg) 90%, transparent)',
+            boxShadow: '0 10px 30px rgba(0,0,0,0.28)',
+          }}
+          aria-label={`Dismiss notification: ${dismissLabel}`}
+          title={dismissLabel}
+        >
+          <div
+            className="w-10 h-10 rounded-full border flex items-center justify-center"
+            style={{ borderColor: tone.border, backgroundColor: tone.bg }}
+          >
+            <IconComp className={`w-5 h-5 ${tone.icon}`} />
+          </div>
+          {overflowCount > 0 ? (
+            <span className="absolute -top-1 -right-1 min-w-[1.25rem] h-5 px-1 rounded-full bg-rose-500 text-white text-[10px] font-bold leading-5">
+              +{overflowCount}
+            </span>
+          ) : null}
+        </button>
+      </div>
+    );
+  }
+
   return (
     <div className="fixed top-4 right-4 left-4 sm:left-auto sm:w-[min(360px,92vw)] z-[80] pointer-events-none space-y-2">
       {notifications.map((entry) => {

@@ -17,7 +17,12 @@ export const DEFAULT_NOTIFICATION_CONFIG = {
     native: true,
     cooldownSeconds: 0,
   },
+  rules: [],
 };
+
+const MAX_RULES = 60;
+const CONDITION_TYPES = new Set(['greater_than', 'less_than', 'equals', 'is_active']);
+const LEVEL_TYPES = new Set(['info', 'warning', 'critical', 'success', 'error']);
 
 const toBool = (value, fallback) => {
   if (value === undefined || value === null) return fallback;
@@ -44,6 +49,49 @@ const normalizeLevelConfig = (value, fallback) => {
   };
 };
 
+const normalizeRuleChannels = (value) => {
+  const input = value && typeof value === 'object' ? value : {};
+  return {
+    inApp: toBool(input.inApp, true),
+    browser: toBool(input.browser, true),
+    native: toBool(input.native, true),
+  };
+};
+
+const normalizeRule = (value, index) => {
+  const input = value && typeof value === 'object' ? value : {};
+  const id = String(input.id || '').trim() || `rule_${index + 1}`;
+  const conditionTypeRaw = String(input.conditionType || '').trim().toLowerCase();
+  const conditionType = CONDITION_TYPES.has(conditionTypeRaw) ? conditionTypeRaw : 'is_active';
+  const levelRaw = String(input.level || '').trim().toLowerCase();
+  const level = LEVEL_TYPES.has(levelRaw) ? levelRaw : 'warning';
+  return {
+    id,
+    enabled: toBool(input.enabled, true),
+    entityId: String(input.entityId || '').trim(),
+    conditionType,
+    compareValue: String(input.compareValue ?? '').trim(),
+    title: String(input.title || '').trim(),
+    message: String(input.message || '').trim(),
+    level,
+    channels: normalizeRuleChannels(input.channels),
+    cooldownSeconds: clampInt(input.cooldownSeconds, 300, 0, 86400),
+  };
+};
+
+const normalizeRules = (value) => {
+  const source = Array.isArray(value) ? value : [];
+  const unique = new Set();
+  const normalized = [];
+  for (let i = 0; i < source.length && normalized.length < MAX_RULES; i += 1) {
+    const rule = normalizeRule(source[i], i);
+    if (!rule.id || unique.has(rule.id)) continue;
+    unique.add(rule.id);
+    normalized.push(rule);
+  }
+  return normalized;
+};
+
 export const normalizeNotificationConfig = (value) => {
   const input = value && typeof value === 'object' ? value : {};
   return {
@@ -58,6 +106,7 @@ export const normalizeNotificationConfig = (value) => {
     ),
     warning: normalizeLevelConfig(input.warning, DEFAULT_NOTIFICATION_CONFIG.warning),
     critical: normalizeLevelConfig(input.critical, DEFAULT_NOTIFICATION_CONFIG.critical),
+    rules: normalizeRules(input.rules),
     updatedAt: input.updatedAt || null,
   };
 };
