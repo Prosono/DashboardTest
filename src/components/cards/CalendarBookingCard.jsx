@@ -5,6 +5,7 @@ import {
   Clock3,
   MapPin,
   User,
+  Users,
   Wrench,
   ShieldCheck,
 } from 'lucide-react';
@@ -153,9 +154,9 @@ const getBookingTypeMeta = (type, t) => {
     case 'private':
       return { label: t('calendarBooking.type.private') || 'Private', Icon: ShieldCheck };
     case 'felles':
-      return { label: t('calendarBooking.type.felles') || 'Felles', Icon: User };
+      return { label: t('calendarBooking.type.felles') || 'Felles', Icon: Users };
     default:
-      return { label: t('calendarBooking.type.felles') || 'Felles', Icon: User };
+      return { label: t('calendarBooking.type.felles') || 'Felles', Icon: Users };
   }
 };
 
@@ -318,9 +319,51 @@ const CalendarBookingCard = ({
     : (t('calendar.noEvents') || 'No upcoming events');
 
   const isSmall = size === 'small';
+  const summaryEvent = ongoingEvent || nextEvent;
+  const summaryIsLive = !!ongoingEvent;
   const heroPalette = nextEvent ? getBookingPalette(nextEvent.bookingType, !!ongoingEvent) : null;
   const heroTypeMeta = nextEvent ? getBookingTypeMeta(nextEvent.bookingType, t) : null;
   const HeroTypeIcon = heroTypeMeta?.Icon || User;
+  const summaryPalette = summaryEvent
+    ? getBookingPalette(summaryEvent.bookingType, summaryIsLive)
+    : getBookingPalette('felles', false);
+  const summaryTypeMeta = summaryEvent
+    ? getBookingTypeMeta(summaryEvent.bookingType, t)
+    : getBookingTypeMeta('felles', t);
+  const SummaryTypeIcon = summaryTypeMeta.Icon;
+
+  const typeCounts = useMemo(() => {
+    const initial = { felles: 0, service: 0, private: 0, aufguss: 0 };
+    todayEvents.forEach((event) => {
+      const key = event.bookingType in initial ? event.bookingType : 'felles';
+      initial[key] += 1;
+    });
+    return initial;
+  }, [todayEvents]);
+
+  const typeCountRows = [
+    { type: 'felles', count: typeCounts.felles },
+    { type: 'service', count: typeCounts.service },
+    { type: 'private', count: typeCounts.private },
+  ];
+  if (typeCounts.aufguss > 0) {
+    typeCountRows.push({ type: 'aufguss', count: typeCounts.aufguss });
+  }
+
+  const { tomorrowStartMs } = getDayBounds(clockMs);
+  const summaryIsTomorrow = !!summaryEvent && summaryEvent.startMs >= tomorrowStartMs;
+  const summaryDayLabel = summaryIsTomorrow
+    ? (t('calendar.tomorrow') || 'Tomorrow')
+    : (t('calendar.today') || 'Today');
+
+  const listTodayEvents = todayEvents.filter((event) => {
+    if (summaryEvent && event.id === summaryEvent.id) return false;
+    return event.endMs > clockMs;
+  });
+  const listTomorrowEvents = tomorrowEvents.filter((event) => {
+    if (summaryEvent && event.id === summaryEvent.id) return false;
+    return true;
+  });
 
   const renderEventItem = (event) => {
     const live = event.startMs <= clockMs && clockMs < event.endMs;
@@ -449,62 +492,75 @@ const CalendarBookingCard = ({
             <>
               <div
                 className="relative overflow-hidden rounded-2xl border bg-[var(--glass-bg)] p-3.5"
-                style={heroPalette
+                style={summaryEvent
                   ? {
-                    borderColor: heroPalette.softBorder,
-                    backgroundImage: `linear-gradient(130deg, ${heroPalette.softBg} 0%, rgba(0,0,0,0) 56%)`,
+                    borderColor: summaryPalette.softBorder,
+                    backgroundImage: `linear-gradient(130deg, ${summaryPalette.softBg} 0%, rgba(0,0,0,0) 56%)`,
                   }
                   : undefined}
               >
-                {nextEvent ? (
+                {summaryEvent ? (
                   <>
                     <div className="relative rounded-xl overflow-hidden">
                       <span
                         className="absolute -top-8 -right-8 w-28 h-28 rounded-full blur-3xl pointer-events-none"
                         style={{
-                          backgroundColor: getBookingPalette(nextEvent.bookingType, !!ongoingEvent).softBg,
+                          backgroundColor: summaryPalette.softBg,
                           opacity: 0.95,
                         }}
                       />
                       <div className="relative flex items-center justify-between gap-2">
                         <div className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-[10px] uppercase tracking-widest font-bold ${
-                          ongoingEvent
+                          summaryIsLive
                             ? 'border-blue-400/40 bg-blue-500/15 text-blue-300'
                             : 'border-[var(--glass-border)] bg-[var(--glass-bg-hover)] text-[var(--text-secondary)]'
                         }`}>
                           <Clock3 className="w-3.5 h-3.5" />
-                          {ongoingEvent ? (t('calendarBooking.inProgress') || 'In progress') : (t('calendarBooking.next') || 'Next')}
+                          {summaryIsLive ? (t('calendarBooking.inProgress') || 'In progress') : (t('calendarBooking.next') || 'Next')}
                         </div>
                         <span
                           className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full border text-[10px] uppercase tracking-widest font-bold"
                           style={{
-                            color: heroPalette?.color || 'var(--text-secondary)',
-                            borderColor: heroPalette?.softBorder || 'var(--glass-border)',
-                            backgroundColor: heroPalette?.softBg || 'var(--glass-bg-hover)',
+                            color: summaryPalette.color,
+                            borderColor: summaryPalette.softBorder,
+                            backgroundColor: summaryPalette.softBg,
                           }}
                         >
-                          <HeroTypeIcon className="w-3.5 h-3.5" />
-                          {heroTypeMeta?.label || (t('calendarBooking.type.standard') || 'Regular')}
+                          <SummaryTypeIcon className="w-3.5 h-3.5" />
+                          {summaryTypeMeta.label}
                         </span>
                       </div>
-                      <div className="text-[10px] uppercase tracking-widest font-bold text-[var(--text-secondary)]">
-                        {nextStatus}
+                      <div className="mt-2 text-center">
+                        <div className="text-[52px] leading-none font-semibold tabular-nums text-[var(--text-primary)]">
+                          {todayEvents.length}
+                        </div>
+                        <div className="mt-1 text-[13px] text-[var(--text-secondary)]">
+                          {t('calendarBooking.todayCountLabel') || 'Bookings today'}
+                        </div>
                       </div>
-                    </div>
-                    <div className="mt-2 text-[15px] leading-snug font-semibold text-[var(--text-primary)] line-clamp-2">
-                      {nextEvent.summary}
-                    </div>
-                    <div className="mt-2 flex flex-wrap items-center gap-2">
-                      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border border-[var(--glass-border)] bg-[var(--glass-bg-hover)] text-[11px] text-[var(--text-secondary)]">
-                        <Clock3 className="w-3.5 h-3.5" />
-                        {renderTimeRange(nextEvent)}
-                      </span>
-                      {nextEvent.location && (
-                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border border-[var(--glass-border)] bg-[var(--glass-bg-hover)] text-[11px] text-[var(--text-secondary)] max-w-full">
-                          <MapPin className="w-3.5 h-3.5 shrink-0" />
-                          <span className="truncate">{nextEvent.location}</span>
-                        </span>
-                      )}
+                      <div className="mt-3 grid grid-cols-3 gap-2">
+                        {typeCountRows.map((row) => {
+                          const rowMeta = getBookingTypeMeta(row.type, t);
+                          const rowPalette = getBookingPalette(row.type, false);
+                          const RowIcon = rowMeta.Icon;
+                          return (
+                            <div key={row.type} className="rounded-xl border border-[var(--glass-border)] bg-[var(--glass-bg-hover)] px-2 py-1.5 flex items-center justify-center gap-2 min-w-0">
+                              <span className="text-[11px] font-semibold tabular-nums text-[var(--text-secondary)]">{row.count}x</span>
+                              <span
+                                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full border text-[10px] uppercase tracking-[0.18em] font-bold min-w-0"
+                                style={{
+                                  color: rowPalette.color,
+                                  borderColor: rowPalette.softBorder,
+                                  backgroundColor: rowPalette.softBg,
+                                }}
+                              >
+                                <RowIcon className="w-3 h-3 shrink-0" />
+                                <span className="truncate">{rowMeta.label}</span>
+                              </span>
+                            </div>
+                          );
+                        })}
+                      </div>
                     </div>
                   </>
                 ) : (
@@ -514,41 +570,58 @@ const CalendarBookingCard = ({
                 )}
               </div>
 
-              <div className="grid grid-cols-1 gap-2">
+              {summaryEvent && (
                 <div className="rounded-xl border border-[var(--glass-border)] bg-[var(--glass-bg)] px-3 py-2.5">
-                  <div className="text-[10px] uppercase tracking-widest text-[var(--text-secondary)] font-bold">
-                    {t('calendar.today') || 'Today'}
+                  <div className="text-[10px] uppercase tracking-widest text-[var(--text-secondary)] font-bold mb-1">
+                    {summaryDayLabel}
                   </div>
-                  <div className="text-2xl leading-none font-semibold tabular-nums text-[var(--text-primary)] mt-1">
-                    {todayEvents.length}
+                  <div className="flex items-center gap-2 text-[10px] uppercase tracking-widest font-bold min-w-0">
+                    <span
+                      className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full border"
+                      style={{
+                        color: summaryPalette.color,
+                        borderColor: summaryPalette.softBorder,
+                        backgroundColor: summaryPalette.softBg,
+                      }}
+                    >
+                      <SummaryTypeIcon className="w-3 h-3 shrink-0" />
+                      {summaryIsLive ? (t('calendarBooking.inProgress') || 'In progress') : summaryTypeMeta.label}
+                    </span>
+                    <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full border border-[var(--glass-border)] bg-[var(--glass-bg-hover)] text-[var(--text-secondary)]">
+                      <Clock3 className="w-3.5 h-3.5" />
+                      {renderTimeRange(summaryEvent)}
+                    </span>
+                    <span className="ml-auto text-[10px] text-[var(--text-secondary)] truncate max-w-[46%]">
+                      {nextStatus}
+                    </span>
+                  </div>
+                  <div className="mt-1.5 text-base font-semibold text-[var(--text-primary)] truncate">
+                    {summaryEvent.summary}
                   </div>
                 </div>
-              </div>
+              )}
 
               <div className="grid grid-cols-1 gap-3 min-h-0 flex-1">
                 <div className="min-h-0 rounded-2xl border border-[var(--glass-border)] bg-[var(--glass-bg)] p-3 flex flex-col">
-                  <div className="text-[10px] uppercase tracking-widest font-bold text-[var(--text-secondary)] mb-2">
-                    {t('calendar.today') || 'Today'}
-                  </div>
                   <div className="min-h-0 flex-1 overflow-y-auto custom-scrollbar pr-1 space-y-2">
                     {upcomingEvents.length === 0 ? (
                       <div className="text-xs text-[var(--text-secondary)]">{t('calendar.noEvents') || 'No upcoming events'}</div>
                     ) : (
                       <>
-                        {todayEvents.length > 0 && (
+                        {listTodayEvents.length > 0 && (
                           <>
                             <div className="text-[10px] uppercase tracking-widest font-bold text-[var(--text-secondary)]">
                               {t('calendar.today') || 'Today'}
                             </div>
-                            {todayEvents.map(renderEventItem)}
+                            {listTodayEvents.map(renderEventItem)}
                           </>
                         )}
-                        {tomorrowEvents.length > 0 && (
+                        {listTomorrowEvents.length > 0 && (
                           <>
                             <div className="pt-1 text-[10px] uppercase tracking-widest font-bold text-[var(--text-secondary)]">
                               {t('calendar.tomorrow') || 'Tomorrow'}
                             </div>
-                            {tomorrowEvents.map(renderEventItem)}
+                            {listTomorrowEvents.map(renderEventItem)}
                           </>
                         )}
                       </>
