@@ -21,7 +21,9 @@ export const DEFAULT_NOTIFICATION_CONFIG = {
 };
 
 const MAX_RULES = 60;
+const MAX_RULE_CONDITIONS = 8;
 const CONDITION_TYPES = new Set(['greater_than', 'less_than', 'equals', 'is_active']);
+const CONDITION_OPERATORS = new Set(['and', 'or']);
 const LEVEL_TYPES = new Set(['info', 'warning', 'critical', 'success', 'error']);
 
 const toBool = (value, fallback) => {
@@ -58,19 +60,44 @@ const normalizeRuleChannels = (value) => {
   };
 };
 
+const normalizeRuleCondition = (value, fallback = null) => {
+  const input = value && typeof value === 'object' ? value : {};
+  const conditionTypeRaw = String(input.conditionType || '').trim().toLowerCase();
+  const conditionType = CONDITION_TYPES.has(conditionTypeRaw)
+    ? conditionTypeRaw
+    : String(fallback?.conditionType || 'is_active');
+  return {
+    conditionType,
+    compareValue: String(input.compareValue ?? fallback?.compareValue ?? '').trim(),
+  };
+};
+
 const normalizeRule = (value, index) => {
   const input = value && typeof value === 'object' ? value : {};
   const id = String(input.id || '').trim() || `rule_${index + 1}`;
   const conditionTypeRaw = String(input.conditionType || '').trim().toLowerCase();
   const conditionType = CONDITION_TYPES.has(conditionTypeRaw) ? conditionTypeRaw : 'is_active';
+  const conditionOperatorRaw = String(input.conditionOperator || '').trim().toLowerCase();
+  const conditionOperator = CONDITION_OPERATORS.has(conditionOperatorRaw) ? conditionOperatorRaw : 'and';
   const levelRaw = String(input.level || '').trim().toLowerCase();
   const level = LEVEL_TYPES.has(levelRaw) ? levelRaw : 'warning';
+  const sourceConditions = Array.isArray(input.conditions) ? input.conditions : [];
+  const conditions = [];
+  for (let i = 0; i < sourceConditions.length && conditions.length < MAX_RULE_CONDITIONS; i += 1) {
+    conditions.push(normalizeRuleCondition(sourceConditions[i], { conditionType, compareValue: input.compareValue }));
+  }
+  if (conditions.length === 0) {
+    conditions.push(normalizeRuleCondition(input, { conditionType, compareValue: input.compareValue }));
+  }
+  const primaryCondition = conditions[0] || { conditionType: 'is_active', compareValue: '' };
   return {
     id,
     enabled: toBool(input.enabled, true),
     entityId: String(input.entityId || '').trim(),
-    conditionType,
-    compareValue: String(input.compareValue ?? '').trim(),
+    conditionType: primaryCondition.conditionType,
+    compareValue: primaryCondition.compareValue,
+    conditionOperator,
+    conditions,
     title: String(input.title || '').trim(),
     message: String(input.message || '').trim(),
     level,

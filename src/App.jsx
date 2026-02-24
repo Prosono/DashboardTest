@@ -503,26 +503,37 @@ function AppContent({
     return false;
   }, []);
 
-  const evaluateCustomNotificationRule = useCallback((rule, entityState) => {
-    const conditionType = String(rule?.conditionType || 'is_active').trim().toLowerCase();
-    const compareValue = String(rule?.compareValue ?? '').trim();
-    const rawState = entityState?.state;
+  const evaluateCustomNotificationCondition = useCallback((condition, rawState) => {
+    const conditionType = String(condition?.conditionType || 'is_active').trim().toLowerCase();
+    const compareValue = String(condition?.compareValue ?? '').trim();
     if (conditionType === 'is_active') {
       return isStateActive(rawState);
     }
-
     if (conditionType === 'equals') {
       return String(rawState ?? '').trim().toLowerCase() === compareValue.toLowerCase();
     }
-
     const stateNum = Number(rawState);
     const compareNum = Number(compareValue);
     if (!Number.isFinite(stateNum) || !Number.isFinite(compareNum)) return false;
-
     if (conditionType === 'greater_than') return stateNum > compareNum;
     if (conditionType === 'less_than') return stateNum < compareNum;
     return false;
   }, [isStateActive]);
+
+  const evaluateCustomNotificationRule = useCallback((rule, entityState) => {
+    const fallbackCondition = {
+      conditionType: String(rule?.conditionType || 'is_active').trim().toLowerCase(),
+      compareValue: String(rule?.compareValue ?? '').trim(),
+    };
+    const conditions = Array.isArray(rule?.conditions) && rule.conditions.length > 0
+      ? rule.conditions
+      : [fallbackCondition];
+    const operator = String(rule?.conditionOperator || 'and').trim().toLowerCase() === 'or' ? 'or' : 'and';
+    const rawState = entityState?.state;
+    const results = conditions.map((condition) => evaluateCustomNotificationCondition(condition, rawState));
+    if (results.length === 0) return false;
+    return operator === 'or' ? results.some(Boolean) : results.every(Boolean);
+  }, [evaluateCustomNotificationCondition]);
 
   const renderRuleMessage = useCallback((template, context = {}, allEntities = {}) => {
     const safeTemplate = String(template || '').trim();

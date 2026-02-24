@@ -2246,6 +2246,11 @@ export default function ConfigModal({
     id: `rule_${Date.now()}_${Math.random().toString(16).slice(2, 8)}`,
     enabled: true,
     entityId: '',
+    conditionOperator: 'and',
+    conditions: [{
+      conditionType: 'is_active',
+      compareValue: '',
+    }],
     conditionType: 'is_active',
     compareValue: '',
     title: '',
@@ -2258,6 +2263,43 @@ export default function ConfigModal({
     },
     cooldownSeconds: 300,
   });
+
+  const getRuleConditions = (rule) => {
+    const source = rule && typeof rule === 'object' ? rule : {};
+    if (Array.isArray(source.conditions) && source.conditions.length > 0) {
+      return source.conditions.map((condition) => ({
+        conditionType: String(condition?.conditionType || 'is_active').trim() || 'is_active',
+        compareValue: String(condition?.compareValue ?? ''),
+      }));
+    }
+    return [{
+      conditionType: String(source.conditionType || 'is_active').trim() || 'is_active',
+      compareValue: String(source.compareValue ?? ''),
+    }];
+  };
+
+  const applyRuleConditionsPatch = (rule, nextConditionsInput, nextOperatorInput = null) => {
+    const nextConditions = (Array.isArray(nextConditionsInput) ? nextConditionsInput : [])
+      .map((condition) => ({
+        conditionType: String(condition?.conditionType || 'is_active').trim() || 'is_active',
+        compareValue: String(condition?.compareValue ?? ''),
+      }))
+      .slice(0, 8);
+    if (nextConditions.length === 0) {
+      nextConditions.push({ conditionType: 'is_active', compareValue: '' });
+    }
+    const primary = nextConditions[0];
+    const nextOperator = String(nextOperatorInput ?? (rule?.conditionOperator || 'and')).trim().toLowerCase() === 'or'
+      ? 'or'
+      : 'and';
+    return {
+      ...rule,
+      conditionOperator: nextOperator,
+      conditions: nextConditions,
+      conditionType: primary.conditionType,
+      compareValue: primary.compareValue,
+    };
+  };
 
   const addNotificationRule = () => {
     const nextRule = createNotificationRule();
@@ -2273,11 +2315,70 @@ export default function ConfigModal({
     if (!normalizedRuleId) return;
     updateNotificationDraft((prev) => ({
       ...prev,
-      rules: (Array.isArray(prev.rules) ? prev.rules : []).map((rule) => (
-        String(rule?.id || '').trim() === normalizedRuleId
-          ? { ...rule, ...(patch || {}) }
-          : rule
-      )),
+      rules: (Array.isArray(prev.rules) ? prev.rules : []).map((rule) => {
+        if (String(rule?.id || '').trim() !== normalizedRuleId) return rule;
+        const merged = { ...rule, ...(patch || {}) };
+        const mergedConditions = getRuleConditions(merged);
+        return applyRuleConditionsPatch(merged, mergedConditions, merged.conditionOperator);
+      }),
+    }));
+  };
+
+  const updateNotificationRuleConditionOperator = (ruleId, operator) => {
+    const normalizedRuleId = String(ruleId || '').trim();
+    if (!normalizedRuleId) return;
+    updateNotificationDraft((prev) => ({
+      ...prev,
+      rules: (Array.isArray(prev.rules) ? prev.rules : []).map((rule) => {
+        if (String(rule?.id || '').trim() !== normalizedRuleId) return rule;
+        return applyRuleConditionsPatch(rule, getRuleConditions(rule), operator);
+      }),
+    }));
+  };
+
+  const addNotificationRuleCondition = (ruleId) => {
+    const normalizedRuleId = String(ruleId || '').trim();
+    if (!normalizedRuleId) return;
+    updateNotificationDraft((prev) => ({
+      ...prev,
+      rules: (Array.isArray(prev.rules) ? prev.rules : []).map((rule) => {
+        if (String(rule?.id || '').trim() !== normalizedRuleId) return rule;
+        const current = getRuleConditions(rule);
+        const next = [...current, { conditionType: 'is_active', compareValue: '' }].slice(0, 8);
+        return applyRuleConditionsPatch(rule, next, rule?.conditionOperator);
+      }),
+    }));
+  };
+
+  const updateNotificationRuleCondition = (ruleId, conditionIndex, patch) => {
+    const normalizedRuleId = String(ruleId || '').trim();
+    const targetIndex = Number.isInteger(conditionIndex) ? conditionIndex : Number.parseInt(String(conditionIndex || ''), 10);
+    if (!normalizedRuleId || !Number.isInteger(targetIndex) || targetIndex < 0) return;
+    updateNotificationDraft((prev) => ({
+      ...prev,
+      rules: (Array.isArray(prev.rules) ? prev.rules : []).map((rule) => {
+        if (String(rule?.id || '').trim() !== normalizedRuleId) return rule;
+        const current = getRuleConditions(rule);
+        if (targetIndex >= current.length) return rule;
+        const next = current.map((condition, idx) => (idx === targetIndex ? { ...condition, ...(patch || {}) } : condition));
+        return applyRuleConditionsPatch(rule, next, rule?.conditionOperator);
+      }),
+    }));
+  };
+
+  const removeNotificationRuleCondition = (ruleId, conditionIndex) => {
+    const normalizedRuleId = String(ruleId || '').trim();
+    const targetIndex = Number.isInteger(conditionIndex) ? conditionIndex : Number.parseInt(String(conditionIndex || ''), 10);
+    if (!normalizedRuleId || !Number.isInteger(targetIndex) || targetIndex < 0) return;
+    updateNotificationDraft((prev) => ({
+      ...prev,
+      rules: (Array.isArray(prev.rules) ? prev.rules : []).map((rule) => {
+        if (String(rule?.id || '').trim() !== normalizedRuleId) return rule;
+        const current = getRuleConditions(rule);
+        if (current.length <= 1 || targetIndex >= current.length) return rule;
+        const next = current.filter((_, idx) => idx !== targetIndex);
+        return applyRuleConditionsPatch(rule, next, rule?.conditionOperator);
+      }),
     }));
   };
 
@@ -2616,9 +2717,10 @@ export default function ConfigModal({
               const channels = normalizedRule.channels && typeof normalizedRule.channels === 'object'
                 ? normalizedRule.channels
                 : { inApp: true, browser: true, native: true };
-              const showCompareValue = normalizedRule.conditionType === 'greater_than'
-                || normalizedRule.conditionType === 'less_than'
-                || normalizedRule.conditionType === 'equals';
+              const ruleConditions = getRuleConditions(normalizedRule);
+              const conditionOperator = String(normalizedRule.conditionOperator || 'and').trim().toLowerCase() === 'or'
+                ? 'or'
+                : 'and';
               const selectedEntityId = String(normalizedRule.entityId || '').trim();
               const selectedOption = notificationEntityOptions.find((option) => option.id === selectedEntityId) || null;
               const selectedDomain = String(notificationRuleDomain[ruleId] || 'all').trim() || 'all';
@@ -2629,7 +2731,10 @@ export default function ConfigModal({
                 .slice(0, 40);
               const referenceEntityId = String(notificationRuleReferenceEntity[ruleId] || selectedEntityId).trim();
               const isExpanded = Boolean(notificationRuleExpanded[ruleId]);
-              const conditionSummary = t(`notifications.condition.${String(normalizedRule.conditionType || 'is_active').trim()}`);
+              const firstCondition = ruleConditions[0] || { conditionType: 'is_active', compareValue: '' };
+              const conditionSummary = ruleConditions.length <= 1
+                ? t(`notifications.condition.${String(firstCondition.conditionType || 'is_active').trim()}`)
+                : `${t(`notifications.conditionOperator.${conditionOperator}`)} • ${ruleConditions.length}`;
               const severitySummary = t(`notifications.severity.${String(normalizedRule.level || 'warning').trim()}`);
               const headerTitle = String(normalizedRule.title || '').trim()
                 || selectedOption?.friendlyName
@@ -2750,20 +2855,89 @@ export default function ConfigModal({
                         </div>
                       )}
                     </div>
-                    <div className="space-y-1">
-                      <label className="text-[10px] uppercase tracking-wider font-bold text-[var(--text-secondary)]">
-                        {t('notifications.ruleCondition')}
-                      </label>
-                      <select
-                        value={String(normalizedRule.conditionType || 'is_active')}
-                        onChange={(e) => updateNotificationRule(ruleId, { conditionType: e.target.value })}
-                        className="w-full px-3 py-2 rounded-lg bg-[var(--glass-bg)] border border-[var(--glass-border)] text-sm"
+                    <div className="space-y-2 md:col-span-2">
+                      <div className="grid grid-cols-1 md:grid-cols-[minmax(0,1fr)_12rem] gap-2">
+                        <div className="space-y-1">
+                          <label className="text-[10px] uppercase tracking-wider font-bold text-[var(--text-secondary)]">
+                            {t('notifications.ruleCondition')}
+                          </label>
+                          <div className="px-3 py-2 rounded-lg bg-[var(--glass-bg)] border border-[var(--glass-border)] text-xs text-[var(--text-secondary)]">
+                            {selectedOption?.friendlyName || selectedEntityId || t('notifications.ruleEntity')}
+                          </div>
+                        </div>
+                        <div className="space-y-1">
+                          <label className="text-[10px] uppercase tracking-wider font-bold text-[var(--text-secondary)]">
+                            {t('notifications.ruleConditionOperator')}
+                          </label>
+                          <select
+                            value={conditionOperator}
+                            onChange={(e) => updateNotificationRuleConditionOperator(ruleId, e.target.value)}
+                            className="w-full px-3 py-2 rounded-lg bg-[var(--glass-bg)] border border-[var(--glass-border)] text-sm"
+                          >
+                            <option value="and">{t('notifications.conditionOperator.and')}</option>
+                            <option value="or">{t('notifications.conditionOperator.or')}</option>
+                          </select>
+                        </div>
+                      </div>
+                      <div className="space-y-2">
+                        {ruleConditions.map((condition, conditionIdx) => {
+                          const showClauseCompareValue = condition.conditionType === 'greater_than'
+                            || condition.conditionType === 'less_than'
+                            || condition.conditionType === 'equals';
+                          return (
+                            <div
+                              key={`${ruleId}_condition_${conditionIdx}`}
+                              className="rounded-lg border border-[var(--glass-border)] bg-[var(--glass-bg)] p-2 space-y-2"
+                            >
+                              <div className="flex items-center justify-between gap-2">
+                                <span className="text-[10px] uppercase tracking-wider font-bold text-[var(--text-secondary)]">
+                                  {t('notifications.ruleClauseLabel')} {conditionIdx + 1}
+                                </span>
+                                <button
+                                  type="button"
+                                  onClick={() => removeNotificationRuleCondition(ruleId, conditionIdx)}
+                                  disabled={ruleConditions.length <= 1}
+                                  className="px-2 py-1 rounded-md border border-red-500/25 bg-red-500/10 text-red-300 text-[10px] uppercase tracking-wider font-bold disabled:opacity-40 disabled:cursor-not-allowed"
+                                >
+                                  {t('common.delete')}
+                                </button>
+                              </div>
+                              <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                                <select
+                                  value={String(condition.conditionType || 'is_active')}
+                                  onChange={(e) => updateNotificationRuleCondition(ruleId, conditionIdx, { conditionType: e.target.value })}
+                                  className="w-full px-3 py-2 rounded-lg bg-[var(--glass-bg-hover)] border border-[var(--glass-border)] text-sm"
+                                >
+                                  <option value="is_active">{t('notifications.condition.is_active')}</option>
+                                  <option value="greater_than">{t('notifications.condition.greater_than')}</option>
+                                  <option value="less_than">{t('notifications.condition.less_than')}</option>
+                                  <option value="equals">{t('notifications.condition.equals')}</option>
+                                </select>
+                                {showClauseCompareValue ? (
+                                  <input
+                                    value={String(condition.compareValue ?? '')}
+                                    onChange={(e) => updateNotificationRuleCondition(ruleId, conditionIdx, { compareValue: e.target.value })}
+                                    className="w-full px-3 py-2 rounded-lg bg-[var(--glass-bg-hover)] border border-[var(--glass-border)] text-sm"
+                                    placeholder={t('notifications.ruleValuePlaceholder')}
+                                  />
+                                ) : (
+                                  <div className="w-full px-3 py-2 rounded-lg bg-[var(--glass-bg-hover)] border border-[var(--glass-border)] text-xs text-[var(--text-secondary)]">
+                                    {t('notifications.ruleValueNotRequired')}
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => addNotificationRuleCondition(ruleId)}
+                        disabled={ruleConditions.length >= 8}
+                        className="px-2.5 py-1.5 rounded-md border border-[var(--glass-border)] bg-[var(--glass-bg)] text-[10px] font-bold uppercase tracking-wider disabled:opacity-40 disabled:cursor-not-allowed"
                       >
-                        <option value="is_active">{t('notifications.condition.is_active')}</option>
-                        <option value="greater_than">{t('notifications.condition.greater_than')}</option>
-                        <option value="less_than">{t('notifications.condition.less_than')}</option>
-                        <option value="equals">{t('notifications.condition.equals')}</option>
-                      </select>
+                        {t('notifications.addCondition')}
+                      </button>
                     </div>
                     <div className="space-y-1">
                       <label className="text-[10px] uppercase tracking-wider font-bold text-[var(--text-secondary)]">
@@ -2780,19 +2954,6 @@ export default function ConfigModal({
                         <option value="success">{t('notifications.severity.success')}</option>
                       </select>
                     </div>
-                    {showCompareValue && (
-                      <div className="space-y-1 md:col-span-2">
-                        <label className="text-[10px] uppercase tracking-wider font-bold text-[var(--text-secondary)]">
-                          {t('notifications.ruleValue')}
-                        </label>
-                        <input
-                          value={String(normalizedRule.compareValue ?? '')}
-                          onChange={(e) => updateNotificationRule(ruleId, { compareValue: e.target.value })}
-                          className="w-full px-3 py-2 rounded-lg bg-[var(--glass-bg)] border border-[var(--glass-border)] text-sm"
-                          placeholder={t('notifications.ruleValuePlaceholder')}
-                        />
-                      </div>
-                    )}
                     <div className="space-y-1 md:col-span-2">
                       <label className="text-[10px] uppercase tracking-wider font-bold text-[var(--text-secondary)] flex items-center gap-1.5">
                         <AlignLeft className="w-3 h-3" />
