@@ -14,6 +14,8 @@ import {
   Eye,
   EyeOff,
   RefreshCw,
+  ChevronLeft,
+  ChevronRight,
 } from './icons';
 
 import SettingsDropdown from './components/ui/SettingsDropdown';
@@ -1216,6 +1218,19 @@ function AppContent({
     label: pageDefaults[id]?.label || id,
     icon: pageDefaults[id]?.icon || LayoutGrid
   }));
+  const activePageIndex = visiblePageIds.indexOf(activePage);
+  const previousPageId = activePageIndex > 0 ? visiblePageIds[activePageIndex - 1] : null;
+  const nextPageId = activePageIndex >= 0 && activePageIndex < (visiblePageIds.length - 1)
+    ? visiblePageIds[activePageIndex + 1]
+    : null;
+  const goToPreviousPage = useCallback(() => {
+    if (!previousPageId) return;
+    setActivePage(previousPageId);
+  }, [previousPageId, setActivePage]);
+  const goToNextPage = useCallback(() => {
+    if (!nextPageId) return;
+    setActivePage(nextPageId);
+  }, [nextPageId, setActivePage]);
 
   const isCardVisibleForCurrentRole = useCallback((cardId, pageId = activePage) => {
     if (editMode && canEditDashboard) return true;
@@ -1776,7 +1791,41 @@ function AppContent({
           </div>
         </div>
 
-        <div className={isMobile ? 'mobile-page-swipe-stage overflow-x-hidden' : ''} style={mobilePageStageStyle}>
+        <div className={isMobile ? 'mobile-page-swipe-stage overflow-x-hidden' : 'relative'} style={mobilePageStageStyle}>
+          {!isMobile && previousPageId && (
+            <button
+              type="button"
+              onClick={goToPreviousPage}
+              className="absolute left-0 top-1/2 -translate-x-[calc(100%+0.75rem)] -translate-y-1/2 z-20 w-11 h-11 rounded-full border flex items-center justify-center transition-all duration-200 shadow-lg shadow-black/20"
+              style={{
+                borderColor: 'var(--glass-border)',
+                backgroundColor: 'color-mix(in srgb, var(--card-bg) 82%, transparent)',
+                color: 'var(--text-secondary)',
+                backdropFilter: 'blur(10px)',
+              }}
+              title="Previous tab"
+              aria-label="Go to previous tab"
+            >
+              <ChevronLeft className="w-5 h-5" />
+            </button>
+          )}
+          {!isMobile && nextPageId && (
+            <button
+              type="button"
+              onClick={goToNextPage}
+              className="absolute right-0 top-1/2 translate-x-[calc(100%+0.75rem)] -translate-y-1/2 z-20 w-11 h-11 rounded-full border flex items-center justify-center transition-all duration-200 shadow-lg shadow-black/20"
+              style={{
+                borderColor: 'var(--glass-border)',
+                backgroundColor: 'color-mix(in srgb, var(--card-bg) 82%, transparent)',
+                color: 'var(--text-secondary)',
+                backdropFilter: 'blur(10px)',
+              }}
+              title="Next tab"
+              aria-label="Go to next tab"
+            >
+              <ChevronRight className="w-5 h-5" />
+            </button>
+          )}
           {!visiblePageIds.includes(activePage) ? (
             <div key={`${activePage}-restricted`} className="flex flex-col items-center justify-center min-h-[45vh] text-center p-8 opacity-90 animate-in fade-in zoom-in duration-300 font-sans">
               <div className="bg-[var(--glass-bg)] border border-[var(--glass-border)] p-5 rounded-full mb-4 shadow-lg shadow-black/5">
