@@ -17,6 +17,7 @@ import {
   Wifi,
   Settings,
   AlertCircle,
+  AlertTriangle,
   Bell,
   Lock,
   Server,
