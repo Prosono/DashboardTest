@@ -591,7 +591,6 @@ function AppContent({
   const mobilePageSwipeTrackingRef = useRef(false);
   const mobilePageSwipeHorizontalRef = useRef(false);
   const mobilePageSwipeStartRef = useRef({ x: 0, y: 0 });
-  const mobilePageSwipeCommitTimerRef = useRef(0);
   const [mobilePageSwipeOffsetX, setMobilePageSwipeOffsetX] = useState(0);
   const [mobilePageSwipePreviewActive, setMobilePageSwipePreviewActive] = useState(false);
   const [mobilePageTransitionDirection, setMobilePageTransitionDirection] = useState('');
@@ -632,10 +631,6 @@ function AppContent({
     if (mobilePageTransitionTimerRef.current) {
       window.clearTimeout(mobilePageTransitionTimerRef.current);
       mobilePageTransitionTimerRef.current = 0;
-    }
-    if (mobilePageSwipeCommitTimerRef.current) {
-      window.clearTimeout(mobilePageSwipeCommitTimerRef.current);
-      mobilePageSwipeCommitTimerRef.current = 0;
     }
   }, []);
 
@@ -1098,7 +1093,6 @@ function AppContent({
     const SWIPE_DIRECTION_LOCK_PX = 14;
     const SWIPE_PREVIEW_MAX_OFFSET_PX = 220;
     const SWIPE_PREVIEW_RESISTANCE = 0.9;
-    const SWIPE_COMMIT_DURATION_MS = 90;
 
     const resetSwipeVisual = () => {
       setMobilePageSwipePreviewActive(false);
@@ -1118,10 +1112,6 @@ function AppContent({
       if (target && typeof target.closest === 'function') {
         if (target.closest('[data-disable-page-swipe="true"]')) return;
         if (target.closest('input, textarea, select, [contenteditable="true"]')) return;
-      }
-      if (mobilePageSwipeCommitTimerRef.current) {
-        window.clearTimeout(mobilePageSwipeCommitTimerRef.current);
-        mobilePageSwipeCommitTimerRef.current = 0;
       }
       setMobilePageSwipePreviewActive(false);
       setMobilePageSwipeOffsetX(0);
@@ -1202,16 +1192,9 @@ function AppContent({
       }
       const direction = dx < 0 ? 'left' : 'right';
       setMobilePageSwipePreviewActive(false);
-      setMobilePageSwipeOffsetX(direction === 'left' ? -SWIPE_PREVIEW_MAX_OFFSET_PX : SWIPE_PREVIEW_MAX_OFFSET_PX);
       triggerMobilePageTransition(direction);
-      if (mobilePageSwipeCommitTimerRef.current) {
-        window.clearTimeout(mobilePageSwipeCommitTimerRef.current);
-      }
-      mobilePageSwipeCommitTimerRef.current = window.setTimeout(() => {
-        setActivePage(visiblePageIds[targetIndex]);
-        setMobilePageSwipeOffsetX(0);
-        mobilePageSwipeCommitTimerRef.current = 0;
-      }, SWIPE_COMMIT_DURATION_MS);
+      setActivePage(visiblePageIds[targetIndex]);
+      setMobilePageSwipeOffsetX(0);
     };
 
     const onTouchCancel = () => {
@@ -1231,10 +1214,6 @@ function AppContent({
       window.removeEventListener('touchcancel', onTouchCancel);
       resetSwipe();
       resetSwipeVisual();
-      if (mobilePageSwipeCommitTimerRef.current) {
-        window.clearTimeout(mobilePageSwipeCommitTimerRef.current);
-        mobilePageSwipeCommitTimerRef.current = 0;
-      }
     };
   }, [isMobile, shouldLockMobileScroll, editMode, mobilePullRefreshing, visiblePageIds, activePage, setActivePage, triggerMobilePageTransition]);
 
