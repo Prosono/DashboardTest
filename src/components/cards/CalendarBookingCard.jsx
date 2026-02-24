@@ -78,17 +78,25 @@ const getDayBounds = (nowMs) => {
 };
 
 const BOOKING_TYPE_PATTERNS = {
-  service: ['service', 'vedlikehold', 'maintenance', 'teknisk', 'repair', 'reparasjon'],
-  private: ['privat', 'private', 'vip', 'exclusive'],
-  felles: ['felles', 'shared', 'common'],
+  service: ['service'],
+  aufguss: ['aufguss'],
+  private: ['privat', 'private'],
+  felles: ['felles'],
 };
 
 const getBookingType = (event) => {
-  const summary = String(event?.summary || '').toLowerCase();
-  const description = String(event?.description || '').toLowerCase();
-  const location = String(event?.location || '').toLowerCase();
-  const haystack = `${summary} ${description} ${location}`;
+  const normalizeText = (value) => String(value || '')
+    .toLowerCase()
+    .normalize('NFKD')
+    .replace(/[\u0300-\u036f]/g, '');
+
+  const summary = normalizeText(event?.summary);
+  const description = normalizeText(event?.description);
+  const location = normalizeText(event?.location);
+  const haystack = `${summary} ${description} ${location}`.trim();
+
   if (BOOKING_TYPE_PATTERNS.service.some((pattern) => haystack.includes(pattern))) return 'service';
+  if (BOOKING_TYPE_PATTERNS.aufguss.some((pattern) => haystack.includes(pattern))) return 'aufguss';
   if (BOOKING_TYPE_PATTERNS.private.some((pattern) => haystack.includes(pattern))) return 'private';
   if (BOOKING_TYPE_PATTERNS.felles.some((pattern) => haystack.includes(pattern))) return 'felles';
   return 'felles';
@@ -109,6 +117,13 @@ const getBookingPalette = (type, isOngoing = false) => {
       softBorder: 'rgba(245, 158, 11, 0.38)',
     };
   }
+  if (type === 'aufguss') {
+    return {
+      color: '#a855f7',
+      softBg: 'rgba(168, 85, 247, 0.14)',
+      softBorder: 'rgba(168, 85, 247, 0.4)',
+    };
+  }
   if (type === 'private') {
     return {
       color: '#ec4899',
@@ -117,9 +132,9 @@ const getBookingPalette = (type, isOngoing = false) => {
     };
   }
   return {
-    color: '#22c55e',
-    softBg: 'rgba(34, 197, 94, 0.14)',
-    softBorder: 'rgba(34, 197, 94, 0.38)',
+    color: '#3b82f6',
+    softBg: 'rgba(59, 130, 246, 0.14)',
+    softBorder: 'rgba(59, 130, 246, 0.38)',
   };
 };
 
@@ -127,6 +142,8 @@ const getBookingTypeMeta = (type, t) => {
   switch (type) {
     case 'service':
       return { label: t('calendarBooking.type.service') || 'Service', Icon: Wrench };
+    case 'aufguss':
+      return { label: t('calendarBooking.type.aufguss') || 'Aufguss', Icon: User };
     case 'private':
       return { label: t('calendarBooking.type.private') || 'Private', Icon: ShieldCheck };
     case 'felles':

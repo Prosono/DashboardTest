@@ -719,6 +719,7 @@
   "calendarBooking.live": "Live",
   "calendarBooking.type.standard": "Vanleg",
   "calendarBooking.type.felles": "Felles",
+  "calendarBooking.type.aufguss": "Aufguss",
   "calendarBooking.type.private": "Privat",
   "calendarBooking.type.service": "Service",
   "calendarBooking.type.cleaning": "Reingjering",

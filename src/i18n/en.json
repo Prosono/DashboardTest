@@ -133,6 +133,7 @@
   "calendarBooking.live": "Live",
   "calendarBooking.type.standard": "Regular",
   "calendarBooking.type.felles": "Shared",
+  "calendarBooking.type.aufguss": "Aufguss",
   "calendarBooking.type.private": "Private",
   "calendarBooking.type.service": "Service",
   "calendarBooking.type.cleaning": "Cleaning",
