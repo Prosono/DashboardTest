@@ -476,10 +476,10 @@ export default function SaunaBookingTempCard({
     if (overallScore === null) {
       return { ring: '#64748b', glow: 'rgba(100, 116, 139, 0.25)', text: 'text-[var(--text-primary)]' };
     }
-    if (overallScore >= 85) {
+    if (overallScore > 90) {
       return { ring: '#10b981', glow: 'rgba(16, 185, 129, 0.35)', text: 'text-emerald-300' };
     }
-    if (overallScore >= 65) {
+    if (overallScore >= 70) {
       return { ring: '#f59e0b', glow: 'rgba(245, 158, 11, 0.35)', text: 'text-amber-300' };
     }
     return { ring: '#f43f5e', glow: 'rgba(244, 63, 94, 0.35)', text: 'text-rose-300' };
