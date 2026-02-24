@@ -234,6 +234,16 @@
   transform: scale(0.98);
   filter: brightness(1.05);
 }
+
+/* On mobile, sauna cards should not "press-shrink" while the user scrolls. */
+@media (max-width: 1024px) {
+  .sauna-card-surface.touch-feedback:hover,
+  .sauna-card-surface.touch-feedback:active {
+    transform: none;
+    filter: none;
+  }
+}
+
 ::selection {
   background: var(--selection-bg, rgba(59, 130, 246, 0.3));
   color: var(--selection-text, #fff);
