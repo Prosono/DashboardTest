@@ -685,25 +685,77 @@ export default function ModalOrchestrator({
           setOptimisticLightBrightness,
           tempHistoryById,
           isCardHiddenByLogic: () => false,
-          setShowLightModal,
-          setShowSensorInfoModal,
-          setActiveClimateEntityModal,
-          setShowCostModal,
-          setActiveVacuumId,
-          setShowVacuumModal,
-          setShowAndroidTVModal,
-          setActiveCarModal,
-          setShowWeatherModal,
-          setShowNordpoolModal,
-          setShowCalendarModal,
-          setShowTodoModal,
-          setShowRoomModal,
-          setShowCoverModal,
-          setShowEditCardModal,
-          setEditCardSettingsKey,
-          setActiveSaunaFieldModal,
+          setShowLightModal: (value) => {
+            setShowPopupCardModal(null);
+            setShowLightModal(value);
+          },
+          setShowSensorInfoModal: (value) => {
+            setShowPopupCardModal(null);
+            setShowSensorInfoModal(value);
+          },
+          setActiveClimateEntityModal: (value) => {
+            setShowPopupCardModal(null);
+            setActiveClimateEntityModal(value);
+          },
+          setShowCostModal: (value) => {
+            setShowPopupCardModal(null);
+            setShowCostModal(value);
+          },
+          setActiveVacuumId: (value) => {
+            setShowPopupCardModal(null);
+            setActiveVacuumId(value);
+          },
+          setShowVacuumModal: (value) => {
+            setShowPopupCardModal(null);
+            setShowVacuumModal(value);
+          },
+          setShowAndroidTVModal: (value) => {
+            setShowPopupCardModal(null);
+            setShowAndroidTVModal(value);
+          },
+          setActiveCarModal: (value) => {
+            setShowPopupCardModal(null);
+            setActiveCarModal(value);
+          },
+          setShowWeatherModal: (value) => {
+            setShowPopupCardModal(null);
+            setShowWeatherModal(value);
+          },
+          setShowNordpoolModal: (value) => {
+            setShowPopupCardModal(null);
+            setShowNordpoolModal(value);
+          },
+          setShowCalendarModal: (value) => {
+            setShowPopupCardModal(null);
+            setShowCalendarModal(value);
+          },
+          setShowTodoModal: (value) => {
+            setShowPopupCardModal(null);
+            setShowTodoModal(value);
+          },
+          setShowRoomModal: (value) => {
+            setShowPopupCardModal(null);
+            setShowRoomModal(value);
+          },
+          setShowCoverModal: (value) => {
+            setShowPopupCardModal(null);
+            setShowCoverModal(value);
+          },
+          setShowEditCardModal: (value) => {
+            setShowPopupCardModal(null);
+            setShowEditCardModal(value);
+          },
+          setEditCardSettingsKey: (value) => {
+            setShowPopupCardModal(null);
+            setEditCardSettingsKey(value);
+          },
+          setActiveSaunaFieldModal: (value) => {
+            setShowPopupCardModal(null);
+            setActiveSaunaFieldModal(value);
+          },
           setShowPopupCardModal,
           openMediaModal: (mpId, groupKey, groupIds) => {
+            setShowPopupCardModal(null);
             setActiveMediaId(mpId);
             setActiveMediaGroupKey(groupKey);
             setActiveMediaGroupIds(groupIds);
