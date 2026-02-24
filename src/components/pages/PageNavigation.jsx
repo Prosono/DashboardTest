@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Plus, Edit2 } from '../../icons';
 import { getIconComponent } from '../../icons';
 
@@ -24,6 +24,7 @@ export default function PageNavigation({
   pageSettings,
   activePage,
   setActivePage,
+  isMobile,
   editMode,
   setEditingPage,
   setShowAddPageModal,
@@ -32,6 +33,8 @@ export default function PageNavigation({
   const [dragOverId, setDragOverId] = useState(null);
   const isLightTheme = typeof document !== 'undefined' && document.documentElement?.dataset?.theme === 'light';
   const pageOrder = pagesConfig?.pages || [];
+  const navScrollRef = useRef(null);
+  const pageButtonRefs = useRef(new Map());
 
   const movePage = (sourceId, targetId) => {
     if (!persistConfig) return;
@@ -45,8 +48,29 @@ export default function PageNavigation({
     persistConfig({ ...pagesConfig, pages: nextPages });
   };
 
+  useEffect(() => {
+    if (!isMobile) return;
+    const container = navScrollRef.current;
+    const activeButton = pageButtonRefs.current.get(activePage);
+    if (!container || !activeButton) return;
+
+    const containerRect = container.getBoundingClientRect();
+    const activeRect = activeButton.getBoundingClientRect();
+    const currentLeft = container.scrollLeft;
+    const centerDelta = (activeRect.left + (activeRect.width / 2)) - (containerRect.left + (containerRect.width / 2));
+    const rawTargetLeft = currentLeft + centerDelta;
+    const maxScrollLeft = Math.max(0, container.scrollWidth - container.clientWidth);
+    const targetLeft = Math.max(0, Math.min(maxScrollLeft, rawTargetLeft));
+
+    container.scrollTo({ left: targetLeft, behavior: 'smooth' });
+  }, [activePage, isMobile, editMode, pageOrder.length]);
+
   return (
-    <div data-disable-page-swipe="true" className="flex items-center gap-4 overflow-x-auto pb-2 scrollbar-hide flex-1 min-w-0">
+    <div
+      ref={navScrollRef}
+      data-disable-page-swipe="true"
+      className="flex items-center gap-4 overflow-x-auto pb-2 scrollbar-hide flex-1 min-w-0"
+    >
       {pages.map(page => {
         const settings = pageSettings[page.id] || {};
         const label = settings.label || page.label;
@@ -59,6 +83,10 @@ export default function PageNavigation({
         return (
           <button
             key={page.id}
+            ref={(node) => {
+              if (node) pageButtonRefs.current.set(page.id, node);
+              else pageButtonRefs.current.delete(page.id);
+            }}
             draggable={editMode}
             onClick={() => editMode ? setEditingPage(page.id) : setActivePage(page.id)}
             onDragStart={(event) => {
