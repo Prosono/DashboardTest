@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import ModernDropdown from '../components/ui/ModernDropdown';
 import M3Slider from '../components/ui/M3Slider';
 import { GRADIENT_PRESETS } from '../contexts/ConfigContext';
@@ -38,9 +38,121 @@ import {
   LogIn,
   LogOut,
   Key,
+  Search,
+  Type,
+  AlignLeft,
 } from '../icons';
 import { normalizeHaConfig, normalizeConnection, normalizeConnectionId } from '../utils/haConnections';
 import { DEFAULT_NOTIFICATION_CONFIG, normalizeNotificationConfig } from '../utils/notificationConfig';
+
+const stripRichTextToPlain = (input) => String(input || '')
+  .replace(/<br\s*\/?>/gi, '\n')
+  .replace(/<\/(p|div)>/gi, '\n')
+  .replace(/<[^>]+>/g, '')
+  .replace(/&nbsp;/gi, ' ')
+  .replace(/&amp;/gi, '&')
+  .replace(/&lt;/gi, '<')
+  .replace(/&gt;/gi, '>')
+  .replace(/&quot;/gi, '"')
+  .replace(/&#39;/gi, "'");
+
+const sanitizeRichHtml = (input) => String(input || '')
+  .replace(/<script[\s\S]*?>[\s\S]*?<\/script>/gi, '')
+  .replace(/<style[\s\S]*?>[\s\S]*?<\/style>/gi, '')
+  .replace(/\son\w+="[^"]*"/gi, '')
+  .replace(/\son\w+='[^']*'/gi, '');
+
+const isRichTextEffectivelyEmpty = (html) => stripRichTextToPlain(html).trim().length === 0;
+
+function NotificationRichTextEditor({ value, onChange, placeholder, t }) {
+  const editorRef = useRef(null);
+  const [isFocused, setIsFocused] = useState(false);
+  const [isEmpty, setIsEmpty] = useState(() => isRichTextEffectivelyEmpty(value));
+
+  useEffect(() => {
+    const el = editorRef.current;
+    if (!el) return;
+    const safeHtml = sanitizeRichHtml(value);
+    if (el.innerHTML !== safeHtml) el.innerHTML = safeHtml;
+    setIsEmpty(isRichTextEffectivelyEmpty(safeHtml));
+  }, [value]);
+
+  const emitChange = useCallback(() => {
+    const html = sanitizeRichHtml(editorRef.current?.innerHTML || '');
+    setIsEmpty(isRichTextEffectivelyEmpty(html));
+    onChange?.(html);
+  }, [onChange]);
+
+  const runCommand = useCallback((command) => {
+    if (!editorRef.current) return;
+    editorRef.current.focus();
+    if (typeof document !== 'undefined' && typeof document.execCommand === 'function') {
+      document.execCommand(command, false, null);
+      emitChange();
+    }
+  }, [emitChange]);
+
+  const insertLineBreak = useCallback(() => {
+    if (!editorRef.current) return;
+    editorRef.current.focus();
+    if (typeof document !== 'undefined' && typeof document.execCommand === 'function') {
+      document.execCommand('insertLineBreak', false, null);
+      emitChange();
+      return;
+    }
+    const current = sanitizeRichHtml(editorRef.current.innerHTML || '');
+    const next = `${current}<br>`;
+    editorRef.current.innerHTML = next;
+    emitChange();
+  }, [emitChange]);
+
+  return (
+    <div className="rounded-xl border border-[var(--glass-border)] bg-[var(--glass-bg)] overflow-hidden">
+      <div className="flex flex-wrap items-center gap-1.5 px-2.5 py-2 border-b border-[var(--glass-border)] bg-[color-mix(in_srgb,var(--glass-bg-hover)_86%,transparent)]">
+        <button
+          type="button"
+          onClick={() => runCommand('bold')}
+          className="h-7 px-2 rounded-md border border-[var(--glass-border)] bg-[var(--glass-bg)] text-xs font-bold"
+          title={t('notifications.formatBold')}
+        >
+          B
+        </button>
+        <button
+          type="button"
+          onClick={() => runCommand('italic')}
+          className="h-7 px-2 rounded-md border border-[var(--glass-border)] bg-[var(--glass-bg)] text-xs italic font-bold"
+          title={t('notifications.formatItalic')}
+        >
+          I
+        </button>
+        <button
+          type="button"
+          onClick={insertLineBreak}
+          className="h-7 px-2 rounded-md border border-[var(--glass-border)] bg-[var(--glass-bg)] text-[11px] font-bold uppercase tracking-wider"
+          title={t('notifications.formatLineBreak')}
+        >
+          {t('notifications.formatLineBreak')}
+        </button>
+      </div>
+      <div className="relative">
+        {isEmpty && !isFocused ? (
+          <div className="absolute left-3 right-3 top-2 text-sm text-[var(--text-muted)] pointer-events-none">
+            {placeholder}
+          </div>
+        ) : null}
+        <div
+          ref={editorRef}
+          contentEditable
+          suppressContentEditableWarning
+          onFocus={() => setIsFocused(true)}
+          onBlur={() => { setIsFocused(false); emitChange(); }}
+          onInput={emitChange}
+          className="min-h-[96px] max-h-56 overflow-y-auto custom-scrollbar px-3 py-2 text-sm text-[var(--text-primary)] outline-none whitespace-pre-wrap break-words"
+        />
+      </div>
+    </div>
+  );
+}
 
 export default function ConfigModal({
   open,
@@ -2123,7 +2235,7 @@ export default function ConfigModal({
       const next = typeof updater === 'function' ? updater(base) : { ...base, ...(updater || {}) };
       setNotificationDirty(true);
       setNotificationSaveMessage('');
-      return normalizeNotificationConfig(next);
+      return next;
     });
   };
 
@@ -2241,22 +2353,42 @@ export default function ConfigModal({
   };
 
   const renderNotificationsTab = () => {
-    const draft = normalizeNotificationConfig(notificationDraft || DEFAULT_NOTIFICATION_CONFIG);
+    const draftSource = notificationDraft && typeof notificationDraft === 'object'
+      ? notificationDraft
+      : DEFAULT_NOTIFICATION_CONFIG;
+    const draft = {
+      ...DEFAULT_NOTIFICATION_CONFIG,
+      ...draftSource,
+      warning: {
+        ...DEFAULT_NOTIFICATION_CONFIG.warning,
+        ...(draftSource.warning && typeof draftSource.warning === 'object' ? draftSource.warning : {}),
+      },
+      critical: {
+        ...DEFAULT_NOTIFICATION_CONFIG.critical,
+        ...(draftSource.critical && typeof draftSource.critical === 'object' ? draftSource.critical : {}),
+      },
+      rules: Array.isArray(draftSource.rules) ? draftSource.rules : [],
+    };
     const warningChannelsEnabled = Boolean(draft.warning.inApp || draft.warning.browser || draft.warning.native);
     const criticalChannelsEnabled = Boolean(draft.critical.inApp || draft.critical.browser || draft.critical.native);
     const saveBlocked = !notificationDirty || notificationConfigSaving || notificationConfigLoading;
 
     return (
-      <div className="space-y-4 font-sans animate-in fade-in slide-in-from-right-4 duration-300">
-        <div className="rounded-2xl border border-[var(--glass-border)] bg-[var(--glass-bg)] p-4 space-y-3">
+      <div className="space-y-5 font-sans animate-in fade-in slide-in-from-right-4 duration-300">
+        <div className="rounded-2xl border border-[var(--glass-border)] bg-[linear-gradient(145deg,color-mix(in_srgb,var(--glass-bg)_92%,rgba(56,189,248,0.08)),color-mix(in_srgb,var(--glass-bg)_94%,rgba(14,165,233,0.02)))] p-4 space-y-3">
           <div className="flex items-start justify-between gap-3">
-            <div>
-              <h4 className="text-xs uppercase tracking-wider font-bold text-[var(--text-secondary)]">
-                {t('notifications.panelTitle')}
-              </h4>
-              <p className="text-xs text-[var(--text-secondary)] mt-1">
-                {t('notifications.panelDescription')}
-              </p>
+            <div className="flex items-start gap-3">
+              <div className="w-9 h-9 rounded-xl border border-sky-400/25 bg-sky-500/10 text-sky-300 flex items-center justify-center shrink-0">
+                <Bell className="w-4 h-4" />
+              </div>
+              <div>
+                <h4 className="text-xs uppercase tracking-wider font-bold text-[var(--text-secondary)]">
+                  {t('notifications.panelTitle')}
+                </h4>
+                <p className="text-xs text-[var(--text-secondary)] mt-1">
+                  {t('notifications.panelDescription')}
+                </p>
+              </div>
             </div>
             <button
               type="button"
@@ -2344,11 +2476,35 @@ export default function ConfigModal({
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
           {[
-            { key: 'warning', title: t('notifications.warningChannels'), channels: draft.warning, hasAny: warningChannelsEnabled },
-            { key: 'critical', title: t('notifications.criticalChannels'), channels: draft.critical, hasAny: criticalChannelsEnabled },
+            {
+              key: 'warning',
+              title: t('notifications.warningChannels'),
+              channels: draft.warning,
+              hasAny: warningChannelsEnabled,
+              icon: AlertCircle,
+              accent: 'amber',
+            },
+            {
+              key: 'critical',
+              title: t('notifications.criticalChannels'),
+              channels: draft.critical,
+              hasAny: criticalChannelsEnabled,
+              icon: AlertTriangle,
+              accent: 'rose',
+            },
           ].map((entry) => (
-            <div key={entry.key} className="rounded-2xl border border-[var(--glass-border)] bg-[var(--glass-bg)] p-4 space-y-3">
-              <h4 className="text-[11px] uppercase tracking-wider font-bold text-[var(--text-secondary)]">{entry.title}</h4>
+            <div
+              key={entry.key}
+              className={`rounded-2xl border border-[var(--glass-border)] p-4 space-y-3 ${
+                entry.accent === 'rose'
+                  ? 'bg-[linear-gradient(145deg,color-mix(in_srgb,var(--glass-bg)_94%,rgba(244,63,94,0.09)),color-mix(in_srgb,var(--glass-bg)_96%,transparent))]'
+                  : 'bg-[linear-gradient(145deg,color-mix(in_srgb,var(--glass-bg)_94%,rgba(245,158,11,0.08)),color-mix(in_srgb,var(--glass-bg)_96%,transparent))]'
+              }`}
+            >
+              <h4 className="text-[11px] uppercase tracking-wider font-bold text-[var(--text-secondary)] flex items-center gap-2">
+                <entry.icon className={`w-3.5 h-3.5 ${entry.accent === 'rose' ? 'text-rose-300' : 'text-amber-300'}`} />
+                {entry.title}
+              </h4>
               <div className="space-y-2">
                 {['inApp', 'browser', 'native'].map((channel) => (
                   <button
@@ -2400,15 +2556,20 @@ export default function ConfigModal({
           ))}
         </div>
 
-        <div className="rounded-2xl border border-[var(--glass-border)] bg-[var(--glass-bg)] p-4 space-y-3">
+        <div className="rounded-2xl border border-[var(--glass-border)] bg-[linear-gradient(145deg,color-mix(in_srgb,var(--glass-bg)_92%,rgba(167,139,250,0.08)),color-mix(in_srgb,var(--glass-bg)_95%,transparent))] p-4 space-y-3">
           <div className="flex items-center justify-between gap-3">
-            <div>
+            <div className="flex items-start gap-3">
+              <div className="w-8 h-8 rounded-lg border border-violet-400/25 bg-violet-500/10 text-violet-300 flex items-center justify-center shrink-0">
+                <Sparkles className="w-4 h-4" />
+              </div>
+              <div>
               <h4 className="text-[11px] uppercase tracking-wider font-bold text-[var(--text-secondary)]">
                 {t('notifications.customRulesTitle')}
               </h4>
               <p className="text-xs text-[var(--text-secondary)] mt-1">
                 {t('notifications.customRulesDescription')}
               </p>
+              </div>
             </div>
             <button
               type="button"
@@ -2476,7 +2637,8 @@ export default function ConfigModal({
 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
                     <div className="space-y-1">
-                      <label className="text-[10px] uppercase tracking-wider font-bold text-[var(--text-secondary)]">
+                      <label className="text-[10px] uppercase tracking-wider font-bold text-[var(--text-secondary)] flex items-center gap-1.5">
+                        <Type className="w-3 h-3" />
                         {t('notifications.ruleTitle')}
                       </label>
                       <input
@@ -2487,7 +2649,8 @@ export default function ConfigModal({
                       />
                     </div>
                     <div className="space-y-1 md:col-span-2">
-                      <label className="text-[10px] uppercase tracking-wider font-bold text-[var(--text-secondary)]">
+                      <label className="text-[10px] uppercase tracking-wider font-bold text-[var(--text-secondary)] flex items-center gap-1.5">
+                        <Search className="w-3 h-3" />
                         {t('notifications.ruleEntity')}
                       </label>
                       <div className="grid grid-cols-1 md:grid-cols-[minmax(0,1fr)_12rem] gap-2">
@@ -2583,40 +2746,20 @@ export default function ConfigModal({
                       </div>
                     )}
                     <div className="space-y-1 md:col-span-2">
-                      <label className="text-[10px] uppercase tracking-wider font-bold text-[var(--text-secondary)]">
+                      <label className="text-[10px] uppercase tracking-wider font-bold text-[var(--text-secondary)] flex items-center gap-1.5">
+                        <AlignLeft className="w-3 h-3" />
                         {t('notifications.ruleMessage')}
                       </label>
-                      <textarea
+                      <NotificationRichTextEditor
                         value={String(normalizedRule.message || '')}
-                        onChange={(e) => updateNotificationRule(ruleId, { message: e.target.value })}
-                        className="w-full px-3 py-2 rounded-lg bg-[var(--glass-bg)] border border-[var(--glass-border)] text-sm resize-y min-h-[88px]"
+                        onChange={(nextValue) => updateNotificationRule(ruleId, { message: nextValue })}
                         placeholder={t('notifications.ruleMessagePlaceholder')}
+                        t={t}
                       />
                       <div className="text-[10px] text-[var(--text-secondary)]">
                         {t('notifications.ruleMessageFormattingHint')}
                       </div>
                       <div className="flex flex-wrap gap-1.5">
-                        <button
-                          type="button"
-                          onClick={() => appendNotificationRuleMessage(ruleId, '**bold**')}
-                          className="px-2 py-1 rounded-md border border-[var(--glass-border)] bg-[var(--glass-bg)] text-[10px] font-bold uppercase tracking-wider"
-                        >
-                          {t('notifications.formatBold')}
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => appendNotificationRuleMessage(ruleId, '*italic*')}
-                          className="px-2 py-1 rounded-md border border-[var(--glass-border)] bg-[var(--glass-bg)] text-[10px] font-bold uppercase tracking-wider"
-                        >
-                          {t('notifications.formatItalic')}
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => appendNotificationRuleMessage(ruleId, '\n')}
-                          className="px-2 py-1 rounded-md border border-[var(--glass-border)] bg-[var(--glass-bg)] text-[10px] font-bold uppercase tracking-wider"
-                        >
-                          {t('notifications.formatLineBreak')}
-                        </button>
                         <button
                           type="button"
                           onClick={() => appendNotificationRuleMessage(ruleId, '{entityName}')}

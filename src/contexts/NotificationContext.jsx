@@ -54,10 +54,28 @@ const isNativePlatform = () => {
 
 const canUseBrowserNotification = () => typeof window !== 'undefined' && typeof Notification !== 'undefined';
 
-const toPlainTextMessage = (value) => String(value || '')
+const stripHtmlToPlainText = (value) => String(value || '')
+  .replace(/<br\s*\/?>/gi, '\n')
+  .replace(/<\/(p|div)>/gi, '\n')
+  .replace(/<[^>]+>/g, '')
+  .replace(/&nbsp;/gi, ' ')
+  .replace(/&amp;/gi, '&')
+  .replace(/&lt;/gi, '<')
+  .replace(/&gt;/gi, '>')
+  .replace(/&quot;/gi, '"')
+  .replace(/&#39;/gi, "'");
+
+const toPlainTextMessage = (value) => stripHtmlToPlainText(value)
   .replace(/\*\*(.*?)\*\*/g, '$1')
   .replace(/\*(.*?)\*/g, '$1')
   .replace(/\r/g, '');
+
+const sanitizeHtmlForRender = (value) => String(value || '')
+  .replace(/<script[\s\S]*?>[\s\S]*?<\/script>/gi, '')
+  .replace(/<style[\s\S]*?>[\s\S]*?<\/style>/gi, '')
+  .replace(/\son\w+="[^"]*"/gi, '')
+  .replace(/\son\w+='[^']*'/gi, '')
+  .replace(/\s(href|src)\s*=\s*(['"])javascript:[\s\S]*?\2/gi, '');
 
 const renderInlineFormatting = (line, keyPrefix) => {
   const text = String(line || '');
@@ -75,6 +93,11 @@ const renderInlineFormatting = (line, keyPrefix) => {
 };
 
 const RichMessage = ({ message, className = '' }) => {
+  const hasHtml = /<[^>]+>/.test(String(message || ''));
+  if (hasHtml) {
+    const safeHtml = sanitizeHtmlForRender(message);
+    return <div className={className} dangerouslySetInnerHTML={{ __html: safeHtml }} />;
+  }
   const lines = String(message || '').split('\n');
   return (
     <div className={className}>
