@@ -413,6 +413,10 @@ export default function SaunaCard({
     nextBookingServiceNorm,
     norm(nextBookingServiceEntity?.attributes?.next_booking_type),
     norm(nextBookingServiceEntity?.attributes?.booking_type),
+    norm(nextBookingEntity?.attributes?.next_booking_type),
+    norm(nextBookingEntity?.attributes?.booking_type),
+    norm(nextBookingEntity?.attributes?.booking_kind),
+    norm(nextBookingEntity?.attributes?.next_type),
   ]
     .filter(Boolean)
     .join(' ');
@@ -429,6 +433,7 @@ export default function SaunaCard({
   const nextMinutes = toNum(nextBookingEntity?.state);
   const hasNext = nextMinutes != null && nextMinutes >= 0;
   const preheatOn = isOn(preheatWindowEntity?.state);
+  const effectivePreheatOn = preheatOn && !nextBookingIsService;
   const peopleNowNumeric = Number.parseFloat(String(peopleNow).replace(',', '.'));
   const peopleNowIsZero = Number.isFinite(peopleNowNumeric) && peopleNowNumeric <= 0;
 
@@ -612,7 +617,7 @@ export default function SaunaCard({
   const primaryState = (() => {
     if (saunaIsActive && serviceYes) return { label: tr('sauna.service', 'Service'), desc: tr('sauna.serviceOngoing', 'Pågår nå'), tone: 'warn' };
     if (saunaIsActive) return { label: tr('sauna.active', 'Aktiv'), desc: tr('sauna.bookingNow', 'Pågående økt'), tone: 'ok' };
-    if (preheatOn) return { label: tr('sauna.preheat', 'Forvarmer'), desc: hasNext ? `${tr('sauna.next', 'Neste')}: ${Math.round(nextMinutes)}m` : tr('sauna.beforeBooking', 'Før booking'), tone: 'warm' };
+    if (effectivePreheatOn) return { label: tr('sauna.preheat', 'Forvarmer'), desc: hasNext ? `${tr('sauna.next', 'Neste')}: ${Math.round(nextMinutes)}m` : tr('sauna.beforeBooking', 'Før booking'), tone: 'warm' };
     if (isWarmByTemp) return { label: tr('sauna.warm', 'Varm'), desc: tr('sauna.readySoon', 'Snart klar'), tone: 'warm' };
     if (thermostatOn) return { label: tr('common.on', 'På'), desc: tr('sauna.standby', 'Standby'), tone: 'info' };
     return { label: tr('common.off', 'Av'), desc: hasNext ? `${tr('sauna.next', 'Neste')}: ${Math.round(nextMinutes)}m` : tr('sauna.inactive', 'Inaktiv'), tone: 'muted' };
@@ -673,9 +678,9 @@ export default function SaunaCard({
 
   const statusVisual = (() => {
     const next = Number.isFinite(nextMinutes) ? Math.round(nextMinutes) : -1;
-    if (saunaIsActive && serviceYes) return { icon: Wrench, color: preheatOn ? 'text-orange-300' : 'text-emerald-300' };
+    if (saunaIsActive && serviceYes) return { icon: Wrench, color: effectivePreheatOn ? 'text-orange-300' : 'text-emerald-300' };
     if (saunaIsActive) return { icon: SaunaIcon, color: 'text-emerald-300' };
-    if (preheatOn) return { icon: Flame, color: 'text-orange-300' };
+    if (effectivePreheatOn) return { icon: Flame, color: 'text-orange-300' };
     return { icon: Power, color: next === -1 ? 'text-[var(--text-muted)]' : 'text-violet-300' };
   })();
 
@@ -862,7 +867,7 @@ export default function SaunaCard({
           </div>
         </div>
 
-        {(bookingLine || preheatOn) && (() => {
+        {(bookingLine || effectivePreheatOn) && (() => {
           const BookingIcon = statusVisual.icon;
           return (
             <div
