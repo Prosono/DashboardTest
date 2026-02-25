@@ -555,19 +555,19 @@ const CalendarBookingCard = ({
                   <>
                     <div className="relative flex justify-center">
                       <div
-                        className="w-full max-w-[320px] aspect-square rounded-full border flex flex-col items-center justify-center text-center px-5 py-6"
+                        className="w-full max-w-[240px] md:max-w-[260px] aspect-square rounded-full border flex flex-col items-center justify-center text-center px-4 py-4"
                         style={{
                           borderColor: 'color-mix(in srgb, var(--glass-border) 72%, transparent)',
                           backgroundColor: 'color-mix(in srgb, var(--card-bg) 86%, transparent)',
                         }}
                       >
-                        <div className="text-[52px] leading-none font-semibold tabular-nums text-[var(--text-primary)] opacity-85">
+                        <div className="text-[40px] md:text-[44px] leading-none font-semibold tabular-nums text-[var(--text-primary)] opacity-85">
                           {todayEvents.length}
                         </div>
                         <div className="mt-1 text-[13px] text-[var(--text-secondary)]">
                           {t('calendarBooking.todayCountLabel') || 'Bookings today'}
                         </div>
-                        <div className="mt-3 flex flex-wrap items-center justify-center gap-1.5">
+                        <div className="mt-2.5 flex w-full flex-col items-center gap-1.5">
                           {typeCountRows.map((row) => {
                             const rowMeta = getBookingTypeMeta(row.type, t);
                             const rowPalette = getBookingPalette(row.type, false);
@@ -575,7 +575,7 @@ const CalendarBookingCard = ({
                             return (
                               <span
                                 key={row.type}
-                                className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-[10px] uppercase tracking-[0.1em] font-bold min-w-0 text-[var(--text-secondary)]"
+                                className="inline-flex items-center justify-center gap-1.5 px-2.5 py-1 rounded-full border text-[10px] uppercase tracking-[0.1em] font-bold min-w-0 w-full max-w-[190px] text-[var(--text-secondary)]"
                                 style={{
                                   borderColor: rowPalette.softBorder,
                                   backgroundColor: 'var(--glass-bg-hover)',
