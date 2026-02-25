@@ -373,7 +373,7 @@ const CalendarBookingCard = ({
     return true;
   });
 
-  const renderEventItem = (event) => {
+  const renderEventItem = (event, index, list) => {
     const live = event.startMs <= clockMs && clockMs < event.endMs;
     const relative = live
       ? (t('calendarBooking.inProgress') || 'In progress')
@@ -384,16 +384,14 @@ const CalendarBookingCard = ({
     const statusLabel = live ? (t('calendarBooking.live') || 'Live') : typeMeta.label;
 
     return (
-      <div
-        key={event.id}
-        className="relative rounded-xl border pl-5 pr-3 py-2.5 overflow-hidden"
-        style={{
-          borderColor: itemPalette.softBorder,
-          backgroundColor: 'var(--glass-bg)',
-          backgroundImage: `linear-gradient(130deg, ${itemPalette.softBg} 0%, rgba(0,0,0,0) 36%)`,
-          boxShadow: live ? `0 0 0 1px ${itemPalette.softBorder} inset` : 'none',
-        }}
-      >
+      <div key={event.id} className="relative">
+        <div
+          className="relative rounded-[14px] pl-5 pr-3 py-2.5 overflow-hidden"
+          style={{
+            backgroundColor: 'color-mix(in srgb, var(--card-bg) 82%, transparent)',
+            backgroundImage: `linear-gradient(130deg, ${itemPalette.softBg} 0%, rgba(0,0,0,0) 40%)`,
+          }}
+        >
         <span
           className="absolute left-0 top-2 bottom-2 w-1 rounded-r-full"
           style={{ backgroundColor: itemPalette.color }}
@@ -432,6 +430,13 @@ const CalendarBookingCard = ({
             <span className="truncate">{event.location}</span>
           </div>
         )}
+        </div>
+        {index < list.length - 1 && (
+          <div
+            className="h-px my-1.5 mx-1"
+            style={{ backgroundColor: 'color-mix(in srgb, var(--glass-border) 62%, transparent)' }}
+          />
+        )}
       </div>
     );
   };
@@ -451,7 +456,10 @@ const CalendarBookingCard = ({
 
       <div className={`h-full ${isSmall ? 'flex items-center gap-3 p-4' : 'flex flex-col p-4 gap-2'} min-w-0`}>
         {isSmall && (
-          <div className="shrink-0 w-12 h-12 rounded-2xl border border-[var(--glass-border)] bg-[var(--glass-bg-hover)] flex items-center justify-center">
+          <div
+            className="shrink-0 w-12 h-12 rounded-2xl flex items-center justify-center"
+            style={{ backgroundColor: 'color-mix(in srgb, var(--glass-bg-hover) 65%, transparent)' }}
+          >
             <IconComp className="w-6 h-6 text-[var(--text-secondary)]" />
           </div>
         )}
@@ -459,7 +467,10 @@ const CalendarBookingCard = ({
         <div className={`${isSmall ? 'min-w-0 flex-1' : 'min-h-0 h-full flex flex-col gap-2'}`}>
           <div className={`min-w-0 ${isSmall ? '' : 'flex items-center gap-3'}`}>
             {!isSmall && (
-              <div className="shrink-0 w-12 h-12 rounded-2xl border border-[var(--glass-border)] bg-[var(--glass-bg-hover)] flex items-center justify-center">
+              <div
+                className="shrink-0 w-12 h-12 rounded-2xl flex items-center justify-center"
+                style={{ backgroundColor: 'color-mix(in srgb, var(--glass-bg-hover) 65%, transparent)' }}
+              >
                 <IconComp className="w-6 h-6 text-[var(--text-secondary)]" />
               </div>
             )}
@@ -515,25 +526,25 @@ const CalendarBookingCard = ({
           ) : (
             <>
               {summaryEvent && (
-                <div className="rounded-xl border border-[var(--glass-border)] bg-[var(--glass-bg)] px-3 py-2">
-              <div className="text-[10px] uppercase tracking-widest text-[var(--text-secondary)] font-bold mb-1">
-                {summaryDayLabel}
-              </div>
-              <div className="flex items-center gap-2 text-[10px] uppercase tracking-widest font-bold min-w-0">
-                <span
-                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full border text-[var(--text-secondary)]"
-                  style={{
-                    borderColor: summaryPalette.softBorder,
-                    backgroundColor: 'var(--glass-bg-hover)',
-                  }}
-                >
-                  <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: summaryPalette.color }} />
-                  <SummaryTypeIcon className="w-3 h-3 shrink-0 opacity-80" />
-                  {summaryIsLive ? (t('calendarBooking.inProgress') || 'In progress') : summaryTypeMeta.label}
-                </span>
-                <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full border border-[var(--glass-border)] bg-[var(--glass-bg-hover)] text-[var(--text-secondary)]">
-                  <Clock3 className="w-3.5 h-3.5" />
-                  {renderTimeRange(summaryEvent)}
+                <div className="px-2 pb-2">
+                  <div className="text-[10px] uppercase tracking-widest text-[var(--text-secondary)] font-bold mb-1">
+                    {summaryDayLabel}
+                  </div>
+                  <div className="flex items-center gap-2 text-[10px] uppercase tracking-widest font-bold min-w-0">
+                    <span
+                      className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full border text-[var(--text-secondary)]"
+                      style={{
+                        borderColor: summaryPalette.softBorder,
+                        backgroundColor: 'var(--glass-bg-hover)',
+                      }}
+                    >
+                      <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: summaryPalette.color }} />
+                      <SummaryTypeIcon className="w-3 h-3 shrink-0 opacity-80" />
+                      {summaryIsLive ? (t('calendarBooking.inProgress') || 'In progress') : summaryTypeMeta.label}
+                    </span>
+                    <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full border border-[var(--glass-border)] bg-[var(--glass-bg-hover)] text-[var(--text-secondary)]">
+                      <Clock3 className="w-3.5 h-3.5" />
+                      {renderTimeRange(summaryEvent)}
                     </span>
                     <span className="ml-auto text-[10px] text-[var(--text-secondary)] truncate max-w-[46%]">
                       {nextStatus}
@@ -546,10 +557,9 @@ const CalendarBookingCard = ({
               )}
 
               <div
-                className="relative overflow-hidden rounded-2xl border bg-[var(--glass-bg)] p-3"
+                className="relative overflow-hidden rounded-2xl px-2 py-2"
                 style={summaryEvent
                   ? {
-                    borderColor: summaryPalette.softBorder,
                     backgroundImage: `linear-gradient(130deg, ${summaryPalette.softBg} 0%, rgba(0,0,0,0) 34%)`,
                   }
                   : undefined}
@@ -597,8 +607,13 @@ const CalendarBookingCard = ({
                 )}
               </div>
 
+              <div
+                className="h-px mx-1"
+                style={{ backgroundColor: 'color-mix(in srgb, var(--glass-border) 62%, transparent)' }}
+              />
+
               <div className="grid grid-cols-1 gap-2 min-h-0 flex-1">
-                <div className="min-h-0 rounded-2xl border border-[var(--glass-border)] bg-[var(--glass-bg)] p-2.5 flex flex-col">
+                <div className="min-h-0 p-1.5 flex flex-col">
                   <div className="min-h-0 flex-1 overflow-y-auto custom-scrollbar pr-1 space-y-2">
                     {upcomingEvents.length === 0 ? (
                       <div className="text-xs text-[var(--text-secondary)]">{t('calendar.noEvents') || 'No upcoming events'}</div>
