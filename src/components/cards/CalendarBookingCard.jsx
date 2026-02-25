@@ -101,8 +101,24 @@ const RING_COLORS = {
 };
 
 const BOOKING_RING_STROKE_PX = 12;
-const BOOKING_RING_CAP_RADIUS_PCT = 47.5;
 const BOOKING_RING_ICON_RADIUS_PCT = 51;
+const BOOKING_RING_RADIUS = 44;
+
+const polarToCartesian = (cx, cy, radius, angleDeg) => {
+  const rad = ((angleDeg - 90) * Math.PI) / 180;
+  return {
+    x: cx + (Math.cos(rad) * radius),
+    y: cy + (Math.sin(rad) * radius),
+  };
+};
+
+const describeArcPath = (cx, cy, radius, startDeg, endDeg) => {
+  const start = polarToCartesian(cx, cy, radius, startDeg);
+  const end = polarToCartesian(cx, cy, radius, endDeg);
+  const sweep = Math.max(0, endDeg - startDeg);
+  const largeArcFlag = sweep > 180 ? 1 : 0;
+  return `M ${start.x} ${start.y} A ${radius} ${radius} 0 ${largeArcFlag} 1 ${end.x} ${end.y}`;
+};
 
 const getBookingType = (event) => {
   const normalizeText = (value) => String(value || '')
@@ -381,13 +397,12 @@ const CalendarBookingCard = ({
     const rows = typeCountRows.filter((row) => row.count > 0);
     const trackColor = 'color-mix(in srgb, var(--glass-border) 72%, transparent)';
     if (!rows.length || totalTodayBookings <= 0) {
-      return { background: `conic-gradient(${trackColor} 0deg 360deg)`, iconAnchors: [], capAnchors: [] };
+      return { trackColor, segments: [], iconAnchors: [] };
     }
     let accumulated = 0;
     const gapDeg = rows.length > 1 ? 1.6 : 0;
-    const stops = [];
+    const segments = [];
     const iconAnchors = [];
-    const capAnchors = [];
 
     rows.forEach((row) => {
       const startDeg = (accumulated / totalTodayBookings) * 360;
@@ -396,13 +411,17 @@ const CalendarBookingCard = ({
 
       const segmentStart = Math.min(endDeg, startDeg + (gapDeg / 2));
       const segmentEnd = Math.max(segmentStart, endDeg - (gapDeg / 2));
-
-      if (segmentStart > startDeg) {
-        stops.push(`${trackColor} ${startDeg.toFixed(2)}deg ${segmentStart.toFixed(2)}deg`);
-      }
-      stops.push(`${row.ringColor} ${segmentStart.toFixed(2)}deg ${segmentEnd.toFixed(2)}deg`);
-      if (segmentEnd < endDeg) {
-        stops.push(`${trackColor} ${segmentEnd.toFixed(2)}deg ${endDeg.toFixed(2)}deg`);
+      const sweepDeg = Math.max(0, segmentEnd - segmentStart);
+      if (sweepDeg > 0.02) {
+        segments.push({
+          key: `${row.type}_${segmentStart.toFixed(2)}_${segmentEnd.toFixed(2)}`,
+          type: row.type,
+          color: row.ringColor,
+          startDeg: segmentStart,
+          endDeg: segmentEnd,
+          sweepDeg,
+          fullCircle: sweepDeg >= 359.8,
+        });
       }
       iconAnchors.push({
         type: row.type,
@@ -410,39 +429,9 @@ const CalendarBookingCard = ({
         color: row.ringColor,
         angleDeg: segmentEnd,
       });
-      capAnchors.push({
-        key: `${row.type}_start_${startDeg.toFixed(2)}`,
-        color: row.ringColor,
-        angleDeg: segmentStart,
-      });
-      capAnchors.push({
-        key: `${row.type}_end_${endDeg.toFixed(2)}`,
-        color: row.ringColor,
-        angleDeg: segmentEnd,
-      });
     });
 
-    if (accumulated < totalTodayBookings) {
-      const remainingStart = (accumulated / totalTodayBookings) * 360;
-      stops.push(`${trackColor} ${remainingStart.toFixed(2)}deg 360deg`);
-    } else if (!stops.length) {
-      stops.push(`${trackColor} 0deg 360deg`);
-    } else {
-      const lastEndMatch = String(stops[stops.length - 1]).match(/([0-9.]+deg)\s*$/);
-      const lastEnd = lastEndMatch ? parseFloat(lastEndMatch[1]) : 360;
-      if (Number.isFinite(lastEnd) && lastEnd < 360) {
-        stops.push(`${trackColor} ${lastEnd.toFixed(2)}deg 360deg`);
-      }
-    }
-
-    if (!stops.length) {
-      return { background: `conic-gradient(${trackColor} 0deg 360deg)`, iconAnchors: [], capAnchors: [] };
-    }
-    return {
-      background: `conic-gradient(${stops.join(', ')})`,
-      iconAnchors,
-      capAnchors,
-    };
+    return { trackColor, segments, iconAnchors };
   }, [typeCountRows, totalTodayBookings]);
 
   const bookingRingIconPositions = useMemo(() => bookingRingChart.iconAnchors.map((anchor) => {
@@ -452,14 +441,6 @@ const CalendarBookingCard = ({
     const y = 50 + (Math.sin(rad) * radiusPct);
     return { ...anchor, x, y };
   }), [bookingRingChart.iconAnchors]);
-
-  const bookingRingCapPositions = useMemo(() => bookingRingChart.capAnchors.map((anchor) => {
-    const rad = ((anchor.angleDeg - 90) * Math.PI) / 180;
-    const radiusPct = BOOKING_RING_CAP_RADIUS_PCT;
-    const x = 50 + (Math.cos(rad) * radiusPct);
-    const y = 50 + (Math.sin(rad) * radiusPct);
-    return { ...anchor, x, y };
-  }), [bookingRingChart.capAnchors]);
 
   const { tomorrowStartMs } = getDayBounds(clockMs);
   const summaryIsTomorrow = !!summaryEvent && summaryEvent.startMs >= tomorrowStartMs;
@@ -659,32 +640,49 @@ const CalendarBookingCard = ({
                       <div
                         className="relative w-full max-w-[204px] md:max-w-[220px] aspect-square overflow-visible"
                       >
-                        <div
-                          className="absolute inset-0 rounded-full"
-                          style={{
-                            background: bookingRingChart.background,
-                            WebkitMask: `radial-gradient(farthest-side, transparent calc(100% - ${BOOKING_RING_STROKE_PX}px), #000 calc(100% - ${BOOKING_RING_STROKE_PX}px))`,
-                            mask: `radial-gradient(farthest-side, transparent calc(100% - ${BOOKING_RING_STROKE_PX}px), #000 calc(100% - ${BOOKING_RING_STROKE_PX}px))`,
-                          }}
-                        />
+                        <svg
+                          className="absolute inset-0 w-full h-full [transform:translateZ(0)]"
+                          viewBox="0 0 100 100"
+                          aria-hidden="true"
+                          style={{ overflow: 'visible', shapeRendering: 'geometricPrecision' }}
+                        >
+                          <circle
+                            cx="50"
+                            cy="50"
+                            r={BOOKING_RING_RADIUS}
+                            fill="none"
+                            stroke={bookingRingChart.trackColor}
+                            strokeWidth={BOOKING_RING_STROKE_PX}
+                          />
+                          {bookingRingChart.segments.map((segment) => (
+                            segment.fullCircle ? (
+                              <circle
+                                key={`ring_segment_${segment.key}`}
+                                cx="50"
+                                cy="50"
+                                r={BOOKING_RING_RADIUS}
+                                fill="none"
+                                stroke={segment.color}
+                                strokeWidth={BOOKING_RING_STROKE_PX}
+                                strokeLinecap="round"
+                              />
+                            ) : (
+                              <path
+                                key={`ring_segment_${segment.key}`}
+                                d={describeArcPath(50, 50, BOOKING_RING_RADIUS, segment.startDeg, segment.endDeg)}
+                                fill="none"
+                                stroke={segment.color}
+                                strokeWidth={BOOKING_RING_STROKE_PX}
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                              />
+                            )
+                          ))}
+                        </svg>
                         <div
                           className="absolute inset-0 rounded-full"
                           style={{ boxShadow: '0 0 0 1px color-mix(in srgb, var(--glass-border) 62%, transparent) inset' }}
                         />
-                        {bookingRingCapPositions.map((anchor) => (
-                          <span
-                            key={`ring_cap_${anchor.key}`}
-                            className="absolute z-[6] rounded-full -translate-x-1/2 -translate-y-1/2"
-                            style={{
-                              width: `${BOOKING_RING_STROKE_PX}px`,
-                              height: `${BOOKING_RING_STROKE_PX}px`,
-                              left: `${anchor.x}%`,
-                              top: `${anchor.y}%`,
-                              backgroundColor: anchor.color,
-                              boxShadow: '0 0 0 1px rgba(255,255,255,0.08)',
-                            }}
-                          />
-                        ))}
 
                         {bookingRingIconPositions.map((anchor) => {
                           const AnchorIcon = anchor.Icon || User;
