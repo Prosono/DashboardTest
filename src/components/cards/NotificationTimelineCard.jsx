@@ -284,7 +284,7 @@ export default function NotificationTimelineCard({
     <>
       <div
         {...dragProps}
-        className={`touch-feedback w-full rounded-3xl border relative overflow-hidden p-4 sm:p-5 font-sans break-inside-avoid ${
+        className={`touch-feedback notification-timeline-card-surface w-full rounded-3xl border relative overflow-hidden p-4 sm:p-5 font-sans break-inside-avoid ${
           editMode ? 'cursor-move' : ''
         }`}
         style={{

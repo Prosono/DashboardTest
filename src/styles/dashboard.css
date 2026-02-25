@@ -235,6 +235,16 @@
   filter: brightness(1.05);
 }
 
+/* Keep timeline card border stable inside popup while hovering. */
+.notification-timeline-card-surface.touch-feedback:hover,
+.notification-timeline-card-surface.touch-feedback:active {
+  transform: none;
+  filter: none;
+  box-shadow: none;
+  border-color: var(--glass-border) !important;
+  z-index: auto;
+}
+
 /* On mobile, sauna cards should not "press-shrink" while the user scrolls. */
 @media (max-width: 1024px) {
   .sauna-card-surface.touch-feedback:hover,
