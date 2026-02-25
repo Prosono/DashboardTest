@@ -94,11 +94,15 @@ const BOOKING_TYPE_PATTERNS = {
 };
 
 const RING_COLORS = {
-  felles: '#7fb4ff',
-  service: '#f0b429',
-  private: '#ea6db3',
-  aufguss: '#a57fff',
+  felles: '#63a4ff',
+  service: '#ffbf2f',
+  private: '#ff5cae',
+  aufguss: '#9c71ff',
 };
+
+const BOOKING_RING_STROKE_PX = 12;
+const BOOKING_RING_CAP_RADIUS_PCT = 47.5;
+const BOOKING_RING_ICON_RADIUS_PCT = 51;
 
 const getBookingType = (event) => {
   const normalizeText = (value) => String(value || '')
@@ -377,12 +381,13 @@ const CalendarBookingCard = ({
     const rows = typeCountRows.filter((row) => row.count > 0);
     const trackColor = 'color-mix(in srgb, var(--glass-border) 72%, transparent)';
     if (!rows.length || totalTodayBookings <= 0) {
-      return { background: `conic-gradient(${trackColor} 0deg 360deg)`, iconAnchors: [] };
+      return { background: `conic-gradient(${trackColor} 0deg 360deg)`, iconAnchors: [], capAnchors: [] };
     }
     let accumulated = 0;
     const gapDeg = rows.length > 1 ? 1.6 : 0;
     const stops = [];
     const iconAnchors = [];
+    const capAnchors = [];
 
     rows.forEach((row) => {
       const startDeg = (accumulated / totalTodayBookings) * 360;
@@ -405,6 +410,16 @@ const CalendarBookingCard = ({
         color: row.ringColor,
         angleDeg: segmentEnd,
       });
+      capAnchors.push({
+        key: `${row.type}_start_${startDeg.toFixed(2)}`,
+        color: row.ringColor,
+        angleDeg: segmentStart,
+      });
+      capAnchors.push({
+        key: `${row.type}_end_${endDeg.toFixed(2)}`,
+        color: row.ringColor,
+        angleDeg: segmentEnd,
+      });
     });
 
     if (accumulated < totalTodayBookings) {
@@ -421,21 +436,30 @@ const CalendarBookingCard = ({
     }
 
     if (!stops.length) {
-      return { background: `conic-gradient(${trackColor} 0deg 360deg)`, iconAnchors: [] };
+      return { background: `conic-gradient(${trackColor} 0deg 360deg)`, iconAnchors: [], capAnchors: [] };
     }
     return {
       background: `conic-gradient(${stops.join(', ')})`,
       iconAnchors,
+      capAnchors,
     };
   }, [typeCountRows, totalTodayBookings]);
 
   const bookingRingIconPositions = useMemo(() => bookingRingChart.iconAnchors.map((anchor) => {
     const rad = ((anchor.angleDeg - 90) * Math.PI) / 180;
-    const radiusPct = 52;
+    const radiusPct = BOOKING_RING_ICON_RADIUS_PCT;
     const x = 50 + (Math.cos(rad) * radiusPct);
     const y = 50 + (Math.sin(rad) * radiusPct);
     return { ...anchor, x, y };
   }), [bookingRingChart.iconAnchors]);
+
+  const bookingRingCapPositions = useMemo(() => bookingRingChart.capAnchors.map((anchor) => {
+    const rad = ((anchor.angleDeg - 90) * Math.PI) / 180;
+    const radiusPct = BOOKING_RING_CAP_RADIUS_PCT;
+    const x = 50 + (Math.cos(rad) * radiusPct);
+    const y = 50 + (Math.sin(rad) * radiusPct);
+    return { ...anchor, x, y };
+  }), [bookingRingChart.capAnchors]);
 
   const { tomorrowStartMs } = getDayBounds(clockMs);
   const summaryIsTomorrow = !!summaryEvent && summaryEvent.startMs >= tomorrowStartMs;
@@ -633,20 +657,34 @@ const CalendarBookingCard = ({
                   <>
                     <div className="relative flex justify-center">
                       <div
-                        className="relative w-full max-w-[250px] md:max-w-[270px] aspect-square overflow-visible"
+                        className="relative w-full max-w-[204px] md:max-w-[220px] aspect-square overflow-visible"
                       >
                         <div
                           className="absolute inset-0 rounded-full"
                           style={{
                             background: bookingRingChart.background,
-                            WebkitMask: 'radial-gradient(farthest-side, transparent calc(100% - 14px), #000 calc(100% - 14px))',
-                            mask: 'radial-gradient(farthest-side, transparent calc(100% - 14px), #000 calc(100% - 14px))',
+                            WebkitMask: `radial-gradient(farthest-side, transparent calc(100% - ${BOOKING_RING_STROKE_PX}px), #000 calc(100% - ${BOOKING_RING_STROKE_PX}px))`,
+                            mask: `radial-gradient(farthest-side, transparent calc(100% - ${BOOKING_RING_STROKE_PX}px), #000 calc(100% - ${BOOKING_RING_STROKE_PX}px))`,
                           }}
                         />
                         <div
                           className="absolute inset-0 rounded-full"
                           style={{ boxShadow: '0 0 0 1px color-mix(in srgb, var(--glass-border) 62%, transparent) inset' }}
                         />
+                        {bookingRingCapPositions.map((anchor) => (
+                          <span
+                            key={`ring_cap_${anchor.key}`}
+                            className="absolute z-[6] rounded-full -translate-x-1/2 -translate-y-1/2"
+                            style={{
+                              width: `${BOOKING_RING_STROKE_PX}px`,
+                              height: `${BOOKING_RING_STROKE_PX}px`,
+                              left: `${anchor.x}%`,
+                              top: `${anchor.y}%`,
+                              backgroundColor: anchor.color,
+                              boxShadow: '0 0 0 1px rgba(255,255,255,0.08)',
+                            }}
+                          />
+                        ))}
 
                         {bookingRingIconPositions.map((anchor) => {
                           const AnchorIcon = anchor.Icon || User;
