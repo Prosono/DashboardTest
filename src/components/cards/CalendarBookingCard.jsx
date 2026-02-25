@@ -120,36 +120,36 @@ const getBookingType = (event) => {
 const getBookingPalette = (type, isOngoing = false) => {
   if (isOngoing) {
     return {
-      color: '#7ea8dc',
-      softBg: 'rgba(126, 168, 220, 0.12)',
-      softBorder: 'rgba(126, 168, 220, 0.26)',
+      color: '#7f98b7',
+      softBg: 'rgba(127, 152, 183, 0.08)',
+      softBorder: 'rgba(127, 152, 183, 0.2)',
     };
   }
   if (type === 'service') {
     return {
-      color: '#cfa14a',
-      softBg: 'rgba(207, 161, 74, 0.1)',
-      softBorder: 'rgba(207, 161, 74, 0.25)',
+      color: '#b49a6d',
+      softBg: 'rgba(180, 154, 109, 0.075)',
+      softBorder: 'rgba(180, 154, 109, 0.19)',
     };
   }
   if (type === 'aufguss') {
     return {
-      color: '#9a78d3',
-      softBg: 'rgba(154, 120, 211, 0.1)',
-      softBorder: 'rgba(154, 120, 211, 0.24)',
+      color: '#8f82b4',
+      softBg: 'rgba(143, 130, 180, 0.075)',
+      softBorder: 'rgba(143, 130, 180, 0.19)',
     };
   }
   if (type === 'private') {
     return {
-      color: '#c56f9f',
-      softBg: 'rgba(197, 111, 159, 0.1)',
-      softBorder: 'rgba(197, 111, 159, 0.24)',
+      color: '#af839f',
+      softBg: 'rgba(175, 131, 159, 0.075)',
+      softBorder: 'rgba(175, 131, 159, 0.19)',
     };
   }
   return {
-    color: '#7098d9',
-    softBg: 'rgba(112, 152, 217, 0.1)',
-    softBorder: 'rgba(112, 152, 217, 0.24)',
+    color: '#7b97be',
+    softBg: 'rgba(123, 151, 190, 0.075)',
+    softBorder: 'rgba(123, 151, 190, 0.19)',
   };
 };
 
@@ -389,19 +389,26 @@ const CalendarBookingCard = ({
         className="relative rounded-xl border pl-5 pr-3 py-2.5 overflow-hidden"
         style={{
           borderColor: itemPalette.softBorder,
-          backgroundColor: 'var(--glass-bg-hover)',
-          backgroundImage: `linear-gradient(130deg, ${itemPalette.softBg} 0%, rgba(0,0,0,0) 58%)`,
+          backgroundColor: 'var(--glass-bg)',
+          backgroundImage: `linear-gradient(130deg, ${itemPalette.softBg} 0%, rgba(0,0,0,0) 36%)`,
           boxShadow: live ? `0 0 0 1px ${itemPalette.softBorder} inset` : 'none',
         }}
       >
         <span
-          className="absolute left-0 top-2 bottom-2 w-1.5 rounded-r-full"
+          className="absolute left-0 top-2 bottom-2 w-1 rounded-r-full"
           style={{ backgroundColor: itemPalette.color }}
         />
         <div className="flex items-center justify-between gap-2">
           <div className="inline-flex items-center gap-2 text-[10px] uppercase tracking-widest font-bold text-[var(--text-secondary)]">
-            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full border" style={{ color: itemPalette.color, borderColor: itemPalette.softBorder, backgroundColor: itemPalette.softBg }}>
-              <ItemTypeIcon className="w-3 h-3" />
+            <span
+              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full border text-[var(--text-secondary)]"
+              style={{
+                borderColor: itemPalette.softBorder,
+                backgroundColor: 'var(--glass-bg-hover)',
+              }}
+            >
+              <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: itemPalette.color }} />
+              <ItemTypeIcon className="w-3 h-3 opacity-80" />
               {statusLabel}
             </span>
             <span className="inline-flex items-center gap-1.5">
@@ -509,24 +516,24 @@ const CalendarBookingCard = ({
             <>
               {summaryEvent && (
                 <div className="rounded-xl border border-[var(--glass-border)] bg-[var(--glass-bg)] px-3 py-2">
-                  <div className="text-[10px] uppercase tracking-widest text-[var(--text-secondary)] font-bold mb-1">
-                    {summaryDayLabel}
-                  </div>
-                  <div className="flex items-center gap-2 text-[10px] uppercase tracking-widest font-bold min-w-0">
-                    <span
-                      className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full border"
-                      style={{
-                        color: summaryPalette.color,
-                        borderColor: summaryPalette.softBorder,
-                        backgroundColor: summaryPalette.softBg,
-                      }}
-                    >
-                      <SummaryTypeIcon className="w-3 h-3 shrink-0" />
-                      {summaryIsLive ? (t('calendarBooking.inProgress') || 'In progress') : summaryTypeMeta.label}
-                    </span>
-                    <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full border border-[var(--glass-border)] bg-[var(--glass-bg-hover)] text-[var(--text-secondary)]">
-                      <Clock3 className="w-3.5 h-3.5" />
-                      {renderTimeRange(summaryEvent)}
+              <div className="text-[10px] uppercase tracking-widest text-[var(--text-secondary)] font-bold mb-1">
+                {summaryDayLabel}
+              </div>
+              <div className="flex items-center gap-2 text-[10px] uppercase tracking-widest font-bold min-w-0">
+                <span
+                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full border text-[var(--text-secondary)]"
+                  style={{
+                    borderColor: summaryPalette.softBorder,
+                    backgroundColor: 'var(--glass-bg-hover)',
+                  }}
+                >
+                  <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: summaryPalette.color }} />
+                  <SummaryTypeIcon className="w-3 h-3 shrink-0 opacity-80" />
+                  {summaryIsLive ? (t('calendarBooking.inProgress') || 'In progress') : summaryTypeMeta.label}
+                </span>
+                <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full border border-[var(--glass-border)] bg-[var(--glass-bg-hover)] text-[var(--text-secondary)]">
+                  <Clock3 className="w-3.5 h-3.5" />
+                  {renderTimeRange(summaryEvent)}
                     </span>
                     <span className="ml-auto text-[10px] text-[var(--text-secondary)] truncate max-w-[46%]">
                       {nextStatus}
@@ -543,22 +550,15 @@ const CalendarBookingCard = ({
                 style={summaryEvent
                   ? {
                     borderColor: summaryPalette.softBorder,
-                    backgroundImage: `linear-gradient(130deg, ${summaryPalette.softBg} 0%, rgba(0,0,0,0) 50%)`,
+                    backgroundImage: `linear-gradient(130deg, ${summaryPalette.softBg} 0%, rgba(0,0,0,0) 34%)`,
                   }
                   : undefined}
               >
                 {summaryEvent ? (
                   <>
                     <div className="relative rounded-xl overflow-hidden">
-                      <span
-                        className="absolute -top-8 -right-8 w-28 h-28 rounded-full blur-3xl pointer-events-none"
-                        style={{
-                          backgroundColor: summaryPalette.softBg,
-                          opacity: 0.95,
-                        }}
-                      />
                       <div className="mt-1 text-center">
-                        <div className="text-[50px] leading-none font-semibold tabular-nums text-[var(--text-secondary)]">
+                        <div className="text-[46px] leading-none font-semibold tabular-nums text-[var(--text-primary)] opacity-85">
                           {todayEvents.length}
                         </div>
                         <div className="mt-1 text-[13px] text-[var(--text-secondary)]">
@@ -574,15 +574,15 @@ const CalendarBookingCard = ({
                           return (
                             <span
                               key={row.type}
-                              className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-[10px] uppercase tracking-[0.1em] font-bold min-w-0"
+                              className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-[10px] uppercase tracking-[0.1em] font-bold min-w-0 text-[var(--text-secondary)]"
                               style={{
-                                color: rowPalette.color,
                                 borderColor: rowPalette.softBorder,
-                                backgroundColor: rowPalette.softBg,
+                                backgroundColor: 'var(--glass-bg-hover)',
                               }}
                             >
-                              <span className="text-[12px] leading-none font-semibold tabular-nums text-[var(--text-secondary)] shrink-0">{row.count}x</span>
-                              <RowIcon className="w-3.5 h-3.5 shrink-0" />
+                              <span className="text-[12px] leading-none font-semibold tabular-nums text-[var(--text-primary)] shrink-0">{row.count}x</span>
+                              <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: rowPalette.color }} />
+                              <RowIcon className="w-3.5 h-3.5 shrink-0 opacity-80" />
                               <span className="truncate max-w-[110px]">{rowMeta.label}</span>
                             </span>
                           );
