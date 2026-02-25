@@ -285,7 +285,6 @@ const CalendarBookingCard = ({
   const selectedCalendarName = selectedCalendarId
     ? (entities?.[selectedCalendarId]?.attributes?.friendly_name || selectedCalendarId)
     : '';
-  const displayName = customName || settings?.name || t('calendar.bookingTitle') || t('calendar.title') || 'Calendar booking';
   const IconComp = iconName ? (getIconComponent(iconName) || CalendarIcon) : CalendarIcon;
 
   const {
@@ -477,9 +476,6 @@ const CalendarBookingCard = ({
               <div className="text-[10px] uppercase tracking-[0.28em] text-[var(--text-secondary)] font-bold truncate">
                 {selectedCalendarName || (t('calendar.selectCalendars') || 'Select calendars')}
               </div>
-              <div className="text-base md:text-lg font-semibold text-[var(--text-primary)] truncate">
-                {displayName}
-              </div>
             </div>
           </div>
 
@@ -553,41 +549,46 @@ const CalendarBookingCard = ({
               )}
 
               <div
-                className="relative overflow-hidden rounded-2xl px-2 py-2"
+                className="relative overflow-hidden px-2 py-2"
               >
                 {summaryEvent ? (
                   <>
-                    <div className="relative rounded-xl overflow-hidden">
-                      <div className="mt-1 text-center">
-                        <div className="text-[46px] leading-none font-semibold tabular-nums text-[var(--text-primary)] opacity-85">
+                    <div className="relative flex justify-center">
+                      <div
+                        className="w-full max-w-[320px] aspect-square rounded-full border flex flex-col items-center justify-center text-center px-5 py-6"
+                        style={{
+                          borderColor: 'color-mix(in srgb, var(--glass-border) 72%, transparent)',
+                          backgroundColor: 'color-mix(in srgb, var(--card-bg) 86%, transparent)',
+                        }}
+                      >
+                        <div className="text-[52px] leading-none font-semibold tabular-nums text-[var(--text-primary)] opacity-85">
                           {todayEvents.length}
                         </div>
                         <div className="mt-1 text-[13px] text-[var(--text-secondary)]">
                           {t('calendarBooking.todayCountLabel') || 'Bookings today'}
                         </div>
-                      </div>
-
-                      <div className="mt-2.5 flex flex-wrap items-center justify-center gap-1.5">
-                        {typeCountRows.map((row) => {
-                          const rowMeta = getBookingTypeMeta(row.type, t);
-                          const rowPalette = getBookingPalette(row.type, false);
-                          const RowIcon = rowMeta.Icon;
-                          return (
-                            <span
-                              key={row.type}
-                              className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-[10px] uppercase tracking-[0.1em] font-bold min-w-0 text-[var(--text-secondary)]"
-                              style={{
-                                borderColor: rowPalette.softBorder,
-                                backgroundColor: 'var(--glass-bg-hover)',
-                              }}
-                            >
-                              <span className="text-[12px] leading-none font-semibold tabular-nums text-[var(--text-primary)] shrink-0">{row.count}x</span>
-                              <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: rowPalette.color }} />
-                              <RowIcon className="w-3.5 h-3.5 shrink-0 opacity-80" />
-                              <span className="truncate max-w-[110px]">{rowMeta.label}</span>
-                            </span>
-                          );
-                        })}
+                        <div className="mt-3 flex flex-wrap items-center justify-center gap-1.5">
+                          {typeCountRows.map((row) => {
+                            const rowMeta = getBookingTypeMeta(row.type, t);
+                            const rowPalette = getBookingPalette(row.type, false);
+                            const RowIcon = rowMeta.Icon;
+                            return (
+                              <span
+                                key={row.type}
+                                className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-[10px] uppercase tracking-[0.1em] font-bold min-w-0 text-[var(--text-secondary)]"
+                                style={{
+                                  borderColor: rowPalette.softBorder,
+                                  backgroundColor: 'var(--glass-bg-hover)',
+                                }}
+                              >
+                                <span className="text-[12px] leading-none font-semibold tabular-nums text-[var(--text-primary)] shrink-0">{row.count}x</span>
+                                <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: rowPalette.color }} />
+                                <RowIcon className="w-3.5 h-3.5 shrink-0 opacity-80" />
+                                <span className="truncate max-w-[110px]">{rowMeta.label}</span>
+                              </span>
+                            );
+                          })}
+                        </div>
                       </div>
                     </div>
                   </>
