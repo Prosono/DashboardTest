@@ -158,12 +158,23 @@ export default function NotificationTimelineCard({
     if (!selectedEntry) setSelectedEntryId('');
   }, [selectedEntryId, selectedEntry]);
 
-  const handleDeleteEntry = useCallback((entryId) => {
-    const normalizedId = String(entryId || '').trim();
+  const confirmAction = useCallback((message) => {
+    if (typeof window === 'undefined' || typeof window.confirm !== 'function') return true;
+    return window.confirm(String(message || ''));
+  }, []);
+
+  const handleDeleteEntry = useCallback((entry) => {
+    const normalizedId = String(entry?.id || entry || '').trim();
     if (!normalizedId) return;
+    const confirmMessageBase = tr(t, 'notificationTimeline.confirmDeleteEntry', 'Delete this notification entry?');
+    const entryTitle = String(entry?.title || '').trim();
+    const confirmMessage = entryTitle
+      ? `${confirmMessageBase}\n\n${entryTitle}`
+      : confirmMessageBase;
+    if (!confirmAction(confirmMessage)) return;
     removeNotificationHistoryEntry?.(normalizedId);
     if (selectedEntryId === normalizedId) setSelectedEntryId('');
-  }, [removeNotificationHistoryEntry, selectedEntryId]);
+  }, [confirmAction, removeNotificationHistoryEntry, selectedEntryId, t]);
 
   const severityOptions = useMemo(() => ([
     { value: 'all', label: tr(t, 'notificationTimeline.filter.severity.all', 'All severities') },
@@ -266,7 +277,7 @@ export default function NotificationTimelineCard({
             <div className="flex items-center justify-end gap-2 pt-1">
               <button
                 type="button"
-                onClick={() => handleDeleteEntry(selectedEntry?.id)}
+                onClick={() => handleDeleteEntry(selectedEntry)}
                 className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-red-500/25 bg-red-500/10 text-red-300 text-xs font-bold hover:bg-red-500/15 transition-colors"
               >
                 <Trash2 className="w-3.5 h-3.5" />
@@ -309,6 +320,9 @@ export default function NotificationTimelineCard({
               type="button"
               onClick={(event) => {
                 event.stopPropagation();
+                if (!confirmAction(tr(t, 'notificationTimeline.confirmClear', 'Delete all notification entries?'))) {
+                  return;
+                }
                 clearNotificationHistory?.();
               }}
               className="inline-flex items-center gap-1.5 px-2 py-1 rounded-lg border border-red-500/25 bg-red-500/10 text-red-300 text-[10px] uppercase tracking-wider font-bold hover:bg-red-500/15 transition-colors"
@@ -410,7 +424,7 @@ export default function NotificationTimelineCard({
                           type="button"
                           onClick={(event) => {
                             event.stopPropagation();
-                            handleDeleteEntry(entry?.id);
+                            handleDeleteEntry(entry);
                           }}
                           className="w-6 h-6 rounded-md border border-red-500/25 bg-red-500/10 text-red-300 hover:bg-red-500/15 flex items-center justify-center transition-colors"
                           title={tr(t, 'notificationTimeline.deleteEntry', 'Delete entry')}

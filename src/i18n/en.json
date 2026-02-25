@@ -1034,6 +1034,8 @@
   "notificationTimeline.details": "Notification details",
   "notificationTimeline.close": "Close",
   "notificationTimeline.deleteEntry": "Delete entry",
+  "notificationTimeline.confirmDeleteEntry": "Delete this notification entry?",
+  "notificationTimeline.confirmClear": "Delete all notification entries?",
   "notificationTimeline.field.severity": "Severity",
   "notificationTimeline.field.createdAt": "Created",
   "notificationTimeline.field.id": "Entry ID",
