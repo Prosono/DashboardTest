@@ -358,3 +358,33 @@ export const saveNotificationConfig = async (config) => {
   });
   return normalizeNotificationConfig(payload?.config || {});
 };
+
+export const fetchNotificationHistory = async () => {
+  const payload = await apiRequest('/api/auth/notification-history', { method: 'GET' });
+  return Array.isArray(payload?.history) ? payload.history : [];
+};
+
+export const appendNotificationHistoryEntry = async (entry, options = {}) => {
+  const payload = await apiRequest('/api/auth/notification-history', {
+    method: 'POST',
+    body: JSON.stringify({
+      entry: entry || {},
+      dedupeWindowMs: options?.dedupeWindowMs,
+    }),
+  });
+  return Array.isArray(payload?.history) ? payload.history : [];
+};
+
+export const clearNotificationHistory = async () => {
+  const payload = await apiRequest('/api/auth/notification-history', { method: 'DELETE' });
+  return Array.isArray(payload?.history) ? payload.history : [];
+};
+
+export const deleteNotificationHistoryEntry = async (id) => {
+  const entryId = String(id || '').trim();
+  if (!entryId) return [];
+  const payload = await apiRequest(`/api/auth/notification-history/${encodeURIComponent(entryId)}`, {
+    method: 'DELETE',
+  });
+  return Array.isArray(payload?.history) ? payload.history : [];
+};

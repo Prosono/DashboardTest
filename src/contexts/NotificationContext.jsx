@@ -1,7 +1,13 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { Capacitor, registerPlugin } from '@capacitor/core';
 import { AlertTriangle, AlertCircle, Bell, Check, X, ChevronDown, ChevronUp } from '../icons';
-import { getClientId } from '../services/appAuth';
+import {
+  appendNotificationHistoryEntry,
+  clearNotificationHistory as clearSharedNotificationHistory,
+  deleteNotificationHistoryEntry,
+  fetchNotificationHistory,
+  getClientId,
+} from '../services/appAuth';
 
 const MAX_NOTIFICATIONS = 40;
 const MAX_NOTIFICATION_HISTORY = 200;
@@ -35,6 +41,11 @@ const normalizeHistoryEntry = (entry) => ({
   meta: normalizeHistoryMeta(entry?.meta),
 });
 
+const normalizeHistoryEntries = (entries) => (Array.isArray(entries) ? entries : [])
+  .map((entry) => normalizeHistoryEntry(entry))
+  .filter((entry) => Boolean(entry.id))
+  .slice(0, MAX_NOTIFICATION_HISTORY);
+
 const readStoredNotificationHistory = () => {
   if (typeof window === 'undefined') return [];
   try {
@@ -42,10 +53,7 @@ const readStoredNotificationHistory = () => {
     if (!raw) return [];
     const parsed = JSON.parse(raw);
     if (!Array.isArray(parsed)) return [];
-    return parsed
-      .map((entry) => normalizeHistoryEntry(entry))
-      .filter((entry) => Boolean(entry.id))
-      .slice(0, MAX_NOTIFICATION_HISTORY);
+    return normalizeHistoryEntries(parsed);
   } catch {
     return [];
   }
@@ -54,10 +62,7 @@ const readStoredNotificationHistory = () => {
 const writeStoredNotificationHistory = (entries) => {
   if (typeof window === 'undefined') return;
   try {
-    const normalized = (Array.isArray(entries) ? entries : [])
-      .slice(0, MAX_NOTIFICATION_HISTORY)
-      .map((entry) => normalizeHistoryEntry(entry))
-      .filter((entry) => Boolean(entry.id));
+    const normalized = normalizeHistoryEntries(entries);
     window.localStorage.setItem(getNotificationHistoryStorageKey(), JSON.stringify(normalized));
   } catch {
     // noop
@@ -425,18 +430,63 @@ export const NotificationProvider = ({ children }) => {
   const timersRef = useRef(new Map());
   const historyScopeRef = useRef(getNotificationHistoryStorageKey());
 
+  const syncHistoryFromServer = useCallback(async () => {
+    const currentScopeKey = getNotificationHistoryStorageKey();
+    if (currentScopeKey !== historyScopeRef.current) {
+      historyScopeRef.current = currentScopeKey;
+      setNotificationHistory(readStoredNotificationHistory());
+    }
+    try {
+      const remoteHistory = await fetchNotificationHistory();
+      const normalizedRemote = normalizeHistoryEntries(remoteHistory);
+      historyScopeRef.current = currentScopeKey;
+      setNotificationHistory(normalizedRemote);
+      writeStoredNotificationHistory(normalizedRemote);
+      return normalizedRemote;
+    } catch {
+      return null;
+    }
+  }, []);
+
   useEffect(() => {
-    const syncHistory = () => {
+    const syncFromStorage = () => {
       historyScopeRef.current = getNotificationHistoryStorageKey();
       setNotificationHistory(readStoredNotificationHistory());
     };
-    window.addEventListener('storage', syncHistory);
-    window.addEventListener('focus', syncHistory);
-    return () => {
-      window.removeEventListener('storage', syncHistory);
-      window.removeEventListener('focus', syncHistory);
-    };
+
+    window.addEventListener('storage', syncFromStorage);
+    return () => window.removeEventListener('storage', syncFromStorage);
   }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    const syncNow = async () => {
+      if (cancelled) return;
+      await syncHistoryFromServer();
+    };
+    const handleVisibilityChange = () => {
+      if (typeof document !== 'undefined' && document.visibilityState !== 'visible') return;
+      void syncNow();
+    };
+
+    void syncNow();
+    const intervalId = window.setInterval(syncNow, 15000);
+    window.addEventListener('focus', syncNow);
+    window.addEventListener('pageshow', syncNow);
+    if (typeof document !== 'undefined') {
+      document.addEventListener('visibilitychange', handleVisibilityChange);
+    }
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(intervalId);
+      window.removeEventListener('focus', syncNow);
+      window.removeEventListener('pageshow', syncNow);
+      if (typeof document !== 'undefined') {
+        document.removeEventListener('visibilitychange', handleVisibilityChange);
+      }
+    };
+  }, [syncHistoryFromServer]);
 
   const dismissNotification = useCallback((id) => {
     setNotifications((prev) => prev.filter((entry) => entry.id !== id));
@@ -478,6 +528,15 @@ export const NotificationProvider = ({ children }) => {
       writeStoredNotificationHistory(next);
       return next;
     });
+    void appendNotificationHistoryEntry(payload, { dedupeWindowMs: 15000 })
+      .then((serverHistory) => {
+        const normalizedRemote = normalizeHistoryEntries(serverHistory);
+        if (normalizedRemote.length === 0 && payload.id) return;
+        historyScopeRef.current = getNotificationHistoryStorageKey();
+        setNotificationHistory(normalizedRemote);
+        writeStoredNotificationHistory(normalizedRemote);
+      })
+      .catch(() => {});
 
     if (inApp) {
       setNotifications((prev) => [payload, ...prev].slice(0, MAX_NOTIFICATIONS));
@@ -513,6 +572,14 @@ export const NotificationProvider = ({ children }) => {
     historyScopeRef.current = getNotificationHistoryStorageKey();
     setNotificationHistory([]);
     writeStoredNotificationHistory([]);
+    void clearSharedNotificationHistory()
+      .then((serverHistory) => {
+        const normalizedRemote = normalizeHistoryEntries(serverHistory);
+        historyScopeRef.current = getNotificationHistoryStorageKey();
+        setNotificationHistory(normalizedRemote);
+        writeStoredNotificationHistory(normalizedRemote);
+      })
+      .catch(() => {});
   }, []);
 
   const removeNotificationHistoryEntry = useCallback((id) => {
@@ -524,6 +591,14 @@ export const NotificationProvider = ({ children }) => {
       writeStoredNotificationHistory(next);
       return next;
     });
+    void deleteNotificationHistoryEntry(normalizedId)
+      .then((serverHistory) => {
+        const normalizedRemote = normalizeHistoryEntries(serverHistory);
+        historyScopeRef.current = getNotificationHistoryStorageKey();
+        setNotificationHistory(normalizedRemote);
+        writeStoredNotificationHistory(normalizedRemote);
+      })
+      .catch(() => {});
   }, []);
 
   const value = useMemo(() => ({

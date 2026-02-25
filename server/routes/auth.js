@@ -9,6 +9,15 @@ import {
   normalizeNotificationConfig,
   parseStoredNotificationConfig,
 } from '../notificationConfig.js';
+import {
+  getNotificationHistoryKey,
+  MAX_NOTIFICATION_HISTORY,
+  normalizeNotificationHistory,
+  normalizeNotificationHistoryEntry,
+  parseStoredNotificationHistory,
+  serializeNotificationHistory,
+  shouldDedupeHistoryEntry,
+} from '../notificationHistory.js';
 
 const SUPER_ADMIN_CLIENT_ID = normalizeClientId(process.env.SUPER_ADMIN_CLIENT_ID || 'AdministratorClient') || 'administratorclient';
 const PLATFORM_ADMIN_CLIENT_ID = normalizeClientId(process.env.PLATFORM_ADMIN_CLIENT_ID || SUPER_ADMIN_CLIENT_ID) || SUPER_ADMIN_CLIENT_ID;
@@ -275,6 +284,85 @@ router.put('/notification-config', authRequired, adminRequired, (req, res) => {
       ...normalized,
       updatedAt: now,
     },
+  });
+});
+
+const loadNotificationHistoryForClient = (clientId) => {
+  const key = getNotificationHistoryKey(clientId);
+  const row = db.prepare('SELECT value, updated_at FROM system_settings WHERE key = ?').get(key);
+  return {
+    key,
+    row,
+    history: parseStoredNotificationHistory(row?.value || ''),
+  };
+};
+
+const persistNotificationHistoryForClient = (clientId, history) => {
+  const key = getNotificationHistoryKey(clientId);
+  const now = new Date().toISOString();
+  const normalized = normalizeNotificationHistory(history).slice(0, MAX_NOTIFICATION_HISTORY);
+  const payload = serializeNotificationHistory(normalized);
+
+  db.prepare(`
+    INSERT INTO system_settings (key, value, updated_at)
+    VALUES (?, ?, ?)
+    ON CONFLICT(key) DO UPDATE SET
+      value = excluded.value,
+      updated_at = excluded.updated_at
+  `).run(key, payload, now);
+
+  return { history: normalized, updatedAt: now };
+};
+
+router.get('/notification-history', authRequired, (req, res) => {
+  const { row, history } = loadNotificationHistoryForClient(req.auth?.user?.clientId);
+  return res.json({
+    history,
+    updatedAt: row?.updated_at || null,
+  });
+});
+
+router.post('/notification-history', authRequired, (req, res) => {
+  const candidate = normalizeNotificationHistoryEntry(req.body?.entry || req.body || {});
+  if (!candidate.id) {
+    return res.status(400).json({ error: 'Notification entry id is required' });
+  }
+
+  const dedupeWindowMs = Math.max(0, Math.min(120000, Number.parseInt(String(req.body?.dedupeWindowMs ?? ''), 10) || 15000));
+  const { history: currentHistory } = loadNotificationHistoryForClient(req.auth?.user?.clientId);
+  const deduped = currentHistory.some((entry) => shouldDedupeHistoryEntry(entry, candidate, dedupeWindowMs));
+  const nextHistory = deduped
+    ? currentHistory
+    : [candidate, ...currentHistory].slice(0, MAX_NOTIFICATION_HISTORY);
+
+  const saved = persistNotificationHistoryForClient(req.auth?.user?.clientId, nextHistory);
+  return res.json({
+    history: saved.history,
+    updatedAt: saved.updatedAt,
+    deduped,
+  });
+});
+
+router.delete('/notification-history', authRequired, (req, res) => {
+  const saved = persistNotificationHistoryForClient(req.auth?.user?.clientId, []);
+  return res.json({
+    history: saved.history,
+    updatedAt: saved.updatedAt,
+  });
+});
+
+router.delete('/notification-history/:entryId', authRequired, (req, res) => {
+  const entryId = String(req.params?.entryId || '').trim();
+  if (!entryId) {
+    return res.status(400).json({ error: 'Notification entry id is required' });
+  }
+
+  const { history: currentHistory } = loadNotificationHistoryForClient(req.auth?.user?.clientId);
+  const nextHistory = currentHistory.filter((entry) => String(entry?.id || '').trim() !== entryId);
+  const saved = persistNotificationHistoryForClient(req.auth?.user?.clientId, nextHistory);
+  return res.json({
+    history: saved.history,
+    updatedAt: saved.updatedAt,
   });
 });
 
