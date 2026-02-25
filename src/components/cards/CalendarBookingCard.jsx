@@ -367,16 +367,47 @@ const CalendarBookingCard = ({
 
   const bookingRingBackground = useMemo(() => {
     const rows = typeCountRows.filter((row) => row.count > 0);
+    const trackColor = 'color-mix(in srgb, var(--glass-border) 72%, transparent)';
     if (!rows.length || totalTodayBookings <= 0) {
-      return 'conic-gradient(color-mix(in srgb, var(--glass-border) 72%, transparent) 0deg 360deg)';
+      return `conic-gradient(${trackColor} 0deg 360deg)`;
     }
     let accumulated = 0;
-    const stops = rows.map((row) => {
+    const gapDeg = rows.length > 1 ? 1.6 : 0;
+    const stops = [];
+
+    rows.forEach((row) => {
       const startDeg = (accumulated / totalTodayBookings) * 360;
       accumulated += row.count;
       const endDeg = (accumulated / totalTodayBookings) * 360;
-      return `${row.palette.color} ${startDeg.toFixed(2)}deg ${endDeg.toFixed(2)}deg`;
+
+      const segmentStart = Math.min(endDeg, startDeg + (gapDeg / 2));
+      const segmentEnd = Math.max(segmentStart, endDeg - (gapDeg / 2));
+
+      if (segmentStart > startDeg) {
+        stops.push(`${trackColor} ${startDeg.toFixed(2)}deg ${segmentStart.toFixed(2)}deg`);
+      }
+      stops.push(`${row.palette.color} ${segmentStart.toFixed(2)}deg ${segmentEnd.toFixed(2)}deg`);
+      if (segmentEnd < endDeg) {
+        stops.push(`${trackColor} ${segmentEnd.toFixed(2)}deg ${endDeg.toFixed(2)}deg`);
+      }
     });
+
+    if (accumulated < totalTodayBookings) {
+      const remainingStart = (accumulated / totalTodayBookings) * 360;
+      stops.push(`${trackColor} ${remainingStart.toFixed(2)}deg 360deg`);
+    } else if (!stops.length) {
+      stops.push(`${trackColor} 0deg 360deg`);
+    } else {
+      const lastEndMatch = String(stops[stops.length - 1]).match(/([0-9.]+deg)\s*$/);
+      const lastEnd = lastEndMatch ? parseFloat(lastEndMatch[1]) : 360;
+      if (Number.isFinite(lastEnd) && lastEnd < 360) {
+        stops.push(`${trackColor} ${lastEnd.toFixed(2)}deg 360deg`);
+      }
+    }
+
+    if (!stops.length) {
+      return `conic-gradient(${trackColor} 0deg 360deg)`;
+    }
     return `conic-gradient(${stops.join(', ')})`;
   }, [typeCountRows, totalTodayBookings]);
 
@@ -578,52 +609,27 @@ const CalendarBookingCard = ({
                   <>
                     <div className="relative flex justify-center">
                       <div
-                        className="w-full max-w-[240px] md:max-w-[260px] aspect-square rounded-full border flex flex-col items-center justify-center text-center px-4 py-4"
+                        className="w-full max-w-[250px] md:max-w-[270px] aspect-square rounded-full p-[8px]"
                         style={{
-                          borderColor: 'color-mix(in srgb, var(--glass-border) 72%, transparent)',
-                          backgroundColor: 'color-mix(in srgb, var(--card-bg) 86%, transparent)',
+                          background: bookingRingBackground,
+                          boxShadow: '0 0 0 1px color-mix(in srgb, var(--glass-border) 62%, transparent) inset',
                         }}
                       >
-                        <div className="relative w-[132px] h-[132px] md:w-[142px] md:h-[142px] mb-3">
-                          <div
-                            className="absolute inset-0 rounded-full"
-                            style={{ background: bookingRingBackground }}
-                          />
-                          <div
-                            className="absolute inset-[11px] rounded-full border"
-                            style={{
-                              borderColor: 'color-mix(in srgb, var(--glass-border) 68%, transparent)',
-                              backgroundColor: 'color-mix(in srgb, var(--card-bg) 90%, transparent)',
-                            }}
-                          />
-                          <div className="absolute inset-0 flex flex-col items-center justify-center">
-                            <div className="text-[34px] md:text-[36px] leading-none font-semibold tabular-nums text-[var(--text-primary)] opacity-90">
+                        <div
+                          className="w-full h-full rounded-full border flex items-center justify-center px-4"
+                          style={{
+                            borderColor: 'color-mix(in srgb, var(--glass-border) 62%, transparent)',
+                            backgroundColor: 'color-mix(in srgb, var(--card-bg) 92%, transparent)',
+                          }}
+                        >
+                          <div className="text-center">
+                            <div className="text-[44px] md:text-[48px] leading-none font-semibold tabular-nums text-[var(--text-primary)] opacity-90">
                               {totalTodayBookings}
                             </div>
-                            <div className="mt-1 text-[11px] text-[var(--text-secondary)]">
+                            <div className="mt-1 text-[13px] text-[var(--text-secondary)]">
                               {t('calendarBooking.todayCountLabel') || 'Bookings today'}
                             </div>
                           </div>
-                        </div>
-                        <div className="mt-2.5 flex w-full flex-col items-center gap-1.5">
-                          {typeCountRows.map((row) => {
-                            const RowIcon = row.meta.Icon;
-                            return (
-                              <span
-                                key={row.type}
-                                className="inline-flex items-center justify-center gap-1.5 px-2.5 py-1 rounded-full border text-[10px] uppercase tracking-[0.1em] font-bold min-w-0 w-full max-w-[190px] text-[var(--text-secondary)]"
-                                style={{
-                                  borderColor: row.palette.softBorder,
-                                  backgroundColor: 'var(--glass-bg-hover)',
-                                }}
-                              >
-                                <span className="text-[12px] leading-none font-semibold tabular-nums text-[var(--text-primary)] shrink-0">{row.count}x</span>
-                                <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: row.palette.color }} />
-                                <RowIcon className="w-3.5 h-3.5 shrink-0 opacity-80" />
-                                <span className="truncate max-w-[110px]">{row.meta.label}</span>
-                              </span>
-                            );
-                          })}
                         </div>
                       </div>
                     </div>
