@@ -1990,6 +1990,7 @@ function AppContent({
                 getEntityImageUrl={getEntityImageUrl}
                 statusPillsConfig={statusPillsForBar}
                 isMobile={isMobile}
+                setShowPopupCardModal={setShowPopupCardModal}
               />
             </div>
           </div>

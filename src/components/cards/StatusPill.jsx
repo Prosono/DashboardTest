@@ -1,5 +1,5 @@
 import { getIconComponent } from '../../icons';
-import { Activity, Clapperboard } from '../../icons';
+import { Activity, Bell, Clapperboard } from '../../icons';
 
 /**
  * Generic configurable status pill
@@ -74,6 +74,75 @@ export default function StatusPill({
         return true;
     }
   };
+
+  if (pill.type === 'notification_timeline') {
+    const summaryEntity = entity || {};
+    if (pill.condition && pill.condition.type && !checkCondition(pill.condition, summaryEntity, getA)) return null;
+
+    const severity = String(summaryEntity?.attributes?.severity || '').toLowerCase();
+    const severityTone = severity === 'critical'
+      ? {
+          bg: 'rgba(190, 24, 93, 0.14)',
+          iconBg: 'rgba(190, 24, 93, 0.22)',
+          icon: 'text-rose-300',
+        }
+      : severity === 'warning'
+        ? {
+            bg: 'rgba(245, 158, 11, 0.12)',
+            iconBg: 'rgba(245, 158, 11, 0.22)',
+            icon: 'text-amber-300',
+          }
+        : {
+            bg: 'rgba(59, 130, 246, 0.12)',
+            iconBg: 'rgba(59, 130, 246, 0.2)',
+            icon: 'text-blue-300',
+          };
+
+    const label = pill.label || t('notificationTimeline.title') || 'Notification timeline';
+    const sublabel = pill.sublabel || summaryEntity?.attributes?.summary_text || '0 entries';
+    const IconComponent = pill.icon ? (getIconComponent(pill.icon) || Bell) : Bell;
+    const bgColor = pill.bgColor || severityTone.bg;
+    const iconBgColor = pill.iconBgColor || severityTone.iconBg;
+    const iconColor = pill.iconColor || severityTone.icon;
+    const labelColor = pill.labelColor || 'text-[var(--text-secondary)]';
+    const sublabelColor = pill.sublabelColor || 'text-[var(--text-muted)]';
+    const animated = pill.animated !== false && (severity === 'critical' || severity === 'warning');
+
+    const paddingClass = isMobile ? 'px-2 py-1 gap-1.5' : 'px-3 py-1.5 gap-2.5';
+    const iconPadding = isMobile ? 'p-1' : 'p-1.5';
+    const textSize = isMobile ? 'text-[10px]' : 'text-xs';
+
+    const Wrapper = onClick ? 'button' : 'div';
+    const wrapperProps = onClick ? {
+      onClick,
+      className: `relative flex items-center ${paddingClass} rounded-2xl transition-all hover:bg-[var(--glass-bg-hover)] active:scale-95 ${animated ? 'animate-pulse' : ''}`,
+      style: { backgroundColor: bgColor },
+    } : {
+      className: `relative flex items-center ${paddingClass} rounded-2xl ${animated ? 'animate-pulse' : ''}`,
+      style: { backgroundColor: bgColor },
+    };
+
+    return (
+      <Wrapper {...wrapperProps}>
+        <div className={`${iconPadding} rounded-xl ${iconColor}`} style={{ backgroundColor: iconBgColor }}>
+          <IconComponent className={`${isMobile ? 'w-3 h-3' : 'w-4 h-4'}`} />
+        </div>
+        <div className="flex flex-col items-start">
+          <span className={`${textSize} uppercase font-bold leading-tight ${labelColor}`} style={lightLabelStyle}>
+            {label}
+          </span>
+          <span className={`${textSize} font-medium uppercase tracking-widest italic ${sublabelColor}`} style={lightSubLabelStyle}>
+            {sublabel}
+          </span>
+        </div>
+        {badge > 0 && (
+          <div className={`absolute -top-2 -right-2 ${isMobile ? 'min-w-[18px] h-[18px] text-[10px]' : 'min-w-[22px] h-[22px] text-xs'} px-1.5 bg-gray-600 text-white font-bold rounded-full flex items-center justify-center border border-transparent shadow-sm z-10`}>
+            {badge}
+          </div>
+        )}
+      </Wrapper>
+    );
+  }
   
   // Handle media_player / emby / sonos type differently
   if (pill.type === 'media_player' || pill.type === 'emby' || pill.type === 'sonos') {
@@ -234,6 +303,11 @@ export default function StatusPill({
           {sublabel}
         </span>
       </div>
+      {badge > 0 && (
+        <div className={`absolute -top-2 -right-2 ${isMobile ? 'min-w-[18px] h-[18px] text-[10px]' : 'min-w-[22px] h-[22px] text-xs'} px-1.5 bg-gray-600 text-white font-bold rounded-full flex items-center justify-center border border-transparent shadow-sm z-10`}>
+          {badge}
+        </div>
+      )}
     </Wrapper>
   );
 }

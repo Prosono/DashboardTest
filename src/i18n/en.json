@@ -788,6 +788,7 @@
   "statusPills.typeMedia": "Media",
   "statusPills.typeSensor": "Sensor",
   "statusPills.typeSonos": "Sonos",
+  "statusPills.typeNotificationTimeline": "Notification timeline",
   "statusPills.useFilter": "Use filter",
   "statusPills.valuePlaceholder": "value",
   "statusPills.visibility": "Visibility",

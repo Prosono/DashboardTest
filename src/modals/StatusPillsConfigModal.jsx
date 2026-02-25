@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { 
   X, Plus, Trash2, Eye, EyeOff, Check,
-  ChevronDown, ChevronUp, Activity, Music, Clapperboard, Speaker
+  ChevronDown, ChevronUp, Activity, Music, Clapperboard, Speaker, Bell
 } from '../icons';
 import { getAllIconKeys, getIconComponent } from '../icons';
 
@@ -47,6 +47,14 @@ export default function StatusPillsConfigModal({
 
   if (!show) return null;
 
+  const getPillTypeLabel = (type) => {
+    if (type === 'media_player') return t('statusPills.typeMedia');
+    if (type === 'emby') return t('statusPills.typeEmby');
+    if (type === 'sonos') return t('statusPills.typeSonos');
+    if (type === 'notification_timeline') return t('statusPills.typeNotificationTimeline');
+    return t('statusPills.typeSensor');
+  };
+
   const handleSave = () => {
     const cleaned = pills.map((pill) => ({
       ...pill,
@@ -62,8 +70,11 @@ export default function StatusPillsConfigModal({
   };
 
   const addPill = (pillType = 'conditional') => {
+    const isNotificationTimeline = pillType === 'notification_timeline';
     const defaultCondition = (pillType === 'media_player' || pillType === 'sonos' || pillType === 'emby')
       ? { type: 'state', states: ['playing'] }
+      : isNotificationTimeline
+        ? null
       : { type: 'state', states: ['on'] };
     
     const newPill = {
@@ -72,14 +83,14 @@ export default function StatusPillsConfigModal({
       entityId: '',
       label: '',
       sublabel: '',
-      icon: pillType === 'emby' ? 'Clapperboard' : 'Activity',
-      bgColor: 'rgba(255, 255, 255, 0.03)',
-      iconBgColor: 'rgba(59, 130, 246, 0.1)',
-      iconColor: 'text-blue-400',
+      icon: pillType === 'emby' ? 'Clapperboard' : isNotificationTimeline ? 'Bell' : 'Activity',
+      bgColor: isNotificationTimeline ? 'rgba(59, 130, 246, 0.12)' : 'rgba(255, 255, 255, 0.03)',
+      iconBgColor: isNotificationTimeline ? 'rgba(59, 130, 246, 0.2)' : 'rgba(59, 130, 246, 0.1)',
+      iconColor: isNotificationTimeline ? 'text-blue-300' : 'text-blue-400',
       labelColor: 'text-[var(--text-secondary)]',
       sublabelColor: 'text-[var(--text-muted)]',
       condition: defaultCondition,
-      clickable: false,
+      clickable: isNotificationTimeline,
       animated: true,
       visible: true,
       showCover: true,
@@ -186,6 +197,9 @@ export default function StatusPillsConfigModal({
                   <button onClick={() => { addPill('sonos'); setShowAddMenu(false); }} className="text-left px-4 py-3 hover:bg-white/5 rounded-lg text-sm text-gray-200 font-medium transition-colors flex items-center gap-2">
                     <Speaker className="w-4 h-4 text-orange-400" /> {t('statusPills.typeSonos')}
                   </button>
+                  <button onClick={() => { addPill('notification_timeline'); setShowAddMenu(false); }} className="text-left px-4 py-3 hover:bg-white/5 rounded-lg text-sm text-gray-200 font-medium transition-colors flex items-center gap-2">
+                    <Bell className="w-4 h-4 text-blue-300" /> {t('statusPills.typeNotificationTimeline')}
+                  </button>
                 </div>
               )}
             </div>
@@ -272,7 +286,7 @@ export default function StatusPillsConfigModal({
                   <div className="flex items-start justify-between gap-4 border-b border-[var(--glass-border)] pb-4">
                     <div className="flex-1">
                       <div className="flex items-center gap-2 mb-2">
-                        <span className="text-xs font-bold uppercase tracking-widest text-blue-400">{pill.type === 'conditional' ? t('statusPills.typeSensor') : pill.type === 'media_player' ? t('statusPills.typeMedia') : pill.type === 'emby' ? t('statusPills.typeEmby') : t('statusPills.typeSonos')}</span>
+                        <span className="text-xs font-bold uppercase tracking-widest text-blue-400">{getPillTypeLabel(pill.type)}</span>
                         {pill.type === 'conditional' && <div className="w-1 h-1 bg-gray-500 rounded-full"></div>}
                         {pill.type === 'conditional' && <span className="text-xs text-gray-500">{t('statusPills.standardPill')}</span>}
                       </div>
@@ -285,7 +299,7 @@ export default function StatusPillsConfigModal({
                       />
                     </div>
                     {/* Preview if conditional */}
-                    {pill.type === 'conditional' && (
+                    {(pill.type === 'conditional' || pill.type === 'notification_timeline') && (
                       <div className="shrink-0">
                         <div 
                           className="inline-flex items-center gap-2.5 px-3 py-1.5 rounded-2xl"
@@ -311,7 +325,7 @@ export default function StatusPillsConfigModal({
                   <div className="grid grid-cols-1 gap-6">
                     
                     {/* Visuals Group (Only for Conditional) */}
-                    {pill.type === 'conditional' && (
+                    {(pill.type === 'conditional' || pill.type === 'notification_timeline') && (
                       <section className="space-y-3">
                         <h4 className="text-xs font-bold uppercase tracking-widest text-[var(--text-muted)]">{t('statusPills.appearance')}</h4>
                         
@@ -408,6 +422,7 @@ export default function StatusPillsConfigModal({
                     )}
 
                     {/* Source Logic */}
+                    {pill.type !== 'notification_timeline' && (
                     <section className="space-y-3">
                       <h4 className="text-xs font-bold uppercase tracking-widest text-[var(--text-muted)]">{t('statusPills.dataSource')}</h4>
                       
@@ -593,6 +608,7 @@ export default function StatusPillsConfigModal({
                       )}
 
                     </section>
+                    )}
 
                     {/* Condition Group */}
                     <section className="space-y-3">

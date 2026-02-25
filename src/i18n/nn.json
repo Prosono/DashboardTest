@@ -900,6 +900,7 @@
   "statusPills.typeMedia": "Media",
   "statusPills.typeEmby": "Emby",
   "statusPills.typeSonos": "Sonos",
+  "statusPills.typeNotificationTimeline": "Varsel-tidslinje",
   "statusPills.moveUp": "Flytt opp",
   "statusPills.moveDown": "Flytt ned",
   "statusPills.hide": "Skjul",
