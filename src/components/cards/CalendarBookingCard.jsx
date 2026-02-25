@@ -93,6 +93,13 @@ const BOOKING_TYPE_PATTERNS = {
   felles: ['felles'],
 };
 
+const RING_COLORS = {
+  felles: '#7fb4ff',
+  service: '#f0b429',
+  private: '#ea6db3',
+  aufguss: '#a57fff',
+};
+
 const getBookingType = (event) => {
   const normalizeText = (value) => String(value || '')
     .toLowerCase()
@@ -362,18 +369,20 @@ const CalendarBookingCard = ({
       ...row,
       palette: getBookingPalette(row.type, false),
       meta: getBookingTypeMeta(row.type, t),
+      ringColor: RING_COLORS[row.type] || '#7fb4ff',
     }));
   }, [typeCounts.felles, typeCounts.service, typeCounts.private, typeCounts.aufguss, t]);
 
-  const bookingRingBackground = useMemo(() => {
+  const bookingRingChart = useMemo(() => {
     const rows = typeCountRows.filter((row) => row.count > 0);
     const trackColor = 'color-mix(in srgb, var(--glass-border) 72%, transparent)';
     if (!rows.length || totalTodayBookings <= 0) {
-      return `conic-gradient(${trackColor} 0deg 360deg)`;
+      return { background: `conic-gradient(${trackColor} 0deg 360deg)`, iconAnchors: [] };
     }
     let accumulated = 0;
     const gapDeg = rows.length > 1 ? 1.6 : 0;
     const stops = [];
+    const iconAnchors = [];
 
     rows.forEach((row) => {
       const startDeg = (accumulated / totalTodayBookings) * 360;
@@ -386,10 +395,16 @@ const CalendarBookingCard = ({
       if (segmentStart > startDeg) {
         stops.push(`${trackColor} ${startDeg.toFixed(2)}deg ${segmentStart.toFixed(2)}deg`);
       }
-      stops.push(`${row.palette.color} ${segmentStart.toFixed(2)}deg ${segmentEnd.toFixed(2)}deg`);
+      stops.push(`${row.ringColor} ${segmentStart.toFixed(2)}deg ${segmentEnd.toFixed(2)}deg`);
       if (segmentEnd < endDeg) {
         stops.push(`${trackColor} ${segmentEnd.toFixed(2)}deg ${endDeg.toFixed(2)}deg`);
       }
+      iconAnchors.push({
+        type: row.type,
+        Icon: row.meta.Icon,
+        color: row.ringColor,
+        angleDeg: segmentEnd,
+      });
     });
 
     if (accumulated < totalTodayBookings) {
@@ -406,10 +421,21 @@ const CalendarBookingCard = ({
     }
 
     if (!stops.length) {
-      return `conic-gradient(${trackColor} 0deg 360deg)`;
+      return { background: `conic-gradient(${trackColor} 0deg 360deg)`, iconAnchors: [] };
     }
-    return `conic-gradient(${stops.join(', ')})`;
+    return {
+      background: `conic-gradient(${stops.join(', ')})`,
+      iconAnchors,
+    };
   }, [typeCountRows, totalTodayBookings]);
+
+  const bookingRingIconPositions = useMemo(() => bookingRingChart.iconAnchors.map((anchor) => {
+    const rad = ((anchor.angleDeg - 90) * Math.PI) / 180;
+    const radiusPct = 52;
+    const x = 50 + (Math.cos(rad) * radiusPct);
+    const y = 50 + (Math.sin(rad) * radiusPct);
+    return { ...anchor, x, y };
+  }), [bookingRingChart.iconAnchors]);
 
   const { tomorrowStartMs } = getDayBounds(clockMs);
   const summaryIsTomorrow = !!summaryEvent && summaryEvent.startMs >= tomorrowStartMs;
@@ -602,26 +628,45 @@ const CalendarBookingCard = ({
                 </div>
               )}
 
-              <div
-                className="relative overflow-hidden px-2 py-2"
-              >
+              <div className="relative overflow-visible px-2 py-2">
                 {summaryEvent ? (
                   <>
                     <div className="relative flex justify-center">
                       <div
-                        className="w-full max-w-[250px] md:max-w-[270px] aspect-square rounded-full p-[8px]"
-                        style={{
-                          background: bookingRingBackground,
-                          boxShadow: '0 0 0 1px color-mix(in srgb, var(--glass-border) 62%, transparent) inset',
-                        }}
+                        className="relative w-full max-w-[250px] md:max-w-[270px] aspect-square overflow-visible"
                       >
                         <div
-                          className="w-full h-full rounded-full border flex items-center justify-center px-4"
+                          className="absolute inset-0 rounded-full"
                           style={{
-                            borderColor: 'color-mix(in srgb, var(--glass-border) 62%, transparent)',
-                            backgroundColor: 'color-mix(in srgb, var(--card-bg) 92%, transparent)',
+                            background: bookingRingChart.background,
+                            WebkitMask: 'radial-gradient(farthest-side, transparent calc(100% - 14px), #000 calc(100% - 14px))',
+                            mask: 'radial-gradient(farthest-side, transparent calc(100% - 14px), #000 calc(100% - 14px))',
                           }}
-                        >
+                        />
+                        <div
+                          className="absolute inset-0 rounded-full"
+                          style={{ boxShadow: '0 0 0 1px color-mix(in srgb, var(--glass-border) 62%, transparent) inset' }}
+                        />
+
+                        {bookingRingIconPositions.map((anchor) => {
+                          const AnchorIcon = anchor.Icon || User;
+                          return (
+                            <div
+                              key={`ring_icon_${anchor.type}`}
+                              className="absolute z-10 w-8 h-8 rounded-lg border backdrop-blur-sm flex items-center justify-center -translate-x-1/2 -translate-y-1/2 shadow-[0_8px_20px_rgba(0,0,0,0.3)]"
+                              style={{
+                                left: `${anchor.x}%`,
+                                top: `${anchor.y}%`,
+                                borderColor: 'color-mix(in srgb, var(--glass-border) 66%, transparent)',
+                                backgroundColor: 'color-mix(in srgb, var(--card-bg) 88%, transparent)',
+                              }}
+                            >
+                              <AnchorIcon className="w-4 h-4" style={{ color: anchor.color }} />
+                            </div>
+                          );
+                        })}
+
+                        <div className="absolute inset-0 flex items-center justify-center px-4">
                           <div className="text-center">
                             <div className="text-[44px] md:text-[48px] leading-none font-semibold tabular-nums text-[var(--text-primary)] opacity-90">
                               {totalTodayBookings}
