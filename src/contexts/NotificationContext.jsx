@@ -17,6 +17,24 @@ const getNotificationHistoryStorageKey = () => {
   return `tunet_notification_history_${scope}`;
 };
 
+const normalizeHistoryMeta = (value) => {
+  if (!value || typeof value !== 'object') return null;
+  try {
+    return JSON.parse(JSON.stringify(value));
+  } catch {
+    return null;
+  }
+};
+
+const normalizeHistoryEntry = (entry) => ({
+  id: String(entry?.id || ''),
+  title: String(entry?.title || 'Notification'),
+  message: String(entry?.message || ''),
+  level: String(entry?.level || 'info'),
+  createdAt: String(entry?.createdAt || nowIso()),
+  meta: normalizeHistoryMeta(entry?.meta),
+});
+
 const readStoredNotificationHistory = () => {
   if (typeof window === 'undefined') return [];
   try {
@@ -25,13 +43,7 @@ const readStoredNotificationHistory = () => {
     const parsed = JSON.parse(raw);
     if (!Array.isArray(parsed)) return [];
     return parsed
-      .map((entry) => ({
-        id: String(entry?.id || ''),
-        title: String(entry?.title || 'Notification'),
-        message: String(entry?.message || ''),
-        level: String(entry?.level || 'info'),
-        createdAt: String(entry?.createdAt || nowIso()),
-      }))
+      .map((entry) => normalizeHistoryEntry(entry))
       .filter((entry) => Boolean(entry.id))
       .slice(0, MAX_NOTIFICATION_HISTORY);
   } catch {
@@ -44,13 +56,7 @@ const writeStoredNotificationHistory = (entries) => {
   try {
     const normalized = (Array.isArray(entries) ? entries : [])
       .slice(0, MAX_NOTIFICATION_HISTORY)
-      .map((entry) => ({
-        id: String(entry?.id || ''),
-        title: String(entry?.title || 'Notification'),
-        message: String(entry?.message || ''),
-        level: String(entry?.level || 'info'),
-        createdAt: String(entry?.createdAt || nowIso()),
-      }))
+      .map((entry) => normalizeHistoryEntry(entry))
       .filter((entry) => Boolean(entry.id));
     window.localStorage.setItem(getNotificationHistoryStorageKey(), JSON.stringify(normalized));
   } catch {
@@ -451,6 +457,7 @@ export const NotificationProvider = ({ children }) => {
     browserOnlyWhenBackground = true,
     durationMs = DEFAULT_DURATION_MS,
     persistent = false,
+    meta = null,
   }) => {
     const id = `${Date.now()}_${Math.random().toString(16).slice(2, 8)}`;
     const payload = {
@@ -459,6 +466,7 @@ export const NotificationProvider = ({ children }) => {
       message: String(message || ''),
       level,
       createdAt: nowIso(),
+      meta: normalizeHistoryMeta(meta),
     };
 
     setNotificationHistory((prev) => {
@@ -507,6 +515,17 @@ export const NotificationProvider = ({ children }) => {
     writeStoredNotificationHistory([]);
   }, []);
 
+  const removeNotificationHistoryEntry = useCallback((id) => {
+    const normalizedId = String(id || '').trim();
+    if (!normalizedId) return;
+    setNotificationHistory((prev) => {
+      const base = Array.isArray(prev) ? prev : [];
+      const next = base.filter((entry) => String(entry?.id || '').trim() !== normalizedId);
+      writeStoredNotificationHistory(next);
+      return next;
+    });
+  }, []);
+
   const value = useMemo(() => ({
     notifications,
     notificationHistory,
@@ -514,7 +533,16 @@ export const NotificationProvider = ({ children }) => {
     dismissNotification,
     clearNotifications,
     clearNotificationHistory,
-  }), [notifications, notificationHistory, notify, dismissNotification, clearNotifications, clearNotificationHistory]);
+    removeNotificationHistoryEntry,
+  }), [
+    notifications,
+    notificationHistory,
+    notify,
+    dismissNotification,
+    clearNotifications,
+    clearNotificationHistory,
+    removeNotificationHistoryEntry,
+  ]);
 
   return (
     <NotificationContext.Provider value={value}>
