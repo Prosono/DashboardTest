@@ -348,14 +348,37 @@ const CalendarBookingCard = ({
     return initial;
   }, [todayEvents]);
 
-  const typeCountRows = [
-    { type: 'felles', count: typeCounts.felles },
-    { type: 'service', count: typeCounts.service },
-    { type: 'private', count: typeCounts.private },
-  ];
-  if (typeCounts.aufguss > 0) {
-    typeCountRows.push({ type: 'aufguss', count: typeCounts.aufguss });
-  }
+  const totalTodayBookings = todayEvents.length;
+  const typeCountRows = useMemo(() => {
+    const rows = [
+      { type: 'felles', count: typeCounts.felles },
+      { type: 'service', count: typeCounts.service },
+      { type: 'private', count: typeCounts.private },
+    ];
+    if (typeCounts.aufguss > 0) {
+      rows.push({ type: 'aufguss', count: typeCounts.aufguss });
+    }
+    return rows.map((row) => ({
+      ...row,
+      palette: getBookingPalette(row.type, false),
+      meta: getBookingTypeMeta(row.type, t),
+    }));
+  }, [typeCounts.felles, typeCounts.service, typeCounts.private, typeCounts.aufguss, t]);
+
+  const bookingRingBackground = useMemo(() => {
+    const rows = typeCountRows.filter((row) => row.count > 0);
+    if (!rows.length || totalTodayBookings <= 0) {
+      return 'conic-gradient(color-mix(in srgb, var(--glass-border) 72%, transparent) 0deg 360deg)';
+    }
+    let accumulated = 0;
+    const stops = rows.map((row) => {
+      const startDeg = (accumulated / totalTodayBookings) * 360;
+      accumulated += row.count;
+      const endDeg = (accumulated / totalTodayBookings) * 360;
+      return `${row.palette.color} ${startDeg.toFixed(2)}deg ${endDeg.toFixed(2)}deg`;
+    });
+    return `conic-gradient(${stops.join(', ')})`;
+  }, [typeCountRows, totalTodayBookings]);
 
   const { tomorrowStartMs } = getDayBounds(clockMs);
   const summaryIsTomorrow = !!summaryEvent && summaryEvent.startMs >= tomorrowStartMs;
@@ -561,30 +584,43 @@ const CalendarBookingCard = ({
                           backgroundColor: 'color-mix(in srgb, var(--card-bg) 86%, transparent)',
                         }}
                       >
-                        <div className="text-[40px] md:text-[44px] leading-none font-semibold tabular-nums text-[var(--text-primary)] opacity-85">
-                          {todayEvents.length}
-                        </div>
-                        <div className="mt-1 text-[13px] text-[var(--text-secondary)]">
-                          {t('calendarBooking.todayCountLabel') || 'Bookings today'}
+                        <div className="relative w-[132px] h-[132px] md:w-[142px] md:h-[142px] mb-3">
+                          <div
+                            className="absolute inset-0 rounded-full"
+                            style={{ background: bookingRingBackground }}
+                          />
+                          <div
+                            className="absolute inset-[11px] rounded-full border"
+                            style={{
+                              borderColor: 'color-mix(in srgb, var(--glass-border) 68%, transparent)',
+                              backgroundColor: 'color-mix(in srgb, var(--card-bg) 90%, transparent)',
+                            }}
+                          />
+                          <div className="absolute inset-0 flex flex-col items-center justify-center">
+                            <div className="text-[34px] md:text-[36px] leading-none font-semibold tabular-nums text-[var(--text-primary)] opacity-90">
+                              {totalTodayBookings}
+                            </div>
+                            <div className="mt-1 text-[11px] text-[var(--text-secondary)]">
+                              {t('calendarBooking.todayCountLabel') || 'Bookings today'}
+                            </div>
+                          </div>
                         </div>
                         <div className="mt-2.5 flex w-full flex-col items-center gap-1.5">
                           {typeCountRows.map((row) => {
-                            const rowMeta = getBookingTypeMeta(row.type, t);
-                            const rowPalette = getBookingPalette(row.type, false);
-                            const RowIcon = rowMeta.Icon;
+                            const RowIcon = row.meta.Icon;
                             return (
                               <span
                                 key={row.type}
                                 className="inline-flex items-center justify-center gap-1.5 px-2.5 py-1 rounded-full border text-[10px] uppercase tracking-[0.1em] font-bold min-w-0 w-full max-w-[190px] text-[var(--text-secondary)]"
                                 style={{
-                                  borderColor: rowPalette.softBorder,
+                                  borderColor: row.palette.softBorder,
                                   backgroundColor: 'var(--glass-bg-hover)',
                                 }}
                               >
                                 <span className="text-[12px] leading-none font-semibold tabular-nums text-[var(--text-primary)] shrink-0">{row.count}x</span>
-                                <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: rowPalette.color }} />
+                                <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: row.palette.color }} />
                                 <RowIcon className="w-3.5 h-3.5 shrink-0 opacity-80" />
-                                <span className="truncate max-w-[110px]">{rowMeta.label}</span>
+                                <span className="truncate max-w-[110px]">{row.meta.label}</span>
                               </span>
                             );
                           })}
