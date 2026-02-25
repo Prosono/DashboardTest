@@ -102,6 +102,47 @@ import { normalizeHaConfig } from './utils/haConnections';
 import { DEFAULT_NOTIFICATION_CONFIG, normalizeNotificationConfig } from './utils/notificationConfig';
 
 const SUPER_ADMIN_OVERVIEW_PAGE_ID = '__super_admin_overview';
+const AUTO_ALERT_PILL_HIDDEN_KEY_PREFIX = 'tunet_auto_alert_pills_hidden_';
+
+const getAutoAlertPillsHiddenStorageKey = (clientScopeRaw) => {
+  const scope = String(clientScopeRaw || '').trim().toLowerCase() || 'default';
+  return `${AUTO_ALERT_PILL_HIDDEN_KEY_PREFIX}${scope}`;
+};
+
+const readAutoAlertPillsHidden = (clientScopeRaw) => {
+  if (typeof window === 'undefined') return [];
+  try {
+    const raw = window.localStorage.getItem(getAutoAlertPillsHiddenStorageKey(clientScopeRaw));
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    const unique = new Set();
+    parsed.forEach((value) => {
+      const normalized = String(value || '').trim();
+      if (normalized) unique.add(normalized);
+    });
+    return Array.from(unique);
+  } catch {
+    return [];
+  }
+};
+
+const writeAutoAlertPillsHidden = (clientScopeRaw, values) => {
+  if (typeof window === 'undefined') return;
+  try {
+    const unique = new Set();
+    (Array.isArray(values) ? values : []).forEach((value) => {
+      const normalized = String(value || '').trim();
+      if (normalized) unique.add(normalized);
+    });
+    window.localStorage.setItem(
+      getAutoAlertPillsHiddenStorageKey(clientScopeRaw),
+      JSON.stringify(Array.from(unique)),
+    );
+  } catch {
+    // noop
+  }
+};
 
 function AppContent({
   showOnboarding,
@@ -170,7 +211,7 @@ function AppContent({
     updateSectionSpacing,
     persistCardSettings,
     statusPillsConfig,
-    saveStatusPillsConfig,
+    saveStatusPillsConfig: saveStatusPillsConfigRaw,
     globalDashboardProfiles,
     globalStorageBusy,
     globalStorageError,
@@ -399,8 +440,78 @@ function AppContent({
     if (!canEditDashboard && editMode) setEditMode(false);
   }, [canEditDashboard, editMode]);
 
+  const autoAlertPillScope = useMemo(
+    () => String(currentUser?.clientId || getClientId() || '').trim().toLowerCase() || 'default',
+    [currentUser?.clientId],
+  );
+  const [hiddenAutoAlertPills, setHiddenAutoAlertPills] = useState(
+    () => readAutoAlertPillsHidden(currentUser?.clientId || getClientId()),
+  );
+
+  useEffect(() => {
+    setHiddenAutoAlertPills(readAutoAlertPillsHidden(autoAlertPillScope));
+  }, [autoAlertPillScope]);
+
+  const persistHiddenAutoAlertPills = useCallback((nextValues) => {
+    const normalized = Array.from(new Set(
+      (Array.isArray(nextValues) ? nextValues : [])
+        .map((value) => String(value || '').trim())
+        .filter(Boolean),
+    )).sort();
+    setHiddenAutoAlertPills(normalized);
+    writeAutoAlertPillsHidden(autoAlertPillScope, normalized);
+  }, [autoAlertPillScope]);
+
+  const saveStatusPillsConfig = useCallback((nextConfig, options = {}) => {
+    const syncAutoAlertHidden = options?.syncAutoAlertHidden !== false;
+    const normalizedConfig = Array.isArray(nextConfig) ? nextConfig : [];
+    const autoEntityIds = [WARNING_SENSOR_ID, CRITICAL_SENSOR_ID]
+      .map((value) => String(value || '').trim())
+      .filter(Boolean);
+
+    if (syncAutoAlertHidden) {
+      const nextHiddenSet = new Set(
+        (Array.isArray(hiddenAutoAlertPills) ? hiddenAutoAlertPills : [])
+          .map((value) => String(value || '').trim())
+          .filter(Boolean),
+      );
+
+      autoEntityIds.forEach((entityId) => {
+        if (!entities?.[entityId]) {
+          nextHiddenSet.delete(entityId);
+          return;
+        }
+        const existsInConfig = normalizedConfig.some(
+          (pill) => String(pill?.entityId || '').trim() === entityId,
+        );
+        if (existsInConfig) nextHiddenSet.delete(entityId);
+        else nextHiddenSet.add(entityId);
+      });
+
+      const currentHidden = Array.from(new Set(
+        (Array.isArray(hiddenAutoAlertPills) ? hiddenAutoAlertPills : [])
+          .map((value) => String(value || '').trim())
+          .filter(Boolean),
+      )).sort();
+      const nextHidden = Array.from(nextHiddenSet).sort();
+      if (JSON.stringify(currentHidden) !== JSON.stringify(nextHidden)) {
+        persistHiddenAutoAlertPills(nextHidden);
+      }
+    }
+
+    saveStatusPillsConfigRaw(normalizedConfig);
+  }, [
+    CRITICAL_SENSOR_ID,
+    WARNING_SENSOR_ID,
+    entities,
+    hiddenAutoAlertPills,
+    persistHiddenAutoAlertPills,
+    saveStatusPillsConfigRaw,
+  ]);
+
   useEffect(() => {
     if (!entities?.[WARNING_SENSOR_ID]) return;
+    if ((hiddenAutoAlertPills || []).includes(WARNING_SENSOR_ID)) return;
     const warningPrefix = 'pill_notification_warning_';
     const base = Array.isArray(statusPillsConfig) ? statusPillsConfig : [];
     const pruned = base.filter((pill) => {
@@ -434,14 +545,15 @@ function AppContent({
     };
 
     if (exists) {
-      if (pruned.length !== base.length) saveStatusPillsConfig(pruned);
+      if (pruned.length !== base.length) saveStatusPillsConfig(pruned, { syncAutoAlertHidden: false });
       return;
     }
-    saveStatusPillsConfig([...pruned, warningPill]);
-  }, [entities, statusPillsConfig, saveStatusPillsConfig, WARNING_SENSOR_ID]);
+    saveStatusPillsConfig([...pruned, warningPill], { syncAutoAlertHidden: false });
+  }, [entities, hiddenAutoAlertPills, statusPillsConfig, saveStatusPillsConfig, WARNING_SENSOR_ID]);
 
   useEffect(() => {
     if (!entities?.[CRITICAL_SENSOR_ID]) return;
+    if ((hiddenAutoAlertPills || []).includes(CRITICAL_SENSOR_ID)) return;
     const criticalPrefix = 'pill_notification_critical_';
     const base = Array.isArray(statusPillsConfig) ? statusPillsConfig : [];
     const pruned = base.filter((pill) => {
@@ -475,11 +587,11 @@ function AppContent({
     };
 
     if (exists) {
-      if (pruned.length !== base.length) saveStatusPillsConfig(pruned);
+      if (pruned.length !== base.length) saveStatusPillsConfig(pruned, { syncAutoAlertHidden: false });
       return;
     }
-    saveStatusPillsConfig([...pruned, criticalPill]);
-  }, [entities, statusPillsConfig, saveStatusPillsConfig, CRITICAL_SENSOR_ID]);
+    saveStatusPillsConfig([...pruned, criticalPill], { syncAutoAlertHidden: false });
+  }, [CRITICAL_SENSOR_ID, entities, hiddenAutoAlertPills, saveStatusPillsConfig, statusPillsConfig]);
 
   const parseAlertCountFromState = useCallback((rawState) => {
     const normalized = String(rawState ?? '').trim().toLowerCase();
