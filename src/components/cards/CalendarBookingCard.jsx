@@ -389,7 +389,6 @@ const CalendarBookingCard = ({
           className="relative rounded-[14px] pl-5 pr-3 py-2.5 overflow-hidden"
           style={{
             backgroundColor: 'color-mix(in srgb, var(--card-bg) 82%, transparent)',
-            backgroundImage: `linear-gradient(130deg, ${itemPalette.softBg} 0%, rgba(0,0,0,0) 40%)`,
           }}
         >
         <span
@@ -526,11 +525,11 @@ const CalendarBookingCard = ({
           ) : (
             <>
               {summaryEvent && (
-                <div className="px-2 pb-2">
+                <div className={`px-2 pb-2 ${summaryIsLive ? 'text-center' : ''}`}>
                   <div className="text-[10px] uppercase tracking-widest text-[var(--text-secondary)] font-bold mb-1">
                     {summaryDayLabel}
                   </div>
-                  <div className="flex items-center gap-2 text-[10px] uppercase tracking-widest font-bold min-w-0">
+                  <div className={`flex items-center gap-2 text-[10px] uppercase tracking-widest font-bold min-w-0 ${summaryIsLive ? 'justify-center flex-wrap' : ''}`}>
                     <span
                       className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full border text-[var(--text-secondary)]"
                       style={{
@@ -546,11 +545,8 @@ const CalendarBookingCard = ({
                       <Clock3 className="w-3.5 h-3.5" />
                       {renderTimeRange(summaryEvent)}
                     </span>
-                    <span className="ml-auto text-[10px] text-[var(--text-secondary)] truncate max-w-[46%]">
-                      {nextStatus}
-                    </span>
                   </div>
-                  <div className="mt-1.5 text-base font-semibold text-[var(--text-primary)] truncate">
+                  <div className={`mt-1.5 text-base font-semibold text-[var(--text-primary)] ${summaryIsLive ? 'text-center' : 'truncate'}`}>
                     {summaryEvent.summary}
                   </div>
                 </div>
@@ -558,11 +554,6 @@ const CalendarBookingCard = ({
 
               <div
                 className="relative overflow-hidden rounded-2xl px-2 py-2"
-                style={summaryEvent
-                  ? {
-                    backgroundImage: `linear-gradient(130deg, ${summaryPalette.softBg} 0%, rgba(0,0,0,0) 34%)`,
-                  }
-                  : undefined}
               >
                 {summaryEvent ? (
                   <>
