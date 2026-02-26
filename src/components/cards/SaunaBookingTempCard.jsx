@@ -22,6 +22,7 @@ const roundToOne = (value) => Math.round(Number(value) * 10) / 10;
 const SCORE_MISS_PENALTY = 10;
 const SCORE_HITRATE_WEIGHT = 0.25;
 const SCORE_TREND_WINDOW = 3;
+const HOURLY_SAMPLE_MINUTE = 1;
 
 const calcScoreFromDeviationPct = (deviationPct, options = {}) => {
   const { hit = null, missPenalty = SCORE_MISS_PENALTY } = options;
@@ -54,6 +55,12 @@ const toHourKey = (timestampMs) => {
   const day = String(date.getDate()).padStart(2, '0');
   const hour = String(date.getHours()).padStart(2, '0');
   return `${year}-${month}-${day}-${hour}`;
+};
+
+const toScheduledHourlySampleMs = (timestampMs) => {
+  const date = new Date(timestampMs);
+  date.setMinutes(HOURLY_SAMPLE_MINUTE, 0, 0);
+  return date.getTime();
 };
 
 const normalizeState = (value) => String(value ?? '').trim().toLowerCase();
@@ -312,12 +319,13 @@ export default function SaunaBookingTempCard({
 
     const maybeCaptureHourlySnapshot = () => {
       const now = new Date();
-      if (now.getMinutes() < 1) return;
+      if (now.getMinutes() !== HOURLY_SAMPLE_MINUTE) return;
       if (!bookingActive || currentTemp === null) return;
       if (serviceEntityId && serviceActive) return;
 
       const nowMs = now.getTime();
-      const hourKey = toHourKey(nowMs);
+      const captureMs = toScheduledHourlySampleMs(nowMs);
+      const hourKey = toHourKey(captureMs);
       if (lastLoggedHourRef.current === hourKey) return;
       const ignoredSnapshotHours = normalizeIgnoredHours(settings?.ignoredSnapshotHours);
       if (ignoredSnapshotHours.includes(hourKey)) {
@@ -331,10 +339,9 @@ export default function SaunaBookingTempCard({
         return;
       }
 
-      const captureMs = nowMs;
       const keepCutoff = captureMs - (keepDays * 24 * 60 * 60 * 1000);
       const nextEntry = {
-        id: `${captureMs}_${Math.random().toString(36).slice(2, 8)}`,
+        id: `hourly_${hourKey}`,
         timestamp: new Date(captureMs).toISOString(),
         hourKey,
         startTemp: roundToOne(currentTemp),
