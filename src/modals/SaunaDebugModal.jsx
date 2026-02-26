@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Activity, BarChart3, Calendar, Clock, Database, RefreshCw, Search, X } from '../icons';
 import { getHistoryBatch } from '../services/haClient';
-import SparkLine from '../components/charts/SparkLine';
+import DebugMultiSeriesChart from '../components/charts/DebugMultiSeriesChart';
 
 const QUICK_WINDOWS = [6, 12, 24, 72];
 const MAX_TIMELINE_EVENTS = 200;
@@ -187,6 +187,7 @@ export default function SaunaDebugModal({
   const [error, setError] = useState('');
   const [fetchedAt, setFetchedAt] = useState(null);
   const [refreshNonce, setRefreshNonce] = useState(0);
+  const [cursorSnapshot, setCursorSnapshot] = useState(null);
 
   const timeWindow = useMemo(() => {
     if (mode === 'day' && selectedDay) {
@@ -355,7 +356,6 @@ export default function SaunaDebugModal({
       }));
   }, [selectedSummaries]);
   const primarySeries = chartSeries[0] || null;
-  const overlaySeries = chartSeries.slice(1);
   const combinedHistory = useMemo(() => {
     const colorByEntity = new Map(chartSeries.map((series) => [series.entityId, series.color]));
     return selectedSummaries
@@ -637,19 +637,12 @@ export default function SaunaDebugModal({
                     ))}
                   </div>
                   {primarySeries ? (
-                    <SparkLine
-                      data={primarySeries.data}
-                      currentIndex={Math.max(0, primarySeries.data.length - 1)}
-                      height={100}
-                      variant="line"
+                    <DebugMultiSeriesChart
+                      series={chartSeries}
+                      height={168}
+                      normalizeSeries={chartSeries.length > 1}
                       lineStrokeWidth={1.0}
-                      primaryColor={primarySeries.color}
-                      overlaySeries={overlaySeries}
-                      includeOverlayInRange
-                      useTimeScale
-                      curve="linear"
-                      areaFill={false}
-                      showCurrentMarker={false}
+                      onCursorSnapshotChange={setCursorSnapshot}
                     />
                   ) : (
                     <div className="rounded-xl border border-[var(--glass-border)] bg-[var(--card-bg)] px-3 py-6 text-center text-xs text-[var(--text-secondary)]">
@@ -665,6 +658,7 @@ export default function SaunaDebugModal({
                       {tr('common.history', 'History')}
                     </p>
                     <p className="text-[11px] text-[var(--text-secondary)]">
+                      {cursorSnapshot?.time ? `${tr('sauna.debugCursor', 'Cursor')}: ${cursorSnapshot.time.toLocaleTimeString()} - ` : ''}
                       {combinedHistory.length} {tr('sauna.debugRows', 'rows')}
                       {fetchedAt ? ` - ${tr('common.updated', 'Updated')}: ${fetchedAt.toLocaleTimeString()}` : ''}
                     </p>
