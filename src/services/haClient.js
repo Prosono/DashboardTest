@@ -78,6 +78,71 @@ export async function getHistory(conn, { start, end, entityId, minimal_response 
   return Array.isArray(historyData) ? historyData : [];
 }
 
+export async function getHistoryBatch(conn, { start, end, entityIds, minimal_response = true, no_attributes = true }) {
+  if (!conn || typeof conn.sendMessagePromise !== 'function') {
+    throw new Error('Invalid or disconnected HA connection');
+  }
+  const requestedEntityIds = (Array.isArray(entityIds) ? entityIds : [])
+    .map((value) => String(value || '').trim())
+    .filter(Boolean);
+  if (!requestedEntityIds.length) return {};
+
+  const rawEntityIds = requestedEntityIds.map((id) => parseScopedEntityId(id).entityId || id);
+  const requestEntityIds = shouldNormalizeLocally(conn) ? rawEntityIds : requestedEntityIds;
+
+  const res = await conn.sendMessagePromise({
+    type: 'history/history_during_period',
+    start_time: start.toISOString(),
+    end_time: end.toISOString(),
+    entity_ids: requestEntityIds,
+    minimal_response,
+    no_attributes,
+  });
+
+  let payload = res;
+  if (payload && typeof payload === 'object' && !Array.isArray(payload)) {
+    if (Object.prototype.hasOwnProperty.call(payload, 'result')) payload = payload.result;
+    else if (Object.prototype.hasOwnProperty.call(payload, 'response')) payload = payload.response;
+    else if (Object.prototype.hasOwnProperty.call(payload, 'data')) payload = payload.data;
+    else if (Object.prototype.hasOwnProperty.call(payload, 'history')) payload = payload.history;
+  }
+  if (payload && typeof payload === 'object' && !Array.isArray(payload)) {
+    if (Object.prototype.hasOwnProperty.call(payload, 'result')) payload = payload.result;
+    else if (Object.prototype.hasOwnProperty.call(payload, 'response')) payload = payload.response;
+    else if (Object.prototype.hasOwnProperty.call(payload, 'data')) payload = payload.data;
+    else if (Object.prototype.hasOwnProperty.call(payload, 'history')) payload = payload.history;
+  }
+
+  const byRequestedId = {};
+  requestedEntityIds.forEach((id) => {
+    byRequestedId[id] = [];
+  });
+
+  if (Array.isArray(payload)) {
+    if (payload.length > 0 && Array.isArray(payload[0])) {
+      payload.forEach((entryList, index) => {
+        const originalId = requestedEntityIds[index];
+        if (!originalId) return;
+        byRequestedId[originalId] = Array.isArray(entryList) ? entryList : [];
+      });
+    } else {
+      const firstId = requestedEntityIds[0];
+      if (firstId) {
+        byRequestedId[firstId] = payload;
+      }
+    }
+  } else if (payload && typeof payload === 'object') {
+    requestedEntityIds.forEach((originalId, index) => {
+      const rawId = rawEntityIds[index];
+      const requestId = requestEntityIds[index];
+      const historyData = payload[originalId] || payload[rawId] || payload[requestId];
+      byRequestedId[originalId] = Array.isArray(historyData) ? historyData : [];
+    });
+  }
+
+  return byRequestedId;
+}
+
 export async function getHistoryRest(baseUrl, token, { start, end: _end, entityId, minimal_response = false, no_attributes = false, significant_changes_only = false }) {
   if (!baseUrl || !token) throw new Error('Missing HA url or token');
   const root = String(baseUrl).replace(/\/$/, '');

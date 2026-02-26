@@ -88,6 +88,25 @@ function makeTr(t) {
   };
 }
 
+function collectEntityIdsFromSettings(settings) {
+  const ids = new Set();
+  if (!settings || typeof settings !== 'object') return [];
+  Object.entries(settings).forEach(([key, value]) => {
+    if (typeof value === 'string' && key.endsWith('EntityId')) {
+      const normalized = value.trim();
+      if (normalized) ids.add(normalized);
+      return;
+    }
+    if (Array.isArray(value) && key.endsWith('EntityIds')) {
+      value.forEach((entry) => {
+        const normalized = String(entry || '').trim();
+        if (normalized) ids.add(normalized);
+      });
+    }
+  });
+  return Array.from(ids);
+}
+
 const FlameAnimated = ({ className, isLightTheme = false }) => (
   <div className={cx('relative', className)}>
     <div className={cx(
@@ -368,6 +387,7 @@ export default function SaunaCard({
   const thermostatIds = useMemo(() => asArray(settings?.thermostatEntityIds), [settings?.thermostatEntityIds]);
   const codeIds = useMemo(() => asArray(settings?.codeEntityIds), [settings?.codeEntityIds]);
   const tempOverviewIds = useMemo(() => asArray(settings?.tempOverviewEntityIds), [settings?.tempOverviewEntityIds]);
+  const debugEntityIds = useMemo(() => collectEntityIdsFromSettings(settings), [settings]);
   const autoLockEntity = settings?.autoLockEntityId ? entities?.[settings.autoLockEntityId] : null;
 
   const currentTemp = tempEntity ? Number.parseFloat(tempEntity.state) : null;
@@ -530,6 +550,15 @@ export default function SaunaCard({
     const ids = asArray(entityIds);
     if (!ids.length) return;
     modals?.setActiveSaunaFieldModal?.({ title, entityIds: ids, cardId, ...options });
+  };
+  const openSaunaDebugModal = () => {
+    if (editMode) return;
+    if (typeof modals?.setShowSaunaDebugModal !== 'function') return;
+    modals.setShowSaunaDebugModal({
+      cardId,
+      saunaName,
+      entityIds: debugEntityIds,
+    });
   };
 
   const openGlobalLightModal = () => {
@@ -1009,6 +1038,25 @@ export default function SaunaCard({
           </div>
         )}
       </div>
+
+      {!editMode && (
+        <button
+          type="button"
+          onClick={openSaunaDebugModal}
+          className={cx(
+            'absolute bottom-4 right-4 z-30 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full border backdrop-blur-md',
+            isLightTheme
+              ? 'bg-white/90 border-slate-300 text-slate-700 hover:text-slate-900'
+              : 'bg-[var(--glass-bg)] border-[var(--glass-border)] text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
+          )}
+          aria-label={tr('sauna.debug', 'Debug')}
+        >
+          <Activity className="w-3.5 h-3.5" />
+          <span className="text-[10px] uppercase tracking-[0.18em] font-bold">
+            {tr('sauna.debug', 'Debug')}
+          </span>
+        </button>
+      )}
     </div>
   );
 }

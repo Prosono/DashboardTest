@@ -17,6 +17,7 @@ const MODAL_DEFAULTS = {
   showCoverModal: null,
   showWeatherModal: null,
   activeSaunaFieldModal: null,
+  showSaunaDebugModal: null,
   showPopupCardModal: null,
   activeMediaModal: null,
   activeMediaGroupKey: null,
@@ -39,6 +40,7 @@ const OPEN_CHECK_KEYS = [
   'showSensorInfoModal', 'activeMediaModal', 'showStatusPillsConfig',
   'showPersonModal', 'showCalendarModal', 'showTodoModal',
   'showRoomModal', 'showWeatherModal', 'showCoverModal', 'activeSaunaFieldModal',
+  'showSaunaDebugModal',
   'showPopupCardModal',
 ];
 

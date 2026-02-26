@@ -37,6 +37,7 @@ const TodoModal = lazy(() => import('../modals/TodoModal'));
 const RoomModal = lazy(() => import('../modals/RoomModal'));
 const VacuumModal = lazy(() => import('../modals/VacuumModal'));
 const SaunaFieldModal = lazy(() => import('../modals/SaunaFieldModal'));
+const SaunaDebugModal = lazy(() => import('../modals/SaunaDebugModal'));
 
 const ThemeSidebar = lazy(() => import('../components/sidebars/ThemeSidebar'));
 const LayoutSidebar = lazy(() => import('../components/sidebars/LayoutSidebar'));
@@ -68,6 +69,7 @@ export default function ModalOrchestrator({
     showCoverModal, setShowCoverModal,
     showWeatherModal, setShowWeatherModal,
     activeSaunaFieldModal, setActiveSaunaFieldModal,
+    showSaunaDebugModal, setShowSaunaDebugModal,
     showPopupCardModal, setShowPopupCardModal,
     activeMediaModal, setActiveMediaModal,
     activeMediaGroupKey, setActiveMediaGroupKey,
@@ -649,6 +651,19 @@ export default function ModalOrchestrator({
         </ModalSuspense>
       )}
 
+      {showSaunaDebugModal && (
+        <ModalSuspense>
+          <SaunaDebugModal
+            show={!!showSaunaDebugModal}
+            payload={typeof showSaunaDebugModal === 'object' ? showSaunaDebugModal : {}}
+            entities={entities}
+            conn={conn}
+            onClose={() => setShowSaunaDebugModal(null)}
+            t={t}
+          />
+        </ModalSuspense>
+      )}
+
       {showPopupCardModal && (() => {
         const payload = typeof showPopupCardModal === 'string'
           ? { targetCardId: showPopupCardModal }
@@ -764,6 +779,10 @@ export default function ModalOrchestrator({
           setActiveSaunaFieldModal: (value) => {
             setShowPopupCardModal(null);
             setActiveSaunaFieldModal(value);
+          },
+          setShowSaunaDebugModal: (value) => {
+            setShowPopupCardModal(null);
+            setShowSaunaDebugModal(value);
           },
           setShowPopupCardModal,
           openMediaModal: (mpId, groupKey, groupIds) => {

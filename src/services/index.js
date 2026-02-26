@@ -1,6 +1,7 @@
 export {
   callService,
   getHistory,
+  getHistoryBatch,
   getHistoryRest,
   getStatistics,
   getForecast,
