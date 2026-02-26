@@ -303,6 +303,10 @@ export default function ConfigModal({
   const [notificationRuleDomain, setNotificationRuleDomain] = useState({});
   const [notificationRuleReferenceEntity, setNotificationRuleReferenceEntity] = useState({});
   const [notificationRuleExpanded, setNotificationRuleExpanded] = useState({});
+  const [appActionHistory, setAppActionHistory] = useState([]);
+  const [appActionHistoryLoading, setAppActionHistoryLoading] = useState(false);
+  const [appActionHistoryBusy, setAppActionHistoryBusy] = useState(false);
+  const [appActionHistoryMessage, setAppActionHistoryMessage] = useState('');
   const notificationEntityOptions = useMemo(() => (
     Object.entries(entities || {})
       .map(([id, entity]) => {
@@ -350,6 +354,12 @@ export default function ConfigModal({
   });
 
   const isLayoutPreview = configTab === 'layout' && layoutPreview;
+  const isAdmin = currentUser?.role === 'admin';
+  const isInspector = currentUser?.role === 'inspector';
+  const canManageConnection = currentUser?.isPlatformAdmin === true;
+  const canAccessStorage = canManageAdministration;
+  const canAccessNotifications = canManageNotifications && isAdmin;
+  const canAccessUpdates = isAdmin && !currentUser?.isPlatformAdmin;
 
   useEffect(() => {
     if (configTab !== 'layout' && layoutPreview) {
@@ -386,6 +396,62 @@ export default function ConfigModal({
     setNotificationRuleReferenceEntity({});
     setNotificationRuleExpanded({});
   }, [notificationConfig]);
+
+  const loadAppActionHistory = useCallback(async () => {
+    if (!canAccessNotifications || typeof userAdminApi?.fetchAppActionHistory !== 'function') {
+      setAppActionHistory([]);
+      return;
+    }
+    setAppActionHistoryLoading(true);
+    setAppActionHistoryMessage('');
+    try {
+      const rows = await userAdminApi.fetchAppActionHistory(200);
+      setAppActionHistory(Array.isArray(rows) ? rows : []);
+    } catch (error) {
+      setAppActionHistory([]);
+      setAppActionHistoryMessage(String(error?.message || t('notifications.appActionHistoryLoadFailed')));
+    } finally {
+      setAppActionHistoryLoading(false);
+    }
+  }, [canAccessNotifications, t, userAdminApi]);
+
+  const clearAllAppActions = useCallback(async () => {
+    if (!canAccessNotifications || typeof userAdminApi?.clearAppActionHistory !== 'function') return;
+    const confirmed = typeof window === 'undefined' || typeof window.confirm !== 'function'
+      ? true
+      : window.confirm(t('notifications.appActionHistoryClearConfirm'));
+    if (!confirmed) return;
+    setAppActionHistoryBusy(true);
+    setAppActionHistoryMessage('');
+    try {
+      const rows = await userAdminApi.clearAppActionHistory();
+      setAppActionHistory(Array.isArray(rows) ? rows : []);
+    } catch (error) {
+      setAppActionHistoryMessage(String(error?.message || t('notifications.appActionHistoryClearFailed')));
+    } finally {
+      setAppActionHistoryBusy(false);
+    }
+  }, [canAccessNotifications, t, userAdminApi]);
+
+  const deleteAppActionEntry = useCallback(async (entryId) => {
+    const normalizedId = String(entryId || '').trim();
+    if (!normalizedId || typeof userAdminApi?.deleteAppActionHistoryEntry !== 'function') return;
+    setAppActionHistoryBusy(true);
+    setAppActionHistoryMessage('');
+    try {
+      const rows = await userAdminApi.deleteAppActionHistoryEntry(normalizedId);
+      setAppActionHistory(Array.isArray(rows) ? rows : []);
+    } catch (error) {
+      setAppActionHistoryMessage(String(error?.message || t('notifications.appActionHistoryDeleteFailed')));
+    } finally {
+      setAppActionHistoryBusy(false);
+    }
+  }, [t, userAdminApi]);
+
+  useEffect(() => {
+    if (!open || configTab !== 'notifications' || !canAccessNotifications) return;
+    void loadAppActionHistory();
+  }, [open, configTab, canAccessNotifications, loadAppActionHistory]);
 
   useEffect(() => {
     if (configTab !== 'storage' || !canManageAdministration || !userAdminApi?.listUsers) return;
@@ -452,13 +518,6 @@ export default function ConfigModal({
   const handleClose = () => {
     if (!isOnboardingActive) onClose?.();
   };
-
-  const isAdmin = currentUser?.role === 'admin';
-  const isInspector = currentUser?.role === 'inspector';
-  const canManageConnection = currentUser?.isPlatformAdmin === true;
-  const canAccessStorage = canManageAdministration;
-  const canAccessNotifications = canManageNotifications && isAdmin;
-  const canAccessUpdates = isAdmin && !currentUser?.isPlatformAdmin;
 
   const TABS = [
     { key: 'connection', icon: Wifi, label: t('system.tabConnection') },
@@ -2598,6 +2657,113 @@ export default function ConfigModal({
               <div className={`w-4 h-4 rounded-full bg-white shadow-sm transition-transform ${draft.inAppPersistent ? 'translate-x-4' : 'translate-x-0'}`} />
             </button>
           </div>
+
+          <div className="flex items-center justify-between gap-3 rounded-lg border border-[var(--glass-border)] bg-[var(--glass-bg-hover)] px-3 py-2">
+            <div>
+              <p className="text-xs font-semibold text-[var(--text-secondary)]">
+                {t('notifications.appActionAudit')}
+              </p>
+              <p className="text-[11px] text-[var(--text-muted)] mt-0.5">
+                {t('notifications.appActionAuditDescription')}
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => updateNotificationDraft((prev) => ({ ...prev, appActionAuditEnabled: !prev.appActionAuditEnabled }))}
+              className={`w-10 h-6 rounded-full p-1 transition-colors relative ${draft.appActionAuditEnabled ? 'bg-emerald-500' : 'bg-gray-500/30'}`}
+            >
+              <div className={`w-4 h-4 rounded-full bg-white shadow-sm transition-transform ${draft.appActionAuditEnabled ? 'translate-x-4' : 'translate-x-0'}`} />
+            </button>
+          </div>
+        </div>
+
+        <div className="rounded-2xl border border-[var(--glass-border)] bg-[linear-gradient(145deg,color-mix(in_srgb,var(--glass-bg)_92%,rgba(45,212,191,0.07)),color-mix(in_srgb,var(--glass-bg)_95%,transparent))] p-4 space-y-3">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <h4 className="text-[11px] uppercase tracking-wider font-bold text-[var(--text-secondary)]">
+                {t('notifications.appActionHistoryTitle')}
+              </h4>
+              <p className="text-xs text-[var(--text-secondary)] mt-1">
+                {t('notifications.appActionHistoryDescription')}
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => void loadAppActionHistory()}
+                disabled={appActionHistoryLoading || appActionHistoryBusy}
+                className="px-2.5 py-1.5 rounded-lg border border-[var(--glass-border)] bg-[var(--glass-bg-hover)] text-[10px] font-bold uppercase tracking-wider disabled:opacity-50"
+              >
+                {t('notifications.appActionHistoryRefresh')}
+              </button>
+              <button
+                type="button"
+                onClick={() => void clearAllAppActions()}
+                disabled={appActionHistoryLoading || appActionHistoryBusy}
+                className="px-2.5 py-1.5 rounded-lg border border-red-500/30 bg-red-500/10 text-red-300 text-[10px] font-bold uppercase tracking-wider disabled:opacity-50"
+              >
+                {t('notifications.appActionHistoryClear')}
+              </button>
+            </div>
+          </div>
+
+          <div className="rounded-xl border border-[var(--glass-border)] bg-[var(--glass-bg)] max-h-72 overflow-y-auto custom-scrollbar divide-y divide-[var(--glass-border)]">
+            {appActionHistoryLoading && (
+              <div className="px-3 py-4 text-xs text-[var(--text-secondary)]">
+                {t('common.loading')}
+              </div>
+            )}
+            {!appActionHistoryLoading && (!Array.isArray(appActionHistory) || appActionHistory.length === 0) && (
+              <div className="px-3 py-4 text-xs text-[var(--text-secondary)]">
+                {t('notifications.appActionHistoryEmpty')}
+              </div>
+            )}
+            {!appActionHistoryLoading && Array.isArray(appActionHistory) && appActionHistory.map((entry, entryIndex) => {
+              const createdAt = Date.parse(String(entry?.createdAt || ''));
+              const when = Number.isFinite(createdAt)
+                ? new Date(createdAt).toLocaleString()
+                : '--';
+              const action = `${String(entry?.domain || '').trim()}.${String(entry?.service || '').trim()}`.replace(/^\./, '');
+              const entityName = String(entry?.entityName || '').trim();
+              const entityId = String(entry?.entityId || '').trim();
+              const actorName = String(entry?.actor?.username || '').trim() || '-';
+              return (
+                <div key={String(entry?.id || `action_${entryIndex}`)} className="px-3 py-2.5">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <p className="text-[11px] uppercase tracking-widest font-bold text-[var(--text-secondary)] truncate">
+                        {action || t('notifications.appActionHistoryFallback')}
+                      </p>
+                      <p className="text-sm font-semibold text-[var(--text-primary)] truncate mt-0.5">
+                        {entityName || entityId || '-'}
+                      </p>
+                      <p className="text-[11px] text-[var(--text-secondary)] mt-0.5 truncate">
+                        {t('notifications.appActionHistoryActor')}: {actorName}
+                        {entityId ? ` • ${entityId}` : ''}
+                      </p>
+                    </div>
+                    <div className="flex items-start gap-2 shrink-0">
+                      <span className="text-[10px] text-[var(--text-muted)] whitespace-nowrap pt-0.5">{when}</span>
+                      <button
+                        type="button"
+                        onClick={() => void deleteAppActionEntry(entry?.id)}
+                        disabled={appActionHistoryBusy}
+                        className="px-2 py-1 rounded-md border border-red-500/25 bg-red-500/10 text-red-300 text-[10px] font-bold uppercase tracking-wider disabled:opacity-50"
+                      >
+                        {t('common.delete')}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          {appActionHistoryMessage ? (
+            <div className="rounded-lg border border-amber-500/25 bg-amber-500/10 px-3 py-2 text-xs text-amber-300">
+              {appActionHistoryMessage}
+            </div>
+          ) : null}
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">

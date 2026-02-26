@@ -396,3 +396,38 @@ export const deleteNotificationHistoryEntry = async (id) => {
   });
   return Array.isArray(payload?.history) ? payload.history : [];
 };
+
+export const fetchAppActionHistory = async (limit = 200) => {
+  const safeLimit = Math.max(1, Math.min(500, Number.parseInt(String(limit ?? ''), 10) || 200));
+  const payload = await apiRequest(`/api/auth/app-action-history?limit=${safeLimit}`, { method: 'GET' });
+  return Array.isArray(payload?.history) ? payload.history : [];
+};
+
+export const appendAppActionHistoryEntry = async (entry, options = {}) => {
+  const payload = await apiRequest('/api/auth/app-action-history', {
+    method: 'POST',
+    body: JSON.stringify({
+      ...(entry && typeof entry === 'object' ? entry : {}),
+      dedupeWindowMs: options?.dedupeWindowMs,
+    }),
+  });
+  return {
+    logged: Boolean(payload?.logged),
+    deduped: Boolean(payload?.deduped),
+    history: Array.isArray(payload?.history) ? payload.history : [],
+  };
+};
+
+export const clearAppActionHistory = async () => {
+  const payload = await apiRequest('/api/auth/app-action-history', { method: 'DELETE' });
+  return Array.isArray(payload?.history) ? payload.history : [];
+};
+
+export const deleteAppActionHistoryEntry = async (id) => {
+  const entryId = String(id || '').trim();
+  if (!entryId) return [];
+  const payload = await apiRequest(`/api/auth/app-action-history/${encodeURIComponent(entryId)}`, {
+    method: 'DELETE',
+  });
+  return Array.isArray(payload?.history) ? payload.history : [];
+};

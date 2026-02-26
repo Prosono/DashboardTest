@@ -1,5 +1,6 @@
 export const DEFAULT_NOTIFICATION_CONFIG = {
   enabled: true,
+  appActionAuditEnabled: false,
   warningSensorEntityId: 'sensor.system_warning_details',
   criticalSensorEntityId: 'sensor.system_critical_details',
   inAppDurationMs: 7000,
@@ -132,6 +133,7 @@ export const normalizeNotificationConfig = (value) => {
   const input = value && typeof value === 'object' ? value : {};
   return {
     enabled: toBool(input.enabled, DEFAULT_NOTIFICATION_CONFIG.enabled),
+    appActionAuditEnabled: toBool(input.appActionAuditEnabled, DEFAULT_NOTIFICATION_CONFIG.appActionAuditEnabled),
     warningSensorEntityId: String(input.warningSensorEntityId || '').trim() || DEFAULT_NOTIFICATION_CONFIG.warningSensorEntityId,
     criticalSensorEntityId: String(input.criticalSensorEntityId || '').trim() || DEFAULT_NOTIFICATION_CONFIG.criticalSensorEntityId,
     inAppDurationMs: clampInt(input.inAppDurationMs, DEFAULT_NOTIFICATION_CONFIG.inAppDurationMs, 1000, 120000),

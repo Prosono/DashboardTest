@@ -77,6 +77,9 @@ import {
   saveGlobalBranding as saveServerGlobalBranding,
   fetchNotificationConfig as fetchServerNotificationConfig,
   saveNotificationConfig as saveServerNotificationConfig,
+  fetchAppActionHistory as fetchServerAppActionHistory,
+  clearAppActionHistory as clearServerAppActionHistory,
+  deleteAppActionHistoryEntry as deleteServerAppActionHistoryEntry,
   reportSessionActivity as reportServerSessionActivity,
   fetchSharedHaConfig,
   saveSharedHaConfig,
@@ -1012,7 +1015,15 @@ function AppContent({
     getS, getA, getEntityImageUrl, callService: rawCallService,
     isSonosActive, isMediaActive,
     hvacMap, fanMap, swingMap,
-  } = useEntityHelpers({ entities, conn, activeUrl, language, now, t });
+  } = useEntityHelpers({
+    entities,
+    conn,
+    activeUrl,
+    language,
+    now,
+    t,
+    appActionAuditEnabled: Boolean(notificationConfig?.appActionAuditEnabled),
+  });
 
   const canControlDevices = currentUserRole !== 'inspector' && !isPlatformAdmin;
   const isAdminUser = canManageUsersAndClients;
@@ -2897,6 +2908,9 @@ export default function App() {
     fetchPlatformOverview: fetchServerPlatformOverview,
     fetchNotificationConfig: fetchServerNotificationConfig,
     saveNotificationConfig: saveServerNotificationConfig,
+    fetchAppActionHistory: fetchServerAppActionHistory,
+    clearAppActionHistory: clearServerAppActionHistory,
+    deleteAppActionHistoryEntry: deleteServerAppActionHistoryEntry,
   }), [currentUser?.id]);
 
   if (!authReady) {

@@ -1,6 +1,8 @@
 import { useCallback, useMemo } from 'react';
 import { ENTITY_UPDATE_THRESHOLD, MEDIA_TIMEOUT } from '../config/constants';
 import { callService as haCallService } from '../services';
+import { appendAppActionHistoryEntry } from '../services/appAuth';
+import { parseScopedEntityId } from '../utils/haConnections';
 import { logger } from '../utils/logger';
 
 /**
@@ -9,7 +11,13 @@ import { logger } from '../utils/logger';
  *
  * Everything is stable-ref (useCallback / useMemo) so consumers don't re-render.
  */
-export function useEntityHelpers({ entities, conn, activeUrl, language, now, t }) {
+const sanitizeEntityRef = (value) => {
+  if (typeof value === 'string') return value.trim();
+  if (Array.isArray(value)) return String(value[0] || '').trim();
+  return '';
+};
+
+export function useEntityHelpers({ entities, conn, activeUrl, language, now, t, appActionAuditEnabled = false }) {
   // ── Attribute / state accessors ────────────────────────────────────────
   const getS = (id, fallback = '--') => {
     const state = entities[id]?.state;
@@ -33,17 +41,41 @@ export function useEntityHelpers({ entities, conn, activeUrl, language, now, t }
 
   // ── Service calls ──────────────────────────────────────────────────────
   const callService = useCallback(
-    (domain, service, data, target) => {
+    async (domain, service, data, target) => {
       if (!conn) {
         logger.warn(`Service call attempted while disconnected: ${domain}.${service}`);
         return Promise.reject(new Error('No connection'));
       }
-      return haCallService(conn, domain, service, data, target).catch((error) => {
+
+      const result = await haCallService(conn, domain, service, data, target).catch((error) => {
         console.error(`Service call failed: ${domain}.${service}`, error);
         throw error;
       });
+
+      if (appActionAuditEnabled) {
+        const entityRef = sanitizeEntityRef(data?.entity_id) || sanitizeEntityRef(target?.entity_id);
+        const parsedEntityRef = parseScopedEntityId(entityRef);
+        const entityId = parsedEntityRef?.entityId || entityRef;
+        const connectionId = parsedEntityRef?.connectionId || '';
+        const entityName = entityId
+          ? String(entities?.[entityRef]?.attributes?.friendly_name || entities?.[entityId]?.attributes?.friendly_name || entityId).trim()
+          : '';
+
+        void appendAppActionHistoryEntry({
+          domain: String(domain || '').trim().toLowerCase(),
+          service: String(service || '').trim().toLowerCase(),
+          entityId: entityRef || entityId,
+          entityName,
+          connectionId,
+          serviceData: data && typeof data === 'object' ? { ...data } : data,
+          target: target && typeof target === 'object' ? { ...target } : target,
+          value: typeof data?.value === 'number' ? data.value : undefined,
+        }, { dedupeWindowMs: 1000 }).catch(() => {});
+      }
+
+      return result;
     },
-    [conn],
+    [appActionAuditEnabled, conn, entities],
   );
 
   // ── Activity helpers ───────────────────────────────────────────────────

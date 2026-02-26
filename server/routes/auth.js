@@ -29,6 +29,15 @@ import {
   serializeNotificationHistory,
   shouldDedupeHistoryEntry,
 } from '../notificationHistory.js';
+import {
+  getAppActionHistoryKey,
+  MAX_APP_ACTION_HISTORY,
+  normalizeAppActionEntry,
+  normalizeAppActionHistory,
+  parseStoredAppActionHistory,
+  serializeAppActionHistory,
+  shouldDedupeAppActionEntry,
+} from '../appActionHistory.js';
 
 const SUPER_ADMIN_CLIENT_ID = normalizeClientId(process.env.SUPER_ADMIN_CLIENT_ID || 'AdministratorClient') || 'administratorclient';
 const PLATFORM_ADMIN_CLIENT_ID = normalizeClientId(process.env.PLATFORM_ADMIN_CLIENT_ID || SUPER_ADMIN_CLIENT_ID) || SUPER_ADMIN_CLIENT_ID;
@@ -362,6 +371,64 @@ const persistNotificationHistoryForClient = (clientId, history) => {
   return { history: normalized, updatedAt: now };
 };
 
+const loadAppActionHistoryForClient = (clientId) => {
+  const key = getAppActionHistoryKey(clientId);
+  const row = db.prepare('SELECT value, updated_at FROM system_settings WHERE key = ?').get(key);
+  return {
+    key,
+    row,
+    history: parseStoredAppActionHistory(row?.value || ''),
+  };
+};
+
+const persistAppActionHistoryForClient = (clientId, history) => {
+  const key = getAppActionHistoryKey(clientId);
+  const now = new Date().toISOString();
+  const normalized = normalizeAppActionHistory(history).slice(0, MAX_APP_ACTION_HISTORY);
+  const payload = serializeAppActionHistory(normalized);
+
+  db.prepare(`
+    INSERT INTO system_settings (key, value, updated_at)
+    VALUES (?, ?, ?)
+    ON CONFLICT(key) DO UPDATE SET
+      value = excluded.value,
+      updated_at = excluded.updated_at
+  `).run(key, payload, now);
+
+  return { history: normalized, updatedAt: now };
+};
+
+const getAppActionAuditEnabledForClient = (clientId) => {
+  const key = getNotificationConfigKey(clientId);
+  const row = db.prepare('SELECT value FROM system_settings WHERE key = ?').get(key);
+  const parsed = parseStoredNotificationConfig(row?.value || '');
+  const normalized = normalizeNotificationConfig(parsed);
+  return Boolean(normalized?.appActionAuditEnabled);
+};
+
+const resolveEntityIdFromActionPayload = (body = {}) => {
+  const direct = String(body?.entityId || '').trim();
+  if (direct) return direct;
+
+  const fromServiceData = body?.serviceData?.entity_id;
+  if (Array.isArray(fromServiceData)) {
+    const first = String(fromServiceData[0] || '').trim();
+    if (first) return first;
+  }
+  const fromServiceDataSingle = String(fromServiceData || '').trim();
+  if (fromServiceDataSingle) return fromServiceDataSingle;
+
+  const fromTarget = body?.target?.entity_id;
+  if (Array.isArray(fromTarget)) {
+    const first = String(fromTarget[0] || '').trim();
+    if (first) return first;
+  }
+  const fromTargetSingle = String(fromTarget || '').trim();
+  if (fromTargetSingle) return fromTargetSingle;
+
+  return '';
+};
+
 router.get('/notification-history', authRequired, (req, res) => {
   const { row, history } = loadNotificationHistoryForClient(req.auth?.user?.clientId);
   return res.json({
@@ -408,6 +475,92 @@ router.delete('/notification-history/:entryId', authRequired, (req, res) => {
   const { history: currentHistory } = loadNotificationHistoryForClient(req.auth?.user?.clientId);
   const nextHistory = currentHistory.filter((entry) => String(entry?.id || '').trim() !== entryId);
   const saved = persistNotificationHistoryForClient(req.auth?.user?.clientId, nextHistory);
+  return res.json({
+    history: saved.history,
+    updatedAt: saved.updatedAt,
+  });
+});
+
+router.get('/app-action-history', authRequired, (req, res) => {
+  const safeLimit = Math.max(1, Math.min(MAX_APP_ACTION_HISTORY, Number.parseInt(String(req.query?.limit ?? ''), 10) || 200));
+  const { row, history } = loadAppActionHistoryForClient(req.auth?.user?.clientId);
+  return res.json({
+    history: history.slice(0, safeLimit),
+    updatedAt: row?.updated_at || null,
+  });
+});
+
+router.post('/app-action-history', authRequired, (req, res) => {
+  const domain = String(req.body?.domain || '').trim().toLowerCase();
+  const service = String(req.body?.service || '').trim().toLowerCase();
+  if (!domain || !service) {
+    return res.status(400).json({ error: 'Domain and service are required' });
+  }
+
+  const clientId = req.auth?.user?.clientId;
+  const enabled = getAppActionAuditEnabledForClient(clientId);
+  if (!enabled) {
+    return res.json({ logged: false, reason: 'disabled' });
+  }
+
+  const createdAt = new Date().toISOString();
+  const entityId = resolveEntityIdFromActionPayload(req.body);
+  const entityName = String(req.body?.entityName || '').trim();
+  const connectionId = String(req.body?.connectionId || '').trim();
+
+  const candidate = normalizeAppActionEntry({
+    id: randomUUID(),
+    createdAt,
+    actor: {
+      id: req.auth?.user?.id,
+      username: req.auth?.user?.username,
+      role: req.auth?.user?.role,
+    },
+    domain,
+    service,
+    entityId,
+    entityName,
+    connectionId,
+    source: 'app_token',
+    summary: entityName || entityId || `${domain}.${service}`,
+    value: req.body?.value,
+    serviceData: req.body?.serviceData,
+    target: req.body?.target,
+  });
+
+  const dedupeWindowMs = Math.max(0, Math.min(120000, Number.parseInt(String(req.body?.dedupeWindowMs ?? ''), 10) || 1200));
+  const { history: currentHistory } = loadAppActionHistoryForClient(clientId);
+  const deduped = currentHistory.some((entry) => shouldDedupeAppActionEntry(entry, candidate, dedupeWindowMs));
+  const nextHistory = deduped
+    ? currentHistory
+    : [candidate, ...currentHistory].slice(0, MAX_APP_ACTION_HISTORY);
+
+  const saved = persistAppActionHistoryForClient(clientId, nextHistory);
+  return res.json({
+    logged: !deduped,
+    deduped,
+    history: saved.history,
+    updatedAt: saved.updatedAt,
+  });
+});
+
+router.delete('/app-action-history', authRequired, adminRequired, (req, res) => {
+  const saved = persistAppActionHistoryForClient(req.auth?.user?.clientId, []);
+  return res.json({
+    history: saved.history,
+    updatedAt: saved.updatedAt,
+  });
+});
+
+router.delete('/app-action-history/:entryId', authRequired, adminRequired, (req, res) => {
+  const entryId = String(req.params?.entryId || '').trim();
+  if (!entryId) {
+    return res.status(400).json({ error: 'Action entry id is required' });
+  }
+
+  const { history: currentHistory } = loadAppActionHistoryForClient(req.auth?.user?.clientId);
+  const nextHistory = currentHistory.filter((entry) => String(entry?.id || '').trim() !== entryId);
+  const saved = persistAppActionHistoryForClient(req.auth?.user?.clientId, nextHistory);
   return res.json({
     history: saved.history,
     updatedAt: saved.updatedAt,
