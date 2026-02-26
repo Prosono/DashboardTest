@@ -6,6 +6,7 @@ import SparkLine from '../components/charts/SparkLine';
 const QUICK_WINDOWS = [6, 12, 24, 72];
 const MAX_TIMELINE_EVENTS = 200;
 const OVERLAY_COLORS = ['#60a5fa', '#a78bfa', '#f59e0b', '#34d399', '#f472b6', '#22d3ee', '#f87171'];
+const MAX_CHART_POINTS = 360;
 
 const asArray = (value) => (Array.isArray(value) ? value : []);
 const norm = (value) => String(value ?? '').trim().toLowerCase();
@@ -31,7 +32,26 @@ function parseTimestamp(entry) {
     || entry?.lc
     || entry?.lu
     || entry?.lr;
-  const date = new Date(raw);
+  if (raw == null || raw === '') return null;
+  if (raw instanceof Date) return Number.isNaN(raw.getTime()) ? null : raw;
+  if (typeof raw === 'number' && Number.isFinite(raw)) {
+    const ms = raw > 1e12 ? raw : raw * 1000;
+    const date = new Date(ms);
+    return Number.isNaN(date.getTime()) ? null : date;
+  }
+  if (typeof raw === 'string') {
+    const trimmed = raw.trim();
+    if (!trimmed) return null;
+    const numeric = Number(trimmed);
+    if (Number.isFinite(numeric)) {
+      const ms = numeric > 1e12 ? numeric : numeric * 1000;
+      const date = new Date(ms);
+      return Number.isNaN(date.getTime()) ? null : date;
+    }
+    const date = new Date(trimmed);
+    return Number.isNaN(date.getTime()) ? null : date;
+  }
+  const date = new Date(String(raw));
   return Number.isNaN(date.getTime()) ? null : date;
 }
 
@@ -112,6 +132,39 @@ function formatState(stateValue) {
   return value;
 }
 
+function downsampleSeries(series, maxPoints = MAX_CHART_POINTS) {
+  if (!Array.isArray(series) || series.length <= maxPoints || maxPoints < 2) return series;
+  const lastIndex = series.length - 1;
+  const step = lastIndex / (maxPoints - 1);
+  const sampled = [];
+  let previousIndex = -1;
+
+  for (let i = 0; i < maxPoints; i += 1) {
+    const index = Math.min(lastIndex, Math.round(i * step));
+    if (index === previousIndex) continue;
+    sampled.push(series[index]);
+    previousIndex = index;
+  }
+
+  if (sampled[sampled.length - 1] !== series[lastIndex]) {
+    sampled.push(series[lastIndex]);
+  }
+  return sampled;
+}
+
+function compactStateSteps(events) {
+  if (!Array.isArray(events) || events.length <= 1) return events;
+  const compacted = [events[0]];
+  for (let index = 1; index < events.length; index += 1) {
+    const prev = compacted[compacted.length - 1];
+    const current = events[index];
+    if (norm(prev.stateRaw) !== norm(current.stateRaw)) {
+      compacted.push(current);
+    }
+  }
+  return compacted;
+}
+
 export default function SaunaDebugModal({
   show,
   payload,
@@ -129,8 +182,7 @@ export default function SaunaDebugModal({
   const [selectedDay, setSelectedDay] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
   const [historyByEntityId, setHistoryByEntityId] = useState({});
-  const [selectedEntityId, setSelectedEntityId] = useState('');
-  const [overlayEntityIds, setOverlayEntityIds] = useState([]);
+  const [selectedEntityIds, setSelectedEntityIds] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [fetchedAt, setFetchedAt] = useState(null);
@@ -226,14 +278,15 @@ export default function SaunaDebugModal({
         ? (numericValues.reduce((sum, value) => sum + value, 0) / numericValues.length)
         : null;
 
-      const sparkData = hasNumericHistory
+      const stateSteps = compactStateSteps(eventsAsc);
+      const sparkDataBase = hasNumericHistory
         ? numericPoints.map((event) => ({ value: event.numericValue, time: event.time }))
-        : eventsAsc.map((event) => ({
+        : stateSteps.map((event) => ({
           value: isTruthyState(event.stateRaw) ? 1 : 0,
           time: event.time,
         }));
+      const sparkData = downsampleSeries(sparkDataBase, MAX_CHART_POINTS);
 
-      const latest = eventsAsc[eventsAsc.length - 1] || null;
       const timeline = [...eventsAsc]
         .sort((a, b) => b.time - a.time)
         .slice(0, MAX_TIMELINE_EVENTS);
@@ -244,7 +297,6 @@ export default function SaunaDebugModal({
         name,
         eventCount: eventsAsc.length,
         changeCount,
-        latest,
         min: numericValues.length ? Math.min(...numericValues) : null,
         max: numericValues.length ? Math.max(...numericValues) : null,
         avg,
@@ -267,42 +319,55 @@ export default function SaunaDebugModal({
 
   useEffect(() => {
     if (!filteredSummaries.length) {
-      if (selectedEntityId) setSelectedEntityId('');
+      if (selectedEntityIds.length > 0) setSelectedEntityIds([]);
       return;
     }
-    if (!filteredSummaries.some((summary) => summary.entityId === selectedEntityId)) {
-      setSelectedEntityId(filteredSummaries[0].entityId);
+    const visibleIds = new Set(filteredSummaries.map((summary) => summary.entityId));
+    const nextSelected = selectedEntityIds.filter((entityId) => visibleIds.has(entityId)).slice(0, 6);
+    if (nextSelected.length === 0) {
+      nextSelected.push(filteredSummaries[0].entityId);
     }
-  }, [filteredSummaries, selectedEntityId]);
+    const changed = (
+      nextSelected.length !== selectedEntityIds.length
+      || nextSelected.some((entityId, index) => entityId !== selectedEntityIds[index])
+    );
+    if (changed) {
+      setSelectedEntityIds(nextSelected);
+    }
+  }, [filteredSummaries, selectedEntityIds]);
 
-  const selectedSummary = filteredSummaries.find((summary) => summary.entityId === selectedEntityId) || null;
-  const overlayCandidates = useMemo(() => {
-    return summaries.filter((summary) => (
-      summary.entityId !== selectedEntityId
-      && summary.chartVariant === 'line'
-      && summary.sparkData.length > 1
-    ));
-  }, [summaries, selectedEntityId]);
-  const overlaySeries = useMemo(() => {
-    if (!selectedSummary || selectedSummary.chartVariant !== 'line') return [];
-    return overlayEntityIds
-      .map((entityId, index) => {
-        const summary = summaries.find((item) => item.entityId === entityId);
-        if (!summary || summary.chartVariant !== 'line' || summary.sparkData.length < 2) return null;
-        return {
-          id: `overlay-${summary.entityId}`,
-          label: summary.name,
-          color: OVERLAY_COLORS[index % OVERLAY_COLORS.length],
-          strokeWidth: 1.05,
-          data: summary.sparkData,
-        };
-      })
+  const selectedSummaries = useMemo(() => {
+    return selectedEntityIds
+      .map((entityId) => summaries.find((summary) => summary.entityId === entityId))
       .filter(Boolean);
-  }, [overlayEntityIds, summaries, selectedSummary]);
-
-  useEffect(() => {
-    setOverlayEntityIds((prev) => prev.filter((entityId) => overlayCandidates.some((candidate) => candidate.entityId === entityId)));
-  }, [overlayCandidates]);
+  }, [selectedEntityIds, summaries]);
+  const selectedSummary = selectedSummaries[0] || null;
+  const chartSeries = useMemo(() => {
+    return selectedSummaries
+      .filter((summary) => Array.isArray(summary.sparkData) && summary.sparkData.length > 1)
+      .map((summary, index) => ({
+        id: `series-${summary.entityId}`,
+        label: summary.name,
+        color: OVERLAY_COLORS[index % OVERLAY_COLORS.length],
+        strokeWidth: index === 0 ? 1.1 : 1.0,
+        data: summary.sparkData,
+        entityId: summary.entityId,
+      }));
+  }, [selectedSummaries]);
+  const primarySeries = chartSeries[0] || null;
+  const overlaySeries = chartSeries.slice(1);
+  const combinedHistory = useMemo(() => {
+    const colorByEntity = new Map(chartSeries.map((series) => [series.entityId, series.color]));
+    return selectedSummaries
+      .flatMap((summary) => summary.timeline.map((event) => ({
+        ...event,
+        entityId: summary.entityId,
+        entityName: summary.name,
+        color: colorByEntity.get(summary.entityId) || '#93c5fd',
+      })))
+      .sort((a, b) => b.time - a.time)
+      .slice(0, MAX_TIMELINE_EVENTS);
+  }, [selectedSummaries, chartSeries]);
 
   const summaryStats = useMemo(() => {
     const totalEvents = summaries.reduce((sum, summary) => sum + summary.eventCount, 0);
@@ -445,6 +510,9 @@ export default function SaunaDebugModal({
                 className="w-full pl-9 pr-3 py-2 rounded-xl border border-[var(--glass-border)] bg-[var(--glass-bg)] text-sm outline-none focus:border-blue-400/40"
               />
             </div>
+            <div className="text-[11px] text-[var(--text-secondary)]">
+              {tr('sauna.debugSelectedCount', 'Selected')}: {selectedEntityIds.length}
+            </div>
 
             {loading && (
               <div className="rounded-2xl border border-[var(--glass-border)] bg-[var(--glass-bg)] p-3 text-xs text-[var(--text-secondary)]">
@@ -459,12 +527,20 @@ export default function SaunaDebugModal({
 
             <div className="space-y-2">
               {filteredSummaries.map((summary) => {
-                const active = summary.entityId === selectedEntityId;
+                const active = selectedEntityIds.includes(summary.entityId);
                 return (
                   <button
                     key={summary.entityId}
                     type="button"
-                    onClick={() => setSelectedEntityId(summary.entityId)}
+                    onClick={() => {
+                      setSelectedEntityIds((prev) => {
+                        if (prev.includes(summary.entityId)) {
+                          if (prev.length === 1) return prev;
+                          return prev.filter((id) => id !== summary.entityId);
+                        }
+                        return [...prev, summary.entityId].slice(0, 6);
+                      });
+                    }}
                     className={`w-full text-left rounded-2xl border p-3 transition ${
                       active
                         ? 'bg-blue-500/16 border-blue-400/35'
@@ -473,9 +549,12 @@ export default function SaunaDebugModal({
                   >
                     <div className="flex items-start justify-between gap-2">
                       <p className="text-sm font-semibold text-[var(--text-primary)] truncate">{summary.name}</p>
-                      <span className="px-2 py-0.5 rounded-full text-[10px] uppercase tracking-widest border border-[var(--glass-border)] text-[var(--text-secondary)]">
-                        {summary.domain}
-                      </span>
+                      <div className="flex items-center gap-1">
+                        <span className={`w-2 h-2 rounded-full ${active ? 'bg-blue-300' : 'bg-transparent border border-[var(--glass-border)]'}`} />
+                        <span className="px-2 py-0.5 rounded-full text-[10px] uppercase tracking-widest border border-[var(--glass-border)] text-[var(--text-secondary)]">
+                          {summary.domain}
+                        </span>
+                      </div>
                     </div>
                     <p className="mt-1 text-[11px] text-[var(--text-secondary)] truncate">{summary.entityId}</p>
                     <div className="mt-2 flex items-center gap-2 text-[11px] text-[var(--text-secondary)]">
@@ -546,60 +625,35 @@ export default function SaunaDebugModal({
                     </p>
                     <p className="text-[11px] text-[var(--text-secondary)]">{windowLabel}</p>
                   </div>
-                  {selectedSummary.chartVariant === 'line' && (
-                    <div className="mb-2 space-y-2">
-                      <div className="text-[10px] uppercase tracking-widest text-[var(--text-secondary)]">
-                        {tr('sauna.debugOverlay', 'Overlay entities')}
-                      </div>
-                      <div className="flex flex-wrap gap-1.5">
-                        {overlayCandidates.map((candidate) => {
-                          const active = overlayEntityIds.includes(candidate.entityId);
-                          return (
-                            <button
-                              key={candidate.entityId}
-                              type="button"
-                              onClick={() => {
-                                setOverlayEntityIds((prev) => {
-                                  if (prev.includes(candidate.entityId)) {
-                                    return prev.filter((id) => id !== candidate.entityId);
-                                  }
-                                  return [...prev, candidate.entityId].slice(0, 5);
-                                });
-                              }}
-                              className={`px-2 py-1 rounded-full border text-[10px] transition ${
-                                active
-                                  ? 'bg-blue-500/20 border-blue-400/40 text-blue-200'
-                                  : 'bg-[var(--card-bg)] border-[var(--glass-border)] text-[var(--text-secondary)]'
-                              }`}
-                            >
-                              {candidate.name}
-                            </button>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  )}
-                  <SparkLine
-                    data={selectedSummary.sparkData}
-                    currentIndex={Math.max(0, selectedSummary.sparkData.length - 1)}
-                    height={100}
-                    variant={selectedSummary.chartVariant}
-                    lineStrokeWidth={1.15}
-                    overlaySeries={overlaySeries}
-                    includeOverlayInRange
-                    useTimeScale
-                  />
-                  {overlaySeries.length > 0 && (
-                    <div className="mt-2 flex flex-wrap gap-2">
-                      {overlaySeries.map((series) => (
-                        <span
-                          key={series.id}
-                          className="inline-flex items-center gap-1.5 px-2 py-1 rounded-full border text-[10px] border-[var(--glass-border)] text-[var(--text-secondary)]"
-                        >
-                          <span className="w-2 h-2 rounded-full" style={{ backgroundColor: series.color }} />
-                          {series.label}
-                        </span>
-                      ))}
+                  <div className="mb-2 flex flex-wrap gap-2">
+                    {chartSeries.map((series, index) => (
+                      <span
+                        key={series.id}
+                        className="inline-flex items-center gap-1.5 px-2 py-1 rounded-full border text-[10px] border-[var(--glass-border)] text-[var(--text-secondary)]"
+                      >
+                        <span className="w-2 h-2 rounded-full" style={{ backgroundColor: series.color }} />
+                        <span className={index === 0 ? 'font-semibold' : ''}>{series.label}</span>
+                      </span>
+                    ))}
+                  </div>
+                  {primarySeries ? (
+                    <SparkLine
+                      data={primarySeries.data}
+                      currentIndex={Math.max(0, primarySeries.data.length - 1)}
+                      height={100}
+                      variant="line"
+                      lineStrokeWidth={1.0}
+                      primaryColor={primarySeries.color}
+                      overlaySeries={overlaySeries}
+                      includeOverlayInRange
+                      useTimeScale
+                      curve="linear"
+                      areaFill={false}
+                      showCurrentMarker={false}
+                    />
+                  ) : (
+                    <div className="rounded-xl border border-[var(--glass-border)] bg-[var(--card-bg)] px-3 py-6 text-center text-xs text-[var(--text-secondary)]">
+                      {tr('sauna.debugNoTrendData', 'No trend data for selected entities')}
                     </div>
                   )}
                 </div>
@@ -611,15 +665,19 @@ export default function SaunaDebugModal({
                       {tr('common.history', 'History')}
                     </p>
                     <p className="text-[11px] text-[var(--text-secondary)]">
-                      {selectedSummary.timeline.length} {tr('sauna.debugRows', 'rows')}
+                      {combinedHistory.length} {tr('sauna.debugRows', 'rows')}
                       {fetchedAt ? ` - ${tr('common.updated', 'Updated')}: ${fetchedAt.toLocaleTimeString()}` : ''}
                     </p>
                   </div>
                   <div className="max-h-[360px] overflow-y-auto custom-scrollbar space-y-2 pr-1">
-                    {selectedSummary.timeline.map((event, index) => (
-                      <div key={`${selectedSummary.entityId}_${event.time.getTime()}_${index}`} className="rounded-xl border border-[var(--glass-border)] bg-[var(--card-bg)] px-3 py-2">
+                    {combinedHistory.map((event, index) => (
+                      <div key={`${event.entityId}_${event.time.getTime()}_${index}`} className="rounded-xl border border-[var(--glass-border)] bg-[var(--card-bg)] px-3 py-2">
                         <div className="flex items-center justify-between gap-2">
-                          <p className="text-sm font-semibold text-[var(--text-primary)]">{formatState(event.stateRaw)}</p>
+                          <div className="flex items-center gap-2 min-w-0">
+                            <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: event.color }} />
+                            <p className="text-xs text-[var(--text-secondary)] truncate">{event.entityName}</p>
+                            <p className="text-sm font-semibold text-[var(--text-primary)] truncate">{formatState(event.stateRaw)}</p>
+                          </div>
                           <p className="text-[11px] text-[var(--text-secondary)]">{event.time.toLocaleString()}</p>
                         </div>
                         <div className="mt-1 text-[11px] text-[var(--text-secondary)]">
@@ -627,7 +685,7 @@ export default function SaunaDebugModal({
                         </div>
                       </div>
                     ))}
-                    {selectedSummary.timeline.length === 0 && (
+                    {combinedHistory.length === 0 && (
                       <div className="rounded-xl border border-[var(--glass-border)] bg-[var(--card-bg)] px-3 py-2 text-xs text-[var(--text-secondary)]">
                         {tr('sauna.debugNoHistory', 'No history in selected window')}
                       </div>

@@ -23,6 +23,11 @@ const createBezierPath = (points, smoothing = 0.3) => {
   }, '');
 };
 
+const createLinearPath = (points) => points.reduce((acc, point, index) => {
+  if (index === 0) return `M ${point[0].toFixed(2)},${point[1].toFixed(2)}`;
+  return `${acc} L ${point[0].toFixed(2)},${point[1].toFixed(2)}`;
+}, '');
+
 const parseTimeMs = (value) => {
   if (!value) return NaN;
   if (value instanceof Date) return value.getTime();
@@ -45,6 +50,10 @@ export default function SparkLine({
   overlaySeries = [],
   includeOverlayInRange = false,
   useTimeScale = false,
+  curve = 'bezier',
+  showCurrentMarker = true,
+  areaFill = true,
+  primaryColor = null,
 }) {
   if (!data || data.length === 0) return null;
   
@@ -129,7 +138,11 @@ export default function SparkLine({
 
   const points = toPointArray(data);
 
-  const pathData = useMemo(() => createBezierPath(points, 0.3), [points]);
+  const useLinearCurve = String(curve || '').toLowerCase() === 'linear';
+  const pathData = useMemo(
+    () => (useLinearCurve ? createLinearPath(points) : createBezierPath(points, 0.3)),
+    [points, useLinearCurve]
+  );
   const areaData = useMemo(() => `${pathData} L ${width},${height} L 0,${height} Z`, [pathData, height]);
   const currentPoint = points[safeCurrentIndex] || points[0];
   const useBars = String(variant || '').toLowerCase() === 'bar';
@@ -217,15 +230,26 @@ export default function SparkLine({
         ) : (
           <>
             {/* Area fill with smooth fade */}
-            <path d={areaData} fill={`url(#${areaId})`} mask={`url(#${maskId}-use)`} />
+            {areaFill && (
+              <path d={areaData} fill={`url(#${areaId})`} mask={`url(#${maskId}-use)`} />
+            )}
 
             {/* Bezier line with gradient */}
-            <path d={pathData} fill="none" stroke={`url(#${lineId})`} strokeWidth={lineStrokeWidth} strokeLinecap="round" strokeLinejoin="round" />
+            <path
+              d={pathData}
+              fill="none"
+              stroke={primaryColor || `url(#${lineId})`}
+              strokeWidth={lineStrokeWidth}
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
 
             {normalizedOverlays.map((series) => {
               const overlayPoints = toPointArray(series.data);
               if (!overlayPoints.length) return null;
-              const overlayPath = createBezierPath(overlayPoints, 0.25);
+              const overlayPath = useLinearCurve
+                ? createLinearPath(overlayPoints)
+                : createBezierPath(overlayPoints, 0.25);
               return (
                 <path
                   key={series.id}
@@ -241,7 +265,9 @@ export default function SparkLine({
             })}
 
             {/* Current point marker */}
-            <circle cx={currentPoint[0]} cy={currentPoint[1]} r="3.5" fill={getDotColor(values[safeCurrentIndex])} className="animate-pulse" />
+            {showCurrentMarker && (
+              <circle cx={currentPoint[0]} cy={currentPoint[1]} r="3.5" fill={getDotColor(values[safeCurrentIndex])} className="animate-pulse" />
+            )}
           </>
         )}
       </svg>
