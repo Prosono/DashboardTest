@@ -1022,7 +1022,6 @@ function AppContent({
     language,
     now,
     t,
-    appActionAuditEnabled: Boolean(notificationConfig?.appActionAuditEnabled),
   });
 
   const canControlDevices = currentUserRole !== 'inspector' && !isPlatformAdmin;

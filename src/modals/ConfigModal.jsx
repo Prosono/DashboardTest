@@ -2658,22 +2658,13 @@ export default function ConfigModal({
             </button>
           </div>
 
-          <div className="flex items-center justify-between gap-3 rounded-lg border border-[var(--glass-border)] bg-[var(--glass-bg-hover)] px-3 py-2">
-            <div>
-              <p className="text-xs font-semibold text-[var(--text-secondary)]">
-                {t('notifications.appActionAudit')}
-              </p>
-              <p className="text-[11px] text-[var(--text-muted)] mt-0.5">
-                {t('notifications.appActionAuditDescription')}
-              </p>
-            </div>
-            <button
-              type="button"
-              onClick={() => updateNotificationDraft((prev) => ({ ...prev, appActionAuditEnabled: !prev.appActionAuditEnabled }))}
-              className={`w-10 h-6 rounded-full p-1 transition-colors relative ${draft.appActionAuditEnabled ? 'bg-emerald-500' : 'bg-gray-500/30'}`}
-            >
-              <div className={`w-4 h-4 rounded-full bg-white shadow-sm transition-transform ${draft.appActionAuditEnabled ? 'translate-x-4' : 'translate-x-0'}`} />
-            </button>
+          <div className="rounded-lg border border-emerald-500/25 bg-emerald-500/10 px-3 py-2">
+            <p className="text-xs font-semibold text-emerald-300">
+              {t('notifications.appActionAuditAlwaysOn')}
+            </p>
+            <p className="text-[11px] text-emerald-200/85 mt-0.5">
+              {t('notifications.appActionAuditAlwaysOnDescription')}
+            </p>
           </div>
         </div>
 

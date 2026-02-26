@@ -172,6 +172,10 @@ export default function EditCardModal({
 
   const isPerson = entityId?.startsWith('person.');
   const personDisplay = editSettings?.personDisplay || 'photo';
+  const isNotificationTimelineEdit = (
+    editSettings?.type === 'notification_timeline'
+    || String(entityId || '').startsWith('notification_timeline_card_')
+  );
 
   const entityEntries = Object.entries(entities || {});
   const byDomain = (domain) => entityEntries.filter(([id]) => id.startsWith(`${domain}.`)).map(([id]) => id);
@@ -440,6 +444,51 @@ export default function EditCardModal({
                 <p className="text-[10px] text-[var(--text-secondary)]">
                   {translateText('form.dividerHeaderHint', 'Header is shown only in horizontal mode.')}
                 </p>
+              </div>
+            </div>
+          )}
+
+          {editSettingsKey && isNotificationTimelineEdit && (
+            <div className="space-y-3">
+              <label className="text-xs uppercase font-bold text-gray-500 ml-1">
+                {translateText('notificationTimeline.settings.title', 'Notification timeline settings')}
+              </label>
+              <div className="rounded-2xl popup-surface p-3 space-y-3">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <p className="text-xs font-semibold text-[var(--text-secondary)]">
+                      {translateText('notificationTimeline.settings.showEvents', 'Show events tab')}
+                    </p>
+                    <p className="text-[10px] text-[var(--text-muted)] mt-0.5">
+                      {translateText('notificationTimeline.settings.showEventsHint', 'Show app actions for this client in a separate tab.')}
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => saveCardSetting(editSettingsKey, 'showEvents', !(editSettings?.showEvents === true))}
+                    className={`w-10 h-6 rounded-full p-1 transition-colors relative ${(editSettings?.showEvents === true) ? 'bg-blue-500' : 'bg-gray-500/30'}`}
+                  >
+                    <div className={`w-4 h-4 rounded-full bg-white shadow-sm transition-transform ${(editSettings?.showEvents === true) ? 'translate-x-4' : 'translate-x-0'}`} />
+                  </button>
+                </div>
+                <div className="space-y-1">
+                  <span className="text-[10px] uppercase tracking-wider text-[var(--text-secondary)]">
+                    {translateText('notificationTimeline.settings.maxEntries', 'Max entries')}
+                  </span>
+                  <input
+                    type="number"
+                    min={1}
+                    max={200}
+                    step={1}
+                    className="w-full px-3 py-2 text-[var(--text-primary)] rounded-xl popup-surface focus:border-blue-500/50 outline-none transition-colors"
+                    value={Number(editSettings?.maxEntries) || 200}
+                    onChange={(e) => {
+                      const parsed = Number(e.target.value);
+                      const next = Number.isFinite(parsed) ? Math.max(1, Math.min(200, Math.round(parsed))) : 200;
+                      saveCardSetting(editSettingsKey, 'maxEntries', next);
+                    }}
+                  />
+                </div>
               </div>
             </div>
           )}

@@ -222,6 +222,7 @@ export const handleAddSelected = (ctx) => {
       commitSingleCard(cardId, {
         type: 'notification_timeline',
         maxEntries: 200,
+        showEvents: false,
       }, { openEdit: true });
       return;
     }

@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { AlertCircle, AlertTriangle, Bell, Check, Clock, Search, Trash2, X } from '../../icons';
 import { useNotifications } from '../../contexts';
+import { fetchAppActionHistory } from '../../services/appAuth';
 
 const clamp = (value, min, max, fallback) => {
   const parsed = Number(value);
@@ -93,6 +94,35 @@ const getTimeThresholdMs = (windowKey, nowMs) => {
   return null;
 };
 
+const normalizeEventRow = (entry) => {
+  const actor = entry?.actor && typeof entry.actor === 'object' ? entry.actor : {};
+  return {
+    id: String(entry?.id || ''),
+    createdAt: String(entry?.createdAt || ''),
+    domain: String(entry?.domain || '').trim().toLowerCase(),
+    service: String(entry?.service || '').trim().toLowerCase(),
+    entityId: String(entry?.entityId || '').trim(),
+    entityName: String(entry?.entityName || '').trim(),
+    connectionId: String(entry?.connectionId || '').trim(),
+    summary: String(entry?.summary || '').trim(),
+    source: String(entry?.source || '').trim(),
+    actorName: String(actor?.username || actor?.id || '').trim(),
+    actorRole: String(actor?.role || '').trim(),
+    raw: entry,
+  };
+};
+
+const getEventSearchText = (entry) => [
+  String(entry?.domain || ''),
+  String(entry?.service || ''),
+  String(entry?.entityId || ''),
+  String(entry?.entityName || ''),
+  String(entry?.connectionId || ''),
+  String(entry?.summary || ''),
+  String(entry?.actorName || ''),
+  String(entry?.source || ''),
+].join(' ').toLowerCase();
+
 export default function NotificationTimelineCard({
   cardId,
   settings = {},
@@ -111,11 +141,17 @@ export default function NotificationTimelineCard({
   } = useNotifications();
 
   const heading = customNames[cardId] || settings.heading || tr(t, 'notificationTimeline.title', 'Notification timeline');
+  const showEvents = Boolean(settings?.showEvents);
   const maxEntries = clamp(settings.maxEntries, 1, 200, 200);
   const [searchQuery, setSearchQuery] = useState('');
   const [severityFilter, setSeverityFilter] = useState('all');
   const [timeWindowFilter, setTimeWindowFilter] = useState('all');
+  const [activeTab, setActiveTab] = useState('notifications');
   const [selectedEntryId, setSelectedEntryId] = useState('');
+  const [selectedEventId, setSelectedEventId] = useState('');
+  const [appEvents, setAppEvents] = useState([]);
+  const [appEventsLoading, setAppEventsLoading] = useState(false);
+  const [appEventsError, setAppEventsError] = useState('');
 
   const allRows = useMemo(
     () => (Array.isArray(notificationHistory) ? notificationHistory : []),
@@ -148,6 +184,54 @@ export default function NotificationTimelineCard({
     return filtered.slice(0, maxEntries);
   }, [allRows, searchQuery, severityFilter, timeWindowFilter, maxEntries]);
 
+  const loadAppEvents = useCallback(async () => {
+    if (!showEvents) return;
+    setAppEventsLoading(true);
+    setAppEventsError('');
+    try {
+      const history = await fetchAppActionHistory(500);
+      const normalized = (Array.isArray(history) ? history : [])
+        .map((entry) => normalizeEventRow(entry))
+        .filter((entry) => Boolean(entry.id));
+      setAppEvents(normalized);
+    } catch (error) {
+      setAppEventsError(String(error?.message || tr(t, 'notificationTimeline.eventsLoadFailed', 'Could not load app events')));
+    } finally {
+      setAppEventsLoading(false);
+    }
+  }, [showEvents, t]);
+
+  useEffect(() => {
+    if (!showEvents) return;
+    void loadAppEvents();
+  }, [showEvents, loadAppEvents]);
+
+  useEffect(() => {
+    if (!showEvents && activeTab === 'events') {
+      setActiveTab('notifications');
+    }
+  }, [showEvents, activeTab]);
+
+  const allEventRows = useMemo(
+    () => (Array.isArray(appEvents) ? appEvents : []),
+    [appEvents],
+  );
+
+  const eventRows = useMemo(() => {
+    const query = String(searchQuery || '').trim().toLowerCase();
+    const nowMs = Date.now();
+    const thresholdMs = getTimeThresholdMs(timeWindowFilter, nowMs);
+    const filtered = allEventRows.filter((entry) => {
+      if (thresholdMs !== null) {
+        const createdAtMs = Date.parse(String(entry?.createdAt || ''));
+        if (!Number.isFinite(createdAtMs) || createdAtMs < thresholdMs) return false;
+      }
+      if (!query) return true;
+      return getEventSearchText(entry).includes(query);
+    });
+    return filtered.slice(0, maxEntries);
+  }, [allEventRows, maxEntries, searchQuery, timeWindowFilter]);
+
   const selectedEntry = useMemo(() => {
     if (!selectedEntryId) return null;
     return allRows.find((entry) => String(entry?.id || '') === selectedEntryId) || null;
@@ -157,6 +241,16 @@ export default function NotificationTimelineCard({
     if (!selectedEntryId) return;
     if (!selectedEntry) setSelectedEntryId('');
   }, [selectedEntryId, selectedEntry]);
+
+  const selectedEvent = useMemo(() => {
+    if (!selectedEventId) return null;
+    return allEventRows.find((entry) => String(entry?.id || '') === selectedEventId) || null;
+  }, [allEventRows, selectedEventId]);
+
+  useEffect(() => {
+    if (!selectedEventId) return;
+    if (!selectedEvent) setSelectedEventId('');
+  }, [selectedEventId, selectedEvent]);
 
   const confirmAction = useCallback((message) => {
     if (typeof window === 'undefined' || typeof window.confirm !== 'function') return true;
@@ -190,6 +284,10 @@ export default function NotificationTimelineCard({
     { value: '24h', label: tr(t, 'notificationTimeline.filter.time.24h', 'Last 24h') },
     { value: '7d', label: tr(t, 'notificationTimeline.filter.time.7d', 'Last 7 days') },
   ]), [t]);
+
+  const isEventsTab = showEvents && activeTab === 'events';
+  const totalRows = isEventsTab ? allEventRows.length : allRows.length;
+  const filteredRows = isEventsTab ? eventRows : rows;
 
   const detailModal = selectedEntry && typeof document !== 'undefined'
     ? createPortal(
@@ -291,6 +389,104 @@ export default function NotificationTimelineCard({
     )
     : null;
 
+  const eventDetailModal = selectedEvent && typeof document !== 'undefined'
+    ? createPortal(
+      <div
+        className="fixed inset-0 z-[150] flex items-center justify-center p-3 sm:p-5"
+        style={{ backgroundColor: 'rgba(0, 0, 0, 0.55)', backdropFilter: 'blur(6px)' }}
+        onClick={() => setSelectedEventId('')}
+      >
+        <div
+          className="w-full max-w-2xl max-h-[84vh] rounded-3xl border overflow-hidden"
+          style={{
+            background: 'linear-gradient(135deg, var(--card-bg) 0%, var(--modal-bg) 100%)',
+            borderColor: 'var(--glass-border)',
+          }}
+          onClick={(event) => event.stopPropagation()}
+        >
+          <div className="flex items-start justify-between gap-3 px-4 py-3 border-b border-[var(--glass-border)]">
+            <div className="min-w-0">
+              <p className="text-[10px] uppercase tracking-[0.2em] text-[var(--text-secondary)] font-bold">
+                {tr(t, 'notificationTimeline.events.details', 'Event details')}
+              </p>
+              <p className="text-base font-semibold text-[var(--text-primary)] truncate mt-1">
+                {String(selectedEvent?.summary || selectedEvent?.entityName || selectedEvent?.entityId || tr(t, 'notificationTimeline.events.fallback', 'App event'))}
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setSelectedEventId('')}
+              className="w-9 h-9 rounded-full border border-[var(--glass-border)] bg-[var(--glass-bg)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] flex items-center justify-center"
+              title={tr(t, 'notificationTimeline.close', 'Close')}
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+
+          <div className="p-4 space-y-3 max-h-[calc(84vh-70px)] overflow-y-auto custom-scrollbar">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              <div className="rounded-xl border border-[var(--glass-border)] bg-[var(--glass-bg)] p-2.5">
+                <p className="text-[10px] uppercase tracking-wider text-[var(--text-secondary)] font-bold">
+                  {tr(t, 'notificationTimeline.events.action', 'Action')}
+                </p>
+                <p className="mt-1 text-sm font-semibold text-[var(--text-primary)] break-words">
+                  {[selectedEvent?.domain, selectedEvent?.service].filter(Boolean).join('.') || '-'}
+                </p>
+              </div>
+              <div className="rounded-xl border border-[var(--glass-border)] bg-[var(--glass-bg)] p-2.5">
+                <p className="text-[10px] uppercase tracking-wider text-[var(--text-secondary)] font-bold">
+                  {tr(t, 'notificationTimeline.field.createdAt', 'Created')}
+                </p>
+                <p className="mt-1 text-sm font-semibold text-[var(--text-primary)]">
+                  {formatDateTime(selectedEvent?.createdAt, locale, true)}
+                </p>
+              </div>
+            </div>
+
+            <div className="rounded-xl border border-[var(--glass-border)] bg-[var(--glass-bg)] p-2.5">
+              <p className="text-[10px] uppercase tracking-wider text-[var(--text-secondary)] font-bold">
+                {tr(t, 'notificationTimeline.events.actor', 'Actor')}
+              </p>
+              <p className="mt-1 text-sm text-[var(--text-primary)]">
+                {selectedEvent?.actorName || '-'}
+              </p>
+            </div>
+
+            <div className="rounded-xl border border-[var(--glass-border)] bg-[var(--glass-bg)] p-2.5">
+              <p className="text-[10px] uppercase tracking-wider text-[var(--text-secondary)] font-bold">
+                {tr(t, 'notificationTimeline.events.entity', 'Entity')}
+              </p>
+              <p className="mt-1 text-sm text-[var(--text-primary)] break-words">
+                {selectedEvent?.entityName || selectedEvent?.entityId || '-'}
+              </p>
+            </div>
+
+            <div className="rounded-xl border border-[var(--glass-border)] bg-[var(--glass-bg)] p-2.5">
+              <p className="text-[10px] uppercase tracking-wider text-[var(--text-secondary)] font-bold">
+                {tr(t, 'notificationTimeline.field.id', 'Entry ID')}
+              </p>
+              <p className="mt-1 text-xs font-mono break-all text-[var(--text-primary)]">
+                {String(selectedEvent?.id || '-')}
+              </p>
+            </div>
+
+            {selectedEvent?.raw ? (
+              <div className="rounded-xl border border-[var(--glass-border)] bg-[var(--glass-bg)] p-2.5">
+                <p className="text-[10px] uppercase tracking-wider text-[var(--text-secondary)] font-bold">
+                  {tr(t, 'notificationTimeline.field.meta', 'Metadata')}
+                </p>
+                <pre className="mt-1 text-[11px] whitespace-pre-wrap break-words text-[var(--text-primary)] font-mono">
+                  {JSON.stringify(selectedEvent.raw, null, 2)}
+                </pre>
+              </div>
+            ) : null}
+          </div>
+        </div>
+      </div>,
+      document.body,
+    )
+    : null;
+
   return (
     <>
       <div
@@ -312,10 +508,10 @@ export default function NotificationTimelineCard({
               {heading}
             </p>
             <p className="text-xs mt-1 text-[var(--text-secondary)]">
-              {rows.length}/{allRows.length} {tr(t, 'notificationTimeline.entries', 'entries')}
+              {filteredRows.length}/{totalRows} {tr(t, 'notificationTimeline.entries', 'entries')}
             </p>
           </div>
-          {!editMode && allRows.length > 0 && (
+          {!editMode && !isEventsTab && allRows.length > 0 && (
             <button
               type="button"
               onClick={(event) => {
@@ -334,26 +530,68 @@ export default function NotificationTimelineCard({
           )}
         </div>
 
-        {!editMode && allRows.length > 0 && (
-          <div className="grid grid-cols-1 sm:grid-cols-[minmax(0,1fr)_10rem_10rem] gap-2 mb-3">
+        {showEvents && (
+          <div className="inline-flex items-center gap-1 rounded-lg border border-[var(--glass-border)] bg-[var(--glass-bg)] p-1 mb-3">
+            <button
+              type="button"
+              onClick={() => setActiveTab('notifications')}
+              className={`px-2.5 py-1 rounded-md text-[10px] uppercase tracking-widest font-bold transition-colors ${
+                !isEventsTab
+                  ? 'bg-blue-500/20 text-blue-300'
+                  : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
+              }`}
+            >
+              {tr(t, 'notificationTimeline.tab.notifications', 'Notifications')}
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveTab('events')}
+              className={`px-2.5 py-1 rounded-md text-[10px] uppercase tracking-widest font-bold transition-colors ${
+                isEventsTab
+                  ? 'bg-emerald-500/20 text-emerald-300'
+                  : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
+              }`}
+            >
+              {tr(t, 'notificationTimeline.tab.events', 'Events')}
+            </button>
+          </div>
+        )}
+
+        {!editMode && totalRows > 0 && (
+          <div className={`grid grid-cols-1 gap-2 mb-3 ${isEventsTab ? 'sm:grid-cols-[minmax(0,1fr)_10rem_auto]' : 'sm:grid-cols-[minmax(0,1fr)_10rem_10rem]'}`}>
             <label className="relative">
               <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-[var(--text-muted)]" />
               <input
                 value={searchQuery}
                 onChange={(event) => setSearchQuery(event.target.value)}
                 className="w-full h-9 pl-8 pr-3 rounded-lg border border-[var(--glass-border)] bg-[var(--glass-bg)] text-xs text-[var(--text-primary)] outline-none focus:border-blue-500/40"
-                placeholder={tr(t, 'notificationTimeline.filter.search', 'Search notifications')}
+                placeholder={isEventsTab
+                  ? tr(t, 'notificationTimeline.events.search', 'Search events')
+                  : tr(t, 'notificationTimeline.filter.search', 'Search notifications')}
               />
             </label>
-            <select
-              value={severityFilter}
-              onChange={(event) => setSeverityFilter(event.target.value)}
-              className="h-9 px-2.5 rounded-lg border border-[var(--glass-border)] bg-[var(--glass-bg)] text-xs text-[var(--text-primary)] outline-none focus:border-blue-500/40"
-            >
-              {severityOptions.map((option) => (
-                <option key={option.value} value={option.value}>{option.label}</option>
-              ))}
-            </select>
+            {!isEventsTab ? (
+              <select
+                value={severityFilter}
+                onChange={(event) => setSeverityFilter(event.target.value)}
+                className="h-9 px-2.5 rounded-lg border border-[var(--glass-border)] bg-[var(--glass-bg)] text-xs text-[var(--text-primary)] outline-none focus:border-blue-500/40"
+              >
+                {severityOptions.map((option) => (
+                  <option key={option.value} value={option.value}>{option.label}</option>
+                ))}
+              </select>
+            ) : (
+              <button
+                type="button"
+                onClick={() => void loadAppEvents()}
+                className="h-9 px-2.5 rounded-lg border border-[var(--glass-border)] bg-[var(--glass-bg)] text-xs text-[var(--text-primary)] outline-none hover:bg-[var(--glass-bg-hover)] disabled:opacity-60"
+                disabled={appEventsLoading}
+              >
+                {appEventsLoading
+                  ? tr(t, 'common.loading', 'Loading')
+                  : tr(t, 'notificationTimeline.events.refresh', 'Refresh')}
+              </button>
+            )}
             <select
               value={timeWindowFilter}
               onChange={(event) => setTimeWindowFilter(event.target.value)}
@@ -366,16 +604,30 @@ export default function NotificationTimelineCard({
           </div>
         )}
 
-        {allRows.length === 0 ? (
+        {isEventsTab && appEventsLoading ? (
           <div className="rounded-2xl border border-dashed border-[var(--glass-border)] bg-[var(--glass-bg)] px-4 py-6 text-center">
             <p className="text-xs font-bold uppercase tracking-widest text-[var(--text-secondary)]">
-              {tr(t, 'notificationTimeline.emptyTitle', 'No notifications yet')}
-            </p>
-            <p className="text-[11px] mt-1 text-[var(--text-muted)]">
-              {tr(t, 'notificationTimeline.emptyHint', 'When alerts are triggered, they will appear here.')}
+              {tr(t, 'common.loading', 'Loading')}
             </p>
           </div>
-        ) : rows.length === 0 ? (
+        ) : isEventsTab && appEventsError ? (
+          <div className="rounded-2xl border border-red-500/25 bg-red-500/10 px-4 py-3 text-xs text-red-200">
+            {appEventsError}
+          </div>
+        ) : totalRows === 0 ? (
+          <div className="rounded-2xl border border-dashed border-[var(--glass-border)] bg-[var(--glass-bg)] px-4 py-6 text-center">
+            <p className="text-xs font-bold uppercase tracking-widest text-[var(--text-secondary)]">
+              {isEventsTab
+                ? tr(t, 'notificationTimeline.events.emptyTitle', 'No events yet')
+                : tr(t, 'notificationTimeline.emptyTitle', 'No notifications yet')}
+            </p>
+            <p className="text-[11px] mt-1 text-[var(--text-muted)]">
+              {isEventsTab
+                ? tr(t, 'notificationTimeline.events.emptyHint', 'Actions performed in this client will appear here.')
+                : tr(t, 'notificationTimeline.emptyHint', 'When alerts are triggered, they will appear here.')}
+            </p>
+          </div>
+        ) : filteredRows.length === 0 ? (
           <div className="rounded-2xl border border-dashed border-[var(--glass-border)] bg-[var(--glass-bg)] px-4 py-6 text-center">
             <p className="text-xs font-bold uppercase tracking-widest text-[var(--text-secondary)]">
               {tr(t, 'notificationTimeline.noMatch', 'No entries match your filters')}
@@ -383,7 +635,7 @@ export default function NotificationTimelineCard({
           </div>
         ) : (
           <div className="space-y-2 max-h-[420px] overflow-y-auto custom-scrollbar pr-1">
-            {rows.map((entry) => {
+            {!isEventsTab && filteredRows.map((entry) => {
               const severity = getSeverityMeta(entry?.level);
               const SeverityIcon = severity.icon || Bell;
               const levelLabel = String(normalizeLevel(entry?.level || 'info')).toUpperCase();
@@ -442,10 +694,61 @@ export default function NotificationTimelineCard({
                 </div>
               );
             })}
+            {isEventsTab && filteredRows.map((entry) => {
+              const actionLabel = [entry?.domain, entry?.service].filter(Boolean).join('.');
+              const entityLabel = entry?.entityName || entry?.entityId || entry?.summary || tr(t, 'notificationTimeline.events.fallback', 'App event');
+              const actorLabel = entry?.actorName
+                ? `${tr(t, 'notificationTimeline.events.actor', 'Actor')}: ${entry.actorName}`
+                : '';
+              const connectionLabel = entry?.connectionId
+                ? `${tr(t, 'notificationTimeline.events.connection', 'Connection')}: ${entry.connectionId}`
+                : '';
+              return (
+                <div
+                  key={entry.id}
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => setSelectedEventId(String(entry?.id || ''))}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter' || event.key === ' ') {
+                      event.preventDefault();
+                      setSelectedEventId(String(entry?.id || ''));
+                    }
+                  }}
+                  className="w-full text-left rounded-xl border border-[var(--glass-border)] bg-[var(--glass-bg)] p-2.5 hover:bg-[var(--glass-bg-hover)] transition-colors cursor-pointer"
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full border border-emerald-500/25 bg-emerald-500/10 text-[10px] font-bold uppercase tracking-wider text-emerald-300">
+                          {tr(t, 'notificationTimeline.tab.events', 'Events')}
+                        </span>
+                        <p className="text-sm font-semibold text-[var(--text-primary)] truncate">
+                          {entityLabel}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="inline-flex items-center gap-1 text-[10px] text-[var(--text-secondary)] shrink-0 mt-0.5">
+                      <Clock className="w-3 h-3" />
+                      <span>{formatDateTime(entry?.createdAt, locale)}</span>
+                    </div>
+                  </div>
+                  <div className="mt-1.5 text-xs text-[var(--text-secondary)] space-y-0.5">
+                    <p className="font-semibold text-[var(--text-primary)]">{actionLabel || '-'}</p>
+                    {(actorLabel || connectionLabel) ? (
+                      <p>
+                        {[actorLabel, connectionLabel].filter(Boolean).join(' • ')}
+                      </p>
+                    ) : null}
+                  </div>
+                </div>
+              );
+            })}
           </div>
         )}
       </div>
       {detailModal}
+      {eventDetailModal}
     </>
   );
 }

@@ -84,6 +84,7 @@ const toMetricSnapshot = (payload) => {
       activeSessions: Number(totals.activeSessions || 0),
       onlineSessions: Number(totals.onlineSessions || 0),
       logs: Number(totals.logs || 0),
+      appActions: Number(totals.appActions || 0),
     },
   };
 };
@@ -281,6 +282,10 @@ export default function SuperAdminOverview({
     () => (Array.isArray(overview?.recentLogs) ? overview.recentLogs : []),
     [overview?.recentLogs],
   );
+  const recentAppActions = useMemo(
+    () => (Array.isArray(overview?.recentAppActions) ? overview.recentAppActions : []),
+    [overview?.recentAppActions],
+  );
   const generatedAt = overview?.generatedAt || null;
 
   const instances = useMemo(() => {
@@ -376,6 +381,13 @@ export default function SuperAdminOverview({
       icon: Activity,
       label: t('superAdminOverview.stats.logs'),
       value: totals.logs || 0,
+      tone: 'neutral',
+    },
+    {
+      key: 'appActions',
+      icon: Activity,
+      label: t('superAdminOverview.stats.appActions'),
+      value: totals.appActions || 0,
       tone: 'neutral',
     },
   ]), [t, totals]);
@@ -491,10 +503,18 @@ export default function SuperAdminOverview({
           value: log.type || 'log',
           date: log.createdAt,
         }));
+      case 'appActions':
+        return recentAppActions.map((entry, index) => ({
+          id: entry.id || `${entry.clientId || 'client'}_${entry.createdAt || index}`,
+          title: `${entry.clientName || entry.clientId || '-'} / ${entry.entityName || entry.entityId || '-'}`,
+          subtitle: `${t('superAdminOverview.appActions.actor')}: ${entry?.actor?.username || entry?.actor?.id || '-'}`,
+          value: [entry.domain, entry.service].filter(Boolean).join('.') || t('superAdminOverview.appActions.fallback'),
+          date: entry.createdAt || null,
+        }));
       default:
         return [];
     }
-  }, [activeKpiKey, clients, instances, issues, recentLogs, sortedSessions, t]);
+  }, [activeKpiKey, clients, instances, issues, recentLogs, recentAppActions, sortedSessions, t]);
 
   return (
     <div className="page-transition flex flex-col gap-4 md:gap-6 font-sans" data-disable-pull-refresh="true">
@@ -694,36 +714,73 @@ export default function SuperAdminOverview({
               )}
             </div>
 
-            <div className="popup-surface rounded-3xl p-4 md:p-5 border border-[var(--glass-border)]">
-              <div className="flex items-center justify-between gap-3 mb-4">
-                <h3 className="text-xs md:text-sm font-bold uppercase tracking-[0.2em] text-[var(--text-secondary)]">
-                  {t('superAdminOverview.sections.logs')}
-                </h3>
-                <Server className="w-4 h-4 text-[var(--text-muted)]" />
+            <div className="flex flex-col gap-4">
+              <div className="popup-surface rounded-3xl p-4 md:p-5 border border-[var(--glass-border)]">
+                <div className="flex items-center justify-between gap-3 mb-4">
+                  <h3 className="text-xs md:text-sm font-bold uppercase tracking-[0.2em] text-[var(--text-secondary)]">
+                    {t('superAdminOverview.sections.logs')}
+                  </h3>
+                  <Server className="w-4 h-4 text-[var(--text-muted)]" />
+                </div>
+
+                {recentLogs.length === 0 ? (
+                  <p className="text-sm text-[var(--text-secondary)]">{t('superAdminOverview.logs.empty')}</p>
+                ) : (
+                  <div className="space-y-2 max-h-[28vh] overflow-y-auto custom-scrollbar pr-1">
+                    {recentLogs.map((log) => (
+                      <div
+                        key={log.id}
+                        className="rounded-xl border border-[var(--glass-border)] bg-[var(--glass-bg)] px-3 py-2.5"
+                      >
+                        <p className="text-xs font-semibold text-[var(--text-primary)]">
+                          {log.clientId} / {log.dashboardId}
+                        </p>
+                        <p className="text-[11px] text-[var(--text-secondary)] mt-0.5">
+                          {t('superAdminOverview.logs.savedBy')}: {log.createdByUsername || log.createdBy || '-'}
+                        </p>
+                        <p className="text-[10px] uppercase tracking-[0.14em] text-[var(--text-muted)] mt-1">
+                          {formatDateTime(log.createdAt, language)}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
 
-              {recentLogs.length === 0 ? (
-                <p className="text-sm text-[var(--text-secondary)]">{t('superAdminOverview.logs.empty')}</p>
-              ) : (
-                <div className="space-y-2 max-h-[62vh] overflow-y-auto custom-scrollbar pr-1">
-                  {recentLogs.map((log) => (
-                    <div
-                      key={log.id}
-                      className="rounded-xl border border-[var(--glass-border)] bg-[var(--glass-bg)] px-3 py-2.5"
-                    >
-                      <p className="text-xs font-semibold text-[var(--text-primary)]">
-                        {log.clientId} / {log.dashboardId}
-                      </p>
-                      <p className="text-[11px] text-[var(--text-secondary)] mt-0.5">
-                        {t('superAdminOverview.logs.savedBy')}: {log.createdByUsername || log.createdBy || '-'}
-                      </p>
-                      <p className="text-[10px] uppercase tracking-[0.14em] text-[var(--text-muted)] mt-1">
-                        {formatDateTime(log.createdAt, language)}
-                      </p>
-                    </div>
-                  ))}
+              <div className="popup-surface rounded-3xl p-4 md:p-5 border border-[var(--glass-border)]">
+                <div className="flex items-center justify-between gap-3 mb-4">
+                  <h3 className="text-xs md:text-sm font-bold uppercase tracking-[0.2em] text-[var(--text-secondary)]">
+                    {t('superAdminOverview.sections.appActions')}
+                  </h3>
+                  <Activity className="w-4 h-4 text-[var(--text-muted)]" />
                 </div>
-              )}
+
+                {recentAppActions.length === 0 ? (
+                  <p className="text-sm text-[var(--text-secondary)]">{t('superAdminOverview.appActions.empty')}</p>
+                ) : (
+                  <div className="space-y-2 max-h-[30vh] overflow-y-auto custom-scrollbar pr-1">
+                    {recentAppActions.map((entry, index) => (
+                      <div
+                        key={entry.id || `${entry.clientId || 'client'}_${entry.createdAt || index}`}
+                        className="rounded-xl border border-[var(--glass-border)] bg-[var(--glass-bg)] px-3 py-2.5"
+                      >
+                        <p className="text-xs font-semibold text-[var(--text-primary)]">
+                          {entry.clientName || entry.clientId || '-'} / {entry.entityName || entry.entityId || '-'}
+                        </p>
+                        <p className="text-[11px] text-[var(--text-secondary)] mt-0.5">
+                          {[entry.domain, entry.service].filter(Boolean).join('.') || t('superAdminOverview.appActions.fallback')}
+                        </p>
+                        <p className="text-[11px] text-[var(--text-secondary)] mt-0.5">
+                          {t('superAdminOverview.appActions.actor')}: {entry?.actor?.username || entry?.actor?.id || '-'}
+                        </p>
+                        <p className="text-[10px] uppercase tracking-[0.14em] text-[var(--text-muted)] mt-1">
+                          {formatDateTime(entry.createdAt, language)}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
           </section>
 

@@ -398,14 +398,6 @@ const persistAppActionHistoryForClient = (clientId, history) => {
   return { history: normalized, updatedAt: now };
 };
 
-const getAppActionAuditEnabledForClient = (clientId) => {
-  const key = getNotificationConfigKey(clientId);
-  const row = db.prepare('SELECT value FROM system_settings WHERE key = ?').get(key);
-  const parsed = parseStoredNotificationConfig(row?.value || '');
-  const normalized = normalizeNotificationConfig(parsed);
-  return Boolean(normalized?.appActionAuditEnabled);
-};
-
 const resolveEntityIdFromActionPayload = (body = {}) => {
   const direct = String(body?.entityId || '').trim();
   if (direct) return direct;
@@ -498,10 +490,6 @@ router.post('/app-action-history', authRequired, (req, res) => {
   }
 
   const clientId = req.auth?.user?.clientId;
-  const enabled = getAppActionAuditEnabledForClient(clientId);
-  if (!enabled) {
-    return res.json({ logged: false, reason: 'disabled' });
-  }
 
   const createdAt = new Date().toISOString();
   const entityId = resolveEntityIdFromActionPayload(req.body);

@@ -17,7 +17,7 @@ const sanitizeEntityRef = (value) => {
   return '';
 };
 
-export function useEntityHelpers({ entities, conn, activeUrl, language, now, t, appActionAuditEnabled = false }) {
+export function useEntityHelpers({ entities, conn, activeUrl, language, now, t }) {
   // ── Attribute / state accessors ────────────────────────────────────────
   const getS = (id, fallback = '--') => {
     const state = entities[id]?.state;
@@ -52,30 +52,28 @@ export function useEntityHelpers({ entities, conn, activeUrl, language, now, t, 
         throw error;
       });
 
-      if (appActionAuditEnabled) {
-        const entityRef = sanitizeEntityRef(data?.entity_id) || sanitizeEntityRef(target?.entity_id);
-        const parsedEntityRef = parseScopedEntityId(entityRef);
-        const entityId = parsedEntityRef?.entityId || entityRef;
-        const connectionId = parsedEntityRef?.connectionId || '';
-        const entityName = entityId
-          ? String(entities?.[entityRef]?.attributes?.friendly_name || entities?.[entityId]?.attributes?.friendly_name || entityId).trim()
-          : '';
+      const entityRef = sanitizeEntityRef(data?.entity_id) || sanitizeEntityRef(target?.entity_id);
+      const parsedEntityRef = parseScopedEntityId(entityRef);
+      const entityId = parsedEntityRef?.entityId || entityRef;
+      const connectionId = parsedEntityRef?.connectionId || '';
+      const entityName = entityId
+        ? String(entities?.[entityRef]?.attributes?.friendly_name || entities?.[entityId]?.attributes?.friendly_name || entityId).trim()
+        : '';
 
-        void appendAppActionHistoryEntry({
-          domain: String(domain || '').trim().toLowerCase(),
-          service: String(service || '').trim().toLowerCase(),
-          entityId: entityRef || entityId,
-          entityName,
-          connectionId,
-          serviceData: data && typeof data === 'object' ? { ...data } : data,
-          target: target && typeof target === 'object' ? { ...target } : target,
-          value: typeof data?.value === 'number' ? data.value : undefined,
-        }, { dedupeWindowMs: 1000 }).catch(() => {});
-      }
+      void appendAppActionHistoryEntry({
+        domain: String(domain || '').trim().toLowerCase(),
+        service: String(service || '').trim().toLowerCase(),
+        entityId: entityRef || entityId,
+        entityName,
+        connectionId,
+        serviceData: data && typeof data === 'object' ? { ...data } : data,
+        target: target && typeof target === 'object' ? { ...target } : target,
+        value: typeof data?.value === 'number' ? data.value : undefined,
+      }, { dedupeWindowMs: 1000 }).catch(() => {});
 
       return result;
     },
-    [appActionAuditEnabled, conn, entities],
+    [conn, entities],
   );
 
   // ── Activity helpers ───────────────────────────────────────────────────

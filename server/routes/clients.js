@@ -10,10 +10,12 @@ import {
   toDashboardVersionMeta,
 } from '../dashboardVersions.js';
 import { mergeHaConfigPayload, parseHaConfigRow, serializeHaConnections } from '../haConfig.js';
+import { parseStoredAppActionHistory } from '../appActionHistory.js';
 
 const router = Router();
 
 const PLATFORM_ADMIN_CLIENT_ID = normalizeClientId(process.env.PLATFORM_ADMIN_CLIENT_ID || DEFAULT_CLIENT_ID) || DEFAULT_CLIENT_ID;
+const APP_ACTION_HISTORY_KEY_PREFIX = 'app_action_history::';
 const normalizeDashboardId = (value) => String(value || 'default').trim().replace(/\s+/g, '_').toLowerCase();
 const parseLimit = (value, fallback = 30) => {
   const parsed = Number.parseInt(String(value ?? ''), 10);
@@ -249,6 +251,20 @@ router.get('/overview', (req, res) => {
     ORDER BY dv.created_at DESC
     LIMIT ?
   `).all(logLimit);
+  const appActionRows = db.prepare(`
+    SELECT key, value, updated_at
+    FROM system_settings
+    WHERE key LIKE ?
+  `).all(`${APP_ACTION_HISTORY_KEY_PREFIX}%`);
+  const appActionsByClient = new Map();
+  appActionRows.forEach((row) => {
+    const key = String(row?.key || '');
+    if (!key.startsWith(APP_ACTION_HISTORY_KEY_PREFIX)) return;
+    const rawClientId = key.slice(APP_ACTION_HISTORY_KEY_PREFIX.length);
+    const clientId = normalizeClientId(rawClientId) || DEFAULT_CLIENT_ID;
+    const parsed = parseStoredAppActionHistory(row?.value || '');
+    appActionsByClient.set(clientId, Array.isArray(parsed) ? parsed : []);
+  });
 
   const clientOverview = clients.map((client) => {
     const parsedConfig = parseHaConfigRow(haConfigByClient.get(client.id));
@@ -280,6 +296,7 @@ router.get('/overview', (req, res) => {
     const dashboardCount = Number(dashboardCounts.get(client.id) || 0);
     const activeSessionCount = Number(sessionCounts.get(client.id) || 0);
     const loggedInUserCount = Number(loggedInUserCounts.get(client.id) || 0);
+    const appActionCount = Number((appActionsByClient.get(client.id) || []).length || 0);
     const sessionOverview = Array.isArray(sessionsByClient.get(client.id)) ? sessionsByClient.get(client.id) : [];
     const onlineSessionCount = sessionOverview.filter((session) => session.isOnline).length;
 
@@ -294,6 +311,7 @@ router.get('/overview', (req, res) => {
       activeSessionCount,
       onlineSessionCount,
       loggedInUserCount,
+      appActionCount,
       primaryConnectionId,
       connectionCount: connectionOverview.length,
       readyConnectionCount,
@@ -311,6 +329,7 @@ router.get('/overview', (req, res) => {
     activeSessions: acc.activeSessions + Number(client.activeSessionCount || 0),
     onlineSessions: acc.onlineSessions + Number(client.onlineSessionCount || 0),
     loggedInUsers: acc.loggedInUsers + Number(client.loggedInUserCount || 0),
+    appActions: acc.appActions + Number(client.appActionCount || 0),
     connections: acc.connections + Number(client.connectionCount || 0),
     readyConnections: acc.readyConnections + Number(client.readyConnectionCount || 0),
     issueConnections: acc.issueConnections + Number(client.issueConnectionCount || 0),
@@ -322,6 +341,7 @@ router.get('/overview', (req, res) => {
     activeSessions: 0,
     onlineSessions: 0,
     loggedInUsers: 0,
+    appActions: 0,
     connections: 0,
     readyConnections: 0,
     issueConnections: 0,
@@ -337,6 +357,21 @@ router.get('/overview', (req, res) => {
     createdBy: row.created_by || '',
     createdByUsername: row.created_by_username || '',
   }));
+  const recentAppActions = clientOverview
+    .flatMap((client) => {
+      const entries = appActionsByClient.get(client.id) || [];
+      return entries.map((entry) => ({
+        ...entry,
+        clientId: client.id,
+        clientName: client.name || client.id,
+      }));
+    })
+    .sort((a, b) => {
+      const aTs = Date.parse(String(a?.createdAt || ''));
+      const bTs = Date.parse(String(b?.createdAt || ''));
+      return (Number.isFinite(bTs) ? bTs : 0) - (Number.isFinite(aTs) ? aTs : 0);
+    })
+    .slice(0, logLimit);
 
   const instances = clientOverview.flatMap((client) => (
     (Array.isArray(client.connections) ? client.connections : []).map((connection) => ({
@@ -363,12 +398,14 @@ router.get('/overview', (req, res) => {
     totals: {
       ...totals,
       logs: recentLogs.length,
+      appActions: Number(totals.appActions || 0),
     },
     clients: clientOverview,
     sessions: allSessionOverview,
     instances,
     issues,
     recentLogs,
+    recentAppActions,
   });
 });
 
