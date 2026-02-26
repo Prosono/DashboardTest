@@ -77,6 +77,7 @@ import {
   saveGlobalBranding as saveServerGlobalBranding,
   fetchNotificationConfig as fetchServerNotificationConfig,
   saveNotificationConfig as saveServerNotificationConfig,
+  reportSessionActivity as reportServerSessionActivity,
   fetchSharedHaConfig,
   saveSharedHaConfig,
   writeStoredHaConfig,
@@ -1674,6 +1675,11 @@ function AppContent({
     label: pageDefaults[id]?.label || id,
     icon: pageDefaults[id]?.icon || LayoutGrid
   }));
+  const activePageLabel = useMemo(() => {
+    if (activePage === 'home') return t('page.home');
+    if (activePage === SUPER_ADMIN_OVERVIEW_PAGE_ID) return t('superAdminOverview.pageLabel');
+    return String(pageSettings?.[activePage]?.label || activePage || '').trim() || activePage;
+  }, [activePage, pageSettings, t]);
   const activePageIndex = visiblePageIds.indexOf(activePage);
   const previousPageId = activePageIndex > 0 ? visiblePageIds[activePageIndex - 1] : null;
   const nextPageId = activePageIndex >= 0 && activePageIndex < (visiblePageIds.length - 1)
@@ -1687,6 +1693,44 @@ function AppContent({
     if (!nextPageId) return;
     setActivePage(nextPageId);
   }, [nextPageId, setActivePage]);
+  const sessionActivityTimerRef = useRef(0);
+  const hasAnyOpenModal = Boolean(hasOpenModal?.());
+  useEffect(() => {
+    if (!currentUser?.id) return undefined;
+    const sendSessionActivity = () => {
+      const payload = {
+        pageId: activePage,
+        pageLabel: activePageLabel,
+        action: editMode ? 'editing_dashboard' : 'viewing_dashboard',
+        details: {
+          isMobile: Boolean(isMobile),
+          hasOpenModal: hasAnyOpenModal,
+          configOpen: Boolean(showConfigModal),
+          activeMediaModal: activeMediaModal ? String(activeMediaModal) : '',
+          editMode: Boolean(editMode),
+        },
+      };
+      reportServerSessionActivity(payload).catch(() => {});
+    };
+
+    sendSessionActivity();
+    sessionActivityTimerRef.current = window.setInterval(sendSessionActivity, 30_000);
+    return () => {
+      if (sessionActivityTimerRef.current) {
+        window.clearInterval(sessionActivityTimerRef.current);
+        sessionActivityTimerRef.current = 0;
+      }
+    };
+  }, [
+    currentUser?.id,
+    activePage,
+    activePageLabel,
+    editMode,
+    isMobile,
+    hasAnyOpenModal,
+    showConfigModal,
+    activeMediaModal,
+  ]);
 
   const isCardVisibleForCurrentRole = useCallback((cardId, pageId = activePage) => {
     if (editMode && canEditDashboard) return true;

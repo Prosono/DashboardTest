@@ -235,6 +235,13 @@ const ensureSessionsTable = () => {
       scope_client_id TEXT,
       is_super_admin INTEGER NOT NULL DEFAULT 0,
       session_username TEXT,
+      last_seen_at TEXT,
+      last_activity_at TEXT,
+      last_activity_path TEXT,
+      last_activity_label TEXT,
+      last_activity_data TEXT,
+      ip_address TEXT,
+      user_agent TEXT,
       FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
     )
   `);
@@ -255,10 +262,22 @@ const ensureSessionsTable = () => {
           scope_client_id TEXT,
           is_super_admin INTEGER NOT NULL DEFAULT 0,
           session_username TEXT,
+          last_seen_at TEXT,
+          last_activity_at TEXT,
+          last_activity_path TEXT,
+          last_activity_label TEXT,
+          last_activity_data TEXT,
+          ip_address TEXT,
+          user_agent TEXT,
           FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
         );
-        INSERT INTO sessions (token, user_id, expires_at, created_at, scope_client_id, is_super_admin, session_username)
-        SELECT s.token, s.user_id, s.expires_at, s.created_at, NULL, 0, NULL
+        INSERT INTO sessions (
+          token, user_id, expires_at, created_at, scope_client_id, is_super_admin, session_username,
+          last_seen_at, last_activity_at, last_activity_path, last_activity_label, last_activity_data, ip_address, user_agent
+        )
+        SELECT
+          s.token, s.user_id, s.expires_at, s.created_at, NULL, 0, NULL,
+          s.created_at, s.created_at, '', 'login', '', '', ''
         FROM sessions_old s
         WHERE EXISTS (SELECT 1 FROM users u WHERE u.id = s.user_id);
         DROP TABLE sessions_old;
@@ -277,8 +296,17 @@ const ensureSessionsTable = () => {
   if (!sessionColumns.includes('scope_client_id')) db.prepare('ALTER TABLE sessions ADD COLUMN scope_client_id TEXT').run();
   if (!sessionColumns.includes('is_super_admin')) db.prepare('ALTER TABLE sessions ADD COLUMN is_super_admin INTEGER NOT NULL DEFAULT 0').run();
   if (!sessionColumns.includes('session_username')) db.prepare('ALTER TABLE sessions ADD COLUMN session_username TEXT').run();
+  if (!sessionColumns.includes('last_seen_at')) db.prepare('ALTER TABLE sessions ADD COLUMN last_seen_at TEXT').run();
+  if (!sessionColumns.includes('last_activity_at')) db.prepare('ALTER TABLE sessions ADD COLUMN last_activity_at TEXT').run();
+  if (!sessionColumns.includes('last_activity_path')) db.prepare('ALTER TABLE sessions ADD COLUMN last_activity_path TEXT').run();
+  if (!sessionColumns.includes('last_activity_label')) db.prepare('ALTER TABLE sessions ADD COLUMN last_activity_label TEXT').run();
+  if (!sessionColumns.includes('last_activity_data')) db.prepare('ALTER TABLE sessions ADD COLUMN last_activity_data TEXT').run();
+  if (!sessionColumns.includes('ip_address')) db.prepare('ALTER TABLE sessions ADD COLUMN ip_address TEXT').run();
+  if (!sessionColumns.includes('user_agent')) db.prepare('ALTER TABLE sessions ADD COLUMN user_agent TEXT').run();
 
   db.exec('CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions(user_id)');
+  db.exec('CREATE INDEX IF NOT EXISTS idx_sessions_scope_client ON sessions(scope_client_id)');
+  db.exec('CREATE INDEX IF NOT EXISTS idx_sessions_last_seen ON sessions(last_seen_at DESC)');
 };
 
 const ensureHaConfigTable = () => {

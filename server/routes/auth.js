@@ -1,7 +1,18 @@
 import { Router } from 'express';
 import { randomUUID } from 'crypto';
 import db, { normalizeClientId, provisionClientDefaults } from '../db.js';
-import { adminRequired, authRequired, createScopedSession, createSession, deleteSession, getTokenFromRequest, safeUser } from '../auth.js';
+import {
+  adminRequired,
+  authRequired,
+  createScopedSession,
+  createSession,
+  deleteSession,
+  getClientIp,
+  getTokenFromRequest,
+  getUserAgent,
+  safeUser,
+  touchSession,
+} from '../auth.js';
 import { hashPassword, verifyPassword } from '../password.js';
 import { mergeHaConfigPayload, parseHaConfigRow, serializeHaConnections } from '../haConfig.js';
 import {
@@ -85,6 +96,11 @@ router.post('/login', (req, res) => {
       scopeClientId: SUPER_ADMIN_CLIENT_ID,
       isSuperAdmin: true,
       sessionUsername: superAdmin.username,
+      activityLabel: 'login',
+      activityPath: '/auth/login',
+      activityData: { role: 'super_admin' },
+      ipAddress: getClientIp(req),
+      userAgent: getUserAgent(req),
     });
     return res.json({
       token: session.token,
@@ -118,7 +134,13 @@ router.post('/login', (req, res) => {
     return res.status(401).json({ error: 'Invalid client ID, username or password' });
   }
 
-  const session = createSession(user.id);
+  const session = createSession(user.id, {
+    activityLabel: 'login',
+    activityPath: '/auth/login',
+    activityData: { role: user.role || 'user' },
+    ipAddress: getClientIp(req),
+    userAgent: getUserAgent(req),
+  });
   return res.json({ token: session.token, expiresAt: session.expiresAt, user: safeUser(user) });
 });
 
@@ -140,6 +162,32 @@ router.get('/me', authRequired, (req, res) => {
     safe.isPlatformAdmin = true;
   }
   return res.json({ user: safe });
+});
+
+router.post('/session/activity', authRequired, (req, res) => {
+  const pageId = String(req.body?.pageId || '').trim();
+  const pageLabel = String(req.body?.pageLabel || '').trim();
+  const action = String(req.body?.action || '').trim();
+  const details = req.body?.details && typeof req.body.details === 'object' ? req.body.details : {};
+  const activityLabel = [action, pageLabel || pageId].filter(Boolean).join(' • ').slice(0, 256);
+  const activityPath = pageId ? `/page/${pageId}` : '';
+
+  touchSession(req.auth?.token, {
+    lastSeenAt: new Date().toISOString(),
+    lastActivityAt: new Date().toISOString(),
+    activityPath,
+    activityLabel: activityLabel || 'activity',
+    activityData: {
+      pageId,
+      pageLabel,
+      action,
+      details,
+    },
+    ipAddress: getClientIp(req),
+    userAgent: getUserAgent(req),
+  });
+
+  return res.json({ success: true });
 });
 
 const saveProfile = (req, res) => {

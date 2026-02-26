@@ -173,6 +173,14 @@ export const fetchCurrentUser = async () => {
   return payload?.user || null;
 };
 
+export const reportSessionActivity = async (activity) => {
+  const payload = await apiRequest('/api/auth/session/activity', {
+    method: 'POST',
+    body: JSON.stringify(activity || {}),
+  });
+  return Boolean(payload?.success);
+};
+
 export const updateProfile = async (profile) => {
   try {
     const payload = await apiRequest('/api/auth/profile', {

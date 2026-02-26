@@ -82,6 +82,7 @@ const toMetricSnapshot = (payload) => {
       issueConnections: Number(totals.issueConnections || 0),
       dashboards: Number(totals.dashboards || 0),
       activeSessions: Number(totals.activeSessions || 0),
+      onlineSessions: Number(totals.onlineSessions || 0),
       logs: Number(totals.logs || 0),
     },
   };
@@ -258,6 +259,24 @@ export default function SuperAdminOverview({
     () => (Array.isArray(overview?.clients) ? overview.clients : []),
     [overview?.clients],
   );
+  const sessions = useMemo(() => {
+    if (Array.isArray(overview?.sessions)) return overview.sessions;
+    return clients.flatMap((client) => (Array.isArray(client?.sessions) ? client.sessions : []));
+  }, [overview?.sessions, clients]);
+  const onlineSessions = useMemo(
+    () => sessions.filter((session) => Boolean(session?.isOnline)),
+    [sessions],
+  );
+  const sortedSessions = useMemo(
+    () => sessions
+      .slice()
+      .sort((a, b) => {
+        const aTs = Date.parse(String(a?.lastActivityAt || a?.lastSeenAt || a?.createdAt || ''));
+        const bTs = Date.parse(String(b?.lastActivityAt || b?.lastSeenAt || b?.createdAt || ''));
+        return (Number.isFinite(bTs) ? bTs : 0) - (Number.isFinite(aTs) ? aTs : 0);
+      }),
+    [sessions],
+  );
   const recentLogs = useMemo(
     () => (Array.isArray(overview?.recentLogs) ? overview.recentLogs : []),
     [overview?.recentLogs],
@@ -344,6 +363,13 @@ export default function SuperAdminOverview({
       label: t('superAdminOverview.stats.activeSessions'),
       value: totals.activeSessions || 0,
       tone: 'neutral',
+    },
+    {
+      key: 'onlineSessions',
+      icon: Activity,
+      label: t('superAdminOverview.stats.onlineSessions'),
+      value: totals.onlineSessions || 0,
+      tone: Number(totals.onlineSessions || 0) > 0 ? 'good' : 'neutral',
     },
     {
       key: 'logs',
@@ -440,15 +466,23 @@ export default function SuperAdminOverview({
           }))
           .sort((a, b) => Number(b.value || 0) - Number(a.value || 0));
       case 'activeSessions':
-        return clients
-          .map((client) => ({
-            id: client.id,
-            title: client.name || client.id,
-            subtitle: `${t('superAdminOverview.client.id')}: ${client.id}`,
-            value: `${formatNumber(client.activeSessionCount || 0)}`,
-            date: client.updatedAt,
-          }))
-          .sort((a, b) => Number(b.value || 0) - Number(a.value || 0));
+        return sortedSessions.map((session) => ({
+          id: session.id || `${session.clientId}:${session.userId}:${session.lastSeenAt || ''}`,
+          title: `${session.username || '-'} / ${session.clientId || '-'}`,
+          subtitle: `${t('superAdminOverview.sessions.from')}: ${session.ipAddress || '-'} • ${session.deviceLabel || session.deviceType || '-'}`,
+          value: session.lastActivityLabel || session.lastActivityPath || t('superAdminOverview.sessions.unknownActivity'),
+          date: session.lastSeenAt || session.lastActivityAt || session.createdAt,
+        }));
+      case 'onlineSessions':
+        return sortedSessions
+          .filter((session) => Boolean(session.isOnline))
+          .map((session) => ({
+            id: session.id || `${session.clientId}:${session.userId}:${session.lastSeenAt || ''}`,
+            title: `${session.username || '-'} / ${session.clientId || '-'}`,
+            subtitle: `${t('superAdminOverview.sessions.from')}: ${session.ipAddress || '-'} • ${session.deviceLabel || session.deviceType || '-'}`,
+            value: session.lastActivityLabel || session.lastActivityPath || t('superAdminOverview.sessions.unknownActivity'),
+            date: session.lastSeenAt || session.lastActivityAt || session.createdAt,
+          }));
       case 'logs':
         return recentLogs.map((log) => ({
           id: log.id,
@@ -460,7 +494,7 @@ export default function SuperAdminOverview({
       default:
         return [];
     }
-  }, [activeKpiKey, clients, instances, issues, recentLogs, t]);
+  }, [activeKpiKey, clients, instances, issues, recentLogs, sortedSessions, t]);
 
   return (
     <div className="page-transition flex flex-col gap-4 md:gap-6 font-sans" data-disable-pull-refresh="true">
@@ -691,6 +725,79 @@ export default function SuperAdminOverview({
                 </div>
               )}
             </div>
+          </section>
+
+          <section className="popup-surface rounded-3xl p-4 md:p-5 border border-[var(--glass-border)]">
+            <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
+              <h3 className="text-xs md:text-sm font-bold uppercase tracking-[0.2em] text-[var(--text-secondary)]">
+                {t('superAdminOverview.sections.liveSessions')}
+              </h3>
+              <div className="inline-flex items-center gap-2 text-[10px] uppercase tracking-[0.16em] text-[var(--text-muted)]">
+                <span className="px-2 py-1 rounded-full border border-emerald-500/30 bg-emerald-500/10 text-emerald-300">
+                  {t('superAdminOverview.sessions.online')}: {formatNumber(onlineSessions.length)}
+                </span>
+                <span className="px-2 py-1 rounded-full border border-[var(--glass-border)] bg-[var(--glass-bg)] text-[var(--text-secondary)]">
+                  {t('superAdminOverview.client.sessions')}: {formatNumber(sortedSessions.length)}
+                </span>
+              </div>
+            </div>
+
+            {sortedSessions.length === 0 ? (
+              <p className="text-sm text-[var(--text-secondary)]">{t('superAdminOverview.sessions.empty')}</p>
+            ) : (
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-2 max-h-[52vh] overflow-y-auto custom-scrollbar pr-1">
+                {sortedSessions.map((session) => (
+                  <article
+                    key={`${session.id || session.userId}-${session.lastSeenAt || session.createdAt || ''}`}
+                    className="rounded-xl border border-[var(--glass-border)] bg-[var(--glass-bg)] px-3 py-2.5"
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <p className="text-xs font-semibold text-[var(--text-primary)] truncate">
+                          {session.username || '-'}
+                        </p>
+                        <p className="text-[10px] uppercase tracking-[0.14em] text-[var(--text-muted)] truncate">
+                          {t('superAdminOverview.client.id')}: {session.clientId || '-'}
+                        </p>
+                      </div>
+                      <span className={`px-2 py-1 rounded-full text-[10px] uppercase tracking-[0.14em] border ${
+                        session.isOnline
+                          ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30'
+                          : 'bg-amber-500/15 text-amber-300 border-amber-500/30'
+                      }`}>
+                        {session.isOnline ? t('superAdminOverview.sessions.online') : t('superAdminOverview.sessions.idle')}
+                      </span>
+                    </div>
+
+                    <div className="mt-2 grid grid-cols-2 gap-2 text-[11px]">
+                      <div className="rounded-lg border border-[var(--glass-border)] bg-[var(--card-bg)] px-2 py-1.5">
+                        <p className="text-[10px] uppercase tracking-[0.12em] text-[var(--text-muted)]">{t('superAdminOverview.sessions.ip')}</p>
+                        <p className="text-[var(--text-primary)] truncate">{session.ipAddress || '-'}</p>
+                      </div>
+                      <div className="rounded-lg border border-[var(--glass-border)] bg-[var(--card-bg)] px-2 py-1.5">
+                        <p className="text-[10px] uppercase tracking-[0.12em] text-[var(--text-muted)]">{t('superAdminOverview.sessions.device')}</p>
+                        <p className="text-[var(--text-primary)] truncate">{session.deviceLabel || session.deviceType || '-'}</p>
+                      </div>
+                    </div>
+
+                    <div className="mt-2 rounded-lg border border-[var(--glass-border)] bg-[var(--card-bg)] px-2 py-1.5">
+                      <p className="text-[10px] uppercase tracking-[0.12em] text-[var(--text-muted)]">{t('superAdminOverview.sessions.activity')}</p>
+                      <p className="text-[11px] text-[var(--text-primary)] truncate">
+                        {session.lastActivityLabel || t('superAdminOverview.sessions.unknownActivity')}
+                      </p>
+                      <p className="mt-0.5 text-[10px] uppercase tracking-[0.12em] text-[var(--text-muted)] truncate">
+                        {session.lastActivityPath || '-'}
+                      </p>
+                    </div>
+
+                    <div className="mt-2 flex items-center justify-between gap-2 text-[10px] uppercase tracking-[0.12em] text-[var(--text-muted)]">
+                      <span>{t('superAdminOverview.sessions.lastActivity')}: {formatDateTime(session.lastActivityAt, language)}</span>
+                      <span>{t('superAdminOverview.sessions.lastSeen')}: {formatDateTime(session.lastSeenAt, language)}</span>
+                    </div>
+                  </article>
+                ))}
+              </div>
+            )}
           </section>
         </>
       )}

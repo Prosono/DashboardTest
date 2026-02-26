@@ -30,6 +30,33 @@ const parseUrlHost = (value) => {
     return raw.replace(/^https?:\/\//i, '').split('/')[0] || raw;
   }
 };
+const safeParseJson = (value, fallback = null) => {
+  try {
+    if (!value) return fallback;
+    const parsed = JSON.parse(value);
+    return parsed && typeof parsed === 'object' ? parsed : fallback;
+  } catch {
+    return fallback;
+  }
+};
+const detectDeviceType = (userAgentValue) => {
+  const ua = String(userAgentValue || '').toLowerCase();
+  if (!ua) return 'unknown';
+  if (/(ipad|tablet|playbook|kindle)/.test(ua)) return 'tablet';
+  if (/(mobi|iphone|ipod|android)/.test(ua)) return 'mobile';
+  return 'desktop';
+};
+const shortUserAgent = (userAgentValue) => {
+  const raw = String(userAgentValue || '').trim();
+  if (!raw) return '';
+  if (/iphone/i.test(raw)) return 'iPhone';
+  if (/ipad/i.test(raw)) return 'iPad';
+  if (/android/i.test(raw)) return 'Android';
+  if (/windows/i.test(raw)) return 'Windows';
+  if (/mac os|macintosh/i.test(raw)) return 'macOS';
+  if (/linux/i.test(raw)) return 'Linux';
+  return raw.slice(0, 80);
+};
 const getConnectionConfigStatus = (connection) => {
   const authMethod = String(connection?.authMethod || 'oauth').trim() === 'token' ? 'token' : 'oauth';
   const url = String(connection?.url || '').trim();
@@ -145,6 +172,66 @@ router.get('/overview', (req, res) => {
     loggedInUserCountRows.map((row) => [row.client_id, Number(row.total || 0)]),
   );
 
+  const activeSessionRows = db.prepare(`
+    SELECT
+      s.token,
+      s.user_id,
+      s.scope_client_id,
+      s.is_super_admin,
+      s.session_username,
+      s.created_at,
+      s.expires_at,
+      s.last_seen_at,
+      s.last_activity_at,
+      s.last_activity_path,
+      s.last_activity_label,
+      s.last_activity_data,
+      s.ip_address,
+      s.user_agent,
+      u.client_id AS user_client_id,
+      u.username,
+      u.role
+    FROM sessions s
+    JOIN users u ON u.id = s.user_id
+    WHERE datetime(s.expires_at) > datetime('now')
+    ORDER BY COALESCE(s.last_activity_at, s.last_seen_at, s.created_at) DESC
+  `).all();
+  const onlineCutoffMs = Date.now() - (5 * 60 * 1000);
+  const sessionsByClient = new Map();
+  const allSessionOverview = activeSessionRows.map((row) => {
+    const resolvedClientId = String(row.scope_client_id || row.user_client_id || '').trim();
+    const activityData = safeParseJson(row.last_activity_data, {});
+    const lastSeenAt = row.last_seen_at || row.created_at || null;
+    const lastActivityAt = row.last_activity_at || lastSeenAt || null;
+    const lastSeenMs = Date.parse(String(lastSeenAt || ''));
+    const isOnline = Number.isFinite(lastSeenMs) ? lastSeenMs >= onlineCutoffMs : false;
+    const sessionOverview = {
+      id: String(row.token || '').slice(0, 12),
+      tokenPreview: String(row.token || '').slice(0, 12),
+      userId: row.user_id,
+      username: row.session_username || row.username || row.user_id,
+      role: Number(row.is_super_admin || 0) === 1 ? 'admin' : row.role,
+      isPlatformAdmin: Number(row.is_super_admin || 0) === 1,
+      clientId: resolvedClientId,
+      ipAddress: String(row.ip_address || '').trim(),
+      userAgent: String(row.user_agent || '').trim(),
+      deviceType: detectDeviceType(row.user_agent),
+      deviceLabel: shortUserAgent(row.user_agent),
+      createdAt: row.created_at || null,
+      expiresAt: row.expires_at || null,
+      lastSeenAt,
+      lastActivityAt,
+      lastActivityPath: String(row.last_activity_path || '').trim(),
+      lastActivityLabel: String(row.last_activity_label || '').trim(),
+      lastActivityData: activityData && typeof activityData === 'object' ? activityData : {},
+      isOnline,
+    };
+    const existing = sessionsByClient.get(resolvedClientId) || [];
+    existing.push(sessionOverview);
+    sessionsByClient.set(resolvedClientId, existing);
+    return sessionOverview;
+  });
+
   const haConfigRows = db.prepare('SELECT * FROM ha_config').all();
   const haConfigByClient = new Map(haConfigRows.map((row) => [row.client_id, row]));
 
@@ -193,6 +280,8 @@ router.get('/overview', (req, res) => {
     const dashboardCount = Number(dashboardCounts.get(client.id) || 0);
     const activeSessionCount = Number(sessionCounts.get(client.id) || 0);
     const loggedInUserCount = Number(loggedInUserCounts.get(client.id) || 0);
+    const sessionOverview = Array.isArray(sessionsByClient.get(client.id)) ? sessionsByClient.get(client.id) : [];
+    const onlineSessionCount = sessionOverview.filter((session) => session.isOnline).length;
 
     return {
       id: client.id,
@@ -203,12 +292,14 @@ router.get('/overview', (req, res) => {
       adminCount: Number(client.admin_count || 0),
       dashboardCount,
       activeSessionCount,
+      onlineSessionCount,
       loggedInUserCount,
       primaryConnectionId,
       connectionCount: connectionOverview.length,
       readyConnectionCount,
       issueConnectionCount,
       connections: connectionOverview,
+      sessions: sessionOverview,
     };
   });
 
@@ -218,6 +309,7 @@ router.get('/overview', (req, res) => {
     admins: acc.admins + Number(client.adminCount || 0),
     dashboards: acc.dashboards + Number(client.dashboardCount || 0),
     activeSessions: acc.activeSessions + Number(client.activeSessionCount || 0),
+    onlineSessions: acc.onlineSessions + Number(client.onlineSessionCount || 0),
     loggedInUsers: acc.loggedInUsers + Number(client.loggedInUserCount || 0),
     connections: acc.connections + Number(client.connectionCount || 0),
     readyConnections: acc.readyConnections + Number(client.readyConnectionCount || 0),
@@ -228,6 +320,7 @@ router.get('/overview', (req, res) => {
     admins: 0,
     dashboards: 0,
     activeSessions: 0,
+    onlineSessions: 0,
     loggedInUsers: 0,
     connections: 0,
     readyConnections: 0,
@@ -272,6 +365,7 @@ router.get('/overview', (req, res) => {
       logs: recentLogs.length,
     },
     clients: clientOverview,
+    sessions: allSessionOverview,
     instances,
     issues,
     recentLogs,
