@@ -5,6 +5,7 @@ import SparkLine from '../components/charts/SparkLine';
 
 const QUICK_WINDOWS = [6, 12, 24, 72];
 const MAX_TIMELINE_EVENTS = 200;
+const OVERLAY_COLORS = ['#60a5fa', '#a78bfa', '#f59e0b', '#34d399', '#f472b6', '#22d3ee', '#f87171'];
 
 const asArray = (value) => (Array.isArray(value) ? value : []);
 const norm = (value) => String(value ?? '').trim().toLowerCase();
@@ -129,6 +130,7 @@ export default function SaunaDebugModal({
   const [searchTerm, setSearchTerm] = useState('');
   const [historyByEntityId, setHistoryByEntityId] = useState({});
   const [selectedEntityId, setSelectedEntityId] = useState('');
+  const [overlayEntityIds, setOverlayEntityIds] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [fetchedAt, setFetchedAt] = useState(null);
@@ -274,6 +276,33 @@ export default function SaunaDebugModal({
   }, [filteredSummaries, selectedEntityId]);
 
   const selectedSummary = filteredSummaries.find((summary) => summary.entityId === selectedEntityId) || null;
+  const overlayCandidates = useMemo(() => {
+    return summaries.filter((summary) => (
+      summary.entityId !== selectedEntityId
+      && summary.chartVariant === 'line'
+      && summary.sparkData.length > 1
+    ));
+  }, [summaries, selectedEntityId]);
+  const overlaySeries = useMemo(() => {
+    if (!selectedSummary || selectedSummary.chartVariant !== 'line') return [];
+    return overlayEntityIds
+      .map((entityId, index) => {
+        const summary = summaries.find((item) => item.entityId === entityId);
+        if (!summary || summary.chartVariant !== 'line' || summary.sparkData.length < 2) return null;
+        return {
+          id: `overlay-${summary.entityId}`,
+          label: summary.name,
+          color: OVERLAY_COLORS[index % OVERLAY_COLORS.length],
+          strokeWidth: 1.05,
+          data: summary.sparkData,
+        };
+      })
+      .filter(Boolean);
+  }, [overlayEntityIds, summaries, selectedSummary]);
+
+  useEffect(() => {
+    setOverlayEntityIds((prev) => prev.filter((entityId) => overlayCandidates.some((candidate) => candidate.entityId === entityId)));
+  }, [overlayCandidates]);
 
   const summaryStats = useMemo(() => {
     const totalEvents = summaries.reduce((sum, summary) => sum + summary.eventCount, 0);
@@ -517,12 +546,62 @@ export default function SaunaDebugModal({
                     </p>
                     <p className="text-[11px] text-[var(--text-secondary)]">{windowLabel}</p>
                   </div>
+                  {selectedSummary.chartVariant === 'line' && (
+                    <div className="mb-2 space-y-2">
+                      <div className="text-[10px] uppercase tracking-widest text-[var(--text-secondary)]">
+                        {tr('sauna.debugOverlay', 'Overlay entities')}
+                      </div>
+                      <div className="flex flex-wrap gap-1.5">
+                        {overlayCandidates.map((candidate) => {
+                          const active = overlayEntityIds.includes(candidate.entityId);
+                          return (
+                            <button
+                              key={candidate.entityId}
+                              type="button"
+                              onClick={() => {
+                                setOverlayEntityIds((prev) => {
+                                  if (prev.includes(candidate.entityId)) {
+                                    return prev.filter((id) => id !== candidate.entityId);
+                                  }
+                                  return [...prev, candidate.entityId].slice(0, 5);
+                                });
+                              }}
+                              className={`px-2 py-1 rounded-full border text-[10px] transition ${
+                                active
+                                  ? 'bg-blue-500/20 border-blue-400/40 text-blue-200'
+                                  : 'bg-[var(--card-bg)] border-[var(--glass-border)] text-[var(--text-secondary)]'
+                              }`}
+                            >
+                              {candidate.name}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
                   <SparkLine
                     data={selectedSummary.sparkData}
                     currentIndex={Math.max(0, selectedSummary.sparkData.length - 1)}
                     height={100}
                     variant={selectedSummary.chartVariant}
+                    lineStrokeWidth={1.15}
+                    overlaySeries={overlaySeries}
+                    includeOverlayInRange
+                    useTimeScale
                   />
+                  {overlaySeries.length > 0 && (
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      {overlaySeries.map((series) => (
+                        <span
+                          key={series.id}
+                          className="inline-flex items-center gap-1.5 px-2 py-1 rounded-full border text-[10px] border-[var(--glass-border)] text-[var(--text-secondary)]"
+                        >
+                          <span className="w-2 h-2 rounded-full" style={{ backgroundColor: series.color }} />
+                          {series.label}
+                        </span>
+                      ))}
+                    </div>
+                  )}
                 </div>
 
                 <div className="rounded-2xl border border-[var(--glass-border)] bg-[var(--glass-bg)] p-4">

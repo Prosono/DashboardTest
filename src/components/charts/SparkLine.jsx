@@ -23,6 +23,14 @@ const createBezierPath = (points, smoothing = 0.3) => {
   }, '');
 };
 
+const parseTimeMs = (value) => {
+  if (!value) return NaN;
+  if (value instanceof Date) return value.getTime();
+  if (typeof value === 'number') return value < 1e12 ? value * 1000 : value;
+  const parsed = Date.parse(String(value));
+  return Number.isFinite(parsed) ? parsed : NaN;
+};
+
 export default function SparkLine({
   data,
   currentIndex,
@@ -33,6 +41,10 @@ export default function SparkLine({
   variant = 'line',
   barColorAccessor,
   barMaxHeightRatio = 1,
+  lineStrokeWidth = 2.5,
+  overlaySeries = [],
+  includeOverlayInRange = false,
+  useTimeScale = false,
 }) {
   if (!data || data.length === 0) return null;
   
@@ -43,8 +55,33 @@ export default function SparkLine({
   const maskId = `cardMask-${idSuffix}`;
 
   const values = data.map(d => d.value);
-  let min = Number.isFinite(minValue) ? Number(minValue) : Math.min(...values);
-  let max = Number.isFinite(maxValue) ? Number(maxValue) : Math.max(...values);
+  const normalizedOverlays = Array.isArray(overlaySeries)
+    ? overlaySeries
+      .map((series, index) => {
+        const seriesData = Array.isArray(series?.data)
+          ? series.data.filter((point) => Number.isFinite(Number(point?.value)))
+          : [];
+        if (!seriesData.length) return null;
+        return {
+          id: series.id || `overlay-${index}`,
+          label: series.label || '',
+          color: series.color || '#93c5fd',
+          strokeWidth: Number.isFinite(Number(series.strokeWidth))
+            ? Number(series.strokeWidth)
+            : Math.max(1, lineStrokeWidth - 0.2),
+          data: seriesData.map((point) => ({ ...point, value: Number(point.value) })),
+        };
+      })
+      .filter(Boolean)
+    : [];
+  const overlayValues = includeOverlayInRange
+    ? normalizedOverlays.flatMap((series) => series.data.map((point) => point.value))
+    : [];
+  const valuesForRange = includeOverlayInRange && overlayValues.length
+    ? [...values, ...overlayValues]
+    : values;
+  let min = Number.isFinite(minValue) ? Number(minValue) : Math.min(...valuesForRange);
+  let max = Number.isFinite(maxValue) ? Number(maxValue) : Math.max(...valuesForRange);
   if (max < min) {
     const tmp = max;
     max = min;
@@ -59,13 +96,41 @@ export default function SparkLine({
   const safeCurrentIndex = Number.isFinite(Number(currentIndex))
     ? Math.max(0, Math.min(values.length - 1, Number(currentIndex)))
     : Math.max(0, values.length - 1);
-  const points = values.map((v, i) => [
-    values.length === 1 ? width / 2 : (i / (values.length - 1)) * width,
-    height - ((v - min) / range) * height
+  const allPointsForTime = useTimeScale
+    ? [
+      ...data,
+      ...normalizedOverlays.flatMap((series) => series.data),
+    ]
+    : [];
+  const allTimeMs = useTimeScale
+    ? allPointsForTime
+      .map((point) => parseTimeMs(point?.time))
+      .filter((value) => Number.isFinite(value))
+    : [];
+  const startMs = allTimeMs.length ? Math.min(...allTimeMs) : NaN;
+  const endMs = allTimeMs.length ? Math.max(...allTimeMs) : NaN;
+  const hasTimeScale = useTimeScale && Number.isFinite(startMs) && Number.isFinite(endMs) && endMs > startMs;
+
+  const getXByPoint = (point, index, count) => {
+    if (hasTimeScale) {
+      const ms = parseTimeMs(point?.time);
+      if (Number.isFinite(ms)) {
+        const ratio = Math.max(0, Math.min(1, (ms - startMs) / (endMs - startMs)));
+        return ratio * width;
+      }
+    }
+    if (count <= 1) return width / 2;
+    return (index / (count - 1)) * width;
+  };
+  const toPointArray = (series) => series.map((point, index) => [
+    getXByPoint(point, index, series.length),
+    height - (((Number(point.value) - min) / range) * height),
   ]);
 
-  const pathData = useMemo(() => createBezierPath(points, 0.3), [data]);
-  const areaData = useMemo(() => `${pathData} L ${width},${height} L 0,${height} Z`, [pathData]);
+  const points = toPointArray(data);
+
+  const pathData = useMemo(() => createBezierPath(points, 0.3), [points]);
+  const areaData = useMemo(() => `${pathData} L ${width},${height} L 0,${height} Z`, [pathData, height]);
   const currentPoint = points[safeCurrentIndex] || points[0];
   const useBars = String(variant || '').toLowerCase() === 'bar';
   const barWidth = values.length <= 1
@@ -155,7 +220,25 @@ export default function SparkLine({
             <path d={areaData} fill={`url(#${areaId})`} mask={`url(#${maskId}-use)`} />
 
             {/* Bezier line with gradient */}
-            <path d={pathData} fill="none" stroke={`url(#${lineId})`} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+            <path d={pathData} fill="none" stroke={`url(#${lineId})`} strokeWidth={lineStrokeWidth} strokeLinecap="round" strokeLinejoin="round" />
+
+            {normalizedOverlays.map((series) => {
+              const overlayPoints = toPointArray(series.data);
+              if (!overlayPoints.length) return null;
+              const overlayPath = createBezierPath(overlayPoints, 0.25);
+              return (
+                <path
+                  key={series.id}
+                  d={overlayPath}
+                  fill="none"
+                  stroke={series.color}
+                  strokeWidth={series.strokeWidth}
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  opacity="0.85"
+                />
+              );
+            })}
 
             {/* Current point marker */}
             <circle cx={currentPoint[0]} cy={currentPoint[1]} r="3.5" fill={getDotColor(values[safeCurrentIndex])} className="animate-pulse" />
