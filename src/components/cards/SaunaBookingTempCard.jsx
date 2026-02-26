@@ -23,6 +23,7 @@ const SCORE_MISS_PENALTY = 10;
 const SCORE_HITRATE_WEIGHT = 0.25;
 const SCORE_TREND_WINDOW = 3;
 const HOURLY_SAMPLE_MINUTE = 1;
+const HOURLY_SAMPLE_LAST_MINUTE = 59;
 
 const calcScoreFromDeviationPct = (deviationPct, options = {}) => {
   const { hit = null, missPenalty = SCORE_MISS_PENALTY } = options;
@@ -319,7 +320,10 @@ export default function SaunaBookingTempCard({
 
     const maybeCaptureHourlySnapshot = () => {
       const now = new Date();
-      if (now.getMinutes() !== HOURLY_SAMPLE_MINUTE) return;
+      const minute = now.getMinutes();
+      // Capture once per hour after :01. This avoids missed samples when browsers
+      // throttle timers in background/mobile and still keeps the logged hour fixed.
+      if (minute < HOURLY_SAMPLE_MINUTE || minute > HOURLY_SAMPLE_LAST_MINUTE) return;
       if (!bookingActive || currentTemp === null) return;
       if (serviceEntityId && serviceActive) return;
 
