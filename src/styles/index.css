@@ -37,18 +37,30 @@ html::after {
   left: 0;
   right: 0;
   pointer-events: none;
-  background: var(--safe-area-bg);
+  backdrop-filter: blur(6px);
   z-index: 2;
 }
 
 html::before {
   top: 0;
-  height: max(var(--safe-area-top), var(--safe-area-top-fallback, 0px));
+  height: calc(max(var(--safe-area-top), var(--safe-area-top-fallback, 0px)) + 14px);
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--safe-area-bg) 86%, transparent) 0%,
+    color-mix(in srgb, var(--safe-area-bg) 54%, transparent) 58%,
+    transparent 100%
+  );
 }
 
 html::after {
   bottom: 0;
-  height: max(var(--safe-area-bottom), var(--safe-area-bottom-fallback, 0px));
+  height: calc(max(var(--safe-area-bottom), var(--safe-area-bottom-fallback, 0px)) + 14px);
+  background: linear-gradient(
+    0deg,
+    color-mix(in srgb, var(--safe-area-bg) 86%, transparent) 0%,
+    color-mix(in srgb, var(--safe-area-bg) 54%, transparent) 58%,
+    transparent 100%
+  );
 }
 
 body {

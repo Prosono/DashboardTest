@@ -1989,9 +1989,9 @@ function AppContent({
     <div
       className="font-sans selection:bg-blue-500/30 transition-colors duration-500"
       style={{
-        minHeight: `calc(100svh - ${safeAreaTop} - ${safeAreaBottom})`,
-        paddingTop: safeAreaTop,
-        paddingBottom: safeAreaBottom,
+        minHeight: '100svh',
+        paddingTop: isMobile ? 0 : safeAreaTop,
+        paddingBottom: isMobile ? 0 : safeAreaBottom,
         backgroundColor: 'var(--bg-primary)',
         color: 'var(--text-primary)',
       }}
@@ -2077,7 +2077,7 @@ function AppContent({
 
       <div
         className={`relative z-10 w-full max-w-[1600px] mx-auto py-6 md:py-10 ${
-          isMobile ? 'px-5 mobile-grid' : (gridColCount === 1 ? 'px-10 sm:px-16 md:px-24' : 'px-6 md:px-20')
+          isMobile ? 'py-3 px-5 mobile-grid' : (gridColCount === 1 ? 'px-10 sm:px-16 md:px-24' : 'px-6 md:px-20')
         } ${isCompactCards ? 'compact-cards' : ''}`}
       >
         <Header

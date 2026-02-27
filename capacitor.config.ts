@@ -16,6 +16,13 @@ const config: CapacitorConfig = {
     contentInset: 'never',
     scrollEnabled: true,
   },
+  plugins: {
+    StatusBar: {
+      overlaysWebView: true,
+      backgroundColor: '#00000000',
+      style: 'DEFAULT',
+    },
+  },
   android: {
     allowMixedContent: false,
   },

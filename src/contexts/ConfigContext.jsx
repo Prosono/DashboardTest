@@ -128,9 +128,13 @@ export const ConfigProvider = ({ children }) => {
   useEffect(() => {
     const root = document.documentElement;
     const platform = detectPlatform();
+    const isNative = typeof Capacitor?.isNativePlatform === 'function'
+      ? Capacitor.isNativePlatform()
+      : false;
+    const useIosFallbackInsets = platform === 'ios' && !isNative;
     root.dataset.platform = platform;
-    root.style.setProperty('--safe-area-top-fallback', platform === 'ios' ? '44px' : '0px');
-    root.style.setProperty('--safe-area-bottom-fallback', platform === 'ios' ? '20px' : '0px');
+    root.style.setProperty('--safe-area-top-fallback', useIosFallbackInsets ? '44px' : '0px');
+    root.style.setProperty('--safe-area-bottom-fallback', useIosFallbackInsets ? '20px' : '0px');
   }, []);
 
   // Apply theme to DOM
