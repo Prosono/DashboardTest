@@ -2040,6 +2040,21 @@ function AppContent({
         />
       )}
 
+      {isMobile && navStickyOnScrollDown && (
+        <div
+          className="fixed left-0 right-0 pointer-events-none z-[24]"
+          style={{
+            top: 0,
+            height: `${Math.max(0, navPinTopPx + 6)}px`,
+            backdropFilter: 'blur(12px) saturate(120%)',
+            WebkitBackdropFilter: 'blur(12px) saturate(120%)',
+            background: isLightTheme
+              ? 'linear-gradient(to bottom, rgba(248, 250, 252, 0.42) 0%, rgba(248, 250, 252, 0.3) 68%, rgba(248, 250, 252, 0.08) 100%)'
+              : 'linear-gradient(to bottom, rgba(2, 6, 23, 0.44) 0%, rgba(2, 6, 23, 0.32) 68%, rgba(2, 6, 23, 0.1) 100%)',
+          }}
+        />
+      )}
+
       {pullRefreshVisible && (
         <div
           className="fixed pointer-events-none z-30 transition-all duration-150"
