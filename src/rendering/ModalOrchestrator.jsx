@@ -78,7 +78,7 @@ function PopupCardFitFrame({
     const nextScale = Math.min(1, viewportWidth / rawWidth, viewportHeight / rawHeight);
     const boundedScale = Number.isFinite(nextScale) ? Math.max(scaleFloor, nextScale) : 1;
     setScale((prev) => (Math.abs(prev - boundedScale) > 0.005 ? boundedScale : prev));
-    setScaledHeight(rawHeight * boundedScale);
+    setScaledHeight((rawHeight * boundedScale) + 2);
   }, [fitToViewport, scaleFloor]);
 
   useEffect(() => {
@@ -286,17 +286,6 @@ export default function ModalOrchestrator({
     onLogout,
     userAdminApi,
   } = cardConfig;
-  const [popupCardFlyInActive, setPopupCardFlyInActive] = useState(false);
-
-  useEffect(() => {
-    if (!showPopupCardModal) {
-      setPopupCardFlyInActive(false);
-      return undefined;
-    }
-    setPopupCardFlyInActive(false);
-    const raf = requestAnimationFrame(() => setPopupCardFlyInActive(true));
-    return () => cancelAnimationFrame(raf);
-  }, [showPopupCardModal]);
 
   // ── Edit modal props (computed here, not passed from App) ──────────────
   const resolveCarSettings = (_cardId, settings = {}) => settings;
@@ -927,13 +916,6 @@ export default function ModalOrchestrator({
           || targetCardId;
         const isSaunaPopupCard = targetCardId.startsWith('sauna_card_');
         const isMobileSaunaPopup = popupIsMobile && isSaunaPopupCard;
-        const popupPanelMotionStyle = {
-          opacity: popupCardFlyInActive ? 1 : 0,
-          transform: popupCardFlyInActive
-            ? 'translate3d(0, 0, 0) scale(1)'
-            : 'translate3d(0, 72px, 0) scale(0.92)',
-          transition: 'transform 360ms cubic-bezier(0.16, 1, 0.3, 1), opacity 260ms ease-out',
-        };
         const popupOverlayClass = `fixed inset-0 z-[140] flex justify-center popup-card-backdrop-enter ${
           isMobileSaunaPopup
             ? 'items-start'
@@ -951,7 +933,7 @@ export default function ModalOrchestrator({
           width: isMobileSaunaPopup ? 'calc(100vw - 2px)' : undefined,
           maxWidth: isMobileSaunaPopup ? 'none' : undefined,
           maxHeight: isMobileSaunaPopup
-            ? 'calc(100dvh - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px) - 40px)'
+            ? 'calc(100dvh - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px) - 24px)'
             : undefined,
         };
 
@@ -963,12 +945,12 @@ export default function ModalOrchestrator({
             data-disable-pull-refresh="true"
           >
             <div
-              className={`w-full rounded-3xl border overflow-hidden flex flex-col ${
+              className={`w-full rounded-3xl border overflow-hidden flex flex-col popup-card-panel-enter ${
                 isSaunaPopupCard
                   ? `${isMobileSaunaPopup ? 'p-1' : 'max-w-6xl max-h-[95dvh] p-2 sm:p-3'}`
                   : 'max-w-6xl max-h-[92vh] p-3 sm:p-4'
               }`}
-              style={{ ...popupPanelStyle, ...popupPanelMotionStyle }}
+              style={popupPanelStyle}
               onClick={(event) => event.stopPropagation()}
               data-disable-pull-refresh="true"
             >
@@ -991,9 +973,9 @@ export default function ModalOrchestrator({
               <PopupCardFitFrame
                 fitToViewport={isSaunaPopupCard}
                 isMobile={isMobileSaunaPopup}
-                liftPx={isMobileSaunaPopup ? 4 : 0}
-                viewportHeightOffsetPx={isMobileSaunaPopup ? 86 : 68}
-                scaleFloor={isMobileSaunaPopup ? 0.86 : 0.45}
+                liftPx={0}
+                viewportHeightOffsetPx={isMobileSaunaPopup ? 62 : 68}
+                scaleFloor={isMobileSaunaPopup ? 0.52 : 0.45}
               >
                 {popupCard || (
                   <div className="rounded-2xl border border-[var(--glass-border)] bg-[var(--glass-bg)] p-5 text-sm text-[var(--text-secondary)]">
