@@ -408,25 +408,59 @@ export default function SaunaDebugModal({
   return (
     <div
       className={`fixed inset-0 z-[155] flex ${isMobile ? 'items-stretch justify-stretch p-0' : 'items-center justify-center p-3 sm:p-6'}`}
-      style={{ backdropFilter: 'blur(16px)', backgroundColor: 'rgba(0, 0, 0, 0.45)' }}
+      style={{ backdropFilter: 'blur(16px)', backgroundColor: isMobile ? 'rgba(2, 8, 20, 0.3)' : 'rgba(0, 0, 0, 0.45)' }}
       onClick={onClose}
       data-disable-pull-refresh="true"
     >
+      {isMobile && (
+        <>
+          <div
+            className="pointer-events-none absolute inset-x-0 top-0 z-[1]"
+            style={{
+              height: 'calc(env(safe-area-inset-top, 0px) + 24px)',
+              background: 'linear-gradient(180deg, rgba(15, 23, 42, 0.44) 0%, rgba(15, 23, 42, 0.18) 65%, rgba(15, 23, 42, 0) 100%)',
+            }}
+          />
+          <div
+            className="pointer-events-none absolute inset-x-0 bottom-0 z-[1]"
+            style={{
+              height: 'calc(env(safe-area-inset-bottom, 0px) + 24px)',
+              background: 'linear-gradient(0deg, rgba(15, 23, 42, 0.44) 0%, rgba(15, 23, 42, 0.18) 65%, rgba(15, 23, 42, 0) 100%)',
+            }}
+          />
+        </>
+      )}
+
+      {isMobile && (
+        <button
+          type="button"
+          onClick={onClose}
+          className="absolute right-3 z-[30] modal-close"
+          style={{ top: 'calc(env(safe-area-inset-top, 0px) + 8px)' }}
+          aria-label={tr('common.close', 'Close')}
+        >
+          <X className="w-4 h-4" />
+        </button>
+      )}
+
       <div
         className={`w-full overflow-hidden popup-anim ${
           isMobile
-            ? 'h-[100dvh] max-h-[100dvh] rounded-none border-0'
+            ? 'h-[100dvh] max-h-[100dvh] rounded-none border-0 flex flex-col'
             : 'max-w-7xl max-h-[94vh] rounded-3xl border'
         }`}
         style={{
-          background: 'linear-gradient(135deg, var(--card-bg) 0%, var(--modal-bg) 100%)',
+          background: isMobile ? 'transparent' : 'linear-gradient(135deg, var(--card-bg) 0%, var(--modal-bg) 100%)',
           borderColor: 'var(--glass-border)',
           color: 'var(--text-primary)',
         }}
         onClick={(event) => event.stopPropagation()}
         data-disable-pull-refresh="true"
       >
-        <div className="p-4 sm:p-5 border-b border-[var(--glass-border)] space-y-3">
+        <div
+          className="p-4 sm:p-5 border-b border-[var(--glass-border)] space-y-3"
+          style={isMobile ? { paddingTop: 'calc(env(safe-area-inset-top, 0px) + 12px)' } : undefined}
+        >
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0">
               <p className="text-[10px] uppercase tracking-[0.24em] font-bold text-[var(--text-secondary)] truncate">
@@ -439,7 +473,7 @@ export default function SaunaDebugModal({
                 {windowLabel}
               </p>
             </div>
-            <button type="button" onClick={onClose} className="modal-close" aria-label={tr('common.close', 'Close')}>
+            <button type="button" onClick={onClose} className={`modal-close ${isMobile ? 'hidden' : ''}`} aria-label={tr('common.close', 'Close')}>
               <X className="w-4 h-4" />
             </button>
           </div>
@@ -539,7 +573,7 @@ export default function SaunaDebugModal({
         <div
           className={`overflow-hidden ${
             isMobile
-              ? 'h-[calc(100dvh-246px)] min-h-[340px] flex flex-col'
+              ? 'flex-1 min-h-0 flex flex-col'
               : 'h-[calc(94vh-250px)] min-h-[360px] grid lg:grid-cols-[320px_1fr]'
           }`}
           data-disable-pull-refresh="true"
