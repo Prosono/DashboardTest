@@ -1287,29 +1287,67 @@ function AppContent({
       : notificationCounts.warning > 0
         ? 'warning'
         : 'info';
-    const tone = severity === 'critical'
-      ? {
+    const tone = (() => {
+      if (isLightTheme) {
+        if (severity === 'critical') {
+          return {
+            bg: 'rgba(255, 228, 230, 0.95)',
+            border: 'rgba(244, 63, 94, 0.4)',
+            iconBg: 'rgba(254, 205, 211, 0.95)',
+            iconColor: 'text-rose-700',
+            labelColor: 'text-rose-800',
+            sublabelColor: 'text-rose-700',
+          };
+        }
+        if (severity === 'warning') {
+          return {
+            bg: 'rgba(255, 243, 199, 0.95)',
+            border: 'rgba(245, 158, 11, 0.42)',
+            iconBg: 'rgba(254, 215, 170, 0.95)',
+            iconColor: 'text-amber-700',
+            labelColor: 'text-amber-800',
+            sublabelColor: 'text-amber-700',
+          };
+        }
+        return {
+          bg: 'rgba(219, 234, 254, 0.94)',
+          border: 'rgba(59, 130, 246, 0.38)',
+          iconBg: 'rgba(191, 219, 254, 0.95)',
+          iconColor: 'text-blue-700',
+          labelColor: 'text-blue-800',
+          sublabelColor: 'text-blue-700',
+        };
+      }
+
+      if (severity === 'critical') {
+        return {
           bg: 'rgba(190, 24, 93, 0.12)',
+          border: 'rgba(244, 63, 94, 0.35)',
           iconBg: 'rgba(190, 24, 93, 0.2)',
           iconColor: 'text-rose-300',
           labelColor: 'text-rose-200',
           sublabelColor: 'text-rose-100',
-        }
-      : severity === 'warning'
-        ? {
-            bg: 'rgba(245, 158, 11, 0.12)',
-            iconBg: 'rgba(245, 158, 11, 0.2)',
-            iconColor: 'text-amber-300',
-            labelColor: 'text-amber-200',
-            sublabelColor: 'text-amber-100',
-          }
-        : {
-            bg: 'rgba(59, 130, 246, 0.12)',
-            iconBg: 'rgba(59, 130, 246, 0.2)',
-            iconColor: 'text-blue-300',
-            labelColor: 'text-blue-200',
-            sublabelColor: 'text-blue-100',
-          };
+        };
+      }
+      if (severity === 'warning') {
+        return {
+          bg: 'rgba(245, 158, 11, 0.12)',
+          border: 'rgba(245, 158, 11, 0.35)',
+          iconBg: 'rgba(245, 158, 11, 0.2)',
+          iconColor: 'text-amber-300',
+          labelColor: 'text-amber-200',
+          sublabelColor: 'text-amber-100',
+        };
+      }
+      return {
+        bg: 'rgba(59, 130, 246, 0.12)',
+        border: 'rgba(59, 130, 246, 0.3)',
+        iconBg: 'rgba(59, 130, 246, 0.2)',
+        iconColor: 'text-blue-300',
+        labelColor: 'text-blue-200',
+        sublabelColor: 'text-blue-100',
+      };
+    })();
 
     const handleClick = () => {
       if (mobileNotificationTimelinePill.clickable === false) return;
@@ -1324,8 +1362,8 @@ function AppContent({
       <button
         type="button"
         onClick={handleClick}
-        className="relative inline-flex items-center gap-1.5 px-2.5 py-1 rounded-2xl transition-all active:scale-[0.98]"
-        style={{ backgroundColor: tone.bg }}
+        className="relative inline-flex items-center gap-1.5 px-2.5 py-1 rounded-2xl border transition-all active:scale-[0.98]"
+        style={{ backgroundColor: tone.bg, borderColor: tone.border }}
         title={label}
       >
         <span className={`p-1 rounded-lg ${tone.iconColor}`} style={{ backgroundColor: tone.iconBg }}>
@@ -1335,7 +1373,7 @@ function AppContent({
           <span className={`text-[10px] uppercase font-bold ${tone.labelColor}`}>
             {label}
           </span>
-          <span className={`text-[10px] uppercase tracking-widest italic ${tone.sublabelColor}`}>
+          <span className={`text-[10px] uppercase tracking-[0.12em] ${isLightTheme ? 'font-semibold' : 'italic'} ${tone.sublabelColor}`}>
             {summary}
           </span>
         </span>
