@@ -54,6 +54,10 @@ html::before {
   mask-image: linear-gradient(180deg, #000 0%, rgba(0, 0, 0, 0.65) 72%, transparent 100%);
 }
 
+html.mobile-sticky-nav-single-blur::before {
+  opacity: 0;
+}
+
 html::after {
   display: none;
 }
