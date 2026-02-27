@@ -2031,11 +2031,11 @@ function AppContent({
           className="fixed left-0 right-0 pointer-events-none z-20 transition-opacity duration-200"
           style={{
             top: 0,
-            height: `calc(${safeAreaTop} + 40px)`,
+            height: safeAreaTop,
             opacity: mobileTopFadeActive ? 1 : 0,
             background: isLightTheme
-              ? 'linear-gradient(to bottom, rgba(248, 250, 252, 0.94) 0%, rgba(248, 250, 252, 0.76) 50%, rgba(248, 250, 252, 0) 100%)'
-              : 'linear-gradient(to bottom, rgba(2, 6, 23, 0.9) 0%, rgba(2, 6, 23, 0.62) 50%, rgba(2, 6, 23, 0) 100%)',
+              ? 'linear-gradient(to bottom, rgba(248, 250, 252, 0.36) 0%, rgba(248, 250, 252, 0.2) 58%, rgba(248, 250, 252, 0) 100%)'
+              : 'linear-gradient(to bottom, rgba(2, 6, 23, 0.34) 0%, rgba(2, 6, 23, 0.18) 58%, rgba(2, 6, 23, 0) 100%)',
           }}
         />
       )}
