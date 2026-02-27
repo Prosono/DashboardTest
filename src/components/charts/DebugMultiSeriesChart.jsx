@@ -180,7 +180,10 @@ export default function DebugMultiSeriesChart({
   const updateCursorFromPointer = (event) => {
     if (!svgRef.current || !timeBounds) return;
     const rect = svgRef.current.getBoundingClientRect();
-    const x = clamp(event.clientX - rect.left, padLeft, padLeft + innerWidth);
+    const clientX = Number.isFinite(event?.clientX) ? event.clientX : 0;
+    const cssX = clamp(clientX - rect.left, 0, rect.width);
+    const viewBoxX = rect.width > 0 ? (cssX / rect.width) * width : padLeft;
+    const x = clamp(viewBoxX, padLeft, padLeft + innerWidth);
     const ratio = (x - padLeft) / (innerWidth || 1);
     const ms = timeBounds.startMs + (ratio * (timeBounds.endMs - timeBounds.startMs));
     setCursorMs(ms);
@@ -198,6 +201,7 @@ export default function DebugMultiSeriesChart({
     <div className="w-full">
       <div
         className="relative w-full"
+        style={{ touchAction: 'none' }}
         onPointerDown={(event) => {
           event.currentTarget.setPointerCapture?.(event.pointerId);
           updateCursorFromPointer(event);

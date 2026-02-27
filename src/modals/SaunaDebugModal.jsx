@@ -547,7 +547,11 @@ export default function SaunaDebugModal({
           <div
             className={`overflow-y-auto custom-scrollbar ${
               isMobile
-                ? `${showEntityPicker ? 'block' : 'hidden'} border-b border-[var(--glass-border)] p-3 space-y-2.5 max-h-[40dvh]`
+                ? `space-y-2.5 border-b border-[var(--glass-border)] transition-all duration-300 ease-out overflow-hidden ${
+                  showEntityPicker
+                    ? 'max-h-[40dvh] opacity-100 translate-y-0 p-3'
+                    : 'max-h-0 opacity-0 -translate-y-2 p-0 border-b-0 pointer-events-none'
+                }`
                 : 'border-r border-[var(--glass-border)] p-4 space-y-3'
             }`}
           >
