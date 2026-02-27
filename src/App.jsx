@@ -2248,7 +2248,8 @@ function AppContent({
                   width: `${navPinnedMetrics.width}px`,
                   borderRadius: isMobile ? '1rem' : '1.2rem',
                   backgroundColor: 'color-mix(in srgb, var(--card-bg) 88%, transparent)',
-                  backdropFilter: isMobile ? 'none' : 'blur(10px)',
+                  backdropFilter: isMobile ? 'blur(10px)' : 'blur(10px)',
+                  WebkitBackdropFilter: isMobile ? 'blur(10px)' : 'blur(10px)',
                   padding: isMobile ? '0.3rem 0.4rem 0.2rem' : '0.35rem 0.6rem',
                 }
                 : {}),
