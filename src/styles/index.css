@@ -37,30 +37,36 @@ html::after {
   left: 0;
   right: 0;
   pointer-events: none;
-  backdrop-filter: blur(6px);
+  backdrop-filter: blur(14px) saturate(120%);
   z-index: 2;
 }
 
 html::before {
   top: 0;
-  height: calc(max(var(--safe-area-top), var(--safe-area-top-fallback, 0px)) + 14px);
+  height: calc(max(var(--safe-area-top), var(--safe-area-top-fallback, 0px)) + 72px);
   background: linear-gradient(
     180deg,
-    color-mix(in srgb, var(--safe-area-bg) 86%, transparent) 0%,
-    color-mix(in srgb, var(--safe-area-bg) 54%, transparent) 58%,
+    color-mix(in srgb, var(--safe-area-bg) 42%, transparent) 0%,
+    color-mix(in srgb, var(--safe-area-bg) 30%, transparent) 24%,
+    color-mix(in srgb, var(--safe-area-bg) 14%, transparent) 62%,
     transparent 100%
   );
+  -webkit-mask-image: linear-gradient(180deg, #000 0%, #000 74%, transparent 100%);
+  mask-image: linear-gradient(180deg, #000 0%, #000 74%, transparent 100%);
 }
 
 html::after {
   bottom: 0;
-  height: calc(max(var(--safe-area-bottom), var(--safe-area-bottom-fallback, 0px)) + 14px);
+  height: calc(max(var(--safe-area-bottom), var(--safe-area-bottom-fallback, 0px)) + 72px);
   background: linear-gradient(
     0deg,
-    color-mix(in srgb, var(--safe-area-bg) 86%, transparent) 0%,
-    color-mix(in srgb, var(--safe-area-bg) 54%, transparent) 58%,
+    color-mix(in srgb, var(--safe-area-bg) 42%, transparent) 0%,
+    color-mix(in srgb, var(--safe-area-bg) 30%, transparent) 24%,
+    color-mix(in srgb, var(--safe-area-bg) 14%, transparent) 62%,
     transparent 100%
   );
+  -webkit-mask-image: linear-gradient(0deg, #000 0%, #000 74%, transparent 100%);
+  mask-image: linear-gradient(0deg, #000 0%, #000 74%, transparent 100%);
 }
 
 body {

@@ -24,7 +24,8 @@ export default function Header({
   children,
   isMobile,
   sectionSpacing,
-  currentTheme
+  currentTheme,
+  showLogoInMobileHeader = true,
 }) {
   const headerBottom = Number.isFinite(sectionSpacing?.statusToNav)
     ? sectionSpacing.statusToNav
@@ -47,7 +48,7 @@ export default function Header({
     resolveLogoUrl(logoSource),
     headerSettings?.logoUpdatedAt,
   );
-  const hasLogo = Boolean(logoUrl);
+  const hasLogo = Boolean(logoUrl) && (!isMobile || showLogoInMobileHeader);
   const mobileTitleLength = String(headerTitle || '').trim().length;
   const mobileFontSize = mobileTitleLength > 16
     ? `calc(clamp(1.05rem, 4.7vw, 1.45rem) * ${headerScale})`

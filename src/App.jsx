@@ -331,7 +331,6 @@ function AppContent({
     globalBranding?.logoUrlDark,
     globalBrandingVersion,
   ]);
-
   // Modal state management
   const modals = useModals();
   const {
@@ -396,6 +395,14 @@ function AppContent({
     notificationConfig?.criticalSensorEntityId || DEFAULT_NOTIFICATION_CONFIG.criticalSensorEntityId,
   ).trim() || DEFAULT_NOTIFICATION_CONFIG.criticalSensorEntityId;
   const { gridColCount, isCompactCards, isMobile } = useResponsiveGrid(gridColumns);
+  const mobileHeaderLogoUrl = useMemo(() => {
+    if (!isMobile) return '';
+    const mobileLogoSource = getLogoForTheme(effectiveHeaderSettings, currentTheme);
+    return appendLogoVersion(
+      resolveLogoUrl(mobileLogoSource),
+      effectiveHeaderSettings?.logoUpdatedAt,
+    );
+  }, [isMobile, effectiveHeaderSettings, currentTheme]);
 
   useEffect(() => {
     let cancelled = false;
@@ -2077,7 +2084,7 @@ function AppContent({
 
       <div
         className={`relative z-10 w-full max-w-[1600px] mx-auto py-6 md:py-10 ${
-          isMobile ? 'py-3 px-5 mobile-grid' : (gridColCount === 1 ? 'px-10 sm:px-16 md:px-24' : 'px-6 md:px-20')
+          isMobile ? 'pt-0 pb-3 px-5 mobile-grid' : (gridColCount === 1 ? 'px-10 sm:px-16 md:px-24' : 'px-6 md:px-20')
         } ${isCompactCards ? 'compact-cards' : ''}`}
       >
         <Header
@@ -2091,12 +2098,21 @@ function AppContent({
           isMobile={isMobile}
           sectionSpacing={sectionSpacing}
           currentTheme={currentTheme}
+          showLogoInMobileHeader={false}
         >
           <div
             className={`w-full mt-0 font-sans ${isMobile ? 'flex flex-col items-center gap-1.5' : 'flex items-center justify-between'}`}
             style={{ marginTop: `${isMobile ? Math.min(8, sectionSpacing?.headerToStatus ?? 0) : (sectionSpacing?.headerToStatus ?? 0)}px` }}
           >
             <div className={`flex flex-wrap gap-2.5 items-center min-w-0 ${isMobile ? 'justify-center w-full' : ''}`}>
+              {isMobile && mobileHeaderLogoUrl && (
+                <img
+                  src={mobileHeaderLogoUrl}
+                  alt="Header logo"
+                  className="h-8 w-auto object-contain select-none opacity-95"
+                  loading="lazy"
+                />
+              )}
               {(pagesConfig.header || []).map(id => personStatus(id))}
               {editMode && canEditDashboard && (
                 <button
