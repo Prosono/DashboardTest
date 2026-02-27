@@ -1037,26 +1037,28 @@ export default function SaunaCard({
             {`${tr('sauna.warm', 'Varm')} ≥ ${warmTempC}°C`}
           </div>
         )}
-      </div>
 
-      {!editMode && (
-        <button
-          type="button"
-          onClick={openSaunaDebugModal}
-          className={cx(
-            'absolute bottom-4 right-4 z-30 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full border backdrop-blur-md',
-            isLightTheme
-              ? 'bg-white/90 border-slate-300 text-slate-700 hover:text-slate-900'
-              : 'bg-[var(--glass-bg)] border-[var(--glass-border)] text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
-          )}
-          aria-label={tr('sauna.debug', 'Debug')}
-        >
-          <Activity className="w-3.5 h-3.5" />
-          <span className="text-[10px] uppercase tracking-[0.18em] font-bold">
-            {tr('sauna.debug', 'Debug')}
-          </span>
-        </button>
-      )}
+        {!editMode && (
+          <div className="mt-3 flex justify-end">
+            <button
+              type="button"
+              onClick={openSaunaDebugModal}
+              className={cx(
+                'z-30 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full border backdrop-blur-md',
+                isLightTheme
+                  ? 'bg-white/90 border-slate-300 text-slate-700 hover:text-slate-900'
+                  : 'bg-[var(--glass-bg)] border-[var(--glass-border)] text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
+              )}
+              aria-label={tr('sauna.debug', 'Debug')}
+            >
+              <Activity className="w-3.5 h-3.5" />
+              <span className="text-[10px] uppercase tracking-[0.18em] font-bold">
+                {tr('sauna.debug', 'Debug')}
+              </span>
+            </button>
+          </div>
+        )}
+      </div>
     </div>
   );
 }

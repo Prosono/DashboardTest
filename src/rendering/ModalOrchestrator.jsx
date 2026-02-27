@@ -901,7 +901,7 @@ export default function ModalOrchestrator({
         const popupOverlayStyle = {
           backdropFilter: 'blur(16px)',
           backgroundColor: 'rgba(0, 0, 0, 0.45)',
-          paddingTop: popupIsMobile ? 'calc(env(safe-area-inset-top, 0px) + 14px)' : undefined,
+          paddingTop: popupIsMobile ? 'calc(env(safe-area-inset-top, 0px) + 24px)' : undefined,
           paddingBottom: popupIsMobile ? 'calc(env(safe-area-inset-bottom, 0px) + 10px)' : undefined,
         };
 
