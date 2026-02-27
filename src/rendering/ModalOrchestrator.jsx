@@ -901,19 +901,19 @@ export default function ModalOrchestrator({
         const popupOverlayStyle = {
           backdropFilter: 'blur(16px)',
           backgroundColor: 'rgba(0, 0, 0, 0.45)',
-          paddingTop: popupIsMobile ? 'calc(env(safe-area-inset-top, 0px) + 24px)' : undefined,
+          paddingTop: popupIsMobile ? 'calc(env(safe-area-inset-top, 0px) + 34px)' : undefined,
           paddingBottom: popupIsMobile ? 'calc(env(safe-area-inset-bottom, 0px) + 10px)' : undefined,
         };
 
         return (
           <div
-            className="fixed inset-0 z-[140] flex items-center justify-center p-3 sm:p-6"
+            className="fixed inset-0 z-[140] flex items-center justify-center p-3 sm:p-6 popup-card-backdrop-enter"
             style={popupOverlayStyle}
             onClick={() => setShowPopupCardModal(null)}
             data-disable-pull-refresh="true"
           >
             <div
-              className={`w-full rounded-3xl border overflow-hidden ${
+              className={`w-full rounded-3xl border overflow-hidden popup-card-panel-enter ${
                 isSaunaPopupCard
                   ? 'max-w-6xl max-h-[95dvh] p-2 sm:p-3'
                   : 'max-w-6xl max-h-[92vh] p-3 sm:p-4'
@@ -925,17 +925,19 @@ export default function ModalOrchestrator({
               onClick={(event) => event.stopPropagation()}
               data-disable-pull-refresh="true"
             >
-              <div className="flex items-center justify-between gap-3 mb-3 px-1">
+              <div className={`flex items-center justify-between gap-3 mb-3 px-1 ${popupIsMobile ? 'pt-1' : ''}`}>
                 <p className="text-[11px] uppercase tracking-[0.24em] font-bold text-[var(--text-secondary)] truncate">
                   {popupTitle}
                 </p>
                 <button
                   type="button"
                   onClick={() => setShowPopupCardModal(null)}
-                  className="w-9 h-9 rounded-full border border-[var(--glass-border)] bg-[var(--glass-bg)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors"
+                  className={`rounded-full border border-[var(--glass-border)] bg-[var(--glass-bg)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors ${
+                    popupIsMobile ? 'w-12 h-12 text-xl' : 'w-10 h-10 text-lg'
+                  }`}
                   aria-label={t('common.close') || 'Close'}
                 >
-                  X
+                  ×
                 </button>
               </div>
 
