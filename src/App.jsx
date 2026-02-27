@@ -2055,12 +2055,12 @@ function AppContent({
           className="fixed left-0 right-0 pointer-events-none z-[24]"
           style={{
             top: 0,
-            height: `${Math.max(0, navPinTopPx + (navPinnedMetrics.height || 0) + 8)}px`,
+            height: `${Math.max(0, navPinTopPx + 1)}px`,
             backdropFilter: 'blur(10px) saturate(120%)',
             WebkitBackdropFilter: 'blur(10px) saturate(120%)',
             background: isLightTheme
-              ? 'linear-gradient(to bottom, rgba(248, 250, 252, 0.42) 0%, rgba(248, 250, 252, 0.33) 70%, rgba(248, 250, 252, 0.18) 100%)'
-              : 'linear-gradient(to bottom, rgba(2, 6, 23, 0.44) 0%, rgba(2, 6, 23, 0.34) 70%, rgba(2, 6, 23, 0.18) 100%)',
+              ? 'linear-gradient(to bottom, rgba(248, 250, 252, 0.36) 0%, rgba(248, 250, 252, 0.28) 100%)'
+              : 'linear-gradient(to bottom, rgba(2, 6, 23, 0.36) 0%, rgba(2, 6, 23, 0.28) 100%)',
           }}
         />
       )}
@@ -2258,8 +2258,8 @@ function AppContent({
                   width: `${navPinnedMetrics.width}px`,
                   borderRadius: isMobile ? '1rem' : '1.2rem',
                   backgroundColor: 'color-mix(in srgb, var(--card-bg) 88%, transparent)',
-                  backdropFilter: isMobile ? 'none' : 'blur(10px)',
-                  WebkitBackdropFilter: isMobile ? 'none' : 'blur(10px)',
+                  backdropFilter: isMobile ? 'blur(10px)' : 'blur(10px)',
+                  WebkitBackdropFilter: isMobile ? 'blur(10px)' : 'blur(10px)',
                   padding: isMobile ? '0.3rem 0.4rem 0.2rem' : '0.35rem 0.6rem',
                 }
                 : {}),
