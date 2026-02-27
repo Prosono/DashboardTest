@@ -188,6 +188,14 @@ export default function SaunaDebugModal({
   const [fetchedAt, setFetchedAt] = useState(null);
   const [refreshNonce, setRefreshNonce] = useState(0);
   const [cursorSnapshot, setCursorSnapshot] = useState(null);
+  const [isMobile, setIsMobile] = useState(() => {
+    if (typeof window === 'undefined') return false;
+    return window.innerWidth < 1024;
+  });
+  const [showEntityPicker, setShowEntityPicker] = useState(() => {
+    if (typeof window === 'undefined') return true;
+    return window.innerWidth >= 1024;
+  });
 
   const timeWindow = useMemo(() => {
     if (mode === 'day' && selectedDay) {
@@ -381,17 +389,35 @@ export default function SaunaDebugModal({
     };
   }, [summaries]);
 
+  useEffect(() => {
+    if (typeof window === 'undefined') return undefined;
+    const handleResize = () => {
+      const nextIsMobile = window.innerWidth < 1024;
+      setIsMobile(nextIsMobile);
+    };
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
+  useEffect(() => {
+    setShowEntityPicker(!isMobile);
+  }, [isMobile]);
+
   if (!show) return null;
 
   return (
     <div
-      className="fixed inset-0 z-[155] flex items-center justify-center p-3 sm:p-6"
+      className={`fixed inset-0 z-[155] flex ${isMobile ? 'items-stretch justify-stretch p-0' : 'items-center justify-center p-3 sm:p-6'}`}
       style={{ backdropFilter: 'blur(16px)', backgroundColor: 'rgba(0, 0, 0, 0.45)' }}
       onClick={onClose}
       data-disable-pull-refresh="true"
     >
       <div
-        className="w-full max-w-7xl max-h-[94vh] rounded-3xl border overflow-hidden popup-anim"
+        className={`w-full overflow-hidden popup-anim ${
+          isMobile
+            ? 'h-[100dvh] max-h-[100dvh] rounded-none border-0'
+            : 'max-w-7xl max-h-[94vh] rounded-3xl border'
+        }`}
         style={{
           background: 'linear-gradient(135deg, var(--card-bg) 0%, var(--modal-bg) 100%)',
           borderColor: 'var(--glass-border)',
@@ -470,12 +496,24 @@ export default function SaunaDebugModal({
             <button
               type="button"
               onClick={() => setRefreshNonce((prev) => prev + 1)}
-              className="ml-auto px-3 py-1.5 rounded-full border text-[11px] font-semibold bg-[var(--glass-bg)] border-[var(--glass-border)] text-[var(--text-secondary)] inline-flex items-center gap-1.5"
+              className={`${isMobile ? '' : 'ml-auto'} px-3 py-1.5 rounded-full border text-[11px] font-semibold bg-[var(--glass-bg)] border-[var(--glass-border)] text-[var(--text-secondary)] inline-flex items-center gap-1.5`}
               title={tr('common.refresh', 'Refresh')}
             >
               <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
               {tr('common.refresh', 'Refresh')}
             </button>
+
+            {isMobile && (
+              <button
+                type="button"
+                onClick={() => setShowEntityPicker((prev) => !prev)}
+                className="px-3 py-1.5 rounded-full border text-[11px] font-semibold bg-[var(--glass-bg)] border-[var(--glass-border)] text-[var(--text-secondary)]"
+              >
+                {showEntityPicker
+                  ? tr('common.close', 'Close')
+                  : `${tr('sauna.debugEntities', 'Entities')} (${selectedEntityIds.length})`}
+              </button>
+            )}
           </div>
         </div>
 
@@ -498,8 +536,21 @@ export default function SaunaDebugModal({
           </div>
         </div>
 
-        <div className="h-[calc(94vh-250px)] min-h-[360px] grid lg:grid-cols-[320px_1fr] overflow-hidden" data-disable-pull-refresh="true">
-          <div className="border-r border-[var(--glass-border)] p-4 space-y-3 overflow-y-auto custom-scrollbar">
+        <div
+          className={`overflow-hidden ${
+            isMobile
+              ? 'h-[calc(100dvh-246px)] min-h-[340px] flex flex-col'
+              : 'h-[calc(94vh-250px)] min-h-[360px] grid lg:grid-cols-[320px_1fr]'
+          }`}
+          data-disable-pull-refresh="true"
+        >
+          <div
+            className={`overflow-y-auto custom-scrollbar ${
+              isMobile
+                ? `${showEntityPicker ? 'block' : 'hidden'} border-b border-[var(--glass-border)] p-3 space-y-2.5 max-h-[40dvh]`
+                : 'border-r border-[var(--glass-border)] p-4 space-y-3'
+            }`}
+          >
             <div className="relative">
               <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-secondary)]" />
               <input
@@ -572,7 +623,7 @@ export default function SaunaDebugModal({
             </div>
           </div>
 
-          <div className="p-4 overflow-y-auto custom-scrollbar">
+          <div className={`${isMobile ? 'flex-1 p-3' : 'p-4'} overflow-y-auto custom-scrollbar`}>
             {!selectedSummary && (
               <div className="h-full rounded-2xl border border-[var(--glass-border)] bg-[var(--glass-bg)] p-5 text-sm text-[var(--text-secondary)] flex items-center justify-center">
                 {tr('sauna.debugSelectEntity', 'Select an entity to inspect history')}
@@ -581,6 +632,35 @@ export default function SaunaDebugModal({
 
             {selectedSummary && (
               <div className="space-y-3">
+                {isMobile && selectedSummaries.length > 0 && (
+                  <div className="rounded-2xl border border-[var(--glass-border)] bg-[var(--glass-bg)] p-2.5">
+                    <p className="text-[10px] uppercase tracking-[0.18em] font-bold text-[var(--text-secondary)] mb-2">
+                      {tr('sauna.debugSelectedCount', 'Selected')}: {selectedEntityIds.length}
+                    </p>
+                    <div className="flex flex-wrap gap-1.5">
+                      {selectedSummaries.map((summary) => (
+                        <button
+                          key={`mobile-selected-${summary.entityId}`}
+                          type="button"
+                          onClick={() => {
+                            setSelectedEntityIds((prev) => {
+                              if (!prev.includes(summary.entityId)) return prev;
+                              if (prev.length <= 1) return prev;
+                              return prev.filter((id) => id !== summary.entityId);
+                            });
+                          }}
+                          className="inline-flex items-center gap-1.5 px-2 py-1 rounded-full border border-[var(--glass-border)] bg-[var(--card-bg)] text-[11px] text-[var(--text-secondary)]"
+                          title={summary.entityId}
+                        >
+                          <span className="w-2 h-2 rounded-full bg-blue-300" />
+                          <span className="max-w-[140px] truncate">{summary.name}</span>
+                          <X className="w-3 h-3" />
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
                 <div className="rounded-2xl border border-[var(--glass-border)] bg-[var(--glass-bg)] p-4">
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
@@ -639,7 +719,7 @@ export default function SaunaDebugModal({
                   {primarySeries ? (
                     <DebugMultiSeriesChart
                       series={chartSeries}
-                      height={168}
+                      height={isMobile ? 146 : 168}
                       normalizeSeries={chartSeries.length > 1}
                       lineStrokeWidth={1.0}
                       onCursorSnapshotChange={setCursorSnapshot}
@@ -663,7 +743,7 @@ export default function SaunaDebugModal({
                       {fetchedAt ? ` - ${tr('common.updated', 'Updated')}: ${fetchedAt.toLocaleTimeString()}` : ''}
                     </p>
                   </div>
-                  <div className="max-h-[360px] overflow-y-auto custom-scrollbar space-y-2 pr-1">
+                  <div className={`${isMobile ? 'max-h-[42dvh]' : 'max-h-[360px]'} overflow-y-auto custom-scrollbar space-y-2 pr-1`}>
                     {combinedHistory.map((event, index) => (
                       <div key={`${event.entityId}_${event.time.getTime()}_${index}`} className="rounded-xl border border-[var(--glass-border)] bg-[var(--card-bg)] px-3 py-2">
                         <div className="flex items-center justify-between gap-2">
