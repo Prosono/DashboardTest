@@ -1064,6 +1064,13 @@ function AppContent({
   const canControlDevices = currentUserRole !== 'inspector' && !isPlatformAdmin;
   const isAdminUser = canManageUsersAndClients;
   const profileDisplayName = String(currentUser?.fullName || currentUser?.username || t('profile.userFallback')).trim();
+  const profileInitial = useMemo(() => {
+    const fullName = String(currentUser?.fullName || '').trim();
+    const username = String(currentUser?.username || '').trim();
+    const firstToken = (fullName || username || profileDisplayName).split(/\s+/)[0] || '';
+    const firstChar = Array.from(firstToken).find((char) => /\S/.test(char)) || '?';
+    return String(firstChar).toLocaleUpperCase(language || 'en');
+  }, [currentUser?.fullName, currentUser?.username, profileDisplayName, language]);
   const [dashboardDirty, setDashboardDirty] = useState(false);
   const dashboardDirtyReadyRef = useRef(false);
   const quickSaveBusyRef = useRef(false);
@@ -1226,15 +1233,19 @@ function AppContent({
     }
   }, [saveCardSettingRaw, scheduleSnapshotPersist]);
 
-  const renderUserChip = (extraClassName = '') => (
+  const renderUserChip = (extraClassName = '', compact = false) => (
     currentUser ? (
       <button
         onClick={() => setShowProfileModal(true)}
-        className={`px-2 py-1 rounded-full border border-[var(--glass-border)] text-[10px] uppercase tracking-wider text-[var(--text-secondary)] hover:text-[var(--text-primary)] ${extraClassName}`}
+        className={`px-2 py-1 rounded-full border border-[var(--glass-border)] text-[10px] uppercase tracking-wider text-[var(--text-secondary)] hover:text-[var(--text-primary)] ${compact ? 'inline-flex items-center gap-1.5' : ''} ${extraClassName}`}
         title={t('profile.title')}
       >
-        <User className="w-3 h-3 inline mr-1" />
-        {profileDisplayName}
+        <User className={`w-3 h-3 ${compact ? '' : 'inline mr-1'}`} />
+        {compact ? (
+          <span className="font-bold leading-none">{profileInitial}</span>
+        ) : (
+          profileDisplayName
+        )}
       </button>
     ) : null
   );
@@ -2332,7 +2343,7 @@ function AppContent({
           <div className="mb-2 px-0.5">
             <div className="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-2">
               <div className="justify-self-start min-w-0">
-                {renderUserChip('max-w-[132px] truncate')}
+                {renderUserChip('', true)}
               </div>
               <div className="justify-self-center">
                 {renderMobileEventsPill()}
