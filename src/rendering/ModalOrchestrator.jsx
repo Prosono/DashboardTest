@@ -898,11 +898,17 @@ export default function ModalOrchestrator({
           || entities?.[targetCardId]?.attributes?.friendly_name
           || targetCardId;
         const isSaunaPopupCard = targetCardId.startsWith('sauna_card_');
+        const popupOverlayStyle = {
+          backdropFilter: 'blur(16px)',
+          backgroundColor: 'rgba(0, 0, 0, 0.45)',
+          paddingTop: popupIsMobile ? 'calc(env(safe-area-inset-top, 0px) + 14px)' : undefined,
+          paddingBottom: popupIsMobile ? 'calc(env(safe-area-inset-bottom, 0px) + 10px)' : undefined,
+        };
 
         return (
           <div
             className="fixed inset-0 z-[140] flex items-center justify-center p-3 sm:p-6"
-            style={{ backdropFilter: 'blur(16px)', backgroundColor: 'rgba(0, 0, 0, 0.45)' }}
+            style={popupOverlayStyle}
             onClick={() => setShowPopupCardModal(null)}
             data-disable-pull-refresh="true"
           >
