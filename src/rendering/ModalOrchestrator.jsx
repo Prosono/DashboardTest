@@ -6,7 +6,7 @@
  *
  * Each modal is lazy-loaded and wrapped in <ModalSuspense> just like before.
  */
-import { lazy, useMemo } from 'react';
+import { lazy, useMemo, useState, useEffect, useRef, useCallback } from 'react';
 import { ModalSuspense, getServerInfo } from '../components';
 import { themes } from '../config/themes';
 import { formatDuration } from '../utils';
@@ -42,6 +42,97 @@ const SaunaDebugModal = lazy(() => import('../modals/SaunaDebugModal'));
 const ThemeSidebar = lazy(() => import('../components/sidebars/ThemeSidebar'));
 const LayoutSidebar = lazy(() => import('../components/sidebars/LayoutSidebar'));
 const HeaderSidebar = lazy(() => import('../components/sidebars/HeaderSidebar'));
+
+function PopupCardFitFrame({ fitToViewport = false, children }) {
+  const viewportRef = useRef(null);
+  const contentRef = useRef(null);
+  const [scale, setScale] = useState(1);
+  const [scaledHeight, setScaledHeight] = useState(null);
+
+  const recalcScale = useCallback(() => {
+    if (!fitToViewport) {
+      setScale(1);
+      setScaledHeight(null);
+      return;
+    }
+
+    const viewport = viewportRef.current;
+    const content = contentRef.current;
+    if (!viewport || !content) return;
+
+    const viewportWidth = viewport.clientWidth;
+    const viewportHeight = viewport.clientHeight;
+    if (viewportWidth <= 0 || viewportHeight <= 0) return;
+
+    const rawWidth = content.scrollWidth;
+    const rawHeight = content.scrollHeight;
+    if (rawWidth <= 0 || rawHeight <= 0) return;
+
+    const nextScale = Math.min(1, viewportWidth / rawWidth, viewportHeight / rawHeight);
+    const boundedScale = Number.isFinite(nextScale) ? Math.max(0.45, nextScale) : 1;
+    setScale((prev) => (Math.abs(prev - boundedScale) > 0.005 ? boundedScale : prev));
+    setScaledHeight(rawHeight * boundedScale);
+  }, [fitToViewport]);
+
+  useEffect(() => {
+    const raf = requestAnimationFrame(recalcScale);
+    return () => cancelAnimationFrame(raf);
+  }, [recalcScale, children]);
+
+  useEffect(() => {
+    if (!fitToViewport) return undefined;
+
+    const handleResize = () => {
+      requestAnimationFrame(recalcScale);
+    };
+    window.addEventListener('resize', handleResize, { passive: true });
+
+    let observer = null;
+    if (typeof ResizeObserver !== 'undefined') {
+      observer = new ResizeObserver(() => requestAnimationFrame(recalcScale));
+      if (viewportRef.current) observer.observe(viewportRef.current);
+      if (contentRef.current) observer.observe(contentRef.current);
+    }
+
+    const timeoutA = setTimeout(recalcScale, 80);
+    const timeoutB = setTimeout(recalcScale, 240);
+
+    return () => {
+      window.removeEventListener('resize', handleResize);
+      if (observer) observer.disconnect();
+      clearTimeout(timeoutA);
+      clearTimeout(timeoutB);
+    };
+  }, [fitToViewport, recalcScale]);
+
+  if (!fitToViewport) {
+    return (
+      <div className="max-h-[calc(92vh-72px)] overflow-y-auto custom-scrollbar pr-1" data-disable-pull-refresh="true">
+        {children}
+      </div>
+    );
+  }
+
+  return (
+    <div ref={viewportRef} className="h-[calc(95dvh-68px)] overflow-hidden" data-disable-pull-refresh="true">
+      <div className="w-full h-full flex justify-center overflow-hidden">
+        <div className="w-full" style={{ height: scaledHeight ? `${scaledHeight}px` : '100%' }}>
+          <div
+            ref={contentRef}
+            className="w-full"
+            style={{
+              transform: `scale(${scale})`,
+              transformOrigin: 'top center',
+              willChange: 'transform',
+            }}
+          >
+            {children}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 export default function ModalOrchestrator({
   entities, conn, activeUrl, connected, authRef,
@@ -806,6 +897,7 @@ export default function ModalOrchestrator({
           || customNames?.[targetCardId]
           || entities?.[targetCardId]?.attributes?.friendly_name
           || targetCardId;
+        const isSaunaPopupCard = targetCardId.startsWith('sauna_card_');
 
         return (
           <div
@@ -815,7 +907,11 @@ export default function ModalOrchestrator({
             data-disable-pull-refresh="true"
           >
             <div
-              className="w-full max-w-6xl max-h-[92vh] rounded-3xl border p-3 sm:p-4 overflow-hidden"
+              className={`w-full rounded-3xl border overflow-hidden ${
+                isSaunaPopupCard
+                  ? 'max-w-6xl max-h-[95dvh] p-2 sm:p-3'
+                  : 'max-w-6xl max-h-[92vh] p-3 sm:p-4'
+              }`}
               style={{
                 background: 'linear-gradient(135deg, var(--card-bg) 0%, var(--modal-bg) 100%)',
                 borderColor: 'var(--glass-border)',
@@ -837,13 +933,13 @@ export default function ModalOrchestrator({
                 </button>
               </div>
 
-              <div className="max-h-[calc(92vh-72px)] overflow-y-auto custom-scrollbar pr-1" data-disable-pull-refresh="true">
+              <PopupCardFitFrame fitToViewport={isSaunaPopupCard}>
                 {popupCard || (
                   <div className="rounded-2xl border border-[var(--glass-border)] bg-[var(--glass-bg)] p-5 text-sm text-[var(--text-secondary)]">
                     {t('popupLauncher.targetUnavailable') || 'Target card is unavailable.'}
                   </div>
                 )}
-              </div>
+              </PopupCardFitFrame>
             </div>
           </div>
         );
