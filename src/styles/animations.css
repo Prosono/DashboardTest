@@ -69,7 +69,7 @@
 }
 
 @keyframes popupCardPanelIn {
-  0% { opacity: 0; transform: translate3d(0, 12px, 0) scale(0.985); }
+  0% { opacity: 0; transform: translate3d(0, 20px, 0) scale(0.96); }
   100% { opacity: 1; transform: translate3d(0, 0, 0) scale(1); }
 }
 
@@ -78,7 +78,7 @@
 }
 
 .popup-card-panel-enter {
-  animation: popupCardPanelIn 0.22s cubic-bezier(0.22, 0.61, 0.36, 1) both;
+  animation: popupCardPanelIn 0.28s cubic-bezier(0.22, 0.61, 0.36, 1) both;
 }
 
 /* Update older fade-in-anim if needed, but keeping it for compatibility */

@@ -43,7 +43,7 @@ const ThemeSidebar = lazy(() => import('../components/sidebars/ThemeSidebar'));
 const LayoutSidebar = lazy(() => import('../components/sidebars/LayoutSidebar'));
 const HeaderSidebar = lazy(() => import('../components/sidebars/HeaderSidebar'));
 
-function PopupCardFitFrame({ fitToViewport = false, children }) {
+function PopupCardFitFrame({ fitToViewport = false, isMobile = false, liftPx = 0, children }) {
   const viewportRef = useRef(null);
   const contentRef = useRef(null);
   const [scale, setScale] = useState(1);
@@ -114,7 +114,17 @@ function PopupCardFitFrame({ fitToViewport = false, children }) {
   }
 
   return (
-    <div ref={viewportRef} className="h-[calc(95dvh-68px)] overflow-hidden" data-disable-pull-refresh="true">
+    <div
+      ref={viewportRef}
+      className="overflow-hidden"
+      style={{
+        height: isMobile
+          ? 'calc(100dvh - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px) - 122px)'
+          : 'calc(95dvh - 68px)',
+        transform: liftPx > 0 ? `translateY(-${liftPx}px)` : undefined,
+      }}
+      data-disable-pull-refresh="true"
+    >
       <div className="w-full h-full flex justify-center overflow-hidden">
         <div className="w-full" style={{ height: scaledHeight ? `${scaledHeight}px` : '100%' }}>
           <div
@@ -898,30 +908,42 @@ export default function ModalOrchestrator({
           || entities?.[targetCardId]?.attributes?.friendly_name
           || targetCardId;
         const isSaunaPopupCard = targetCardId.startsWith('sauna_card_');
+        const isMobileSaunaPopup = popupIsMobile && isSaunaPopupCard;
+        const popupOverlayClass = `fixed inset-0 z-[140] flex justify-center popup-card-backdrop-enter ${
+          isMobileSaunaPopup
+            ? 'items-start px-1'
+            : 'items-center p-3 sm:p-6'
+        }`;
         const popupOverlayStyle = {
           backdropFilter: 'blur(16px)',
           backgroundColor: 'rgba(0, 0, 0, 0.45)',
-          paddingTop: popupIsMobile ? 'calc(env(safe-area-inset-top, 0px) + 34px)' : undefined,
-          paddingBottom: popupIsMobile ? 'calc(env(safe-area-inset-bottom, 0px) + 10px)' : undefined,
+          paddingTop: popupIsMobile ? 'calc(env(safe-area-inset-top, 0px) + 32px)' : undefined,
+          paddingBottom: popupIsMobile ? 'calc(env(safe-area-inset-bottom, 0px) + 4px)' : undefined,
+        };
+        const popupPanelStyle = {
+          background: 'linear-gradient(135deg, var(--card-bg) 0%, var(--modal-bg) 100%)',
+          borderColor: 'var(--glass-border)',
+          width: isMobileSaunaPopup ? 'calc(100vw - 8px)' : undefined,
+          maxWidth: isMobileSaunaPopup ? 'none' : undefined,
+          maxHeight: isMobileSaunaPopup
+            ? 'calc(100dvh - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px) - 40px)'
+            : undefined,
         };
 
         return (
           <div
-            className="fixed inset-0 z-[140] flex items-center justify-center p-3 sm:p-6 popup-card-backdrop-enter"
+            className={popupOverlayClass}
             style={popupOverlayStyle}
             onClick={() => setShowPopupCardModal(null)}
             data-disable-pull-refresh="true"
           >
             <div
-              className={`w-full rounded-3xl border overflow-hidden popup-card-panel-enter ${
+              className={`w-full rounded-3xl border overflow-hidden popup-card-panel-enter flex flex-col ${
                 isSaunaPopupCard
-                  ? 'max-w-6xl max-h-[95dvh] p-2 sm:p-3'
+                  ? `${isMobileSaunaPopup ? 'p-1.5' : 'max-w-6xl max-h-[95dvh] p-2 sm:p-3'}`
                   : 'max-w-6xl max-h-[92vh] p-3 sm:p-4'
               }`}
-              style={{
-                background: 'linear-gradient(135deg, var(--card-bg) 0%, var(--modal-bg) 100%)',
-                borderColor: 'var(--glass-border)',
-              }}
+              style={popupPanelStyle}
               onClick={(event) => event.stopPropagation()}
               data-disable-pull-refresh="true"
             >
@@ -941,7 +963,7 @@ export default function ModalOrchestrator({
                 </button>
               </div>
 
-              <PopupCardFitFrame fitToViewport={isSaunaPopupCard}>
+              <PopupCardFitFrame fitToViewport={isSaunaPopupCard} isMobile={isMobileSaunaPopup} liftPx={isMobileSaunaPopup ? 8 : 0}>
                 {popupCard || (
                   <div className="rounded-2xl border border-[var(--glass-border)] bg-[var(--glass-bg)] p-5 text-sm text-[var(--text-secondary)]">
                     {t('popupLauncher.targetUnavailable') || 'Target card is unavailable.'}
