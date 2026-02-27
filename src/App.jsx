@@ -4,6 +4,7 @@ import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { en, nn, nb } from './i18n';
 import {
   AlertTriangle,
+  Bell,
   Check,
   Edit2,
   LayoutGrid,
@@ -158,7 +159,7 @@ function AppContent({
   onSaveGlobalBranding,
   userAdminApi,
 }) {
-  const { notify } = useNotifications();
+  const { notify, notificationHistory = [] } = useNotifications();
   const {
     currentTheme,
     setCurrentTheme,
@@ -718,17 +719,45 @@ function AppContent({
 
   const warningAlertCount = parseAlertCountFromState(entities?.[WARNING_SENSOR_ID]?.state);
   const criticalAlertCount = parseAlertCountFromState(entities?.[CRITICAL_SENSOR_ID]?.state);
-  const mobileAlertCount = warningAlertCount + criticalAlertCount;
-  const mobileAlertTargetId = criticalAlertCount > 0 ? CRITICAL_SENSOR_ID : WARNING_SENSOR_ID;
   const alertNotificationSeededRef = useRef(false);
   const alertNotificationPrevRef = useRef({ warning: 0, critical: 0 });
   const alertNotificationLastSentRef = useRef({ warning: 0, critical: 0 });
   const customRuleSeededRef = useRef(false);
   const customRulePrevMatchRef = useRef({});
   const customRuleLastSentRef = useRef({});
+  const notificationCounts = useMemo(() => {
+    const list = Array.isArray(notificationHistory) ? notificationHistory : [];
+    return list.reduce((acc, entry) => {
+      const level = String(entry?.level || '').trim().toLowerCase();
+      if (level === 'critical' || level === 'error') acc.critical += 1;
+      else if (level === 'warning') acc.warning += 1;
+      else if (level === 'success') acc.success += 1;
+      else acc.info += 1;
+      acc.total += 1;
+      return acc;
+    }, { total: 0, critical: 0, warning: 0, success: 0, info: 0 });
+  }, [notificationHistory]);
+  const notificationSummaryText = useMemo(() => {
+    if (notificationCounts.critical > 0) {
+      return `${notificationCounts.critical} ${t('notificationTimeline.filter.severity.critical')}`;
+    }
+    if (notificationCounts.warning > 0) {
+      return `${notificationCounts.warning} ${t('notificationTimeline.filter.severity.warning')}`;
+    }
+    return `${notificationCounts.total} ${t('notificationTimeline.entries')}`;
+  }, [notificationCounts.critical, notificationCounts.total, notificationCounts.warning, t]);
+  const mobileNotificationTimelinePill = useMemo(() => {
+    if (!isMobile) return null;
+    return (statusPillsConfig || []).find(
+      (pill) => pill?.visible !== false && pill?.type === 'notification_timeline',
+    ) || null;
+  }, [isMobile, statusPillsConfig]);
   const statusPillsForBar = useMemo(() => {
     if (!isMobile) return statusPillsConfig;
-    return (statusPillsConfig || []).filter((pill) => String(pill?.entityId || '') !== WARNING_SENSOR_ID);
+    return (statusPillsConfig || []).filter((pill) => {
+      if (pill?.type === 'notification_timeline') return false;
+      return String(pill?.entityId || '') !== WARNING_SENSOR_ID;
+    });
   }, [isMobile, statusPillsConfig, WARNING_SENSOR_ID]);
 
   useEffect(() => {
@@ -1229,6 +1258,84 @@ function AppContent({
       )}
     </div>
   );
+
+  const renderMobileEventsPill = () => {
+    if (!isMobile || !mobileNotificationTimelinePill) return null;
+    const label = String(
+      mobileNotificationTimelinePill.label
+      || t('notificationTimeline.title')
+      || 'Events',
+    ).trim();
+    const summary = String(
+      mobileNotificationTimelinePill.sublabel
+      || notificationSummaryText
+      || '',
+    ).trim();
+    const severity = notificationCounts.critical > 0
+      ? 'critical'
+      : notificationCounts.warning > 0
+        ? 'warning'
+        : 'info';
+    const tone = severity === 'critical'
+      ? {
+          bg: 'rgba(190, 24, 93, 0.12)',
+          iconBg: 'rgba(190, 24, 93, 0.2)',
+          iconColor: 'text-rose-300',
+          labelColor: 'text-rose-200',
+          sublabelColor: 'text-rose-100',
+        }
+      : severity === 'warning'
+        ? {
+            bg: 'rgba(245, 158, 11, 0.12)',
+            iconBg: 'rgba(245, 158, 11, 0.2)',
+            iconColor: 'text-amber-300',
+            labelColor: 'text-amber-200',
+            sublabelColor: 'text-amber-100',
+          }
+        : {
+            bg: 'rgba(59, 130, 246, 0.12)',
+            iconBg: 'rgba(59, 130, 246, 0.2)',
+            iconColor: 'text-blue-300',
+            labelColor: 'text-blue-200',
+            sublabelColor: 'text-blue-100',
+          };
+
+    const handleClick = () => {
+      if (mobileNotificationTimelinePill.clickable === false) return;
+      setShowPopupCardModal?.({
+        targetCardId: 'notification_timeline_card_status_pill',
+        sourceCardId: mobileNotificationTimelinePill.id,
+        buttonLabel: label || t('notificationTimeline.title'),
+      });
+    };
+
+    return (
+      <button
+        type="button"
+        onClick={handleClick}
+        className="relative inline-flex items-center gap-1.5 px-2.5 py-1 rounded-2xl transition-all active:scale-[0.98]"
+        style={{ backgroundColor: tone.bg }}
+        title={label}
+      >
+        <span className={`p-1 rounded-lg ${tone.iconColor}`} style={{ backgroundColor: tone.iconBg }}>
+          <Bell className="w-3 h-3" />
+        </span>
+        <span className="flex flex-col items-start leading-tight">
+          <span className={`text-[10px] uppercase font-bold ${tone.labelColor}`}>
+            {label}
+          </span>
+          <span className={`text-[10px] uppercase tracking-widest italic ${tone.sublabelColor}`}>
+            {summary}
+          </span>
+        </span>
+        {notificationCounts.total > 0 && (
+          <span className="absolute -top-2 -right-2 min-w-[18px] h-[18px] px-1.5 rounded-full bg-gray-600 text-white text-[10px] font-bold flex items-center justify-center border border-transparent shadow-sm">
+            {notificationCounts.total}
+          </span>
+        )}
+      </button>
+    );
+  };
 
   // ── Page management ────────────────────────────────────────────────────
   const {
@@ -2222,21 +2329,22 @@ function AppContent({
         )}
 
         {isMobile && (
-          <div className="flex items-center justify-between mb-2 px-0.5">
-            {renderUserChip('max-w-[58%] truncate')}
-            <div className="flex items-center gap-2">
-              {mobileAlertCount > 0 && (
-                <button
-                  onClick={() => setShowSensorInfoModal(mobileAlertTargetId)}
-                  className="inline-flex items-center gap-1 px-2 py-1 rounded-full border border-[var(--glass-border)] bg-[var(--glass-bg)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors"
-                  title="Alerts"
-                >
-                  <AlertTriangle className={`w-3.5 h-3.5 ${criticalAlertCount > 0 ? 'text-red-400' : 'text-amber-400'}`} />
-                  <span className="text-[11px] font-bold leading-none">{mobileAlertCount}</span>
-                </button>
-              )}
-              {renderSettingsControl()}
+          <div className="mb-2 px-0.5">
+            <div className="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-2">
+              <div className="justify-self-start min-w-0">
+                {renderUserChip('max-w-[132px] truncate')}
+              </div>
+              <div className="justify-self-center">
+                {renderMobileEventsPill()}
+              </div>
+              <div className="justify-self-end">
+                {renderSettingsControl()}
+              </div>
             </div>
+            <div
+              className="mt-2 h-px w-full rounded-full"
+              style={{ backgroundColor: 'color-mix(in srgb, var(--glass-border) 55%, transparent)' }}
+            />
           </div>
         )}
 
