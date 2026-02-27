@@ -773,12 +773,12 @@ export default function SaunaCard({
     <div
       {...dragProps}
       data-haptic={editMode ? undefined : 'card'}
-      className={cx('sauna-card-surface touch-feedback relative p-5 rounded-[2.5rem] transition-all duration-300 overflow-hidden font-sans h-full', 'border border-[var(--glass-border)] bg-[var(--glass-bg)]', !editMode ? 'cursor-pointer' : 'cursor-move')}
+      className={cx('sauna-card-surface touch-feedback relative p-5 rounded-[2.5rem] transition-all duration-300 overflow-hidden font-sans h-full md:h-auto', 'border border-[var(--glass-border)] bg-[var(--glass-bg)]', !editMode ? 'cursor-pointer' : 'cursor-move')}
       style={cardStyle}
     >
       {controls}
 
-      <div className="relative z-10 h-full min-h-0 flex flex-col overflow-y-hidden md:overflow-y-auto custom-scrollbar md:pr-1">
+      <div className="relative z-10 h-full md:h-auto min-h-0 flex flex-col overflow-y-hidden md:overflow-visible">
         <div className="grid grid-cols-3 items-start gap-4">
           <div className="min-w-0 space-y-2">
             <div className="flex items-center gap-3 min-w-0">
