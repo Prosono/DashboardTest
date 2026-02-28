@@ -13,6 +13,11 @@ import {
   safeUser,
   touchSession,
 } from '../auth.js';
+import {
+  clearLoginAttempts,
+  getLoginThrottleStatus,
+  recordFailedLoginAttempt,
+} from '../loginRateLimiter.js';
 import { hashPassword, verifyPassword } from '../password.js';
 import { mergeHaConfigPayload, parseHaConfigRow, serializeHaConnections } from '../haConfig.js';
 import {
@@ -150,6 +155,15 @@ router.post('/login', (req, res) => {
     return res.status(400).json({ error: 'Client ID, username and password are required' });
   }
 
+  const throttleStatus = getLoginThrottleStatus(req, clientId, username);
+  if (throttleStatus.blocked) {
+    res.setHeader('Retry-After', String(throttleStatus.retryAfterSeconds));
+    return res.status(429).json({
+      error: 'Too many login attempts. Try again later.',
+      retryAfterSeconds: throttleStatus.retryAfterSeconds,
+    });
+  }
+
   const superAdmin = loadSuperAdminConfig();
   const isSuperAdminCredentials = Boolean(superAdmin.username)
     && username === superAdmin.username
@@ -160,6 +174,7 @@ router.post('/login', (req, res) => {
   const isSuperAdminLogin = isSuperAdminCredentials && clientId === SUPER_ADMIN_CLIENT_ID;
 
   if (isSuperAdminCredentials && !isSuperAdminLogin) {
+    recordFailedLoginAttempt(req, clientId, username);
     return res.status(401).json({ error: 'Invalid client ID, username or password' });
   }
 
@@ -191,6 +206,7 @@ router.post('/login', (req, res) => {
       ipAddress: getClientIp(req),
       userAgent: getUserAgent(req),
     });
+    clearLoginAttempts(req, clientId, username);
     return res.json({
       token: session.token,
       expiresAt: session.expiresAt,
@@ -216,11 +232,13 @@ router.post('/login', (req, res) => {
 
   const targetClient = db.prepare('SELECT id FROM clients WHERE id = ?').get(clientId);
   if (!targetClient) {
+    recordFailedLoginAttempt(req, clientId, username);
     return res.status(401).json({ error: 'Invalid client ID, username or password' });
   }
 
   const user = db.prepare('SELECT * FROM users WHERE client_id = ? AND username = ?').get(clientId, username);
   if (!user || !verifyPassword(password, user.password_hash)) {
+    recordFailedLoginAttempt(req, clientId, username);
     return res.status(401).json({ error: 'Invalid client ID, username or password' });
   }
 
@@ -231,6 +249,7 @@ router.post('/login', (req, res) => {
     ipAddress: getClientIp(req),
     userAgent: getUserAgent(req),
   });
+  clearLoginAttempts(req, clientId, username);
   return res.json({ token: session.token, expiresAt: session.expiresAt, user: safeUser(user) });
 });
 

@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import db from '../db.js';
 import { adminRequired, authRequired, createSession, deleteSession, getTokenFromRequest, safeUser } from '../auth.js';
+import { clearLoginAttempts, getLoginThrottleStatus, recordFailedLoginAttempt } from '../loginRateLimiter.js';
 import { verifyPassword } from '../password.js';
 
 const router = Router();
@@ -13,12 +14,23 @@ router.post('/login', (req, res) => {
     return res.status(400).json({ error: 'Username and password are required' });
   }
 
+  const throttleStatus = getLoginThrottleStatus(req, 'default', username);
+  if (throttleStatus.blocked) {
+    res.setHeader('Retry-After', String(throttleStatus.retryAfterSeconds));
+    return res.status(429).json({
+      error: 'Too many login attempts. Try again later.',
+      retryAfterSeconds: throttleStatus.retryAfterSeconds,
+    });
+  }
+
   const user = db.prepare('SELECT * FROM users WHERE username = ?').get(username);
   if (!user || !verifyPassword(password, user.password_hash)) {
+    recordFailedLoginAttempt(req, 'default', username);
     return res.status(401).json({ error: 'Invalid username or password' });
   }
 
   const session = createSession(user.id);
+  clearLoginAttempts(req, 'default', username);
   return res.json({ token: session.token, expiresAt: session.expiresAt, user: safeUser(user) });
 });
 
