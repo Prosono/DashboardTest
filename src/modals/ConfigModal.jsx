@@ -384,6 +384,7 @@ export default function ConfigModal({
   const isLayoutPreview = configTab === 'layout' && layoutPreview;
   const isAdmin = currentUser?.role === 'admin';
   const isInspector = currentUser?.role === 'inspector';
+  const isPlatformAdmin = currentUser?.isPlatformAdmin === true;
   const canManageConnection = currentUser?.isPlatformAdmin === true;
   const canAccessStorage = canManageAdministration;
   const canAccessNotifications = canManageNotifications && isAdmin;
@@ -613,7 +614,6 @@ export default function ConfigModal({
     : TABS;
   const activeConfigTab = availableTabs.some((tab) => tab.key === configTab) ? configTab : 'connection';
   const canManageClients = currentUser?.isPlatformAdmin === true && typeof userAdminApi?.listClients === 'function';
-  const isPlatformAdmin = currentUser?.isPlatformAdmin === true;
   const selectedManagedClient = clients.find((client) => client.id === connectionManageClientId) || null;
   const managedConnections = Array.isArray(managedConnectionConfig?.connections) ? managedConnectionConfig.connections : [];
   const selectedManagedConnection = managedConnections.find((connection) => connection.id === managedConnectionId)
