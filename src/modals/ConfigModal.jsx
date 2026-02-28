@@ -45,6 +45,7 @@ import {
 } from '../icons';
 import { normalizeHaConfig, normalizeConnection, normalizeConnectionId } from '../utils/haConnections';
 import { DEFAULT_NOTIFICATION_CONFIG, normalizeNotificationConfig } from '../utils/notificationConfig';
+import { getPhoneCountryCodeOptions, normalizePhoneCountryCode } from '../constants/phoneCountryCodes';
 
 const stripRichTextToPlain = (input) => String(input || '')
   .replace(/<br\s*\/?>/gi, '\n')
@@ -376,7 +377,7 @@ export default function ConfigModal({
     assignedDashboardId: user?.assignedDashboardId || 'default',
     haUrl: user?.haUrl || '',
     haToken: user?.haToken || '',
-    phoneCountryCode: user?.phoneCountryCode || '+47',
+    phoneCountryCode: normalizePhoneCountryCode(user?.phoneCountryCode) || '+47',
     phone: user?.phone || '',
     password: '',
   });
@@ -1399,7 +1400,7 @@ export default function ConfigModal({
           assignedDashboardId: newUserDashboard || 'default',
           haUrl: newUserHaUrl.trim(),
           haToken: newUserHaToken.trim(),
-          phoneCountryCode: String(newUserPhoneCountryCode || '+47').trim() || '+47',
+          phoneCountryCode: normalizePhoneCountryCode(newUserPhoneCountryCode) || '+47',
           phone: String(newUserPhone || '').trim(),
         });
         setNewUsername('');
@@ -1483,7 +1484,7 @@ export default function ConfigModal({
           assignedDashboardId: String(draft.assignedDashboardId || 'default').trim() || 'default',
           haUrl: String(draft.haUrl || '').trim(),
           haToken: String(draft.haToken || '').trim(),
-          phoneCountryCode: String(draft.phoneCountryCode || '+47').trim() || '+47',
+          phoneCountryCode: normalizePhoneCountryCode(draft.phoneCountryCode) || '+47',
           phone: String(draft.phone || '').trim(),
           password: String(draft.password || '').trim(),
         });
@@ -1878,13 +1879,16 @@ export default function ConfigModal({
                     </select>
                   </div>
                   <div className="space-y-1">
-                    <label className="text-[10px] uppercase tracking-wider text-[var(--text-secondary)] font-bold">Country code</label>
-                    <input
-                      value={newUserPhoneCountryCode}
+                    <label className="text-[10px] uppercase tracking-wider text-[var(--text-secondary)] font-bold">{t('profile.countryCode')}</label>
+                    <select
+                      value={normalizePhoneCountryCode(newUserPhoneCountryCode) || '+47'}
                       onChange={(e) => setNewUserPhoneCountryCode(e.target.value)}
-                      placeholder="+47"
                       className="w-full px-3 py-2 rounded-lg bg-[var(--glass-bg-hover)] border border-[var(--glass-border)] text-sm"
-                    />
+                    >
+                      {getPhoneCountryCodeOptions(newUserPhoneCountryCode).map((option) => (
+                        <option key={option.value} value={option.value}>{option.label}</option>
+                      ))}
+                    </select>
                   </div>
                   <div className="space-y-1">
                     <label className="text-[10px] uppercase tracking-wider text-[var(--text-secondary)] font-bold">{t('profile.phone')}</label>
@@ -1973,13 +1977,16 @@ export default function ConfigModal({
                           </select>
                         </div>
                         <div className="space-y-1">
-                          <label className="text-[10px] uppercase tracking-wider text-[var(--text-secondary)] font-bold">Country code</label>
-                          <input
-                            value={userEdits[u.id]?.phoneCountryCode ?? '+47'}
+                          <label className="text-[10px] uppercase tracking-wider text-[var(--text-secondary)] font-bold">{t('profile.countryCode')}</label>
+                          <select
+                            value={normalizePhoneCountryCode(userEdits[u.id]?.phoneCountryCode ?? '+47') || '+47'}
                             onChange={(e) => updateUserEdit(u.id, { phoneCountryCode: e.target.value })}
                             className="w-full px-3 py-2 rounded-lg bg-[var(--glass-bg-hover)] border border-[var(--glass-border)] text-sm"
-                            placeholder="+47"
-                          />
+                          >
+                            {getPhoneCountryCodeOptions(userEdits[u.id]?.phoneCountryCode).map((option) => (
+                              <option key={option.value} value={option.value}>{option.label}</option>
+                            ))}
+                          </select>
                         </div>
                         <div className="space-y-1">
                           <label className="text-[10px] uppercase tracking-wider text-[var(--text-secondary)] font-bold">{t('profile.phone')}</label>
@@ -3025,12 +3032,15 @@ export default function ConfigModal({
             <div className="pt-2 border-t border-[var(--glass-border)] space-y-2">
               <h5 className="text-[10px] uppercase tracking-wider font-bold text-[var(--text-secondary)]">Send test SMS</h5>
               <div className="grid grid-cols-1 md:grid-cols-[7rem_minmax(0,1fr)] gap-2">
-                <input
-                  value={twilioTestCountryCode}
+                <select
+                  value={normalizePhoneCountryCode(twilioTestCountryCode) || '+47'}
                   onChange={(e) => setTwilioTestCountryCode(e.target.value)}
                   className="w-full px-3 py-2 rounded-lg bg-[var(--glass-bg-hover)] border border-[var(--glass-border)] text-sm"
-                  placeholder="+47"
-                />
+                >
+                  {getPhoneCountryCodeOptions(twilioTestCountryCode).map((option) => (
+                    <option key={option.value} value={option.value}>{option.label}</option>
+                  ))}
+                </select>
                 <input
                   value={twilioTestTo}
                   onChange={(e) => setTwilioTestTo(e.target.value)}

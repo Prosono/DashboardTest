@@ -45,6 +45,7 @@ import {
 } from './hooks';
 
 import { formatDuration } from './utils';
+import { getPhoneCountryCodeOptions, normalizePhoneCountryCode } from './constants/phoneCountryCodes';
 import './styles/dashboard.css';
 
 import { clearAllOAuthTokens, clearOAuthTokens, loadTokensForConnection, saveTokens, saveTokensForConnection } from './services/oauthStorage';
@@ -1166,7 +1167,7 @@ function AppContent({
       username: currentUser?.username || '',
       fullName: currentUser?.fullName || '',
       email: currentUser?.email || '',
-      phoneCountryCode: currentUser?.phoneCountryCode || '+47',
+      phoneCountryCode: normalizePhoneCountryCode(currentUser?.phoneCountryCode) || '+47',
       phone: currentUser?.phone || '',
       avatarUrl: currentUser?.avatarUrl || '',
     });
@@ -1177,7 +1178,10 @@ function AppContent({
     setProfileSaving(true);
     setProfileError('');
     try {
-      const updated = await updateCurrentProfile(profileState);
+      const updated = await updateCurrentProfile({
+        ...profileState,
+        phoneCountryCode: normalizePhoneCountryCode(profileState.phoneCountryCode) || '+47',
+      });
       if (updated && onProfileUpdated) onProfileUpdated(updated);
       setShowProfileModal(false);
     } catch (error) {
@@ -2775,12 +2779,15 @@ function AppContent({
                     <div>
                       <label className="block text-[10px] uppercase tracking-widest font-bold text-[var(--text-secondary)] mb-1.5">{t('profile.phone')}</label>
                       <div className="grid grid-cols-[6.5rem_minmax(0,1fr)] gap-2">
-                        <input
-                          value={profileState.phoneCountryCode}
+                        <select
+                          value={normalizePhoneCountryCode(profileState.phoneCountryCode) || '+47'}
                           onChange={(e) => setProfileState((prev) => ({ ...prev, phoneCountryCode: e.target.value }))}
                           className="w-full px-3 py-2.5 rounded-xl bg-[var(--glass-bg)] border border-[var(--glass-border)] text-sm outline-none focus:border-blue-500/40"
-                          placeholder="+47"
-                        />
+                        >
+                          {getPhoneCountryCodeOptions(profileState.phoneCountryCode).map((option) => (
+                            <option key={option.value} value={option.value}>{option.label}</option>
+                          ))}
+                        </select>
                         <input
                           value={profileState.phone}
                           onChange={(e) => setProfileState((prev) => ({ ...prev, phone: e.target.value }))}

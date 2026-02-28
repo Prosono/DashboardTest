@@ -950,6 +950,7 @@
   "profile.name": "Namn",
   "profile.email": "E-post",
   "profile.phone": "Telefon",
+  "profile.countryCode": "Landskode",
   "profile.avatarUrl": "URL til profilbilete",
   "profile.save": "Lagre profil",
   "userMgmt.title": "Brukaradministrasjon",

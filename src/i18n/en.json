@@ -950,6 +950,7 @@
   "profile.name": "Name",
   "profile.email": "Email",
   "profile.phone": "Phone",
+  "profile.countryCode": "Country code",
   "profile.avatarUrl": "Profile picture URL",
   "profile.save": "Save profile",
   "userMgmt.title": "User Management",
