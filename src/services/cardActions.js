@@ -217,6 +217,22 @@ export const handleAddSelected = (ctx) => {
       return;
     }
 
+    case 'saunaHealthScore': {
+      const cardId = `sauna_health_score_card_${Date.now()}`;
+      commitSingleCard(cardId, {
+        type: 'sauna_health_score',
+        summaryHours: 48,
+        keepDays: 120,
+        maxEntries: 1000,
+        targetTempValue: null,
+        targetToleranceC: 3,
+        activeOnStates: ['on', 'true', '1', 'yes', 'active', 'booked', 'occupied', 'aktiv'],
+        serviceOnStates: ['ja', 'yes', 'service', 'on', 'true', '1'],
+        healthSnapshots: [],
+      }, { openEdit: true });
+      return;
+    }
+
     case 'notificationTimeline': {
       const cardId = `notification_timeline_card_${Date.now()}`;
       commitSingleCard(cardId, {

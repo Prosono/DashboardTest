@@ -311,17 +311,18 @@ export default function ModalOrchestrator({
     const isEditRoom = !!editId && editId.startsWith('room_card_');
     const isEditSauna = !!editId && editId.startsWith('sauna_card_');
     const isEditSaunaBookingTemp = !!editId && editId.startsWith('sauna_booking_temp_card_');
+    const isEditSaunaHealthScore = !!editId && editId.startsWith('sauna_health_score_card_');
     const isEditPopupLauncher = !!editId && editId.startsWith('popup_launcher_card_');
     const isEditDivider = !!editId && editId.startsWith('divider_card_');
     const isEditEmpty = !!editId && editId.startsWith('empty_card_');
     const isEditCover = !!editId && editId.startsWith('cover_card_');
     const editSettings = isEditCar ? resolveCarSettings(editId, rawEditSettings) : rawEditSettings;
-    const isEditGenericType = (!!editSettings?.type && (editSettings.type === 'entity' || editSettings.type === 'toggle' || editSettings.type === 'sensor' || editSettings.type === 'divider' || editSettings.type === 'empty' || editSettings.type === 'calendar_booking' || editSettings.type === 'popup_launcher' || editSettings.type === 'notification_timeline')) || isEditVacuum || isEditAutomation || isEditCar || isEditAndroidTV || isEditRoom || isEditSauna || isEditSaunaBookingTemp || isEditPopupLauncher || isEditDivider || isEditEmpty || isEditCalendarBooking;
+    const isEditGenericType = (!!editSettings?.type && (editSettings.type === 'entity' || editSettings.type === 'toggle' || editSettings.type === 'sensor' || editSettings.type === 'divider' || editSettings.type === 'empty' || editSettings.type === 'calendar_booking' || editSettings.type === 'popup_launcher' || editSettings.type === 'notification_timeline' || editSettings.type === 'sauna_health_score')) || isEditVacuum || isEditAutomation || isEditCar || isEditAndroidTV || isEditRoom || isEditSauna || isEditSaunaBookingTemp || isEditSaunaHealthScore || isEditPopupLauncher || isEditDivider || isEditEmpty || isEditCalendarBooking;
     const isEditSensor = !!editSettings?.type && editSettings.type === 'sensor';
     const isEditWeatherTemp = !!editId && editId.startsWith('weather_temp_');
     const canEditName = !!editId && !isEditWeatherTemp && !isEditDivider && !isEditEmpty && editId !== 'media_player' && editId !== 'sonos';
     const canEditIcon = !!editId && (
-      isEditLight || isEditCalendar || isEditCalendarBooking || isEditTodo || isEditRoom || isEditSauna || isEditSaunaBookingTemp || isEditCover || isEditDivider
+      isEditLight || isEditCalendar || isEditCalendarBooking || isEditTodo || isEditRoom || isEditSauna || isEditSaunaBookingTemp || isEditSaunaHealthScore || isEditCover || isEditDivider
       || editId.startsWith('automation.') || editId.startsWith('vacuum.')
       || editId.startsWith('climate_card_') || editId.startsWith('cost_card_')
       || editId.startsWith('fan_card_') || editId.startsWith('door_card_') || editId.startsWith('motion_card_')
@@ -334,7 +335,7 @@ export default function ModalOrchestrator({
     return {
       canEditName, canEditIcon, canEditStatus,
       isEditLight, isEditCalendar, isEditCalendarBooking, isEditTodo, isEditCost, isEditGenericType,
-      isEditAndroidTV, isEditCar, isEditRoom, isEditSauna, isEditSaunaBookingTemp, isEditPopupLauncher, isEditDivider, isEditEmpty, isEditSensor, isEditWeatherTemp,
+      isEditAndroidTV, isEditCar, isEditRoom, isEditSauna, isEditSaunaBookingTemp, isEditSaunaHealthScore, isEditPopupLauncher, isEditDivider, isEditEmpty, isEditSensor, isEditWeatherTemp,
       editSettingsKey, editSettings,
     };
   }, [showEditCardModal, editSettingsKey, cardSettings, entities]);

@@ -30,6 +30,7 @@ import {
   RoomCard,
   SaunaCard,
   SaunaBookingTempCard,
+  SaunaHealthScoreCard,
   SensorCard,
   VacuumCard,
   WeatherTempCard,
@@ -541,6 +542,27 @@ export function renderSaunaBookingTempCard(cardId, dragProps, getControls, cardS
   );
 }
 
+export function renderSaunaHealthScoreCard(cardId, dragProps, getControls, cardStyle, settingsKey, ctx) {
+  const { entities, editMode, cardSettings, customNames, customIcons, saveCardSetting, t } = ctx;
+  const scoreSettings = cardSettings[settingsKey] || cardSettings[cardId] || {};
+  return (
+    <SaunaHealthScoreCard
+      cardId={cardId}
+      settings={scoreSettings}
+      settingsKey={settingsKey}
+      entities={entities}
+      dragProps={dragProps}
+      controls={getControls(cardId)}
+      cardStyle={cardStyle}
+      editMode={editMode}
+      customNames={customNames}
+      customIcons={customIcons}
+      saveCardSetting={saveCardSetting}
+      t={t}
+    />
+  );
+}
+
 export function renderPopupLauncherCard(cardId, dragProps, getControls, cardStyle, settingsKey, ctx) {
   const { editMode, cardSettings, customNames, setShowPopupCardModal, t } = ctx;
   const settings = cardSettings[settingsKey] || cardSettings[cardId] || {};
@@ -732,6 +754,10 @@ export function dispatchCardRender(cardId, dragProps, getControls, cardStyle, se
 
   if (cardId.startsWith('sauna_booking_temp_card_')) {
     return renderSaunaBookingTempCard(cardId, dragProps, getControls, cardStyle, settingsKey, ctx);
+  }
+
+  if (cardId.startsWith('sauna_health_score_card_')) {
+    return renderSaunaHealthScoreCard(cardId, dragProps, getControls, cardStyle, settingsKey, ctx);
   }
 
   if (cardId.startsWith('popup_launcher_card_')) {

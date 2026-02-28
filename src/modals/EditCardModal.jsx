@@ -97,6 +97,7 @@ export default function EditCardModal({
   isEditRoom,
   isEditSauna,
   isEditSaunaBookingTemp,
+  isEditSaunaHealthScore,
   isEditPopupLauncher,
   isEditDivider,
   isEditAndroidTV,
@@ -1735,6 +1736,205 @@ export default function EditCardModal({
                   className="w-full px-3 py-2 rounded-xl border border-red-400/35 bg-red-500/10 text-red-300 text-xs font-bold uppercase tracking-widest hover:bg-red-500/15 transition-colors"
                 >
                   {translateText('sauna.bookingTemp.clearHistory', 'Clear stored history')}
+                </button>
+              </div>
+            </div>
+          )}
+
+          {isEditSaunaHealthScore && editSettingsKey && (
+            <div className="space-y-6">
+              <div className="popup-surface rounded-2xl p-4 space-y-3">
+                <div className="text-xs uppercase font-bold tracking-widest text-gray-500">
+                  {translateText('sauna.healthScore.cardOptions', 'Sauna health score')}
+                </div>
+                <div className="text-[11px] text-[var(--text-secondary)] leading-relaxed">
+                  {translateText('sauna.healthScore.description', 'Logs one sample every hour at :01 while booking is active and service is off. Score is based on deviation from target temperature.')}
+                </div>
+              </div>
+
+              <SearchableSelect
+                label={translateText('sauna.healthScore.tempEntity', 'Current temperature sensor')}
+                value={editSettings.tempEntityId || null}
+                options={saunaTempSensorOptions}
+                onChange={(value) => saveCardSetting(editSettingsKey, 'tempEntityId', value)}
+                placeholder={translateText('dropdown.noneSelected', 'None selected')}
+                entities={entities}
+                t={t}
+              />
+
+              <SearchableSelect
+                label={translateText('sauna.healthScore.activeEntity', 'Booking active sensor')}
+                value={editSettings.bookingActiveEntityId || null}
+                options={saunaActiveOptions}
+                onChange={(value) => saveCardSetting(editSettingsKey, 'bookingActiveEntityId', value)}
+                placeholder={translateText('dropdown.noneSelected', 'None selected')}
+                entities={entities}
+                t={t}
+              />
+
+              <SearchableSelect
+                label={translateText('sauna.healthScore.serviceEntity', 'Service sensor (optional)')}
+                value={editSettings.serviceEntityId || null}
+                options={saunaServiceOptions}
+                onChange={(value) => saveCardSetting(editSettingsKey, 'serviceEntityId', value)}
+                placeholder={translateText('dropdown.noneSelected', 'None selected')}
+                entities={entities}
+                t={t}
+              />
+
+              <SearchableSelect
+                label={translateText('sauna.healthScore.targetEntity', 'Target temperature entity (optional)')}
+                value={editSettings.targetTempEntityId || null}
+                options={saunaTempSensorOptions}
+                onChange={(value) => saveCardSetting(editSettingsKey, 'targetTempEntityId', value)}
+                placeholder={translateText('dropdown.noneSelected', 'None selected')}
+                entities={entities}
+                t={t}
+              />
+
+              <div className="space-y-1">
+                <label className="text-[10px] uppercase tracking-wider text-[var(--text-secondary)]">
+                  {translateText('sauna.healthScore.targetValue', 'Target temperature override (deg C, optional)')}
+                </label>
+                <input
+                  type="number"
+                  min={0}
+                  max={130}
+                  step={0.5}
+                  className="w-full px-3 py-2 rounded-xl popup-surface text-[var(--text-primary)]"
+                  value={editSettings.targetTempValue ?? ''}
+                  placeholder="80"
+                  onChange={(e) => {
+                    const raw = e.target.value;
+                    if (raw === '') {
+                      saveCardSetting(editSettingsKey, 'targetTempValue', null);
+                      return;
+                    }
+                    const value = Number(raw);
+                    if (!Number.isFinite(value)) return;
+                    saveCardSetting(editSettingsKey, 'targetTempValue', Math.max(0, Math.min(130, Number(value.toFixed(1)))));
+                  }}
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <label className="text-[10px] uppercase tracking-wider text-[var(--text-secondary)]">
+                    {translateText('sauna.healthScore.summaryHours', 'Summary hours')}
+                  </label>
+                  <input
+                    type="number"
+                    min={6}
+                    max={168}
+                    step={1}
+                    className="w-full px-3 py-2 rounded-xl popup-surface text-[var(--text-primary)]"
+                    value={Number(editSettings.summaryHours) || 48}
+                    onChange={(e) => {
+                      const value = Number(e.target.value);
+                      if (!Number.isFinite(value)) return;
+                      saveCardSetting(editSettingsKey, 'summaryHours', Math.max(6, Math.min(168, Math.round(value))));
+                    }}
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[10px] uppercase tracking-wider text-[var(--text-secondary)]">
+                    {translateText('sauna.healthScore.targetTolerance', 'Target tolerance (deg C)')}
+                  </label>
+                  <input
+                    type="number"
+                    min={0}
+                    max={20}
+                    step={0.1}
+                    className="w-full px-3 py-2 rounded-xl popup-surface text-[var(--text-primary)]"
+                    value={Number.isFinite(Number(editSettings.targetToleranceC)) ? Number(editSettings.targetToleranceC) : 3}
+                    onChange={(e) => {
+                      const value = Number(e.target.value);
+                      if (!Number.isFinite(value)) return;
+                      saveCardSetting(editSettingsKey, 'targetToleranceC', Math.max(0, Math.min(20, Number(value.toFixed(1)))));
+                    }}
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[10px] uppercase tracking-wider text-[var(--text-secondary)]">
+                    {translateText('sauna.healthScore.keepDays', 'Retention days')}
+                  </label>
+                  <input
+                    type="number"
+                    min={7}
+                    max={365}
+                    step={1}
+                    className="w-full px-3 py-2 rounded-xl popup-surface text-[var(--text-primary)]"
+                    value={Number(editSettings.keepDays) || 120}
+                    onChange={(e) => {
+                      const value = Number(e.target.value);
+                      if (!Number.isFinite(value)) return;
+                      saveCardSetting(editSettingsKey, 'keepDays', Math.max(7, Math.min(365, Math.round(value))));
+                    }}
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[10px] uppercase tracking-wider text-[var(--text-secondary)]">
+                    {translateText('sauna.healthScore.maxEntries', 'Max entries')}
+                  </label>
+                  <input
+                    type="number"
+                    min={25}
+                    max={3000}
+                    step={25}
+                    className="w-full px-3 py-2 rounded-xl popup-surface text-[var(--text-primary)]"
+                    value={Number(editSettings.maxEntries) || 1000}
+                    onChange={(e) => {
+                      const value = Number(e.target.value);
+                      if (!Number.isFinite(value)) return;
+                      saveCardSetting(editSettingsKey, 'maxEntries', Math.max(25, Math.min(3000, Math.round(value))));
+                    }}
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-[10px] uppercase tracking-wider text-[var(--text-secondary)]">
+                  {translateText('sauna.healthScore.activeStates', 'Booking active states (comma separated)')}
+                </label>
+                <input
+                  type="text"
+                  className="w-full px-3 py-2 rounded-xl popup-surface text-[var(--text-primary)]"
+                  defaultValue={Array.isArray(editSettings.activeOnStates) && editSettings.activeOnStates.length ? editSettings.activeOnStates.join(', ') : 'on, true, 1, yes, active'}
+                  onBlur={(e) => {
+                    const parsed = parseStateCsv(e.target.value);
+                    saveCardSetting(editSettingsKey, 'activeOnStates', parsed.length ? parsed : null);
+                  }}
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-[10px] uppercase tracking-wider text-[var(--text-secondary)]">
+                  {translateText('sauna.healthScore.serviceStates', 'Service states (comma separated)')}
+                </label>
+                <input
+                  type="text"
+                  className="w-full px-3 py-2 rounded-xl popup-surface text-[var(--text-primary)]"
+                  defaultValue={Array.isArray(editSettings.serviceOnStates) && editSettings.serviceOnStates.length ? editSettings.serviceOnStates.join(', ') : 'ja, yes, service, on, true'}
+                  onBlur={(e) => {
+                    const parsed = parseStateCsv(e.target.value);
+                    saveCardSetting(editSettingsKey, 'serviceOnStates', parsed.length ? parsed : null);
+                  }}
+                />
+              </div>
+
+              <div className="popup-surface rounded-2xl p-3 space-y-2">
+                <div className="text-[10px] uppercase tracking-wider text-[var(--text-secondary)]">
+                  {translateText('sauna.healthScore.history', 'Stored samples')}
+                </div>
+                <div className="text-sm font-semibold text-[var(--text-primary)]">
+                  {Array.isArray(editSettings.healthSnapshots) ? editSettings.healthSnapshots.length : 0}
+                </div>
+                <button
+                  type="button"
+                  onClick={() => saveCardSetting(editSettingsKey, 'healthSnapshots', [])}
+                  className="w-full px-3 py-2 rounded-xl border border-red-400/35 bg-red-500/10 text-red-300 text-xs font-bold uppercase tracking-widest hover:bg-red-500/15 transition-colors"
+                >
+                  {translateText('sauna.healthScore.clearHistory', 'Clear stored history')}
                 </button>
               </div>
             </div>

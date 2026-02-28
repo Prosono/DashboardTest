@@ -18,6 +18,7 @@ export { default as RoomCard } from './cards/RoomCard';
 export { default as SensorCard } from './cards/SensorCard';
 export { default as SaunaCard } from './cards/SaunaCard';
 export { default as SaunaBookingTempCard } from './cards/SaunaBookingTempCard';
+export { default as SaunaHealthScoreCard } from './cards/SaunaHealthScoreCard';
 export { default as PopupLauncherCard } from './cards/PopupLauncherCard';
 export { default as NotificationTimelineCard } from './cards/NotificationTimelineCard';
 export { default as StatusPill } from './cards/StatusPill';

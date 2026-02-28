@@ -101,6 +101,7 @@ export function useAddCard({
     if (addCardType === 'car') return t('addCard.available.cars');
     if (addCardType === 'calendarBooking') return t('addCard.available.entities');
     if (addCardType === 'saunaBookingTemp') return t('addCard.available.entities');
+    if (addCardType === 'saunaHealthScore') return t('addCard.available.entities');
     if (addCardType === 'popupLauncher') return t('addCard.available.entities');
     if (addCardType === 'empty') return t('addCard.available.entities');
     if (addCardType === 'divider') return t('addCard.available.entities');
@@ -143,6 +144,8 @@ export function useAddCard({
             : addCardType === 'calendarBooking'
               ? 'addCard.item.entities'
             : addCardType === 'saunaBookingTemp'
+              ? 'addCard.item.entities'
+            : addCardType === 'saunaHealthScore'
               ? 'addCard.item.entities'
             : addCardType === 'popupLauncher'
               ? 'addCard.item.entities'
