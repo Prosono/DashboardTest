@@ -21,6 +21,7 @@ import {
   GenericClimateCard,
   GenericEnergyCostCard,
   GenericNordpoolCard,
+  GlobalTimelineCard,
   LightCard,
   MediaPlayerCard,
   MediaGroupCard,
@@ -606,6 +607,27 @@ export function renderNotificationTimelineCard(cardId, dragProps, getControls, c
   );
 }
 
+export function renderGlobalTimelineCard(cardId, dragProps, getControls, cardStyle, settingsKey, ctx) {
+  const { editMode, cardSettings, customNames, language, t, userAdminApi, currentUser } = ctx;
+  const settings = cardSettings[settingsKey] || cardSettings[cardId] || {};
+  return (
+    <GlobalTimelineCard
+      key={cardId}
+      cardId={cardId}
+      settings={settings}
+      dragProps={dragProps}
+      controls={getControls(cardId)}
+      cardStyle={cardStyle}
+      editMode={editMode}
+      customNames={customNames}
+      locale={language === 'en' ? 'en-US' : 'nb-NO'}
+      t={t}
+      userAdminApi={userAdminApi}
+      currentUser={currentUser}
+    />
+  );
+}
+
 export function renderDividerCard(cardId, dragProps, getControls, cardStyle, settingsKey, ctx) {
   const { editMode, cardSettings } = ctx;
   const settings = cardSettings[settingsKey] || cardSettings[cardId] || {};
@@ -766,6 +788,10 @@ export function dispatchCardRender(cardId, dragProps, getControls, cardStyle, se
 
   if (cardId.startsWith('notification_timeline_card_')) {
     return renderNotificationTimelineCard(cardId, dragProps, getControls, cardStyle, settingsKey, ctx);
+  }
+
+  if (cardId.startsWith('global_timeline_card_')) {
+    return renderGlobalTimelineCard(cardId, dragProps, getControls, cardStyle, settingsKey, ctx);
   }
 
   if (cardId.startsWith('divider_card_')) {

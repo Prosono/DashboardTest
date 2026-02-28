@@ -26,6 +26,7 @@ const CARD_SPAN_RULES = [
   { prefix: 'calendar_booking_card_', category: 'triSize' },
   { prefix: 'todo_card_',     category: 'triSize' },
   { prefix: 'notification_timeline_card_', category: 'triSize' },
+  { prefix: 'global_timeline_card_', category: 'triSize' },
   { prefix: 'light_',         category: 'dualSize' },
   { prefix: 'light.',         category: 'dualSize' },
   { prefix: 'car_card_',      category: 'dualSize' },

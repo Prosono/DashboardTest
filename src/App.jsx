@@ -2121,6 +2121,7 @@ function AppContent({
       entities, editMode, conn, cardSettings, customNames, customIcons,
       getA, getS, getEntityImageUrl, callService, isMediaActive,
       saveCardSetting, language, isMobile, activePage, t,
+      currentUser, userAdminApi,
       optimisticLightBrightness, setOptimisticLightBrightness,
       tempHistoryById, isCardHiddenByLogic,
       setShowLightModal, setShowSensorInfoModal, setActiveClimateEntityModal,

@@ -21,6 +21,7 @@ export { default as SaunaBookingTempCard } from './cards/SaunaBookingTempCard';
 export { default as SaunaHealthScoreCard } from './cards/SaunaHealthScoreCard';
 export { default as PopupLauncherCard } from './cards/PopupLauncherCard';
 export { default as NotificationTimelineCard } from './cards/NotificationTimelineCard';
+export { default as GlobalTimelineCard } from './cards/GlobalTimelineCard';
 export { default as StatusPill } from './cards/StatusPill';
 export { default as TodoCard } from './cards/TodoCard';
 export { default as VacuumCard } from './cards/VacuumCard';

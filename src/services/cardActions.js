@@ -243,6 +243,20 @@ export const handleAddSelected = (ctx) => {
       return;
     }
 
+    case 'globalTimeline': {
+      const cardId = `global_timeline_card_${Date.now()}`;
+      commitSingleCard(cardId, {
+        type: 'global_timeline',
+        maxEntries: 120,
+        autoRefreshSec: 45,
+        includeAppActions: true,
+        includeDashboardLogs: true,
+        includeSessions: true,
+        includeConnectionIssues: true,
+      }, { openEdit: true });
+      return;
+    }
+
     case 'popupLauncher': {
       const cardId = `popup_launcher_card_${Date.now()}`;
       commitSingleCard(cardId, {

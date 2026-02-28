@@ -177,6 +177,10 @@ export default function EditCardModal({
     editSettings?.type === 'notification_timeline'
     || String(entityId || '').startsWith('notification_timeline_card_')
   );
+  const isGlobalTimelineEdit = (
+    editSettings?.type === 'global_timeline'
+    || String(entityId || '').startsWith('global_timeline_card_')
+  );
 
   const entityEntries = Object.entries(entities || {});
   const byDomain = (domain) => entityEntries.filter(([id]) => id.startsWith(`${domain}.`)).map(([id]) => id);
@@ -490,6 +494,73 @@ export default function EditCardModal({
                     }}
                   />
                 </div>
+              </div>
+            </div>
+          )}
+
+          {editSettingsKey && isGlobalTimelineEdit && (
+            <div className="space-y-3">
+              <label className="text-xs uppercase font-bold text-gray-500 ml-1">
+                {translateText('globalTimeline.settings.title', 'Global timeline settings')}
+              </label>
+              <div className="rounded-2xl popup-surface p-3 space-y-3">
+                <div className="space-y-1">
+                  <span className="text-[10px] uppercase tracking-wider text-[var(--text-secondary)]">
+                    {translateText('globalTimeline.settings.maxEntries', 'Max entries')}
+                  </span>
+                  <input
+                    type="number"
+                    min={20}
+                    max={200}
+                    step={1}
+                    className="w-full px-3 py-2 text-[var(--text-primary)] rounded-xl popup-surface focus:border-blue-500/50 outline-none transition-colors"
+                    value={Number(editSettings?.maxEntries) || 120}
+                    onChange={(e) => {
+                      const parsed = Number(e.target.value);
+                      const next = Number.isFinite(parsed) ? Math.max(20, Math.min(200, Math.round(parsed))) : 120;
+                      saveCardSetting(editSettingsKey, 'maxEntries', next);
+                    }}
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <span className="text-[10px] uppercase tracking-wider text-[var(--text-secondary)]">
+                    {translateText('globalTimeline.settings.autoRefreshSec', 'Auto refresh (sec)')}
+                  </span>
+                  <input
+                    type="number"
+                    min={10}
+                    max={600}
+                    step={1}
+                    className="w-full px-3 py-2 text-[var(--text-primary)] rounded-xl popup-surface focus:border-blue-500/50 outline-none transition-colors"
+                    value={Number(editSettings?.autoRefreshSec) || 45}
+                    onChange={(e) => {
+                      const parsed = Number(e.target.value);
+                      const next = Number.isFinite(parsed) ? Math.max(10, Math.min(600, Math.round(parsed))) : 45;
+                      saveCardSetting(editSettingsKey, 'autoRefreshSec', next);
+                    }}
+                  />
+                </div>
+
+                {[
+                  { key: 'includeAppActions', label: translateText('globalTimeline.settings.includeAppActions', 'Include app actions') },
+                  { key: 'includeDashboardLogs', label: translateText('globalTimeline.settings.includeDashboardLogs', 'Include dashboard saves') },
+                  { key: 'includeSessions', label: translateText('globalTimeline.settings.includeSessions', 'Include session activity') },
+                  { key: 'includeConnectionIssues', label: translateText('globalTimeline.settings.includeConnectionIssues', 'Include connection issues') },
+                ].map((option) => (
+                  <div key={option.key} className="flex items-center justify-between gap-3">
+                    <p className="text-xs font-semibold text-[var(--text-secondary)]">
+                      {option.label}
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => saveCardSetting(editSettingsKey, option.key, !(editSettings?.[option.key] !== false))}
+                      className={`w-10 h-6 rounded-full p-1 transition-colors relative ${(editSettings?.[option.key] !== false) ? 'bg-blue-500' : 'bg-gray-500/30'}`}
+                    >
+                      <div className={`w-4 h-4 rounded-full bg-white shadow-sm transition-transform ${(editSettings?.[option.key] !== false) ? 'translate-x-4' : 'translate-x-0'}`} />
+                    </button>
+                  </div>
+                ))}
               </div>
             </div>
           )}
