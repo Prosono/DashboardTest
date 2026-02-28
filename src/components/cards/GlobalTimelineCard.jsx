@@ -14,6 +14,7 @@ import {
   User,
   X,
 } from '../../icons';
+import SparkLine from '../charts/SparkLine';
 import { fetchPlatformOverview as fetchPlatformOverviewDirect } from '../../services/appAuth';
 
 const clamp = (value, min, max, fallback) => {
@@ -114,6 +115,101 @@ const getTimeThresholdMs = (windowKey, nowMs) => {
 };
 
 const toSafeText = (value) => String(value ?? '').trim();
+
+const buildActivityChart = (rows, timeWindowFilter) => {
+  if (!Array.isArray(rows) || rows.length === 0) return null;
+
+  const parsedTimes = rows
+    .map((row) => toDateMs(row?.createdAt))
+    .filter((value) => Number.isFinite(value) && value > 0);
+
+  if (!parsedTimes.length) return null;
+
+  const nowMs = Date.now();
+  const rangeMaxMs = Math.max(nowMs, Math.max(...parsedTimes));
+  let rangeMinMs = Math.min(...parsedTimes);
+
+  if (timeWindowFilter === '24h') {
+    rangeMinMs = rangeMaxMs - (24 * 60 * 60 * 1000);
+  } else if (timeWindowFilter === '7d') {
+    rangeMinMs = rangeMaxMs - (7 * 24 * 60 * 60 * 1000);
+  }
+
+  if (!Number.isFinite(rangeMinMs) || !Number.isFinite(rangeMaxMs) || rangeMaxMs <= rangeMinMs) {
+    rangeMinMs = rangeMaxMs - (24 * 60 * 60 * 1000);
+  }
+
+  const spanMs = Math.max(60 * 1000, rangeMaxMs - rangeMinMs);
+  const bucketCount = timeWindowFilter === '7d' ? 28 : 24;
+  const bucketSizeMs = spanMs / bucketCount;
+
+  const buckets = Array.from({ length: bucketCount }, (_, index) => ({
+    index,
+    startMs: rangeMinMs + (index * bucketSizeMs),
+    endMs: rangeMinMs + ((index + 1) * bucketSizeMs),
+    total: 0,
+    high: 0,
+    levels: {
+      critical: 0,
+      error: 0,
+      warning: 0,
+      info: 0,
+      success: 0,
+    },
+  }));
+
+  rows.forEach((row) => {
+    const timestampMs = toDateMs(row?.createdAt);
+    if (!Number.isFinite(timestampMs)) return;
+    if (timestampMs < rangeMinMs || timestampMs > rangeMaxMs) return;
+    const indexRaw = Math.floor((timestampMs - rangeMinMs) / bucketSizeMs);
+    const bucketIndex = Math.max(0, Math.min(bucketCount - 1, indexRaw));
+    const bucket = buckets[bucketIndex];
+    if (!bucket) return;
+
+    const level = normalizeLevel(row?.level);
+    bucket.total += 1;
+    if (level === 'critical' || level === 'error' || level === 'warning') {
+      bucket.high += 1;
+    }
+    if (bucket.levels[level] !== undefined) {
+      bucket.levels[level] += 1;
+    }
+  });
+
+  const dominantBarColor = (bucket) => {
+    if ((bucket.levels.critical + bucket.levels.error) > 0) return '#f43f5e';
+    if (bucket.levels.warning > 0) return '#f59e0b';
+    if (bucket.levels.info > 0) return '#60a5fa';
+    if (bucket.levels.success > 0) return '#34d399';
+    return '#64748b';
+  };
+
+  const toIso = (ms) => new Date(Math.round(ms)).toISOString();
+
+  const barData = buckets.map((bucket) => ({
+    time: toIso((bucket.startMs + bucket.endMs) / 2),
+    value: bucket.total,
+    barColor: dominantBarColor(bucket),
+  }));
+
+  const highSeries = buckets.map((bucket) => ({
+    time: toIso((bucket.startMs + bucket.endMs) / 2),
+    value: bucket.high,
+  }));
+
+  return {
+    rangeMinMs,
+    rangeMaxMs,
+    totalCount: rows.length,
+    highSeverityCount: rows.filter((row) => {
+      const level = normalizeLevel(row?.level);
+      return level === 'critical' || level === 'error' || level === 'warning';
+    }).length,
+    barData,
+    highSeries,
+  };
+};
 
 const buildTimelineRows = ({
   overview,
@@ -401,6 +497,11 @@ export default function GlobalTimelineCard({
     });
   }, [clientFilter, rows, searchQuery, severityFilter, sourceFilter, timeWindowFilter]);
 
+  const activityChart = useMemo(
+    () => buildActivityChart(filteredRows, timeWindowFilter),
+    [filteredRows, timeWindowFilter],
+  );
+
   const selectedRow = useMemo(() => {
     if (!selectedRowId) return null;
     return rows.find((row) => String(row?.id || '') === selectedRowId) || null;
@@ -629,6 +730,55 @@ export default function GlobalTimelineCard({
                 <option key={option.value} value={option.value}>{option.label}</option>
               ))}
             </select>
+          </div>
+        )}
+
+        {!editMode && !loading && !error && activityChart && (
+          <div className="mb-3 rounded-xl border border-[var(--glass-border)] bg-[var(--glass-bg)] p-2.5">
+            <div className="flex items-center justify-between gap-2">
+              <p className="text-[10px] uppercase tracking-[0.2em] font-bold text-[var(--text-secondary)]">
+                {tr(t, 'globalTimeline.chart.title', 'Timeline activity')}
+              </p>
+              <div className="text-[10px] text-[var(--text-secondary)]">
+                <span className="font-semibold text-[var(--text-primary)]">{activityChart.totalCount}</span>
+                {' '}
+                {tr(t, 'globalTimeline.chart.total', 'events')}
+                {' • '}
+                <span className="font-semibold text-amber-300">{activityChart.highSeverityCount}</span>
+                {' '}
+                {tr(t, 'globalTimeline.chart.highSeverity', 'high')}
+              </div>
+            </div>
+
+            <div className="mt-1.5">
+              <SparkLine
+                data={activityChart.barData}
+                currentIndex={Math.max(0, activityChart.barData.length - 1)}
+                height={86}
+                variant="bar"
+                barColorAccessor={(point) => point?.barColor}
+                barMaxHeightRatio={0.72}
+                useTimeScale
+                curve="linear"
+                lineStrokeWidth={1.2}
+                areaFill={false}
+                showCurrentMarker={false}
+                overlaySeries={[
+                  {
+                    id: 'high-severity',
+                    label: 'high-severity',
+                    color: '#f59e0b',
+                    strokeWidth: 1.35,
+                    data: activityChart.highSeries,
+                  },
+                ]}
+              />
+            </div>
+
+            <div className="mt-1 flex items-center justify-between gap-2 text-[10px] text-[var(--text-muted)]">
+              <span>{formatDateTime(new Date(activityChart.rangeMinMs).toISOString(), locale, true)}</span>
+              <span>{formatDateTime(new Date(activityChart.rangeMaxMs).toISOString(), locale, true)}</span>
+            </div>
           </div>
         )}
 

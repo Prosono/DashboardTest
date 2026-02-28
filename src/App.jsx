@@ -380,7 +380,7 @@ function AppContent({
   const isPlatformAdmin = currentUser?.isPlatformAdmin === true;
   const currentUserRole = normalizeRole(currentUser?.role);
   const isLocalClientAdmin = currentUserRole === 'admin' && !isPlatformAdmin;
-  const canEditDashboard = isLocalClientAdmin;
+  const canEditDashboard = isLocalClientAdmin || isPlatformAdmin;
   const canEditGlobalBranding = isPlatformAdmin;
   const canEditClientSubtitle = isLocalClientAdmin;
   const canManageUsersAndClients = currentUserRole === 'admin' || isPlatformAdmin;
