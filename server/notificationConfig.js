@@ -12,20 +12,32 @@ export const DEFAULT_NOTIFICATION_CONFIG = {
     inApp: true,
     browser: true,
     native: true,
+    sms: false,
+    smsTargets: {
+      groups: ['admin'],
+      userIds: [],
+    },
     cooldownSeconds: 60,
   },
   critical: {
     inApp: true,
     browser: true,
     native: true,
+    sms: false,
+    smsTargets: {
+      groups: ['admin'],
+      userIds: [],
+    },
     cooldownSeconds: 0,
   },
   rules: [],
 };
 
 const MAX_RULES = 60;
+const MAX_TARGET_USERS = 100;
 const CONDITION_TYPES = new Set(['greater_than', 'less_than', 'equals', 'is_active']);
 const LEVEL_TYPES = new Set(['info', 'warning', 'critical', 'success', 'error']);
+const ROLE_TARGETS = new Set(['admin', 'user', 'inspector']);
 
 const toBool = (value, fallback) => {
   if (value === undefined || value === null) return fallback;
@@ -47,12 +59,37 @@ const normalizeEntityId = (value, fallback) => {
   return normalized || fallback;
 };
 
+const normalizeSmsTargets = (value, fallback = { groups: ['admin'], userIds: [] }) => {
+  const input = value && typeof value === 'object' ? value : {};
+  const fallbackGroups = Array.isArray(fallback?.groups) ? fallback.groups : ['admin'];
+  const fallbackUserIds = Array.isArray(fallback?.userIds) ? fallback.userIds : [];
+
+  const groups = Array.from(new Set(
+    (Array.isArray(input.groups) ? input.groups : fallbackGroups)
+      .map((entry) => String(entry || '').trim().toLowerCase())
+      .filter((entry) => ROLE_TARGETS.has(entry)),
+  ));
+
+  const userIds = Array.from(new Set(
+    (Array.isArray(input.userIds) ? input.userIds : fallbackUserIds)
+      .map((entry) => String(entry || '').trim())
+      .filter(Boolean),
+  )).slice(0, MAX_TARGET_USERS);
+
+  if (groups.length === 0 && userIds.length === 0) {
+    return { groups: ['admin'], userIds: [] };
+  }
+  return { groups, userIds };
+};
+
 const normalizeLevelConfig = (value, fallback) => {
   const input = value && typeof value === 'object' ? value : {};
   return {
     inApp: toBool(input.inApp, fallback.inApp),
     browser: toBool(input.browser, fallback.browser),
     native: toBool(input.native, fallback.native),
+    sms: toBool(input.sms, fallback.sms),
+    smsTargets: normalizeSmsTargets(input.smsTargets, fallback.smsTargets),
     cooldownSeconds: clampInt(input.cooldownSeconds, fallback.cooldownSeconds, 0, 86400),
   };
 };
@@ -63,6 +100,7 @@ const normalizeRuleChannels = (value) => {
     inApp: toBool(input.inApp, true),
     browser: toBool(input.browser, true),
     native: toBool(input.native, true),
+    sms: toBool(input.sms, false),
   };
 };
 
@@ -83,6 +121,7 @@ const normalizeRule = (value, index) => {
     message: String(input.message || '').trim(),
     level,
     channels: normalizeRuleChannels(input.channels),
+    smsTargets: normalizeSmsTargets(input.smsTargets, { groups: ['admin'], userIds: [] }),
     cooldownSeconds: clampInt(input.cooldownSeconds, 300, 0, 86400),
   };
 };

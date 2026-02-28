@@ -156,6 +156,7 @@
   "notifications.channel.inApp": "In app",
   "notifications.channel.browser": "Browser",
   "notifications.channel.native": "Mobile native",
+  "notifications.channel.sms": "SMS",
   "notifications.cooldownSeconds": "Cooldown between notifications (seconds)",
   "notifications.noChannelWarning": "No channels enabled for this severity.",
   "notifications.disabledHint": "Notifications are disabled for this client.",

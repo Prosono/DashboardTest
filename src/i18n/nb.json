@@ -743,6 +743,7 @@
   "notifications.channel.inApp": "I appen",
   "notifications.channel.browser": "Nettleser",
   "notifications.channel.native": "Mobil (native)",
+  "notifications.channel.sms": "SMS",
   "notifications.cooldownSeconds": "Ventetid mellom varsler (sekunder)",
   "notifications.noChannelWarning": "Ingen kanaler er aktivert for dette nivået.",
   "notifications.disabledHint": "Varsler er deaktivert for denne klienten.",

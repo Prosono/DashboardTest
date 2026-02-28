@@ -231,6 +231,7 @@ export const safeUser = (userRow) => ({
   haToken: userRow.ha_token || '',
   fullName: userRow.full_name || '',
   email: userRow.email || '',
+  phoneCountryCode: userRow.phone_country_code || '+47',
   phone: userRow.phone || '',
   avatarUrl: userRow.avatar_url || '',
   createdAt: userRow.created_at,

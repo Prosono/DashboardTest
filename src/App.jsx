@@ -78,6 +78,10 @@ import {
   saveGlobalBranding as saveServerGlobalBranding,
   fetchNotificationConfig as fetchServerNotificationConfig,
   saveNotificationConfig as saveServerNotificationConfig,
+  fetchTwilioSmsConfig as fetchServerTwilioSmsConfig,
+  saveTwilioSmsConfig as saveServerTwilioSmsConfig,
+  sendTwilioSmsTest as sendServerTwilioSmsTest,
+  sendNotificationSmsDispatch as sendServerNotificationSmsDispatch,
   fetchAppActionHistory as fetchServerAppActionHistory,
   clearAppActionHistory as clearServerAppActionHistory,
   deleteAppActionHistoryEntry as deleteServerAppActionHistoryEntry,
@@ -385,6 +389,7 @@ function AppContent({
   const canEditClientSubtitle = isLocalClientAdmin;
   const canManageUsersAndClients = currentUserRole === 'admin' || isPlatformAdmin;
   const canManageNotifications = currentUserRole === 'admin' || isPlatformAdmin;
+  const canDispatchSmsNotifications = canManageNotifications;
   const [notificationConfig, setNotificationConfig] = useState(() => normalizeNotificationConfig(DEFAULT_NOTIFICATION_CONFIG));
   const [notificationConfigLoading, setNotificationConfigLoading] = useState(true);
   const [notificationConfigSaving, setNotificationConfigSaving] = useState(false);
@@ -448,6 +453,12 @@ function AppContent({
       setNotificationConfigSaving(false);
     }
   }, [canManageNotifications, userAdminApi, t]);
+
+  const dispatchSmsNotification = useCallback((payload) => {
+    if (!canDispatchSmsNotifications) return;
+    if (typeof userAdminApi?.sendNotificationSmsDispatch !== 'function') return;
+    void userAdminApi.sendNotificationSmsDispatch(payload || {}).catch(() => {});
+  }, [canDispatchSmsNotifications, userAdminApi]);
 
   useEffect(() => {
     if (!canEditDashboard && editMode) setEditMode(false);
@@ -790,11 +801,13 @@ function AppContent({
     if (criticalIncrease > 0) {
       const cooldownMs = Math.max(0, Number(criticalConfig.cooldownSeconds) || 0) * 1000;
       const canSend = cooldownMs <= 0 || (now - Number(alertNotificationLastSentRef.current.critical || 0)) >= cooldownMs;
-      const hasChannel = Boolean(criticalConfig.inApp || criticalConfig.browser || criticalConfig.native);
+      const hasChannel = Boolean(criticalConfig.inApp || criticalConfig.browser || criticalConfig.native || criticalConfig.sms);
       if (canSend && hasChannel) {
+        const title = t('notifications.criticalTitle') || 'Critical warning';
+        const message = `${current.critical} ${t('notifications.activeIssues') || 'active issues'}`;
         void notify({
-          title: t('notifications.criticalTitle') || 'Critical warning',
-          message: `${current.critical} ${t('notifications.activeIssues') || 'active issues'}`,
+          title,
+          message,
           level: 'critical',
           inApp: Boolean(criticalConfig.inApp),
           browser: Boolean(criticalConfig.browser),
@@ -803,16 +816,28 @@ function AppContent({
           persistent: inAppPersistent,
           browserOnlyWhenBackground,
         });
+        if (Boolean(criticalConfig.sms)) {
+          dispatchSmsNotification({
+            title,
+            message,
+            level: 'critical',
+            smsTargets: criticalConfig.smsTargets,
+            dedupeKey: 'system_critical',
+            dedupeWindowMs: cooldownMs,
+          });
+        }
         alertNotificationLastSentRef.current.critical = now;
       }
     } else if (warningIncrease > 0) {
       const cooldownMs = Math.max(0, Number(warningConfig.cooldownSeconds) || 0) * 1000;
       const canSend = cooldownMs <= 0 || (now - Number(alertNotificationLastSentRef.current.warning || 0)) >= cooldownMs;
-      const hasChannel = Boolean(warningConfig.inApp || warningConfig.browser || warningConfig.native);
+      const hasChannel = Boolean(warningConfig.inApp || warningConfig.browser || warningConfig.native || warningConfig.sms);
       if (canSend && hasChannel) {
+        const title = t('notifications.warningTitle') || 'Warning';
+        const message = `${current.warning} ${t('notifications.activeIssues') || 'active issues'}`;
         void notify({
-          title: t('notifications.warningTitle') || 'Warning',
-          message: `${current.warning} ${t('notifications.activeIssues') || 'active issues'}`,
+          title,
+          message,
           level: 'warning',
           inApp: Boolean(warningConfig.inApp),
           browser: Boolean(warningConfig.browser),
@@ -821,12 +846,22 @@ function AppContent({
           persistent: inAppPersistent,
           browserOnlyWhenBackground,
         });
+        if (Boolean(warningConfig.sms)) {
+          dispatchSmsNotification({
+            title,
+            message,
+            level: 'warning',
+            smsTargets: warningConfig.smsTargets,
+            dedupeKey: 'system_warning',
+            dedupeWindowMs: cooldownMs,
+          });
+        }
         alertNotificationLastSentRef.current.warning = now;
       }
     }
 
     alertNotificationPrevRef.current = current;
-  }, [warningAlertCount, criticalAlertCount, notify, t, notificationConfig]);
+  }, [warningAlertCount, criticalAlertCount, notify, t, notificationConfig, dispatchSmsNotification]);
 
   useEffect(() => {
     const rules = Array.isArray(notificationConfig?.rules) ? notificationConfig.rules : [];
@@ -865,7 +900,7 @@ function AppContent({
         const channels = rule?.channels && typeof rule.channels === 'object'
           ? rule.channels
           : { inApp: true, browser: true, native: true };
-        const hasChannel = Boolean(channels.inApp || channels.browser || channels.native);
+        const hasChannel = Boolean(channels.inApp || channels.browser || channels.native || channels.sms);
         if (!hasChannel) return;
 
         const cooldownMs = Math.max(0, Number(rule?.cooldownSeconds) || 0) * 1000;
@@ -900,6 +935,16 @@ function AppContent({
           persistent: inAppPersistent,
           browserOnlyWhenBackground,
         });
+        if (Boolean(channels.sms)) {
+          dispatchSmsNotification({
+            title,
+            message,
+            level: String(rule?.level || 'warning').trim().toLowerCase(),
+            smsTargets: rule?.smsTargets,
+            dedupeKey: `rule_${ruleId}`,
+            dedupeWindowMs: cooldownMs,
+          });
+        }
         customRuleLastSentRef.current[ruleId] = now;
       });
     }
@@ -915,6 +960,7 @@ function AppContent({
     ruleHasConfiguredEntity,
     t,
     renderRuleMessage,
+    dispatchSmsNotification,
   ]);
 
   const saveHeaderLogos = useCallback(async ({ title, logoUrl, logoUrlLight, logoUrlDark, updatedAt: updatedAtInput }) => {
@@ -1110,6 +1156,7 @@ function AppContent({
     username: '',
     fullName: '',
     email: '',
+    phoneCountryCode: '+47',
     phone: '',
     avatarUrl: '',
   });
@@ -1119,10 +1166,11 @@ function AppContent({
       username: currentUser?.username || '',
       fullName: currentUser?.fullName || '',
       email: currentUser?.email || '',
+      phoneCountryCode: currentUser?.phoneCountryCode || '+47',
       phone: currentUser?.phone || '',
       avatarUrl: currentUser?.avatarUrl || '',
     });
-  }, [currentUser?.username, currentUser?.fullName, currentUser?.email, currentUser?.phone, currentUser?.avatarUrl]);
+  }, [currentUser?.username, currentUser?.fullName, currentUser?.email, currentUser?.phoneCountryCode, currentUser?.phone, currentUser?.avatarUrl]);
 
   const saveProfile = useCallback(async (e) => {
     e?.preventDefault?.();
@@ -2726,7 +2774,20 @@ function AppContent({
                     </div>
                     <div>
                       <label className="block text-[10px] uppercase tracking-widest font-bold text-[var(--text-secondary)] mb-1.5">{t('profile.phone')}</label>
-                      <input value={profileState.phone} onChange={(e) => setProfileState((prev) => ({ ...prev, phone: e.target.value }))} className="w-full px-3 py-2.5 rounded-xl bg-[var(--glass-bg)] border border-[var(--glass-border)] text-sm outline-none focus:border-blue-500/40" />
+                      <div className="grid grid-cols-[6.5rem_minmax(0,1fr)] gap-2">
+                        <input
+                          value={profileState.phoneCountryCode}
+                          onChange={(e) => setProfileState((prev) => ({ ...prev, phoneCountryCode: e.target.value }))}
+                          className="w-full px-3 py-2.5 rounded-xl bg-[var(--glass-bg)] border border-[var(--glass-border)] text-sm outline-none focus:border-blue-500/40"
+                          placeholder="+47"
+                        />
+                        <input
+                          value={profileState.phone}
+                          onChange={(e) => setProfileState((prev) => ({ ...prev, phone: e.target.value }))}
+                          className="w-full px-3 py-2.5 rounded-xl bg-[var(--glass-bg)] border border-[var(--glass-border)] text-sm outline-none focus:border-blue-500/40"
+                          placeholder="99999999"
+                        />
+                      </div>
                     </div>
                     <div className="md:col-span-2">
                       <label className="block text-[10px] uppercase tracking-widest font-bold text-[var(--text-secondary)] mb-1.5">{t('profile.avatarUrl')}</label>
@@ -3108,6 +3169,10 @@ export default function App() {
     fetchPlatformOverview: fetchServerPlatformOverview,
     fetchNotificationConfig: fetchServerNotificationConfig,
     saveNotificationConfig: saveServerNotificationConfig,
+    fetchTwilioSmsConfig: fetchServerTwilioSmsConfig,
+    saveTwilioSmsConfig: saveServerTwilioSmsConfig,
+    sendTwilioSmsTest: sendServerTwilioSmsTest,
+    sendNotificationSmsDispatch: sendServerNotificationSmsDispatch,
     fetchAppActionHistory: fetchServerAppActionHistory,
     clearAppActionHistory: clearServerAppActionHistory,
     deleteAppActionHistoryEntry: deleteServerAppActionHistoryEntry,

@@ -43,6 +43,11 @@ router.post('/', (req, res) => {
   const role = parseRole(req.body?.role, 'user');
   const assignedDashboardId = String(req.body?.assignedDashboardId || 'default').trim() || 'default';
   const parsedHa = parseHaFields(req.body);
+  const fullName = String(req.body?.fullName || '').trim();
+  const email = String(req.body?.email || '').trim();
+  const phoneCountryCode = String(req.body?.phoneCountryCode || '+47').trim() || '+47';
+  const phone = String(req.body?.phone || '').trim();
+  const avatarUrl = String(req.body?.avatarUrl || '').trim();
 
   if (!username || !password) {
     return res.status(400).json({ error: 'Username and password are required' });
@@ -61,9 +66,29 @@ router.post('/', (req, res) => {
   const id = randomUUID();
 
   db.prepare(`
-    INSERT INTO users (id, client_id, username, password_hash, role, assigned_dashboard_id, ha_url, ha_token, created_at, updated_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `).run(id, clientId, username, hashPassword(password), role, assignedDashboardId, parsedHa.haUrl, parsedHa.haToken, now, now);
+    INSERT INTO users (
+      id, client_id, username, password_hash, role, assigned_dashboard_id,
+      ha_url, ha_token, full_name, email, phone_country_code, phone, avatar_url,
+      created_at, updated_at
+    )
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(
+    id,
+    clientId,
+    username,
+    hashPassword(password),
+    role,
+    assignedDashboardId,
+    parsedHa.haUrl,
+    parsedHa.haToken,
+    fullName,
+    email,
+    phoneCountryCode,
+    phone,
+    avatarUrl,
+    now,
+    now,
+  );
 
   const user = db.prepare('SELECT * FROM users WHERE id = ? AND client_id = ?').get(id, clientId);
   res.status(201).json({ user: safeUser(user) });
@@ -85,6 +110,9 @@ router.put('/:id', (req, res) => {
   const parsedHa = parseHaFields(req.body, existing);
   const fullName = req.body?.fullName !== undefined ? String(req.body.fullName || '').trim() : (existing.full_name || '');
   const email = req.body?.email !== undefined ? String(req.body.email || '').trim() : (existing.email || '');
+  const phoneCountryCode = req.body?.phoneCountryCode !== undefined
+    ? String(req.body.phoneCountryCode || '').trim()
+    : (existing.phone_country_code || '+47');
   const phone = req.body?.phone !== undefined ? String(req.body.phone || '').trim() : (existing.phone || '');
   const avatarUrl = req.body?.avatarUrl !== undefined ? String(req.body.avatarUrl || '').trim() : (existing.avatar_url || '');
 
@@ -105,9 +133,23 @@ router.put('/:id', (req, res) => {
 
   db.prepare(`
     UPDATE users
-    SET username = ?, role = ?, assigned_dashboard_id = ?, ha_url = ?, ha_token = ?, full_name = ?, email = ?, phone = ?, avatar_url = ?, updated_at = ?
+    SET username = ?, role = ?, assigned_dashboard_id = ?, ha_url = ?, ha_token = ?, full_name = ?, email = ?, phone_country_code = ?, phone = ?, avatar_url = ?, updated_at = ?
     WHERE id = ? AND client_id = ?
-  `).run(username, role, assignedDashboardId, parsedHa.haUrl, parsedHa.haToken, fullName, email, phone, avatarUrl, now, id, clientId);
+  `).run(
+    username,
+    role,
+    assignedDashboardId,
+    parsedHa.haUrl,
+    parsedHa.haToken,
+    fullName,
+    email,
+    phoneCountryCode,
+    phone,
+    avatarUrl,
+    now,
+    id,
+    clientId,
+  );
 
   if (password) {
     db.prepare('UPDATE users SET password_hash = ?, updated_at = ? WHERE id = ? AND client_id = ?')

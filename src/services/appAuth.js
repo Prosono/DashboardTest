@@ -367,6 +367,55 @@ export const saveNotificationConfig = async (config) => {
   return normalizeNotificationConfig(payload?.config || {});
 };
 
+export const fetchTwilioSmsConfig = async () => {
+  const payload = await apiRequest('/api/auth/twilio-sms-config', { method: 'GET' });
+  const config = payload?.config && typeof payload.config === 'object' ? payload.config : {};
+  return {
+    accountSid: String(config.accountSid || '').trim(),
+    fromNumber: String(config.fromNumber || '').trim(),
+    hasAuthToken: Boolean(config.hasAuthToken),
+    updatedAt: config.updatedAt || null,
+  };
+};
+
+export const saveTwilioSmsConfig = async (config) => {
+  const payload = await apiRequest('/api/auth/twilio-sms-config', {
+    method: 'PUT',
+    body: JSON.stringify(config || {}),
+  });
+  const next = payload?.config && typeof payload.config === 'object' ? payload.config : {};
+  return {
+    accountSid: String(next.accountSid || '').trim(),
+    fromNumber: String(next.fromNumber || '').trim(),
+    hasAuthToken: Boolean(next.hasAuthToken),
+    updatedAt: next.updatedAt || null,
+  };
+};
+
+export const sendTwilioSmsTest = async ({ to, countryCode, message }) => {
+  const payload = await apiRequest('/api/auth/twilio-sms-test', {
+    method: 'POST',
+    body: JSON.stringify({
+      to: String(to || '').trim(),
+      countryCode: String(countryCode || '').trim(),
+      message: String(message || ''),
+    }),
+  });
+  return {
+    success: Boolean(payload?.success),
+    sid: String(payload?.sid || '').trim(),
+    to: String(payload?.to || '').trim(),
+  };
+};
+
+export const sendNotificationSmsDispatch = async (payloadInput) => {
+  const payload = await apiRequest('/api/auth/notification-sms', {
+    method: 'POST',
+    body: JSON.stringify(payloadInput || {}),
+  });
+  return payload && typeof payload === 'object' ? payload : {};
+};
+
 export const fetchNotificationHistory = async () => {
   const payload = await apiRequest('/api/auth/notification-history', { method: 'GET' });
   return Array.isArray(payload?.history) ? payload.history : [];

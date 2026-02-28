@@ -125,6 +125,7 @@ const ensureUsersTable = () => {
         ha_token TEXT NOT NULL DEFAULT '',
         full_name TEXT NOT NULL DEFAULT '',
         email TEXT NOT NULL DEFAULT '',
+        phone_country_code TEXT NOT NULL DEFAULT '+47',
         phone TEXT NOT NULL DEFAULT '',
         avatar_url TEXT NOT NULL DEFAULT '',
         created_at TEXT NOT NULL,
@@ -152,6 +153,7 @@ const ensureUsersTable = () => {
     const haTokenExpr = existingCols.includes('ha_token') ? "COALESCE(ha_token, '')" : "''";
     const fullNameExpr = existingCols.includes('full_name') ? "COALESCE(full_name, '')" : "''";
     const emailExpr = existingCols.includes('email') ? "COALESCE(email, '')" : "''";
+    const phoneCountryCodeExpr = existingCols.includes('phone_country_code') ? "COALESCE(phone_country_code, '+47')" : "'+47'";
     const phoneExpr = existingCols.includes('phone') ? "COALESCE(phone, '')" : "''";
     const avatarExpr = existingCols.includes('avatar_url') ? "COALESCE(avatar_url, '')" : "''";
 
@@ -171,6 +173,7 @@ const ensureUsersTable = () => {
           ha_token TEXT NOT NULL DEFAULT '',
           full_name TEXT NOT NULL DEFAULT '',
           email TEXT NOT NULL DEFAULT '',
+          phone_country_code TEXT NOT NULL DEFAULT '+47',
           phone TEXT NOT NULL DEFAULT '',
           avatar_url TEXT NOT NULL DEFAULT '',
           created_at TEXT NOT NULL,
@@ -180,7 +183,7 @@ const ensureUsersTable = () => {
         );
         INSERT INTO users (
           id, client_id, username, password_hash, role, assigned_dashboard_id,
-          ha_url, ha_token, full_name, email, phone, avatar_url,
+          ha_url, ha_token, full_name, email, phone_country_code, phone, avatar_url,
           created_at, updated_at
         )
         SELECT
@@ -194,6 +197,7 @@ const ensureUsersTable = () => {
           ${haTokenExpr},
           ${fullNameExpr},
           ${emailExpr},
+          ${phoneCountryCodeExpr},
           ${phoneExpr},
           ${avatarExpr},
           COALESCE(created_at, '${nowIso()}'),
@@ -219,6 +223,7 @@ const ensureUsersTable = () => {
   if (!userColumns.includes('ha_token')) db.prepare("ALTER TABLE users ADD COLUMN ha_token TEXT NOT NULL DEFAULT ''").run();
   if (!userColumns.includes('full_name')) db.prepare("ALTER TABLE users ADD COLUMN full_name TEXT NOT NULL DEFAULT ''").run();
   if (!userColumns.includes('email')) db.prepare("ALTER TABLE users ADD COLUMN email TEXT NOT NULL DEFAULT ''").run();
+  if (!userColumns.includes('phone_country_code')) db.prepare("ALTER TABLE users ADD COLUMN phone_country_code TEXT NOT NULL DEFAULT '+47'").run();
   if (!userColumns.includes('phone')) db.prepare("ALTER TABLE users ADD COLUMN phone TEXT NOT NULL DEFAULT ''").run();
   if (!userColumns.includes('avatar_url')) db.prepare("ALTER TABLE users ADD COLUMN avatar_url TEXT NOT NULL DEFAULT ''").run();
 

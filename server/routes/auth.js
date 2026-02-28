@@ -21,6 +21,17 @@ import {
   parseStoredNotificationConfig,
 } from '../notificationConfig.js';
 import {
+  getSmsDispatchDedupeStorageKey,
+  isTwilioConfigUsable,
+  loadTwilioConfig,
+  normalizeTwilioConfig,
+  persistTwilioConfig,
+  sendTwilioSms,
+  stripRichTextToPlainText,
+  toE164Phone,
+  toPublicTwilioConfig,
+} from '../twilioSms.js';
+import {
   getNotificationHistoryKey,
   MAX_NOTIFICATION_HISTORY,
   normalizeNotificationHistory,
@@ -59,6 +70,75 @@ const loadSuperAdminConfig = () => {
 };
 
 const router = Router();
+const SMS_TARGET_GROUPS = new Set(['admin', 'user', 'inspector']);
+
+const normalizeSmsTargetsPayload = (value) => {
+  const input = value && typeof value === 'object' ? value : {};
+  const groups = Array.from(new Set(
+    (Array.isArray(input.groups) ? input.groups : [])
+      .map((entry) => String(entry || '').trim().toLowerCase())
+      .filter((entry) => SMS_TARGET_GROUPS.has(entry)),
+  ));
+  const userIds = Array.from(new Set(
+    (Array.isArray(input.userIds) ? input.userIds : [])
+      .map((entry) => String(entry || '').trim())
+      .filter(Boolean),
+  )).slice(0, 100);
+
+  if (groups.length === 0 && userIds.length === 0) {
+    return { groups: ['admin'], userIds: [] };
+  }
+  return { groups, userIds };
+};
+
+const resolveSmsRecipientsForClient = (clientId, smsTargets) => {
+  const targets = normalizeSmsTargetsPayload(smsTargets);
+  const users = db.prepare(`
+    SELECT id, username, role, phone_country_code, phone
+    FROM users
+    WHERE client_id = ?
+  `).all(clientId);
+
+  const selectedIds = new Set(targets.userIds);
+  const selectedGroups = new Set(targets.groups);
+  const recipientsByPhone = new Map();
+
+  users.forEach((user) => {
+    const role = String(user?.role || '').trim().toLowerCase();
+    const selectedByGroup = selectedGroups.has(role);
+    const selectedById = selectedIds.has(String(user?.id || '').trim());
+    if (!selectedByGroup && !selectedById) return;
+    const e164 = toE164Phone(user?.phone_country_code || '+47', user?.phone || '');
+    if (!e164) return;
+    if (!recipientsByPhone.has(e164)) {
+      recipientsByPhone.set(e164, {
+        userId: String(user?.id || '').trim(),
+        username: String(user?.username || '').trim(),
+        role,
+        phone: e164,
+      });
+    }
+  });
+
+  return Array.from(recipientsByPhone.values());
+};
+
+const readSmsDedupeTimestamp = (key) => {
+  const row = db.prepare('SELECT value FROM system_settings WHERE key = ?').get(key);
+  const asNumber = Number.parseInt(String(row?.value || ''), 10);
+  return Number.isFinite(asNumber) && asNumber > 0 ? asNumber : 0;
+};
+
+const writeSmsDedupeTimestamp = (key, timestampMs) => {
+  const now = new Date().toISOString();
+  db.prepare(`
+    INSERT INTO system_settings (key, value, updated_at)
+    VALUES (?, ?, ?)
+    ON CONFLICT(key) DO UPDATE SET
+      value = excluded.value,
+      updated_at = excluded.updated_at
+  `).run(key, String(Math.max(0, Math.trunc(timestampMs))), now);
+};
 
 router.post('/login', (req, res) => {
   const clientIdRaw = String(req.body?.clientId || '').trim();
@@ -124,6 +204,7 @@ router.post('/login', (req, res) => {
         haToken: '',
         fullName: '',
         email: '',
+        phoneCountryCode: '+47',
         phone: '',
         avatarUrl: '',
         createdAt: now,
@@ -206,6 +287,9 @@ const saveProfile = (req, res) => {
   const username = req.body?.username !== undefined ? String(req.body.username || '').trim() : existing.username;
   const fullName = req.body?.fullName !== undefined ? String(req.body.fullName || '').trim() : (existing.full_name || '');
   const email = req.body?.email !== undefined ? String(req.body.email || '').trim() : (existing.email || '');
+  const phoneCountryCode = req.body?.phoneCountryCode !== undefined
+    ? String(req.body.phoneCountryCode || '').trim()
+    : (existing.phone_country_code || '+47');
   const phone = req.body?.phone !== undefined ? String(req.body.phone || '').trim() : (existing.phone || '');
   const avatarUrl = req.body?.avatarUrl !== undefined ? String(req.body.avatarUrl || '').trim() : (existing.avatar_url || '');
   if (!username) return res.status(400).json({ error: 'Username cannot be empty' });
@@ -216,9 +300,9 @@ const saveProfile = (req, res) => {
   const now = new Date().toISOString();
   db.prepare(`
     UPDATE users
-    SET username = ?, full_name = ?, email = ?, phone = ?, avatar_url = ?, updated_at = ?
+    SET username = ?, full_name = ?, email = ?, phone_country_code = ?, phone = ?, avatar_url = ?, updated_at = ?
     WHERE id = ? AND client_id = ?
-  `).run(username, fullName, email, phone, avatarUrl, now, req.auth.user.id, req.auth.user.clientId);
+  `).run(username, fullName, email, phoneCountryCode, phone, avatarUrl, now, req.auth.user.id, req.auth.user.clientId);
 
   const user = db.prepare('SELECT * FROM users WHERE id = ? AND client_id = ?').get(req.auth.user.id, req.auth.user.clientId);
   return res.json({ user: safeUser(user) });
@@ -341,6 +425,156 @@ router.put('/notification-config', authRequired, adminRequired, (req, res) => {
       ...normalized,
       updatedAt: now,
     },
+  });
+});
+
+router.get('/twilio-sms-config', authRequired, adminRequired, (req, res) => {
+  if (!req.auth?.user?.isPlatformAdmin) {
+    return res.status(403).json({ error: 'Only platform admin can manage Twilio settings' });
+  }
+  const { config } = loadTwilioConfig();
+  return res.json({ config: toPublicTwilioConfig(config) });
+});
+
+router.put('/twilio-sms-config', authRequired, adminRequired, (req, res) => {
+  if (!req.auth?.user?.isPlatformAdmin) {
+    return res.status(403).json({ error: 'Only platform admin can manage Twilio settings' });
+  }
+  const incoming = req.body && typeof req.body === 'object' ? req.body : {};
+  const { config: current } = loadTwilioConfig();
+  const next = normalizeTwilioConfig({
+    accountSid: Object.prototype.hasOwnProperty.call(incoming, 'accountSid') ? incoming.accountSid : current.accountSid,
+    authToken: Object.prototype.hasOwnProperty.call(incoming, 'authToken') ? incoming.authToken : current.authToken,
+    fromNumber: Object.prototype.hasOwnProperty.call(incoming, 'fromNumber') ? incoming.fromNumber : current.fromNumber,
+  }, current);
+  const saved = persistTwilioConfig(next);
+  return res.json({ config: toPublicTwilioConfig(saved.config) });
+});
+
+router.post('/twilio-sms-test', authRequired, adminRequired, async (req, res) => {
+  if (!req.auth?.user?.isPlatformAdmin) {
+    return res.status(403).json({ error: 'Only platform admin can send test SMS' });
+  }
+  const { config } = loadTwilioConfig();
+  if (!isTwilioConfigUsable(config)) {
+    return res.status(400).json({ error: 'Twilio SMS is not fully configured' });
+  }
+
+  const toInput = String(req.body?.to || '').trim();
+  const countryCodeInput = String(req.body?.countryCode || '').trim();
+  const message = stripRichTextToPlainText(String(req.body?.message || '')).trim();
+  const to = toE164Phone(countryCodeInput || '+47', toInput);
+
+  if (!to) return res.status(400).json({ error: 'Test phone number is required' });
+  if (!message) return res.status(400).json({ error: 'Test message is required' });
+
+  try {
+    const result = await sendTwilioSms({
+      accountSid: config.accountSid,
+      authToken: config.authToken,
+      fromNumber: config.fromNumber,
+      to,
+      body: message,
+    });
+    return res.json({
+      success: true,
+      sid: result?.sid || '',
+      to,
+    });
+  } catch (error) {
+    return res.status(502).json({ error: String(error?.message || 'Failed to send Twilio SMS') });
+  }
+});
+
+router.post('/notification-sms', authRequired, adminRequired, async (req, res) => {
+  const title = String(req.body?.title || 'Smart Sauna notification').trim();
+  const messageRaw = stripRichTextToPlainText(String(req.body?.message || '')).trim();
+  const dedupeKeyRaw = String(req.body?.dedupeKey || '').trim();
+  const dedupeWindowMs = Math.max(0, Math.min(86400000, Number.parseInt(String(req.body?.dedupeWindowMs ?? ''), 10) || 0));
+  const smsTargets = normalizeSmsTargetsPayload(req.body?.smsTargets || {});
+  const clientId = req.auth?.user?.clientId;
+
+  if (!clientId) {
+    return res.status(400).json({ error: 'Client scope is required' });
+  }
+  if (!messageRaw) {
+    return res.status(400).json({ error: 'SMS message is required' });
+  }
+
+  const { config } = loadTwilioConfig();
+  if (!isTwilioConfigUsable(config)) {
+    return res.json({
+      success: false,
+      sent: 0,
+      failed: 0,
+      deduped: false,
+      reason: 'twilio_not_configured',
+    });
+  }
+
+  const dedupeStorageKey = dedupeWindowMs > 0 && dedupeKeyRaw
+    ? getSmsDispatchDedupeStorageKey(clientId, dedupeKeyRaw)
+    : '';
+  if (dedupeStorageKey) {
+    const storageKey = dedupeStorageKey;
+    const previousAt = readSmsDedupeTimestamp(storageKey);
+    const nowMs = Date.now();
+    if (previousAt > 0 && (nowMs - previousAt) < dedupeWindowMs) {
+      return res.json({
+        success: false,
+        sent: 0,
+        failed: 0,
+        deduped: true,
+      });
+    }
+  }
+
+  const recipients = resolveSmsRecipientsForClient(clientId, smsTargets);
+  if (recipients.length === 0) {
+    return res.json({
+      success: false,
+      sent: 0,
+      failed: 0,
+      deduped: false,
+      reason: 'no_recipients',
+    });
+  }
+
+  let sent = 0;
+  let failed = 0;
+  const errors = [];
+  const smsBody = `${title}\n${messageRaw}`.trim().slice(0, 1400);
+
+  await Promise.all(recipients.map(async (recipient) => {
+    try {
+      await sendTwilioSms({
+        accountSid: config.accountSid,
+        authToken: config.authToken,
+        fromNumber: config.fromNumber,
+        to: recipient.phone,
+        body: smsBody,
+      });
+      sent += 1;
+    } catch (error) {
+      failed += 1;
+      errors.push({
+        userId: recipient.userId,
+        phone: recipient.phone,
+        error: String(error?.message || 'SMS send failed'),
+      });
+    }
+  }));
+
+  if (dedupeStorageKey && sent > 0) {
+    writeSmsDedupeTimestamp(dedupeStorageKey, Date.now());
+  }
+
+  return res.json({
+    success: sent > 0 && failed === 0,
+    sent,
+    failed,
+    deduped: false,
+    errors: errors.slice(0, 20),
   });
 });
 

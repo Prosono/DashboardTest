@@ -247,6 +247,8 @@ export default function ConfigModal({
   const [newUserClientId, setNewUserClientId] = useState('');
   const [newUserHaUrl, setNewUserHaUrl] = useState('');
   const [newUserHaToken, setNewUserHaToken] = useState('');
+  const [newUserPhoneCountryCode, setNewUserPhoneCountryCode] = useState('+47');
+  const [newUserPhone, setNewUserPhone] = useState('');
   const [userEdits, setUserEdits] = useState({});
   const [savingUserIds, setSavingUserIds] = useState({});
   const [deletingUserIds, setDeletingUserIds] = useState({});
@@ -303,6 +305,20 @@ export default function ConfigModal({
   const [notificationRuleDomain, setNotificationRuleDomain] = useState({});
   const [notificationRuleReferenceEntity, setNotificationRuleReferenceEntity] = useState({});
   const [notificationRuleExpanded, setNotificationRuleExpanded] = useState({});
+  const [twilioDraft, setTwilioDraft] = useState({
+    accountSid: '',
+    authToken: '',
+    fromNumber: '',
+    hasAuthToken: false,
+    updatedAt: null,
+  });
+  const [twilioConfigLoading, setTwilioConfigLoading] = useState(false);
+  const [twilioConfigSaving, setTwilioConfigSaving] = useState(false);
+  const [twilioConfigMessage, setTwilioConfigMessage] = useState('');
+  const [twilioTestCountryCode, setTwilioTestCountryCode] = useState('+47');
+  const [twilioTestTo, setTwilioTestTo] = useState('');
+  const [twilioTestMessage, setTwilioTestMessage] = useState('Smart Sauna test message');
+  const [twilioTestSending, setTwilioTestSending] = useState(false);
   const [appActionHistory, setAppActionHistory] = useState([]);
   const [appActionHistoryLoading, setAppActionHistoryLoading] = useState(false);
   const [appActionHistoryBusy, setAppActionHistoryBusy] = useState(false);
@@ -337,6 +353,16 @@ export default function ConfigModal({
     () => Array.from(new Set(notificationEntityOptions.map((option) => option.domain))).sort((a, b) => a.localeCompare(b)),
     [notificationEntityOptions],
   );
+  const notificationRecipientUsers = useMemo(() => (
+    (Array.isArray(users) ? users : [])
+      .map((user) => ({
+        id: String(user?.id || '').trim(),
+        role: String(user?.role || 'user').trim().toLowerCase(),
+        label: String(user?.fullName || user?.username || user?.id || '').trim(),
+      }))
+      .filter((user) => user.id && user.label)
+      .sort((a, b) => a.label.localeCompare(b.label))
+  ), [users]);
 
   const normalizeRole = (role) => {
     const value = String(role || '').trim();
@@ -350,6 +376,8 @@ export default function ConfigModal({
     assignedDashboardId: user?.assignedDashboardId || 'default',
     haUrl: user?.haUrl || '',
     haToken: user?.haToken || '',
+    phoneCountryCode: user?.phoneCountryCode || '+47',
+    phone: user?.phone || '',
     password: '',
   });
 
@@ -452,6 +480,60 @@ export default function ConfigModal({
     if (!open || configTab !== 'notifications' || !canAccessNotifications) return;
     void loadAppActionHistory();
   }, [open, configTab, canAccessNotifications, loadAppActionHistory]);
+
+  useEffect(() => {
+    if (!open || configTab !== 'notifications' || !canAccessNotifications || !userAdminApi?.listUsers) return;
+    let cancelled = false;
+    userAdminApi.listUsers()
+      .then((list) => {
+        if (cancelled) return;
+        const nextUsers = Array.isArray(list) ? list : [];
+        setUsers(nextUsers);
+        setUserEdits((prev) => {
+          const next = { ...prev };
+          nextUsers.forEach((user) => {
+            next[user.id] = {
+              ...(next[user.id] || {}),
+              ...buildUserEditState(user),
+              password: next[user.id]?.password || '',
+            };
+          });
+          return next;
+        });
+      })
+      .catch(() => {
+        if (!cancelled) setUsers([]);
+      });
+    return () => { cancelled = true; };
+  }, [open, configTab, canAccessNotifications, userAdminApi]);
+
+  useEffect(() => {
+    if (!open || configTab !== 'notifications' || !canAccessNotifications || !isPlatformAdmin || !userAdminApi?.fetchTwilioSmsConfig) return;
+    let cancelled = false;
+    setTwilioConfigLoading(true);
+    setTwilioConfigMessage('');
+    userAdminApi.fetchTwilioSmsConfig()
+      .then((cfg) => {
+        if (cancelled) return;
+        const next = cfg && typeof cfg === 'object' ? cfg : {};
+        setTwilioDraft({
+          accountSid: String(next.accountSid || '').trim(),
+          fromNumber: String(next.fromNumber || '').trim(),
+          authToken: '',
+          hasAuthToken: Boolean(next.hasAuthToken),
+          updatedAt: next.updatedAt || null,
+        });
+      })
+      .catch((error) => {
+        if (!cancelled) {
+          setTwilioConfigMessage(String(error?.message || 'Failed to load Twilio settings'));
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setTwilioConfigLoading(false);
+      });
+    return () => { cancelled = true; };
+  }, [open, configTab, canAccessNotifications, isPlatformAdmin, userAdminApi]);
 
   useEffect(() => {
     if (configTab !== 'storage' || !canManageAdministration || !userAdminApi?.listUsers) return;
@@ -1317,12 +1399,16 @@ export default function ConfigModal({
           assignedDashboardId: newUserDashboard || 'default',
           haUrl: newUserHaUrl.trim(),
           haToken: newUserHaToken.trim(),
+          phoneCountryCode: String(newUserPhoneCountryCode || '+47').trim() || '+47',
+          phone: String(newUserPhone || '').trim(),
         });
         setNewUsername('');
         setNewPassword('');
         setNewUserClientId(currentUser?.clientId || clients[0]?.id || '');
         setNewUserHaUrl('');
         setNewUserHaToken('');
+        setNewUserPhoneCountryCode('+47');
+        setNewUserPhone('');
         setShowCreateUserModal(false);
         const list = targetClientId === (currentUser?.clientId || '')
           ? await userAdminApi.listUsers().catch(() => null)
@@ -1397,6 +1483,8 @@ export default function ConfigModal({
           assignedDashboardId: String(draft.assignedDashboardId || 'default').trim() || 'default',
           haUrl: String(draft.haUrl || '').trim(),
           haToken: String(draft.haToken || '').trim(),
+          phoneCountryCode: String(draft.phoneCountryCode || '+47').trim() || '+47',
+          phone: String(draft.phone || '').trim(),
           password: String(draft.password || '').trim(),
         });
         setUsers((prev) => prev.map((user) => (user.id === userId ? updated : user)));
@@ -1789,6 +1877,24 @@ export default function ConfigModal({
                       ))}
                     </select>
                   </div>
+                  <div className="space-y-1">
+                    <label className="text-[10px] uppercase tracking-wider text-[var(--text-secondary)] font-bold">Country code</label>
+                    <input
+                      value={newUserPhoneCountryCode}
+                      onChange={(e) => setNewUserPhoneCountryCode(e.target.value)}
+                      placeholder="+47"
+                      className="w-full px-3 py-2 rounded-lg bg-[var(--glass-bg-hover)] border border-[var(--glass-border)] text-sm"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[10px] uppercase tracking-wider text-[var(--text-secondary)] font-bold">{t('profile.phone')}</label>
+                    <input
+                      value={newUserPhone}
+                      onChange={(e) => setNewUserPhone(e.target.value)}
+                      placeholder="99999999"
+                      className="w-full px-3 py-2 rounded-lg bg-[var(--glass-bg-hover)] border border-[var(--glass-border)] text-sm"
+                    />
+                  </div>
                   <div className="space-y-1 md:col-span-2">
                     <label className="text-[10px] uppercase tracking-wider text-[var(--text-secondary)] font-bold">{t('userMgmt.haUrlOptional')}</label>
                     <input value={newUserHaUrl} onChange={(e) => setNewUserHaUrl(e.target.value)} placeholder={t('userMgmt.haUrlOptional')} className="w-full px-3 py-2 rounded-lg bg-[var(--glass-bg-hover)] border border-[var(--glass-border)] text-sm" />
@@ -1865,6 +1971,24 @@ export default function ConfigModal({
                               <option key={profile.id} value={profile.id}>{profile.name || profile.id}</option>
                             ))}
                           </select>
+                        </div>
+                        <div className="space-y-1">
+                          <label className="text-[10px] uppercase tracking-wider text-[var(--text-secondary)] font-bold">Country code</label>
+                          <input
+                            value={userEdits[u.id]?.phoneCountryCode ?? '+47'}
+                            onChange={(e) => updateUserEdit(u.id, { phoneCountryCode: e.target.value })}
+                            className="w-full px-3 py-2 rounded-lg bg-[var(--glass-bg-hover)] border border-[var(--glass-border)] text-sm"
+                            placeholder="+47"
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <label className="text-[10px] uppercase tracking-wider text-[var(--text-secondary)] font-bold">{t('profile.phone')}</label>
+                          <input
+                            value={userEdits[u.id]?.phone ?? ''}
+                            onChange={(e) => updateUserEdit(u.id, { phone: e.target.value })}
+                            className="w-full px-3 py-2 rounded-lg bg-[var(--glass-bg-hover)] border border-[var(--glass-border)] text-sm"
+                            placeholder="99999999"
+                          />
                         </div>
                         <div className="space-y-1 md:col-span-2">
                           <label className="text-[10px] uppercase tracking-wider text-[var(--text-secondary)] font-bold">{t('userMgmt.haUrlOptional')}</label>
@@ -2301,6 +2425,111 @@ export default function ConfigModal({
     });
   };
 
+  const toggleLevelSmsGroupTarget = (levelKey, groupKey) => {
+    const normalizedLevelKey = String(levelKey || '').trim();
+    const normalizedGroup = String(groupKey || '').trim().toLowerCase();
+    if (!normalizedLevelKey || !normalizedGroup) return;
+    updateNotificationDraft((prev) => {
+      const level = prev?.[normalizedLevelKey] && typeof prev[normalizedLevelKey] === 'object'
+        ? prev[normalizedLevelKey]
+        : {};
+      const currentTargets = level?.smsTargets && typeof level.smsTargets === 'object'
+        ? level.smsTargets
+        : { groups: ['admin'], userIds: [] };
+      const currentGroups = new Set((Array.isArray(currentTargets.groups) ? currentTargets.groups : []).map((entry) => String(entry || '').trim().toLowerCase()).filter(Boolean));
+      if (currentGroups.has(normalizedGroup)) currentGroups.delete(normalizedGroup);
+      else currentGroups.add(normalizedGroup);
+      const nextGroups = Array.from(currentGroups);
+      return {
+        ...prev,
+        [normalizedLevelKey]: {
+          ...level,
+          smsTargets: {
+            groups: nextGroups,
+            userIds: Array.isArray(currentTargets.userIds) ? currentTargets.userIds : [],
+          },
+        },
+      };
+    });
+  };
+
+  const toggleLevelSmsUserTarget = (levelKey, userId) => {
+    const normalizedLevelKey = String(levelKey || '').trim();
+    const normalizedUserId = String(userId || '').trim();
+    if (!normalizedLevelKey || !normalizedUserId) return;
+    updateNotificationDraft((prev) => {
+      const level = prev?.[normalizedLevelKey] && typeof prev[normalizedLevelKey] === 'object'
+        ? prev[normalizedLevelKey]
+        : {};
+      const currentTargets = level?.smsTargets && typeof level.smsTargets === 'object'
+        ? level.smsTargets
+        : { groups: ['admin'], userIds: [] };
+      const currentUserIds = new Set((Array.isArray(currentTargets.userIds) ? currentTargets.userIds : []).map((entry) => String(entry || '').trim()).filter(Boolean));
+      if (currentUserIds.has(normalizedUserId)) currentUserIds.delete(normalizedUserId);
+      else currentUserIds.add(normalizedUserId);
+      return {
+        ...prev,
+        [normalizedLevelKey]: {
+          ...level,
+          smsTargets: {
+            groups: Array.isArray(currentTargets.groups) ? currentTargets.groups : ['admin'],
+            userIds: Array.from(currentUserIds).slice(0, 100),
+          },
+        },
+      };
+    });
+  };
+
+  const toggleRuleSmsGroupTarget = (ruleId, groupKey) => {
+    const normalizedRuleId = String(ruleId || '').trim();
+    const normalizedGroup = String(groupKey || '').trim().toLowerCase();
+    if (!normalizedRuleId || !normalizedGroup) return;
+    updateNotificationDraft((prev) => ({
+      ...prev,
+      rules: (Array.isArray(prev.rules) ? prev.rules : []).map((rule) => {
+        if (String(rule?.id || '').trim() !== normalizedRuleId) return rule;
+        const currentTargets = rule?.smsTargets && typeof rule.smsTargets === 'object'
+          ? rule.smsTargets
+          : { groups: ['admin'], userIds: [] };
+        const groups = new Set((Array.isArray(currentTargets.groups) ? currentTargets.groups : []).map((entry) => String(entry || '').trim().toLowerCase()).filter(Boolean));
+        if (groups.has(normalizedGroup)) groups.delete(normalizedGroup);
+        else groups.add(normalizedGroup);
+        return {
+          ...rule,
+          smsTargets: {
+            groups: Array.from(groups),
+            userIds: Array.isArray(currentTargets.userIds) ? currentTargets.userIds : [],
+          },
+        };
+      }),
+    }));
+  };
+
+  const toggleRuleSmsUserTarget = (ruleId, userId) => {
+    const normalizedRuleId = String(ruleId || '').trim();
+    const normalizedUserId = String(userId || '').trim();
+    if (!normalizedRuleId || !normalizedUserId) return;
+    updateNotificationDraft((prev) => ({
+      ...prev,
+      rules: (Array.isArray(prev.rules) ? prev.rules : []).map((rule) => {
+        if (String(rule?.id || '').trim() !== normalizedRuleId) return rule;
+        const currentTargets = rule?.smsTargets && typeof rule.smsTargets === 'object'
+          ? rule.smsTargets
+          : { groups: ['admin'], userIds: [] };
+        const userIds = new Set((Array.isArray(currentTargets.userIds) ? currentTargets.userIds : []).map((entry) => String(entry || '').trim()).filter(Boolean));
+        if (userIds.has(normalizedUserId)) userIds.delete(normalizedUserId);
+        else userIds.add(normalizedUserId);
+        return {
+          ...rule,
+          smsTargets: {
+            groups: Array.isArray(currentTargets.groups) ? currentTargets.groups : ['admin'],
+            userIds: Array.from(userIds).slice(0, 100),
+          },
+        };
+      }),
+    }));
+  };
+
   const createNotificationRule = () => ({
     id: `rule_${Date.now()}_${Math.random().toString(16).slice(2, 8)}`,
     enabled: true,
@@ -2320,6 +2549,11 @@ export default function ConfigModal({
       inApp: true,
       browser: true,
       native: true,
+      sms: false,
+    },
+    smsTargets: {
+      groups: ['admin'],
+      userIds: [],
     },
     cooldownSeconds: 300,
   });
@@ -2504,6 +2738,7 @@ export default function ConfigModal({
             inApp: Boolean(channels.inApp),
             browser: Boolean(channels.browser),
             native: Boolean(channels.native),
+            sms: Boolean(channels.sms),
             [channelKey]: !Boolean(channels[channelKey]),
           },
         };
@@ -2537,6 +2772,57 @@ export default function ConfigModal({
     }
   };
 
+  const handleSaveTwilioConfig = async () => {
+    if (!isPlatformAdmin || typeof userAdminApi?.saveTwilioSmsConfig !== 'function') return;
+    setTwilioConfigSaving(true);
+    setTwilioConfigMessage('');
+    try {
+      const payload = {
+        accountSid: String(twilioDraft.accountSid || '').trim(),
+        fromNumber: String(twilioDraft.fromNumber || '').trim(),
+      };
+      if (String(twilioDraft.authToken || '').trim()) {
+        payload.authToken = String(twilioDraft.authToken || '').trim();
+      }
+      const saved = await userAdminApi.saveTwilioSmsConfig(payload);
+      setTwilioDraft((prev) => ({
+        ...prev,
+        accountSid: String(saved?.accountSid || '').trim(),
+        fromNumber: String(saved?.fromNumber || '').trim(),
+        hasAuthToken: Boolean(saved?.hasAuthToken),
+        authToken: '',
+        updatedAt: saved?.updatedAt || null,
+      }));
+      setTwilioConfigMessage('Twilio settings saved');
+    } catch (error) {
+      setTwilioConfigMessage(String(error?.message || 'Failed to save Twilio settings'));
+    } finally {
+      setTwilioConfigSaving(false);
+    }
+  };
+
+  const handleSendTwilioTest = async () => {
+    if (!isPlatformAdmin || typeof userAdminApi?.sendTwilioSmsTest !== 'function') return;
+    setTwilioTestSending(true);
+    setTwilioConfigMessage('');
+    try {
+      const result = await userAdminApi.sendTwilioSmsTest({
+        to: twilioTestTo,
+        countryCode: twilioTestCountryCode,
+        message: twilioTestMessage,
+      });
+      if (!result?.success) {
+        setTwilioConfigMessage('Twilio test SMS failed');
+      } else {
+        setTwilioConfigMessage(`Test SMS sent to ${result.to || twilioTestTo}`);
+      }
+    } catch (error) {
+      setTwilioConfigMessage(String(error?.message || 'Failed to send test SMS'));
+    } finally {
+      setTwilioTestSending(false);
+    }
+  };
+
   const renderNotificationsTab = () => {
     const draftSource = notificationDraft && typeof notificationDraft === 'object'
       ? notificationDraft
@@ -2547,15 +2833,27 @@ export default function ConfigModal({
       warning: {
         ...DEFAULT_NOTIFICATION_CONFIG.warning,
         ...(draftSource.warning && typeof draftSource.warning === 'object' ? draftSource.warning : {}),
+        smsTargets: {
+          ...DEFAULT_NOTIFICATION_CONFIG.warning.smsTargets,
+          ...(draftSource.warning?.smsTargets && typeof draftSource.warning.smsTargets === 'object'
+            ? draftSource.warning.smsTargets
+            : {}),
+        },
       },
       critical: {
         ...DEFAULT_NOTIFICATION_CONFIG.critical,
         ...(draftSource.critical && typeof draftSource.critical === 'object' ? draftSource.critical : {}),
+        smsTargets: {
+          ...DEFAULT_NOTIFICATION_CONFIG.critical.smsTargets,
+          ...(draftSource.critical?.smsTargets && typeof draftSource.critical.smsTargets === 'object'
+            ? draftSource.critical.smsTargets
+            : {}),
+        },
       },
       rules: Array.isArray(draftSource.rules) ? draftSource.rules : [],
     };
-    const warningChannelsEnabled = Boolean(draft.warning.inApp || draft.warning.browser || draft.warning.native);
-    const criticalChannelsEnabled = Boolean(draft.critical.inApp || draft.critical.browser || draft.critical.native);
+    const warningChannelsEnabled = Boolean(draft.warning.inApp || draft.warning.browser || draft.warning.native || draft.warning.sms);
+    const criticalChannelsEnabled = Boolean(draft.critical.inApp || draft.critical.browser || draft.critical.native || draft.critical.sms);
     const saveBlocked = !notificationDirty || notificationConfigSaving || notificationConfigLoading;
 
     return (
@@ -2667,6 +2965,98 @@ export default function ConfigModal({
             </p>
           </div>
         </div>
+
+        {isPlatformAdmin ? (
+          <div className="rounded-2xl border border-[var(--glass-border)] bg-[linear-gradient(145deg,color-mix(in_srgb,var(--glass-bg)_92%,rgba(34,197,94,0.07)),color-mix(in_srgb,var(--glass-bg)_95%,transparent))] p-4 space-y-3">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <h4 className="text-[11px] uppercase tracking-wider font-bold text-[var(--text-secondary)]">
+                  Twilio SMS
+                </h4>
+                <p className="text-xs text-[var(--text-secondary)] mt-1">
+                  Configure account SID, auth token, and sender number. This is global for all clients.
+                </p>
+              </div>
+              {twilioConfigLoading ? (
+                <span className="text-[10px] uppercase tracking-wider text-[var(--text-secondary)]">{t('common.loading')}</span>
+              ) : null}
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <div className="space-y-1">
+                <label className="text-[10px] uppercase tracking-wider font-bold text-[var(--text-secondary)]">Account SID</label>
+                <input
+                  value={twilioDraft.accountSid}
+                  onChange={(e) => setTwilioDraft((prev) => ({ ...prev, accountSid: e.target.value }))}
+                  className="w-full px-3 py-2 rounded-lg bg-[var(--glass-bg-hover)] border border-[var(--glass-border)] text-sm"
+                  placeholder="AC..."
+                />
+              </div>
+              <div className="space-y-1">
+                <label className="text-[10px] uppercase tracking-wider font-bold text-[var(--text-secondary)]">From number (E.164)</label>
+                <input
+                  value={twilioDraft.fromNumber}
+                  onChange={(e) => setTwilioDraft((prev) => ({ ...prev, fromNumber: e.target.value }))}
+                  className="w-full px-3 py-2 rounded-lg bg-[var(--glass-bg-hover)] border border-[var(--glass-border)] text-sm"
+                  placeholder="+4712345678"
+                />
+              </div>
+              <div className="space-y-1 md:col-span-2">
+                <label className="text-[10px] uppercase tracking-wider font-bold text-[var(--text-secondary)]">Auth token {twilioDraft.hasAuthToken ? '(saved)' : '(not set)'}</label>
+                <input
+                  type="password"
+                  value={twilioDraft.authToken}
+                  onChange={(e) => setTwilioDraft((prev) => ({ ...prev, authToken: e.target.value }))}
+                  className="w-full px-3 py-2 rounded-lg bg-[var(--glass-bg-hover)] border border-[var(--glass-border)] text-sm"
+                  placeholder="Leave empty to keep current token"
+                />
+              </div>
+            </div>
+            <div className="flex justify-end">
+              <button
+                type="button"
+                onClick={() => void handleSaveTwilioConfig()}
+                disabled={twilioConfigSaving || twilioConfigLoading}
+                className="px-4 py-2 rounded-lg bg-indigo-500 hover:bg-indigo-600 text-white text-xs font-bold uppercase tracking-wider disabled:opacity-50"
+              >
+                {twilioConfigSaving ? t('common.saving') : t('common.save')}
+              </button>
+            </div>
+
+            <div className="pt-2 border-t border-[var(--glass-border)] space-y-2">
+              <h5 className="text-[10px] uppercase tracking-wider font-bold text-[var(--text-secondary)]">Send test SMS</h5>
+              <div className="grid grid-cols-1 md:grid-cols-[7rem_minmax(0,1fr)] gap-2">
+                <input
+                  value={twilioTestCountryCode}
+                  onChange={(e) => setTwilioTestCountryCode(e.target.value)}
+                  className="w-full px-3 py-2 rounded-lg bg-[var(--glass-bg-hover)] border border-[var(--glass-border)] text-sm"
+                  placeholder="+47"
+                />
+                <input
+                  value={twilioTestTo}
+                  onChange={(e) => setTwilioTestTo(e.target.value)}
+                  className="w-full px-3 py-2 rounded-lg bg-[var(--glass-bg-hover)] border border-[var(--glass-border)] text-sm"
+                  placeholder="99999999"
+                />
+              </div>
+              <textarea
+                value={twilioTestMessage}
+                onChange={(e) => setTwilioTestMessage(e.target.value)}
+                className="w-full px-3 py-2 rounded-lg bg-[var(--glass-bg-hover)] border border-[var(--glass-border)] text-sm min-h-[76px]"
+                placeholder="Test message"
+              />
+              <div className="flex justify-end">
+                <button
+                  type="button"
+                  onClick={() => void handleSendTwilioTest()}
+                  disabled={twilioTestSending || twilioConfigLoading}
+                  className="px-4 py-2 rounded-lg border border-[var(--glass-border)] bg-[var(--glass-bg-hover)] text-xs font-bold uppercase tracking-wider disabled:opacity-50"
+                >
+                  {twilioTestSending ? t('common.saving') : 'Send test'}
+                </button>
+              </div>
+            </div>
+          </div>
+        ) : null}
 
         <div className="rounded-2xl border border-[var(--glass-border)] bg-[linear-gradient(145deg,color-mix(in_srgb,var(--glass-bg)_92%,rgba(45,212,191,0.07)),color-mix(in_srgb,var(--glass-bg)_95%,transparent))] p-4 space-y-3">
           <div className="flex items-center justify-between gap-3">
@@ -2788,8 +3178,16 @@ export default function ConfigModal({
                 <entry.icon className={`w-3.5 h-3.5 ${entry.accent === 'rose' ? 'text-rose-300' : 'text-amber-300'}`} />
                 {entry.title}
               </h4>
+              {(() => {
+                const smsTargets = entry.channels?.smsTargets && typeof entry.channels.smsTargets === 'object'
+                  ? entry.channels.smsTargets
+                  : { groups: ['admin'], userIds: [] };
+                const selectedGroups = new Set((Array.isArray(smsTargets.groups) ? smsTargets.groups : []).map((group) => String(group || '').trim().toLowerCase()));
+                const selectedUserIds = new Set((Array.isArray(smsTargets.userIds) ? smsTargets.userIds : []).map((userId) => String(userId || '').trim()));
+                return (
+                  <>
               <div className="space-y-2">
-                {['inApp', 'browser', 'native'].map((channel) => (
+                {['inApp', 'browser', 'native', 'sms'].map((channel) => (
                   <button
                     key={`${entry.key}_${channel}`}
                     type="button"
@@ -2813,6 +3211,50 @@ export default function ConfigModal({
                   </button>
                 ))}
               </div>
+              {entry.channels.sms ? (
+                <div className="space-y-2 rounded-lg border border-[var(--glass-border)] bg-[var(--glass-bg)] p-2">
+                  <p className="text-[10px] uppercase tracking-wider font-bold text-[var(--text-secondary)]">SMS recipients</p>
+                  <div className="grid grid-cols-3 gap-1.5">
+                    {['admin', 'user', 'inspector'].map((groupKey) => {
+                      const active = selectedGroups.has(groupKey);
+                      return (
+                        <button
+                          key={`${entry.key}_group_${groupKey}`}
+                          type="button"
+                          onClick={() => toggleLevelSmsGroupTarget(entry.key, groupKey)}
+                          className={`px-2 py-1.5 rounded-md border text-[10px] uppercase tracking-wider font-bold transition-colors ${
+                            active
+                              ? 'border-emerald-400/35 bg-emerald-500/10 text-emerald-300'
+                              : 'border-[var(--glass-border)] bg-[var(--glass-bg-hover)] text-[var(--text-secondary)]'
+                          }`}
+                        >
+                          {t(`role.${groupKey}`)}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <div className="rounded-lg border border-[var(--glass-border)] bg-[var(--glass-bg-hover)] max-h-28 overflow-y-auto custom-scrollbar divide-y divide-[var(--glass-border)]">
+                    {notificationRecipientUsers.length === 0 ? (
+                      <div className="px-2.5 py-2 text-[11px] text-[var(--text-muted)]">No users found</div>
+                    ) : notificationRecipientUsers.map((user) => {
+                      const selected = selectedUserIds.has(user.id);
+                      return (
+                        <button
+                          key={`${entry.key}_user_${user.id}`}
+                          type="button"
+                          onClick={() => toggleLevelSmsUserTarget(entry.key, user.id)}
+                          className={`w-full flex items-center justify-between px-2.5 py-1.5 text-left text-[11px] transition-colors ${
+                            selected ? 'bg-indigo-500/12 text-indigo-200' : 'text-[var(--text-secondary)] hover:bg-[var(--glass-bg)]'
+                          }`}
+                        >
+                          <span className="truncate">{user.label}</span>
+                          <span className="text-[10px] uppercase tracking-wider opacity-80">{t(`role.${user.role}`)}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              ) : null}
               <div className="space-y-1">
                 <label className="text-[10px] uppercase tracking-wider font-bold text-[var(--text-secondary)]">
                   {t('notifications.cooldownSeconds')}
@@ -2835,6 +3277,9 @@ export default function ConfigModal({
               {!entry.hasAny && (
                 <p className="text-[11px] text-amber-300">{t('notifications.noChannelWarning')}</p>
               )}
+                  </>
+                );
+              })()}
             </div>
           ))}
         </div>
@@ -2881,7 +3326,12 @@ export default function ConfigModal({
               const ruleId = String(normalizedRule.id || '').trim() || `rule_${idx}`;
               const channels = normalizedRule.channels && typeof normalizedRule.channels === 'object'
                 ? normalizedRule.channels
-                : { inApp: true, browser: true, native: true };
+                : { inApp: true, browser: true, native: true, sms: false };
+              const ruleSmsTargets = normalizedRule.smsTargets && typeof normalizedRule.smsTargets === 'object'
+                ? normalizedRule.smsTargets
+                : { groups: ['admin'], userIds: [] };
+              const selectedRuleGroups = new Set((Array.isArray(ruleSmsTargets.groups) ? ruleSmsTargets.groups : []).map((group) => String(group || '').trim().toLowerCase()));
+              const selectedRuleUserIds = new Set((Array.isArray(ruleSmsTargets.userIds) ? ruleSmsTargets.userIds : []).map((userId) => String(userId || '').trim()));
               const ruleConditions = getRuleConditions(normalizedRule);
               const conditionOperator = String(normalizedRule.conditionOperator || 'and').trim().toLowerCase() === 'or'
                 ? 'or'
@@ -3217,8 +3667,8 @@ export default function ConfigModal({
                       <label className="text-[10px] uppercase tracking-wider font-bold text-[var(--text-secondary)]">
                         {t('notifications.ruleChannels')}
                       </label>
-                      <div className="grid grid-cols-3 gap-1.5">
-                        {['inApp', 'browser', 'native'].map((channel) => (
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-1.5">
+                        {['inApp', 'browser', 'native', 'sms'].map((channel) => (
                           <button
                             key={`${ruleId}_${channel}`}
                             type="button"
@@ -3233,6 +3683,50 @@ export default function ConfigModal({
                           </button>
                         ))}
                       </div>
+                      {channels.sms ? (
+                        <div className="mt-2 space-y-2 rounded-lg border border-[var(--glass-border)] bg-[var(--glass-bg)] p-2">
+                          <p className="text-[10px] uppercase tracking-wider font-bold text-[var(--text-secondary)]">SMS recipients</p>
+                          <div className="grid grid-cols-3 gap-1.5">
+                            {['admin', 'user', 'inspector'].map((groupKey) => {
+                              const active = selectedRuleGroups.has(groupKey);
+                              return (
+                                <button
+                                  key={`${ruleId}_group_${groupKey}`}
+                                  type="button"
+                                  onClick={() => toggleRuleSmsGroupTarget(ruleId, groupKey)}
+                                  className={`px-2 py-1.5 rounded-md border text-[10px] uppercase tracking-wider font-bold transition-colors ${
+                                    active
+                                      ? 'border-emerald-400/35 bg-emerald-500/10 text-emerald-300'
+                                      : 'border-[var(--glass-border)] bg-[var(--glass-bg-hover)] text-[var(--text-secondary)]'
+                                  }`}
+                                >
+                                  {t(`role.${groupKey}`)}
+                                </button>
+                              );
+                            })}
+                          </div>
+                          <div className="rounded-lg border border-[var(--glass-border)] bg-[var(--glass-bg-hover)] max-h-28 overflow-y-auto custom-scrollbar divide-y divide-[var(--glass-border)]">
+                            {notificationRecipientUsers.length === 0 ? (
+                              <div className="px-2.5 py-2 text-[11px] text-[var(--text-muted)]">No users found</div>
+                            ) : notificationRecipientUsers.map((user) => {
+                              const selected = selectedRuleUserIds.has(user.id);
+                              return (
+                                <button
+                                  key={`${ruleId}_user_${user.id}`}
+                                  type="button"
+                                  onClick={() => toggleRuleSmsUserTarget(ruleId, user.id)}
+                                  className={`w-full flex items-center justify-between px-2.5 py-1.5 text-left text-[11px] transition-colors ${
+                                    selected ? 'bg-indigo-500/12 text-indigo-200' : 'text-[var(--text-secondary)] hover:bg-[var(--glass-bg)]'
+                                  }`}
+                                >
+                                  <span className="truncate">{user.label}</span>
+                                  <span className="text-[10px] uppercase tracking-wider opacity-80">{t(`role.${user.role}`)}</span>
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      ) : null}
                     </div>
                   </div>
                   )}
@@ -3242,9 +3736,9 @@ export default function ConfigModal({
           </div>
         </div>
 
-        {(notificationSaveMessage || notificationConfigMessage) && (
+        {(notificationSaveMessage || notificationConfigMessage || twilioConfigMessage) && (
           <div className="rounded-xl p-3 text-xs font-semibold bg-[var(--glass-bg)] border border-[var(--glass-border)]">
-            {notificationSaveMessage || notificationConfigMessage}
+            {notificationSaveMessage || notificationConfigMessage || twilioConfigMessage}
           </div>
         )}
 
