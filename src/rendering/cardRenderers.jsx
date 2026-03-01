@@ -28,6 +28,7 @@ import {
   MissingEntityCard,
   NotificationTimelineCard,
   PopupLauncherCard,
+  ReportsCard,
   RoomCard,
   SaunaCard,
   SaunaBookingTempCard,
@@ -628,6 +629,29 @@ export function renderGlobalTimelineCard(cardId, dragProps, getControls, cardSty
   );
 }
 
+export function renderReportsCard(cardId, dragProps, getControls, cardStyle, settingsKey, ctx) {
+  const {
+    editMode, cardSettings, customNames, language, t,
+  } = ctx;
+  const settings = cardSettings[settingsKey] || cardSettings[cardId] || {};
+  return (
+    <ReportsCard
+      key={cardId}
+      cardId={cardId}
+      settings={settings}
+      settingsKey={settingsKey}
+      dragProps={dragProps}
+      controls={getControls(cardId)}
+      cardStyle={cardStyle}
+      editMode={editMode}
+      customNames={customNames}
+      cardSettings={cardSettings}
+      locale={language === 'en' ? 'en-US' : 'nb-NO'}
+      t={t}
+    />
+  );
+}
+
 export function renderDividerCard(cardId, dragProps, getControls, cardStyle, settingsKey, ctx) {
   const { editMode, cardSettings } = ctx;
   const settings = cardSettings[settingsKey] || cardSettings[cardId] || {};
@@ -792,6 +816,10 @@ export function dispatchCardRender(cardId, dragProps, getControls, cardStyle, se
 
   if (cardId.startsWith('global_timeline_card_')) {
     return renderGlobalTimelineCard(cardId, dragProps, getControls, cardStyle, settingsKey, ctx);
+  }
+
+  if (cardId.startsWith('reports_card_')) {
+    return renderReportsCard(cardId, dragProps, getControls, cardStyle, settingsKey, ctx);
   }
 
   if (cardId.startsWith('divider_card_')) {

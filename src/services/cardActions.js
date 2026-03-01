@@ -257,6 +257,16 @@ export const handleAddSelected = (ctx) => {
       return;
     }
 
+    case 'reports': {
+      const cardId = `reports_card_${Date.now()}`;
+      commitSingleCard(cardId, {
+        type: 'reports',
+        defaultRange: '7d',
+        size: 'large',
+      }, { openEdit: true });
+      return;
+    }
+
     case 'popupLauncher': {
       const cardId = `popup_launcher_card_${Date.now()}`;
       commitSingleCard(cardId, {
