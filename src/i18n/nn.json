@@ -1088,6 +1088,8 @@
   "globalTimeline.entries": "oppføringar",
   "globalTimeline.updatedAt": "Oppdatert",
   "globalTimeline.refresh": "Oppdater",
+  "globalTimeline.exportCsv": "Eksporter CSV",
+  "globalTimeline.exportJson": "Eksporter JSON",
   "globalTimeline.emptyTitle": "Ingen tidslinjeoppføringar enno",
   "globalTimeline.emptyHint": "Klienthandlingar og loggar blir viste her.",
   "globalTimeline.noMatch": "Ingen oppføringar matchar filtra",

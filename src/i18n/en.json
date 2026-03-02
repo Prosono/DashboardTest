@@ -1088,6 +1088,8 @@
   "globalTimeline.entries": "entries",
   "globalTimeline.updatedAt": "Updated",
   "globalTimeline.refresh": "Refresh",
+  "globalTimeline.exportCsv": "Export CSV",
+  "globalTimeline.exportJson": "Export JSON",
   "globalTimeline.emptyTitle": "No timeline entries yet",
   "globalTimeline.emptyHint": "Client actions and logs will appear here.",
   "globalTimeline.noMatch": "No entries match your filters",

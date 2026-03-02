@@ -8,6 +8,7 @@ import {
   Check,
   Clock,
   Database,
+  Download,
   RefreshCw,
   Search,
   Shield,
@@ -115,6 +116,20 @@ const getTimeThresholdMs = (windowKey, nowMs) => {
 };
 
 const toSafeText = (value) => String(value ?? '').trim();
+const csvCell = (value) => `"${String(value ?? '').replace(/"/g, '""')}"`;
+
+const downloadBlob = (content, fileName, mimeType) => {
+  if (typeof window === 'undefined') return;
+  const blob = new Blob([content], { type: mimeType });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement('a');
+  anchor.href = url;
+  anchor.download = fileName;
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  URL.revokeObjectURL(url);
+};
 
 const buildActivityChart = (rows, timeWindowFilter) => {
   if (!Array.isArray(rows) || rows.length === 0) return null;
@@ -535,6 +550,100 @@ export default function GlobalTimelineCard({
     { value: '7d', label: tr(t, 'globalTimeline.filter.time.7d', 'Last 7 days') },
   ]), [t]);
 
+  const exportPayload = useMemo(() => ({
+    generatedAt: new Date().toISOString(),
+    overviewGeneratedAt: generatedAt || null,
+    filters: {
+      search: searchQuery,
+      source: sourceFilter,
+      severity: severityFilter,
+      client: clientFilter,
+      timeWindow: timeWindowFilter,
+    },
+    totalRows: rows.length,
+    filteredRows: filteredRows.length,
+    rows: filteredRows.map((row) => ({
+      id: toSafeText(row?.id),
+      createdAt: toSafeText(row?.createdAt),
+      source: toSafeText(row?.kind),
+      severity: normalizeLevel(row?.level),
+      clientId: toSafeText(row?.clientId),
+      clientName: toSafeText(row?.clientName),
+      actorName: toSafeText(row?.actorName),
+      title: toSafeText(row?.title),
+      subtitle: toSafeText(row?.subtitle),
+      entityId: toSafeText(row?.entityId),
+      entityName: toSafeText(row?.entityName),
+      domain: toSafeText(row?.domain),
+      service: toSafeText(row?.service),
+      connectionId: toSafeText(row?.connectionId),
+      summary: toSafeText(row?.summary),
+    })),
+  }), [
+    clientFilter,
+    filteredRows,
+    generatedAt,
+    rows.length,
+    searchQuery,
+    severityFilter,
+    sourceFilter,
+    timeWindowFilter,
+  ]);
+
+  const handleExportJson = useCallback(() => {
+    downloadBlob(
+      JSON.stringify(exportPayload, null, 2),
+      `smart-sauna-global-timeline-${Date.now()}.json`,
+      'application/json;charset=utf-8',
+    );
+  }, [exportPayload]);
+
+  const handleExportCsv = useCallback(() => {
+    const lines = [[
+      csvCell('created_at'),
+      csvCell('source'),
+      csvCell('severity'),
+      csvCell('client_name'),
+      csvCell('client_id'),
+      csvCell('actor'),
+      csvCell('title'),
+      csvCell('subtitle'),
+      csvCell('entity_name'),
+      csvCell('entity_id'),
+      csvCell('domain'),
+      csvCell('service'),
+      csvCell('connection_id'),
+      csvCell('summary'),
+      csvCell('id'),
+    ].join(',')];
+
+    filteredRows.forEach((row) => {
+      lines.push([
+        csvCell(toSafeText(row?.createdAt)),
+        csvCell(toSafeText(row?.kind)),
+        csvCell(normalizeLevel(row?.level)),
+        csvCell(toSafeText(row?.clientName)),
+        csvCell(toSafeText(row?.clientId)),
+        csvCell(toSafeText(row?.actorName)),
+        csvCell(toSafeText(row?.title)),
+        csvCell(toSafeText(row?.subtitle)),
+        csvCell(toSafeText(row?.entityName)),
+        csvCell(toSafeText(row?.entityId)),
+        csvCell(toSafeText(row?.domain)),
+        csvCell(toSafeText(row?.service)),
+        csvCell(toSafeText(row?.connectionId)),
+        csvCell(toSafeText(row?.summary)),
+        csvCell(toSafeText(row?.id)),
+      ].join(','));
+    });
+
+    downloadBlob(
+      lines.join('\n'),
+      `smart-sauna-global-timeline-${Date.now()}.csv`,
+      'text/csv;charset=utf-8',
+    );
+  }, [filteredRows]);
+
   const detailModal = selectedRow && typeof document !== 'undefined'
     ? createPortal(
       <div
@@ -670,16 +779,40 @@ export default function GlobalTimelineCard({
             ) : null}
           </div>
 
-          <button
-            type="button"
-            onClick={() => void fetchTimeline({ silent: true })}
-            className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-[var(--glass-border)] bg-[var(--glass-bg)] text-[10px] uppercase tracking-wider font-bold text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--glass-bg-hover)] transition-colors disabled:opacity-60"
-            disabled={loading || refreshing || !isPlatformAdmin}
-            title={tr(t, 'globalTimeline.refresh', 'Refresh')}
-          >
-            <RefreshCw className={`w-3.5 h-3.5 ${(loading || refreshing) ? 'animate-spin' : ''}`} />
-            <span>{tr(t, 'globalTimeline.refresh', 'Refresh')}</span>
-          </button>
+          <div className="inline-flex items-center gap-1.5">
+            <button
+              type="button"
+              onClick={handleExportCsv}
+              className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-[var(--glass-border)] bg-[var(--glass-bg)] text-[10px] uppercase tracking-wider font-bold text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--glass-bg-hover)] transition-colors disabled:opacity-60"
+              disabled={loading || !isPlatformAdmin || filteredRows.length === 0}
+              title={tr(t, 'globalTimeline.exportCsv', 'Export CSV')}
+            >
+              <Download className="w-3.5 h-3.5" />
+              <span>CSV</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={handleExportJson}
+              className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-[var(--glass-border)] bg-[var(--glass-bg)] text-[10px] uppercase tracking-wider font-bold text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--glass-bg-hover)] transition-colors disabled:opacity-60"
+              disabled={loading || !isPlatformAdmin || filteredRows.length === 0}
+              title={tr(t, 'globalTimeline.exportJson', 'Export JSON')}
+            >
+              <Download className="w-3.5 h-3.5" />
+              <span>JSON</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => void fetchTimeline({ silent: true })}
+              className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-[var(--glass-border)] bg-[var(--glass-bg)] text-[10px] uppercase tracking-wider font-bold text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--glass-bg-hover)] transition-colors disabled:opacity-60"
+              disabled={loading || refreshing || !isPlatformAdmin}
+              title={tr(t, 'globalTimeline.refresh', 'Refresh')}
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${(loading || refreshing) ? 'animate-spin' : ''}`} />
+              <span>{tr(t, 'globalTimeline.refresh', 'Refresh')}</span>
+            </button>
+          </div>
         </div>
 
         {!editMode && (
