@@ -400,6 +400,18 @@ export default function SaunaDebugModal({
       .slice(0, MAX_TIMELINE_EVENTS);
   }, [selectedSummaries, chartSeries]);
 
+  const summaryStats = useMemo(() => {
+    const totalEvents = summaries.reduce((sum, summary) => sum + summary.eventCount, 0);
+    const changedEntities = summaries.filter((summary) => summary.changeCount > 0).length;
+    const numericEntities = summaries.filter((summary) => summary.sparkData.length > 1 && summary.chartVariant === 'line').length;
+    return {
+      totalEntities: summaries.length,
+      totalEvents,
+      changedEntities,
+      numericEntities,
+    };
+  }, [summaries]);
+
   const exportRows = useMemo(() => {
     return selectedSummaries
       .flatMap((summary) => {
@@ -516,18 +528,6 @@ export default function SaunaDebugModal({
       'text/csv;charset=utf-8',
     );
   }, [exportBaseName, exportRows]);
-
-  const summaryStats = useMemo(() => {
-    const totalEvents = summaries.reduce((sum, summary) => sum + summary.eventCount, 0);
-    const changedEntities = summaries.filter((summary) => summary.changeCount > 0).length;
-    const numericEntities = summaries.filter((summary) => summary.sparkData.length > 1 && summary.chartVariant === 'line').length;
-    return {
-      totalEntities: summaries.length,
-      totalEvents,
-      changedEntities,
-      numericEntities,
-    };
-  }, [summaries]);
 
   useEffect(() => {
     if (typeof window === 'undefined') return undefined;
