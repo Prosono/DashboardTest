@@ -104,7 +104,6 @@ export function useAddCard({
     if (addCardType === 'saunaHealthScore') return t('addCard.available.entities');
     if (addCardType === 'popupLauncher') return t('addCard.available.entities');
     if (addCardType === 'globalTimeline') return t('addCard.available.entities');
-    if (addCardType === 'reports') return t('addCard.available.entities');
     if (addCardType === 'empty') return t('addCard.available.entities');
     if (addCardType === 'divider') return t('addCard.available.entities');
     if (
@@ -152,8 +151,6 @@ export function useAddCard({
             : addCardType === 'popupLauncher'
               ? 'addCard.item.entities'
             : addCardType === 'globalTimeline'
-              ? 'addCard.item.entities'
-            : addCardType === 'reports'
               ? 'addCard.item.entities'
             : addCardType === 'empty'
               ? 'addCard.item.entities'

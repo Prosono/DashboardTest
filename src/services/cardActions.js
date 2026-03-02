@@ -238,7 +238,7 @@ export const handleAddSelected = (ctx) => {
       commitSingleCard(cardId, {
         type: 'notification_timeline',
         maxEntries: 200,
-        showEvents: false,
+        showEvents: true,
       }, { openEdit: true });
       return;
     }
@@ -253,16 +253,6 @@ export const handleAddSelected = (ctx) => {
         includeDashboardLogs: true,
         includeSessions: true,
         includeConnectionIssues: true,
-      }, { openEdit: true });
-      return;
-    }
-
-    case 'reports': {
-      const cardId = `reports_card_${Date.now()}`;
-      commitSingleCard(cardId, {
-        type: 'reports',
-        defaultRange: '7d',
-        size: 'large',
       }, { openEdit: true });
       return;
     }

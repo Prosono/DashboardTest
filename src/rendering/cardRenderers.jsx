@@ -28,7 +28,6 @@ import {
   MissingEntityCard,
   NotificationTimelineCard,
   PopupLauncherCard,
-  ReportsCard,
   RoomCard,
   SaunaCard,
   SaunaBookingTempCard,
@@ -633,19 +632,21 @@ export function renderReportsCard(cardId, dragProps, getControls, cardStyle, set
   const {
     editMode, cardSettings, customNames, language, t,
   } = ctx;
-  const settings = cardSettings[settingsKey] || cardSettings[cardId] || {};
+  const rawSettings = cardSettings[settingsKey] || cardSettings[cardId] || {};
+  const settings = {
+    ...rawSettings,
+    showEvents: rawSettings?.showEvents !== false,
+  };
   return (
-    <ReportsCard
+    <NotificationTimelineCard
       key={cardId}
       cardId={cardId}
       settings={settings}
-      settingsKey={settingsKey}
       dragProps={dragProps}
       controls={getControls(cardId)}
       cardStyle={cardStyle}
       editMode={editMode}
       customNames={customNames}
-      cardSettings={cardSettings}
       locale={language === 'en' ? 'en-US' : 'nb-NO'}
       t={t}
     />

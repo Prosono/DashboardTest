@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { AlertCircle, AlertTriangle, Bell, Check, Clock, Search, Trash2, X } from '../../icons';
+import { AlertCircle, AlertTriangle, Bell, Check, Clock, Download, Search, Trash2, X } from '../../icons';
 import { useNotifications } from '../../contexts';
 import { fetchAppActionHistory } from '../../services/appAuth';
 
@@ -123,6 +123,21 @@ const getEventSearchText = (entry) => [
   String(entry?.source || ''),
 ].join(' ').toLowerCase();
 
+const downloadBlob = (content, fileName, mimeType) => {
+  if (typeof window === 'undefined') return;
+  const blob = new Blob([content], { type: mimeType });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement('a');
+  anchor.href = url;
+  anchor.download = fileName;
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  URL.revokeObjectURL(url);
+};
+
+const csvCell = (value) => `"${String(value ?? '').replace(/"/g, '""')}"`;
+
 export default function NotificationTimelineCard({
   cardId,
   settings = {},
@@ -158,7 +173,7 @@ export default function NotificationTimelineCard({
     [notificationHistory],
   );
 
-  const rows = useMemo(() => {
+  const filteredNotificationRows = useMemo(() => {
     const query = String(searchQuery || '').trim().toLowerCase();
     const nowMs = Date.now();
     const thresholdMs = getTimeThresholdMs(timeWindowFilter, nowMs);
@@ -181,8 +196,13 @@ export default function NotificationTimelineCard({
       return haystack.includes(query);
     });
 
-    return filtered.slice(0, maxEntries);
-  }, [allRows, searchQuery, severityFilter, timeWindowFilter, maxEntries]);
+    return filtered;
+  }, [allRows, searchQuery, severityFilter, timeWindowFilter]);
+
+  const rows = useMemo(
+    () => filteredNotificationRows.slice(0, maxEntries),
+    [filteredNotificationRows, maxEntries],
+  );
 
   const loadAppEvents = useCallback(async () => {
     if (!showEvents) return;
@@ -217,7 +237,7 @@ export default function NotificationTimelineCard({
     [appEvents],
   );
 
-  const eventRows = useMemo(() => {
+  const filteredEventRows = useMemo(() => {
     const query = String(searchQuery || '').trim().toLowerCase();
     const nowMs = Date.now();
     const thresholdMs = getTimeThresholdMs(timeWindowFilter, nowMs);
@@ -229,8 +249,13 @@ export default function NotificationTimelineCard({
       if (!query) return true;
       return getEventSearchText(entry).includes(query);
     });
-    return filtered.slice(0, maxEntries);
-  }, [allEventRows, maxEntries, searchQuery, timeWindowFilter]);
+    return filtered;
+  }, [allEventRows, searchQuery, timeWindowFilter]);
+
+  const eventRows = useMemo(
+    () => filteredEventRows.slice(0, maxEntries),
+    [filteredEventRows, maxEntries],
+  );
 
   const selectedEntry = useMemo(() => {
     if (!selectedEntryId) return null;
@@ -287,7 +312,149 @@ export default function NotificationTimelineCard({
 
   const isEventsTab = showEvents && activeTab === 'events';
   const totalRows = isEventsTab ? allEventRows.length : allRows.length;
+  const filteredRowsAll = isEventsTab ? filteredEventRows : filteredNotificationRows;
   const filteredRows = isEventsTab ? eventRows : rows;
+
+  const exportPayload = useMemo(() => {
+    if (isEventsTab) {
+      return {
+        generatedAt: new Date().toISOString(),
+        tab: 'events',
+      filters: {
+        search: searchQuery,
+        timeWindow: timeWindowFilter,
+      },
+      totalRows,
+      filteredRows: filteredRowsAll.length,
+      rows: filteredRowsAll.map((entry) => ({
+        id: entry?.id || '',
+        createdAt: entry?.createdAt || '',
+        action: [entry?.domain, entry?.service].filter(Boolean).join('.') || '',
+          actor: entry?.actorName || '',
+          entityName: entry?.entityName || '',
+          entityId: entry?.entityId || '',
+          connectionId: entry?.connectionId || '',
+          summary: entry?.summary || '',
+        })),
+      };
+    }
+
+    return {
+      generatedAt: new Date().toISOString(),
+      tab: 'notifications',
+      filters: {
+        search: searchQuery,
+        severity: severityFilter,
+        timeWindow: timeWindowFilter,
+      },
+      totalRows,
+      filteredRows: filteredRowsAll.length,
+      rows: filteredRowsAll.map((entry) => ({
+        id: entry?.id || '',
+        createdAt: entry?.createdAt || '',
+        level: normalizeLevel(entry?.level),
+        title: entry?.title || '',
+        message: toPlainText(entry?.message || ''),
+      })),
+    };
+  }, [filteredRowsAll, isEventsTab, searchQuery, severityFilter, timeWindowFilter, totalRows]);
+
+  const handleExportJson = useCallback(() => {
+    const suffix = isEventsTab ? 'events' : 'notifications';
+    downloadBlob(
+      JSON.stringify(exportPayload, null, 2),
+      `smart-sauna-timeline-${suffix}-${Date.now()}.json`,
+      'application/json;charset=utf-8',
+    );
+  }, [exportPayload, isEventsTab]);
+
+  const handleExportCsv = useCallback(() => {
+    const lines = [];
+
+    if (isEventsTab) {
+      lines.push([
+        csvCell('created_at'),
+        csvCell('action'),
+        csvCell('actor'),
+        csvCell('entity_name'),
+        csvCell('entity_id'),
+        csvCell('connection_id'),
+        csvCell('summary'),
+      ].join(','));
+      filteredRowsAll.forEach((entry) => {
+        lines.push([
+          csvCell(entry?.createdAt || ''),
+          csvCell([entry?.domain, entry?.service].filter(Boolean).join('.') || ''),
+          csvCell(entry?.actorName || ''),
+          csvCell(entry?.entityName || ''),
+          csvCell(entry?.entityId || ''),
+          csvCell(entry?.connectionId || ''),
+          csvCell(entry?.summary || ''),
+        ].join(','));
+      });
+    } else {
+      lines.push([
+        csvCell('created_at'),
+        csvCell('severity'),
+        csvCell('title'),
+        csvCell('message'),
+        csvCell('id'),
+      ].join(','));
+      filteredRowsAll.forEach((entry) => {
+        lines.push([
+          csvCell(entry?.createdAt || ''),
+          csvCell(normalizeLevel(entry?.level)),
+          csvCell(entry?.title || ''),
+          csvCell(toPlainText(entry?.message || '')),
+          csvCell(entry?.id || ''),
+        ].join(','));
+      });
+    }
+
+    const suffix = isEventsTab ? 'events' : 'notifications';
+    downloadBlob(lines.join('\n'), `smart-sauna-timeline-${suffix}-${Date.now()}.csv`, 'text/csv;charset=utf-8');
+  }, [filteredRowsAll, isEventsTab]);
+
+  const handleExportHtml = useCallback(() => {
+    const rowsHtml = isEventsTab
+      ? filteredRowsAll.map((entry) => (
+        `<tr><td>${formatDateTime(entry?.createdAt, locale, true)}</td><td>${[entry?.domain, entry?.service].filter(Boolean).join('.') || '-'}</td><td>${entry?.actorName || '-'}</td><td>${entry?.entityName || entry?.entityId || '-'}</td><td>${entry?.summary || '-'}</td></tr>`
+      )).join('')
+      : filteredRowsAll.map((entry) => (
+        `<tr><td>${formatDateTime(entry?.createdAt, locale, true)}</td><td>${String(normalizeLevel(entry?.level || 'info')).toUpperCase()}</td><td>${entry?.title || '-'}</td><td>${toPlainText(entry?.message || '') || '-'}</td></tr>`
+      )).join('');
+
+    const tableHead = isEventsTab
+      ? '<tr><th>Created</th><th>Action</th><th>Actor</th><th>Entity</th><th>Summary</th></tr>'
+      : '<tr><th>Created</th><th>Severity</th><th>Title</th><th>Message</th></tr>';
+
+    const html = `<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Smart Sauna Timeline Export</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; margin: 24px; color: #0f172a; }
+    h1 { margin: 0 0 8px 0; }
+    .muted { color: #64748b; margin-bottom: 16px; }
+    table { width: 100%; border-collapse: collapse; }
+    th, td { border: 1px solid #cbd5e1; padding: 8px; text-align: left; font-size: 13px; vertical-align: top; }
+    th { background: #e2e8f0; }
+  </style>
+</head>
+<body>
+  <h1>Smart Sauna Timeline Export</h1>
+  <p class="muted">Generated: ${formatDateTime(new Date().toISOString(), locale, true)} · Tab: ${isEventsTab ? 'Events' : 'Notifications'} · Rows: ${filteredRowsAll.length}/${totalRows}</p>
+  <table>
+    <thead>${tableHead}</thead>
+    <tbody>${rowsHtml}</tbody>
+  </table>
+</body>
+</html>`;
+
+    const suffix = isEventsTab ? 'events' : 'notifications';
+    downloadBlob(html, `smart-sauna-timeline-${suffix}-${Date.now()}.html`, 'text/html;charset=utf-8');
+  }, [filteredRowsAll, isEventsTab, locale, totalRows]);
 
   const detailModal = selectedEntry && typeof document !== 'undefined'
     ? createPortal(
@@ -508,25 +675,69 @@ export default function NotificationTimelineCard({
               {heading}
             </p>
             <p className="text-xs mt-1 text-[var(--text-secondary)]">
-              {filteredRows.length}/{totalRows} {tr(t, 'notificationTimeline.entries', 'entries')}
+              {filteredRowsAll.length}/{totalRows} {tr(t, 'notificationTimeline.entries', 'entries')}
             </p>
           </div>
-          {!editMode && !isEventsTab && allRows.length > 0 && (
-            <button
-              type="button"
-              onClick={(event) => {
-                event.stopPropagation();
-                if (!confirmAction(tr(t, 'notificationTimeline.confirmClear', 'Delete all notification entries?'))) {
-                  return;
-                }
-                clearNotificationHistory?.();
-              }}
-              className="inline-flex items-center gap-1.5 px-2 py-1 rounded-lg border border-red-500/25 bg-red-500/10 text-red-300 text-[10px] uppercase tracking-wider font-bold hover:bg-red-500/15 transition-colors"
-              title={tr(t, 'notificationTimeline.clear', 'Clear timeline')}
-            >
-              <Trash2 className="w-3.5 h-3.5" />
-              <span>{tr(t, 'notificationTimeline.clear', 'Clear')}</span>
-            </button>
+          {!editMode && (
+            <div className="flex items-center gap-1.5 shrink-0">
+              {filteredRowsAll.length > 0 && (
+                <>
+                  <button
+                    type="button"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      handleExportCsv();
+                    }}
+                    className="inline-flex items-center gap-1 px-2 py-1 rounded-lg border border-[var(--glass-border)] bg-[var(--glass-bg)] text-[var(--text-secondary)] text-[10px] uppercase tracking-wider font-bold hover:bg-[var(--glass-bg-hover)] transition-colors"
+                    title={tr(t, 'notificationTimeline.exportCsv', 'Export CSV')}
+                  >
+                    <Download className="w-3 h-3" />
+                    CSV
+                  </button>
+                  <button
+                    type="button"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      handleExportJson();
+                    }}
+                    className="inline-flex items-center gap-1 px-2 py-1 rounded-lg border border-[var(--glass-border)] bg-[var(--glass-bg)] text-[var(--text-secondary)] text-[10px] uppercase tracking-wider font-bold hover:bg-[var(--glass-bg-hover)] transition-colors"
+                    title={tr(t, 'notificationTimeline.exportJson', 'Export JSON')}
+                  >
+                    <Download className="w-3 h-3" />
+                    JSON
+                  </button>
+                  <button
+                    type="button"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      handleExportHtml();
+                    }}
+                    className="inline-flex items-center gap-1 px-2 py-1 rounded-lg border border-[var(--glass-border)] bg-[var(--glass-bg)] text-[var(--text-secondary)] text-[10px] uppercase tracking-wider font-bold hover:bg-[var(--glass-bg-hover)] transition-colors"
+                    title={tr(t, 'notificationTimeline.exportHtml', 'Export HTML')}
+                  >
+                    <Download className="w-3 h-3" />
+                    HTML
+                  </button>
+                </>
+              )}
+              {!isEventsTab && allRows.length > 0 && (
+                <button
+                  type="button"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    if (!confirmAction(tr(t, 'notificationTimeline.confirmClear', 'Delete all notification entries?'))) {
+                      return;
+                    }
+                    clearNotificationHistory?.();
+                  }}
+                  className="inline-flex items-center gap-1.5 px-2 py-1 rounded-lg border border-red-500/25 bg-red-500/10 text-red-300 text-[10px] uppercase tracking-wider font-bold hover:bg-red-500/15 transition-colors"
+                  title={tr(t, 'notificationTimeline.clear', 'Clear timeline')}
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  <span>{tr(t, 'notificationTimeline.clear', 'Clear')}</span>
+                </button>
+              )}
+            </div>
           )}
         </div>
 
@@ -627,7 +838,7 @@ export default function NotificationTimelineCard({
                 : tr(t, 'notificationTimeline.emptyHint', 'When alerts are triggered, they will appear here.')}
             </p>
           </div>
-        ) : filteredRows.length === 0 ? (
+        ) : filteredRowsAll.length === 0 ? (
           <div className="rounded-2xl border border-dashed border-[var(--glass-border)] bg-[var(--glass-bg)] px-4 py-6 text-center">
             <p className="text-xs font-bold uppercase tracking-widest text-[var(--text-secondary)]">
               {tr(t, 'notificationTimeline.noMatch', 'No entries match your filters')}
