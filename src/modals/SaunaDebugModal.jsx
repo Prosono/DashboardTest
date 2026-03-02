@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from 'react';
-import { Activity, BarChart3, Calendar, Clock, Database, RefreshCw, Search, X } from '../icons';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Activity, BarChart3, Calendar, Clock, Database, Download, RefreshCw, Search, X } from '../icons';
 import { getHistoryBatch } from '../services/haClient';
 import DebugMultiSeriesChart from '../components/charts/DebugMultiSeriesChart';
 
@@ -10,6 +10,29 @@ const MAX_CHART_POINTS = 360;
 
 const asArray = (value) => (Array.isArray(value) ? value : []);
 const norm = (value) => String(value ?? '').trim().toLowerCase();
+const csvCell = (value) => `"${String(value ?? '').replace(/"/g, '""')}"`;
+
+const sanitizeFilePart = (value, fallback = 'export') => {
+  const cleaned = String(value || '')
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+  return cleaned || fallback;
+};
+
+const downloadBlob = (content, fileName, mimeType) => {
+  if (typeof window === 'undefined') return;
+  const blob = new Blob([content], { type: mimeType });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = fileName;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+};
 
 function makeTr(t) {
   return (key, fallback) => {
@@ -377,6 +400,123 @@ export default function SaunaDebugModal({
       .slice(0, MAX_TIMELINE_EVENTS);
   }, [selectedSummaries, chartSeries]);
 
+  const exportRows = useMemo(() => {
+    return selectedSummaries
+      .flatMap((summary) => {
+        const raw = asArray(historyByEntityId?.[summary.entityId]);
+        return raw.map((entry) => {
+          const time = parseTimestamp(entry);
+          if (!time) return null;
+          const stateRaw = entry?.state ?? entry?.s ?? '';
+          const numericValue = parseNumericState(entry);
+          return {
+            entityId: summary.entityId,
+            entityName: summary.name,
+            domain: summary.domain,
+            time,
+            timeIso: time.toISOString(),
+            timeLocal: time.toLocaleString(),
+            stateRaw: String(stateRaw ?? ''),
+            stateFormatted: formatState(stateRaw),
+            numericValue: Number.isFinite(numericValue) ? numericValue : null,
+          };
+        }).filter(Boolean);
+      })
+      .sort((a, b) => a.time - b.time);
+  }, [historyByEntityId, selectedSummaries]);
+
+  const exportPayload = useMemo(() => ({
+    generatedAt: new Date().toISOString(),
+    saunaName,
+    window: {
+      mode,
+      selectedDay: selectedDay || null,
+      rangeHours,
+      start: timeWindow.start.toISOString(),
+      end: timeWindow.end.toISOString(),
+      label: windowLabel,
+    },
+    selectedEntityIds,
+    selectedEntities: selectedSummaries.map((summary) => ({
+      entityId: summary.entityId,
+      name: summary.name,
+      domain: summary.domain,
+      eventCount: summary.eventCount,
+      changeCount: summary.changeCount,
+      min: summary.min,
+      avg: summary.avg,
+      max: summary.max,
+      currentState: summary.currentState,
+      currentLastChanged: summary.currentLastChanged ? summary.currentLastChanged.toISOString() : null,
+    })),
+    stats: summaryStats,
+    rows: exportRows.map((row) => ({
+      entityId: row.entityId,
+      entityName: row.entityName,
+      domain: row.domain,
+      time: row.timeIso,
+      state: row.stateRaw,
+      stateFormatted: row.stateFormatted,
+      numericValue: row.numericValue,
+    })),
+  }), [
+    saunaName,
+    mode,
+    selectedDay,
+    rangeHours,
+    timeWindow.start,
+    timeWindow.end,
+    windowLabel,
+    selectedEntityIds,
+    selectedSummaries,
+    summaryStats,
+    exportRows,
+  ]);
+
+  const exportBaseName = useMemo(() => (
+    `sauna-debug-${sanitizeFilePart(saunaName, 'sauna')}-${Date.now()}`
+  ), [saunaName]);
+
+  const handleExportJson = useCallback(() => {
+    downloadBlob(
+      JSON.stringify(exportPayload, null, 2),
+      `${exportBaseName}.json`,
+      'application/json;charset=utf-8',
+    );
+  }, [exportBaseName, exportPayload]);
+
+  const handleExportCsv = useCallback(() => {
+    const lines = [[
+      csvCell('time_iso'),
+      csvCell('time_local'),
+      csvCell('entity_name'),
+      csvCell('entity_id'),
+      csvCell('domain'),
+      csvCell('state_raw'),
+      csvCell('state_display'),
+      csvCell('numeric_value'),
+    ].join(',')];
+
+    exportRows.forEach((row) => {
+      lines.push([
+        csvCell(row.timeIso),
+        csvCell(row.timeLocal),
+        csvCell(row.entityName),
+        csvCell(row.entityId),
+        csvCell(row.domain),
+        csvCell(row.stateRaw),
+        csvCell(row.stateFormatted),
+        csvCell(Number.isFinite(row.numericValue) ? row.numericValue.toFixed(3) : ''),
+      ].join(','));
+    });
+
+    downloadBlob(
+      lines.join('\n'),
+      `${exportBaseName}.csv`,
+      'text/csv;charset=utf-8',
+    );
+  }, [exportBaseName, exportRows]);
+
   const summaryStats = useMemo(() => {
     const totalEvents = summaries.reduce((sum, summary) => sum + summary.eventCount, 0);
     const changedEntities = summaries.filter((summary) => summary.changeCount > 0).length;
@@ -535,6 +675,28 @@ export default function SaunaDebugModal({
             >
               <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
               {tr('common.refresh', 'Refresh')}
+            </button>
+
+            <button
+              type="button"
+              onClick={handleExportCsv}
+              disabled={exportRows.length === 0}
+              className="px-3 py-1.5 rounded-full border text-[11px] font-semibold bg-[var(--glass-bg)] border-[var(--glass-border)] text-[var(--text-secondary)] inline-flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed"
+              title={tr('sauna.debugExportCsv', 'Export CSV')}
+            >
+              <Download className="w-3.5 h-3.5" />
+              CSV
+            </button>
+
+            <button
+              type="button"
+              onClick={handleExportJson}
+              disabled={exportRows.length === 0}
+              className="px-3 py-1.5 rounded-full border text-[11px] font-semibold bg-[var(--glass-bg)] border-[var(--glass-border)] text-[var(--text-secondary)] inline-flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed"
+              title={tr('sauna.debugExportJson', 'Export JSON')}
+            >
+              <Download className="w-3.5 h-3.5" />
+              JSON
             </button>
 
             {isMobile && (
