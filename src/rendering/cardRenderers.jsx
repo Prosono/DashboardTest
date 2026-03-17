@@ -704,6 +704,7 @@ export function renderEntityGroupControlCard(cardId, dragProps, getControls, car
       cardId={cardId}
       settings={settings}
       entities={entities}
+      conn={ctx.conn}
       dragProps={dragProps}
       controls={getControls(cardId)}
       cardStyle={cardStyle}
