@@ -67,6 +67,71 @@ const compactActivitySeries = (points) => {
   return compacted;
 };
 
+const getSeriesPointMs = (point) => {
+  if (!point?.time) return NaN;
+  if (point.time instanceof Date) return point.time.getTime();
+  const date = new Date(point.time);
+  return Number.isNaN(date.getTime()) ? NaN : date.getTime();
+};
+
+const sampleActivityValueAt = (series, timestampMs) => {
+  if (!Array.isArray(series) || !series.length) return 0;
+
+  let value = Number(series[0]?.value) || 0;
+
+  for (let index = 1; index < series.length; index += 1) {
+    const pointMs = getSeriesPointMs(series[index]);
+    if (!Number.isFinite(pointMs) || pointMs > timestampMs) break;
+    value = Number(series[index]?.value) || 0;
+  }
+
+  return value;
+};
+
+const smoothTrendSeries = (series, windowRadius = 3) => {
+  if (!Array.isArray(series) || series.length < 3) return series;
+
+  return series.map((point, index) => {
+    let weightedTotal = 0;
+    let totalWeight = 0;
+
+    for (let cursor = index - windowRadius; cursor <= index + windowRadius; cursor += 1) {
+      const neighbor = series[cursor];
+      if (!neighbor) continue;
+      const distance = Math.abs(cursor - index);
+      const weight = windowRadius + 1 - distance;
+      weightedTotal += (Number(neighbor.value) || 0) * weight;
+      totalWeight += weight;
+    }
+
+    return {
+      ...point,
+      value: totalWeight > 0 ? weightedTotal / totalWeight : Number(point.value) || 0,
+    };
+  });
+};
+
+export const buildGroupTrendSeries = (activitySeries, sampleCount = 72) => {
+  const source = Array.isArray(activitySeries) ? activitySeries : [];
+  if (source.length < 2) return source;
+
+  const startMs = getSeriesPointMs(source[0]);
+  const endMs = getSeriesPointMs(source[source.length - 1]);
+  if (!Number.isFinite(startMs) || !Number.isFinite(endMs) || endMs <= startMs) return source;
+
+  const points = [];
+  for (let index = 0; index < sampleCount; index += 1) {
+    const ratio = sampleCount === 1 ? 1 : index / (sampleCount - 1);
+    const timestampMs = startMs + ((endMs - startMs) * ratio);
+    points.push({
+      time: new Date(timestampMs),
+      value: sampleActivityValueAt(source, timestampMs),
+    });
+  }
+
+  return smoothTrendSeries(points, 4);
+};
+
 export const buildGroupActivitySeries = ({
   entityIds,
   historyById,
@@ -237,6 +302,12 @@ export default function EntityGroupControlCard({
     : activeCount > 0
       ? ACTIVE_GRAPH_COLOR
       : DEFAULT_GRAPH_COLOR;
+  const trendSeries = useMemo(() => buildGroupTrendSeries(historySeries), [historySeries]);
+  const trendPeak = useMemo(
+    () => trendSeries.reduce((maxValue, point) => Math.max(maxValue, Number(point?.value) || 0), 0),
+    [trendSeries],
+  );
+  const trendMax = Math.max(1, Math.ceil(trendPeak * 1.18));
 
   const value = fieldType === 'number' || fieldType === 'select' || fieldType === 'button' || fieldType === 'script'
     ? `${total}`
@@ -335,30 +406,52 @@ export default function EntityGroupControlCard({
       className={`w-full h-full p-4 rounded-2xl border text-left relative overflow-hidden transition-all ${editMode ? 'cursor-move' : 'cursor-pointer active:scale-[0.99]'} bg-[var(--glass-bg)] border-[var(--glass-border)]`}
       style={cardStyle}
     >
-      {historySeries.length > 1 && (
+      {trendSeries.length > 1 && (
         <>
           <div
             className="absolute inset-0 pointer-events-none z-0"
             style={{
-              background: `radial-gradient(circle at 88% 14%, ${graphColor}22 0%, transparent 42%)`,
+              background: 'radial-gradient(circle at 90% 100%, rgba(245, 158, 11, 0.10) 0%, rgba(96, 165, 250, 0.06) 26%, transparent 58%)',
             }}
           />
-          <div className="absolute inset-x-0 bottom-0 h-24 z-0 pointer-events-none opacity-55">
-            <SparkLine
-              data={historySeries}
-              height={110}
-              currentIndex={historySeries.length - 1}
-              useTimeScale
-              curve="linear"
-              showCurrentMarker={false}
-              areaFill={false}
-              lineStrokeWidth={2.2}
-              primaryColor={graphColor}
+          <div className="absolute inset-x-0 bottom-0 h-24 z-0 pointer-events-none">
+            <div className="absolute inset-0 opacity-30 blur-[2px]">
+              <SparkLine
+                data={trendSeries}
+                height={112}
+                currentIndex={trendSeries.length - 1}
+                useTimeScale
+                showCurrentMarker={false}
+                areaFill={false}
+                lineStrokeWidth={6.2}
+                primaryColor={graphColor}
+                minValue={0}
+                maxValue={trendMax}
+              />
+            </div>
+            <div className="absolute inset-0 opacity-95">
+              <SparkLine
+                data={trendSeries}
+                height={112}
+                currentIndex={trendSeries.length - 1}
+                useTimeScale
+                showCurrentMarker={false}
+                areaFill={false}
+                lineStrokeWidth={3.15}
+                minValue={0}
+                maxValue={trendMax}
+              />
+            </div>
+            <div
+              className="absolute inset-y-0 left-0 w-[46%]"
+              style={{
+                background: 'linear-gradient(to right, var(--glass-bg) 0%, color-mix(in srgb, var(--glass-bg) 88%, transparent) 18%, color-mix(in srgb, var(--glass-bg) 42%, transparent) 58%, transparent 100%)',
+              }}
             />
             <div
               className="absolute inset-0"
               style={{
-                background: 'linear-gradient(to top, var(--glass-bg) 0%, color-mix(in srgb, var(--glass-bg) 35%, transparent) 48%, transparent 100%)',
+                background: 'linear-gradient(to top, var(--glass-bg) 0%, color-mix(in srgb, var(--glass-bg) 42%, transparent) 34%, transparent 100%)',
               }}
             />
           </div>
