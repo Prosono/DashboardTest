@@ -301,6 +301,44 @@
     0 22px 44px rgba(2, 6, 23, 0.22);
 }
 
+html[data-theme='light'] .alarmo-card {
+  border-color: color-mix(in srgb, var(--alarmo-accent) 20%, rgba(51, 65, 85, 0.26));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.92),
+    0 18px 36px rgba(15, 23, 42, 0.12),
+    0 4px 10px rgba(15, 23, 42, 0.06);
+}
+
+html[data-theme='light'] .alarmo-card__soft-pill {
+  background: rgba(255, 255, 255, 0.78) !important;
+  border-color: rgba(148, 163, 184, 0.34) !important;
+}
+
+html[data-theme='light'] .alarmo-card__badge,
+html[data-theme='light'] .alarmo-card__attention-chip {
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.65);
+}
+
+html[data-theme='light'] .alarmo-card [class*="text-rose-100"] {
+  color: #881337 !important;
+}
+
+html[data-theme='light'] .alarmo-card [class*="text-orange-100"] {
+  color: #9a3412 !important;
+}
+
+html[data-theme='light'] .alarmo-card [class*="text-emerald-100"] {
+  color: #065f46 !important;
+}
+
+html[data-theme='light'] .alarmo-card [class*="text-sky-100"] {
+  color: #0c4a6e !important;
+}
+
+html[data-theme='light'] .alarmo-card__muted {
+  color: #475569 !important;
+}
+
 .alarmo-card__sweep {
   background:
     linear-gradient(

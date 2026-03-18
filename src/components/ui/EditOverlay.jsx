@@ -194,7 +194,7 @@ function EditOverlay({
   return (
     <>
       {/* Move buttons – top left */}
-      <div className="absolute top-2 left-2 z-50 flex gap-2">
+      <div className="absolute top-3 left-3 z-50 flex gap-2">
         <button
           onClick={(e) => { e.stopPropagation(); onMoveLeft(); }}
           className="p-2 rounded-full transition-colors hover:bg-blue-500/80 text-white border border-white/20 shadow-lg bg-black/60"
@@ -212,7 +212,7 @@ function EditOverlay({
       </div>
 
       {/* Action buttons – top right */}
-      <div className="absolute top-2 right-2 z-50 flex gap-2">
+      <div className="absolute top-3 right-3 z-50 flex gap-2">
         <button
           onClick={(e) => { e.stopPropagation(); onEdit(); }}
           className="p-2 rounded-full text-white border border-white/20 shadow-lg bg-black/60"

@@ -588,7 +588,7 @@ export default function AddCardContent({
               <Plus className="w-5 h-5" /> {addCardType === 'media'
                 ? `${t('addCard.add')} ${selectedEntities.length} ${t('addCard.players')}`
                 : addCardType === 'alarmCard'
-                  ? `${t('addCard.add')} Alarmo`
+                  ? `${t('addCard.add')} Alarm`
                   : `${t('addCard.add')} ${selectedEntities.length} ${t('addCard.cards')}`}
             </button>
           )}

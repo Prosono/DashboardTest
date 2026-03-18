@@ -266,10 +266,10 @@ export default function EditCardModal({
 
   const updateButtonOptions = sortByName(byDomain('button'));
   const alarmArmModeOptions = [
-    { key: 'away', label: translateText('alarmo.mode.away', 'Away') },
-    { key: 'home', label: translateText('alarmo.mode.home', 'Home') },
-    { key: 'night', label: translateText('alarmo.mode.night', 'Night') },
-    { key: 'vacation', label: translateText('alarmo.mode.vacation', 'Vacation') },
+    { key: 'away', label: translateText('alarm.mode.away', 'Away') },
+    { key: 'home', label: translateText('alarm.mode.home', 'Home') },
+    { key: 'night', label: translateText('alarm.mode.night', 'Night') },
+    { key: 'vacation', label: translateText('alarm.mode.vacation', 'Vacation') },
   ];
   const encodeCardTarget = React.useCallback((pageId, cardId) => `${pageId}::${cardId}`, []);
   const decodeCardTarget = React.useCallback((value) => {
@@ -690,46 +690,46 @@ export default function EditCardModal({
           {isEditAlarmo && editSettingsKey && (
             <div className="space-y-3">
               <label className="text-xs uppercase font-bold text-gray-500 ml-1">
-                {translateText('alarmo.settings.title', 'Alarmo settings')}
+                {translateText('alarm.settings.title', 'Alarm settings')}
               </label>
 
               <div className="rounded-2xl popup-surface p-4 space-y-4">
                 <SearchableSelect
-                  label={translateText('alarmo.settings.alarmEntity', 'Alarm entity')}
+                  label={translateText('alarm.settings.alarmEntity', 'Alarm entity')}
                   value={editSettings?.alarmEntityId || editSettings?.entityIds?.[0] || null}
                   options={alarmOptions}
                   onChange={(value) => {
                     saveCardSetting(editSettingsKey, 'alarmEntityId', value);
                     saveCardSetting(editSettingsKey, 'entityIds', value ? [value] : []);
                   }}
-                  placeholder={translateText('alarmo.settings.alarmEntityPlaceholder', 'Choose alarm')}
+                  placeholder={translateText('alarm.settings.alarmEntityPlaceholder', 'Choose alarm')}
                   entities={entities}
                   t={t}
                 />
 
                 <SearchableSelect
-                  label={translateText('alarmo.settings.countdownEntity', 'Countdown source')}
+                  label={translateText('alarm.settings.countdownEntity', 'Countdown source')}
                   value={editSettings?.countdownEntityId || null}
                   options={countdownOptions}
                   onChange={(value) => saveCardSetting(editSettingsKey, 'countdownEntityId', value)}
-                  placeholder={translateText('alarmo.settings.countdownEntityPlaceholder', 'Optional countdown sensor or timer')}
+                  placeholder={translateText('alarm.settings.countdownEntityPlaceholder', 'Optional countdown sensor or timer')}
                   entities={entities}
                   t={t}
                 />
 
                 <SearchableSelect
-                  label={translateText('alarmo.settings.autoArmEntity', 'Auto-arm entity')}
+                  label={translateText('alarm.settings.autoArmEntity', 'Auto-arm entity')}
                   value={editSettings?.autoArmEntityId || null}
                   options={autoArmOptions}
                   onChange={(value) => saveCardSetting(editSettingsKey, 'autoArmEntityId', value)}
-                  placeholder={translateText('alarmo.settings.autoArmEntityPlaceholder', 'Optional automation, switch or input_boolean')}
+                  placeholder={translateText('alarm.settings.autoArmEntityPlaceholder', 'Optional automation, switch or input_boolean')}
                   entities={entities}
                   t={t}
                 />
 
                 <div className="space-y-2">
                   <label className="text-xs uppercase font-bold text-gray-500 ml-1">
-                    {translateText('alarmo.settings.armMode', 'Arm mode')}
+                    {translateText('alarm.settings.armMode', 'Arm mode')}
                   </label>
                   <div className="grid grid-cols-2 gap-2">
                     {alarmArmModeOptions.map((option) => {
@@ -754,7 +754,7 @@ export default function EditCardModal({
 
                 <div className="space-y-1">
                   <label className="text-[10px] uppercase tracking-widest font-bold text-[var(--text-secondary)]">
-                    {translateText('alarmo.settings.countdownWindow', 'Countdown window (sec)')}
+                    {translateText('alarm.settings.countdownWindow', 'Countdown window (sec)')}
                   </label>
                   <input
                     type="number"
@@ -770,7 +770,7 @@ export default function EditCardModal({
                     }}
                   />
                   <p className="text-[10px] text-[var(--text-secondary)]">
-                    {translateText('alarmo.settings.countdownWindowHint', 'Used as fallback when the selected countdown source does not expose a total duration.')}
+                    {translateText('alarm.settings.countdownWindowHint', 'Used as fallback when the selected countdown source does not expose a total duration.')}
                   </p>
                 </div>
               </div>

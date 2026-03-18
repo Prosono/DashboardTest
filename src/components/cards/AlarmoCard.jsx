@@ -100,6 +100,19 @@ const getAutoEntityLabel = (entityId, entity) => entity?.attributes?.friendly_na
 
 const isEntityOn = (state) => ACTIVE_AUTO_STATES.has(normalize(state));
 
+const requestAlarmCode = ({ t, actionLabel, codeFormat }) => {
+  if (typeof window === 'undefined' || typeof window.prompt !== 'function') return null;
+  const label = String(actionLabel || '').trim().toLowerCase();
+  const formatHint = codeFormat === 'number'
+    ? tr(t, 'alarm.code.hintNumber', 'Bruk tallkode')
+    : tr(t, 'alarm.code.hintGeneric', 'Skriv alarmkoden');
+  const message = `${tr(t, 'alarm.code.prompt', 'Oppgi kode for å')} ${label}. ${formatHint}`;
+  const value = window.prompt(message, '');
+  if (value === null) return null;
+  const trimmed = String(value).trim();
+  return trimmed || null;
+};
+
 const buildCountdownSnapshot = ({ alarmEntity, countdownEntity, settings, nowMs }) => {
   const sourceEntity = countdownEntity || alarmEntity;
   const alarmState = normalize(alarmEntity?.state);
@@ -353,6 +366,7 @@ export default function AlarmoCard({
   callService,
 }) {
   const [nowMs, setNowMs] = useState(() => Date.now());
+  const isLightTheme = typeof document !== 'undefined' && document.documentElement?.dataset?.theme === 'light';
 
   const alarmEntityId = resolveAlarmEntityId(entityId || cardId, settings);
   const selectedArmMode = getArmMode(settings);
@@ -379,7 +393,7 @@ export default function AlarmoCard({
   const statusMeta = getStatusMeta(state, t);
   const selectedIconName = customIcons?.[cardId];
   const Icon = selectedIconName ? (getIconComponent(selectedIconName) || Shield) : (state === 'triggered' ? Siren : Shield);
-  const heading = customNames?.[cardId] || settings?.heading || tr(t, 'alarmo.defaultTitle', 'Alarmo');
+  const heading = customNames?.[cardId] || settings?.heading || tr(t, 'alarm.defaultTitle', 'Alarm');
   const entityLabel = entity?.attributes?.friendly_name || alarmEntityId || tr(t, 'alarmo.entityFallback', 'Alarm');
   const showEntityLabel = heading !== entityLabel;
   const autoArmConfigured = Boolean(settings?.autoArmEntityId && autoArmEntity);
@@ -418,7 +432,7 @@ export default function AlarmoCard({
 
   const countdownSourceLabel = countdownEntity
     ? (countdownEntity?.attributes?.friendly_name || settings?.countdownEntityId)
-    : tr(t, 'alarmo.countdown.auto', 'Bruker alarmstatus');
+    : tr(t, 'alarm.countdown.auto', 'Bruker alarmstatus');
 
   const primaryLabel = primaryActionIsDisarm
     ? tr(t, 'common.disarm', 'Deaktiver')
@@ -427,24 +441,44 @@ export default function AlarmoCard({
     ? 'bg-white/7 text-[var(--text-primary)] border-white/10 shadow-none hover:bg-white/12'
     : tone.buttonClass;
 
-  const handlePrimaryAction = (event) => {
+  const handlePrimaryAction = async (event) => {
     event.stopPropagation();
     if (!alarmEntityId || unavailable || typeof callService !== 'function') return;
 
+    const codeFormat = entity?.attributes?.code_format;
+    const needsCode = primaryActionIsDisarm
+      ? Boolean(codeFormat)
+      : Boolean(entity?.attributes?.code_arm_required);
+    const code = needsCode
+      ? requestAlarmCode({ t, actionLabel: primaryLabel, codeFormat })
+      : null;
+
+    if (needsCode && !code) return;
+    const payload = {
+      entity_id: alarmEntityId,
+      ...(code ? { code } : {}),
+    };
+
     if (primaryActionIsDisarm) {
-      callService('alarm_control_panel', 'alarm_disarm', { entity_id: alarmEntityId });
+      await Promise.resolve(callService('alarm_control_panel', 'alarm_disarm', payload)).catch((error) => {
+        console.error('Failed to disarm alarm from card', error);
+      });
       return;
     }
 
-    callService('alarm_control_panel', selectedArmMode.service, { entity_id: alarmEntityId });
+    await Promise.resolve(callService('alarm_control_panel', selectedArmMode.service, payload)).catch((error) => {
+      console.error('Failed to arm alarm from card', error);
+    });
   };
 
-  const handleAutoToggle = (event) => {
+  const handleAutoToggle = async (event) => {
     event.stopPropagation();
     if (!settings?.autoArmEntityId || !autoArmEntity || typeof callService !== 'function') return;
     const domain = String(settings.autoArmEntityId).split('.')[0];
     if (!['automation', 'input_boolean', 'switch'].includes(domain)) return;
-    callService(domain, 'toggle', { entity_id: settings.autoArmEntityId });
+    await Promise.resolve(callService(domain, 'toggle', { entity_id: settings.autoArmEntityId })).catch((error) => {
+      console.error('Failed to toggle auto-arm from card', error);
+    });
   };
 
   if (!entity || !alarmEntityId) return null;
@@ -461,13 +495,17 @@ export default function AlarmoCard({
         '--alarmo-accent': tone.accent,
         '--alarmo-accent-strong': tone.accentStrong,
         '--alarmo-accent-soft': tone.accentSoft,
+        '--alarm-card-base':
+          isLightTheme
+            ? 'linear-gradient(160deg, rgba(255,255,255,0.98) 0%, color-mix(in srgb, white 76%, var(--alarmo-accent-soft)) 100%)'
+            : 'radial-gradient(circle at top right, rgba(255,255,255,0.1), transparent 34%), linear-gradient(160deg, color-mix(in srgb, var(--card-bg) 72%, var(--alarmo-accent-soft)) 0%, color-mix(in srgb, var(--modal-bg) 84%, transparent) 100%)',
       }}
     >
       <div
         className="absolute inset-0 pointer-events-none"
         style={{
           borderRadius: 'inherit',
-          background: 'radial-gradient(circle at top right, rgba(255,255,255,0.1), transparent 34%), linear-gradient(160deg, color-mix(in srgb, var(--card-bg) 72%, var(--alarmo-accent-soft)) 0%, color-mix(in srgb, var(--modal-bg) 84%, transparent) 100%)',
+          background: 'var(--alarm-card-base)',
         }}
       />
       <div className="alarmo-card__sweep absolute inset-x-[-30%] top-0 h-28 pointer-events-none opacity-70" />
@@ -501,11 +539,11 @@ export default function AlarmoCard({
 
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">
-              <span className="inline-flex items-center gap-1 rounded-full border border-white/10 bg-white/5 px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.26em] text-[var(--text-secondary)]">
+              <span className="alarmo-card__soft-pill alarmo-card__muted inline-flex items-center gap-1 rounded-full border border-white/10 bg-white/5 px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.26em] text-[var(--text-secondary)]">
                 <Sparkles className="h-3.5 w-3.5" />
-                {tr(t, 'alarmo.eyebrow', 'Alarmo')}
+                {tr(t, 'alarm.eyebrow', 'Alarm')}
               </span>
-              <span className={`inline-flex items-center rounded-full border px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.22em] ${tone.badgeClass}`}>
+              <span className={`alarmo-card__badge inline-flex items-center rounded-full border px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.22em] ${tone.badgeClass}`}>
                 {statusMeta.label}
               </span>
             </div>
@@ -514,11 +552,11 @@ export default function AlarmoCard({
               {heading}
             </h3>
             {showEntityLabel && (
-              <p className="mt-2 max-w-xl text-sm text-[var(--text-secondary)]">
+              <p className="alarmo-card__muted mt-2 max-w-xl text-sm text-[var(--text-secondary)]">
                 {entityLabel}
               </p>
             )}
-            <p className="mt-3 max-w-xl text-sm leading-6 text-[var(--text-secondary)]">
+            <p className="alarmo-card__muted mt-3 max-w-xl text-sm leading-6 text-[var(--text-secondary)]">
               {statusMeta.detail}
             </p>
           </div>
@@ -529,10 +567,10 @@ export default function AlarmoCard({
             type="button"
             disabled={!isInteractive}
             onClick={handleAutoToggle}
-            className={`inline-flex h-10 shrink-0 items-center gap-2 rounded-full border px-3 text-xs font-bold uppercase tracking-[0.2em] transition-all ${tone.secondaryButtonClass} ${!isInteractive ? 'cursor-default opacity-70' : ''}`}
+            className={`alarmo-card__soft-pill inline-flex h-10 shrink-0 items-center gap-2 rounded-full border px-3 text-xs font-bold uppercase tracking-[0.2em] transition-all ${tone.secondaryButtonClass} ${!isInteractive ? 'cursor-default opacity-70' : ''}`}
           >
             <ToggleRight className={`h-4 w-4 transition-transform ${autoArmActive ? 'translate-x-0' : 'opacity-70'}`} />
-            {autoArmActive ? tr(t, 'alarmo.autoArm.on', 'Auto pa') : tr(t, 'alarmo.autoArm.off', 'Auto av')}
+            {autoArmActive ? tr(t, 'alarm.autoArm.on', 'Auto pa') : tr(t, 'alarm.autoArm.off', 'Auto av')}
           </button>
         )}
       </div>
@@ -540,7 +578,7 @@ export default function AlarmoCard({
       <div className={`alarmo-card__hero relative z-10 mt-5 rounded-[1.7rem] border p-4 sm:p-5 ${tone.panelClass}`}>
         <div className="alarmo-card__hero-grid flex items-end justify-between gap-4">
           <div className="min-w-0">
-            <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-black/10 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.24em] text-[var(--text-secondary)]">
+            <div className="alarmo-card__soft-pill alarmo-card__muted inline-flex items-center gap-2 rounded-full border border-white/10 bg-black/10 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.24em] text-[var(--text-secondary)]">
               <Clock className="h-3.5 w-3.5" />
               {countdown.active ? getCountdownLabel(state, t) : statusMeta.headline}
             </div>
@@ -552,12 +590,12 @@ export default function AlarmoCard({
               {countdown.active ? countdownDisplay : statusMeta.label}
             </div>
 
-            <div className="mt-3 flex flex-wrap items-center gap-2 text-[11px] uppercase tracking-[0.22em] text-[var(--text-secondary)]">
-              <span>{countdown.active ? countdownSourceLabel : tr(t, 'alarmo.status.steady', 'Stabil status')}</span>
+            <div className="alarmo-card__muted mt-3 flex flex-wrap items-center gap-2 text-[11px] uppercase tracking-[0.22em] text-[var(--text-secondary)]">
+              <span>{countdown.active ? countdownSourceLabel : tr(t, 'alarm.status.steady', 'Stabil status')}</span>
               {isTriggered && (
-                <span className="inline-flex items-center gap-1 rounded-full border border-rose-400/25 bg-rose-500/12 px-2 py-1 text-rose-100">
+                <span className="alarmo-card__attention-chip inline-flex items-center gap-1 rounded-full border border-rose-400/25 bg-rose-500/12 px-2 py-1 text-rose-100">
                   <AlertTriangle className="h-3.5 w-3.5" />
-                  {tr(t, 'alarmo.triggered.attention', 'Krever oppmerksomhet')}
+                  {tr(t, 'alarm.triggered.attention', 'Krever oppmerksomhet')}
                 </span>
               )}
             </div>
@@ -565,8 +603,8 @@ export default function AlarmoCard({
 
           <div className="alarmo-card__hero-aside flex min-w-[7.5rem] flex-col items-end gap-3">
             <div className="text-right">
-              <div className="text-[10px] font-bold uppercase tracking-[0.26em] text-[var(--text-secondary)]">
-                {tr(t, 'alarmo.selectedMode', 'Valgt modus')}
+              <div className="alarmo-card__muted text-[10px] font-bold uppercase tracking-[0.26em] text-[var(--text-secondary)]">
+                {tr(t, 'alarm.selectedMode', 'Valgt modus')}
               </div>
               <div className="mt-1 text-base font-semibold text-[var(--text-primary)]">
                 {selectedArmMode.label}
@@ -578,10 +616,10 @@ export default function AlarmoCard({
                 style={{ transform: `scaleX(${clamp(progressRatio, 0, 1)})` }}
               />
             </div>
-            <div className="text-[10px] uppercase tracking-[0.22em] text-[var(--text-secondary)]">
+            <div className="alarmo-card__muted text-[10px] uppercase tracking-[0.22em] text-[var(--text-secondary)]">
               {countdown.active
-                ? `${Math.round(clamp(progressRatio * 100, 0, 100))}% ${tr(t, 'alarmo.remaining', 'igjen')}`
-                : tr(t, 'alarmo.ready', 'Klar')}
+                ? `${Math.round(clamp(progressRatio * 100, 0, 100))}% ${tr(t, 'alarm.remaining', 'igjen')}`
+                : tr(t, 'alarm.ready', 'Klar')}
             </div>
           </div>
         </div>
@@ -593,7 +631,7 @@ export default function AlarmoCard({
             key={metric.label}
             className={`rounded-[1.3rem] border px-3 py-3.5 ${metric.emphasize ? tone.panelClass : 'border-white/10 bg-white/[0.04]'}`}
           >
-            <div className="text-[10px] font-bold uppercase tracking-[0.24em] text-[var(--text-secondary)]">
+            <div className="alarmo-card__muted text-[10px] font-bold uppercase tracking-[0.24em] text-[var(--text-secondary)]">
               {metric.label}
             </div>
             <div className="mt-2 truncate text-sm font-semibold text-[var(--text-primary)]">
@@ -613,14 +651,14 @@ export default function AlarmoCard({
           {primaryLabel}
         </button>
 
-        <div className={`rounded-[1.2rem] border px-4 py-3 ${tone.secondaryButtonClass}`}>
-          <div className="text-[10px] font-bold uppercase tracking-[0.24em] text-[var(--text-secondary)]">
-            {tr(t, 'alarmo.autoArm.source', 'Auto-arm kilde')}
+        <div className={`alarmo-card__soft-pill rounded-[1.2rem] border px-4 py-3 ${tone.secondaryButtonClass}`}>
+          <div className="alarmo-card__muted text-[10px] font-bold uppercase tracking-[0.24em] text-[var(--text-secondary)]">
+            {tr(t, 'alarm.autoArm.source', 'Auto-arm kilde')}
           </div>
           <div className="mt-2 truncate text-sm font-semibold text-[var(--text-primary)]">
             {settings?.autoArmEntityId
               ? getAutoEntityLabel(settings.autoArmEntityId, autoArmEntity)
-              : tr(t, 'alarmo.autoArm.notSet', 'Ikke koblet')}
+              : tr(t, 'alarm.autoArm.notSet', 'Ikke koblet')}
           </div>
         </div>
       </div>
