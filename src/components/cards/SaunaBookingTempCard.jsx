@@ -6,7 +6,6 @@ import SparkLine from '../charts/SparkLine';
 import { getHistoryBatch } from '../../services';
 import {
   collectPendingHourlySampleTimes,
-  getCurrentEligibleHourlyWindowStartMs,
   getRecommendedHourlyMaxEntries,
   HOURLY_SAMPLE_MINUTE,
   parseTimestampMs,
@@ -147,6 +146,26 @@ const parseHistoryNumericState = (entry) => {
   return Number.isFinite(parsed) ? parsed : null;
 };
 
+const getHistoryStateAt = (rawHistory, timestampMs, fallbackState = null) => {
+  const history = Array.isArray(rawHistory) ? rawHistory : [];
+  let state = fallbackState;
+
+  history
+    .map((entry) => ({
+      ms: parseHistoryEntryMs(entry),
+      state: entry?.state ?? entry?.s ?? null,
+    }))
+    .filter((entry) => Number.isFinite(entry.ms) && entry.state !== null && entry.state !== undefined)
+    .sort((a, b) => a.ms - b.ms)
+    .forEach((entry) => {
+      if (entry.ms <= timestampMs) {
+        state = entry.state;
+      }
+    });
+
+  return state;
+};
+
 const getNumericHistoryValueAt = (rawHistory, timestampMs, fallbackValue = null) => {
   const history = Array.isArray(rawHistory) ? rawHistory : [];
   let value = Number.isFinite(Number(fallbackValue)) ? Number(fallbackValue) : null;
@@ -165,6 +184,20 @@ const getNumericHistoryValueAt = (rawHistory, timestampMs, fallbackValue = null)
     });
 
   return value;
+};
+
+const getInitialBackfillStartMs = (existingSnapshots, nowMs) => {
+  const lookbackStartMs = nowMs - (7 * 24 * 60 * 60 * 1000);
+  const earliestExistingMs = Array.isArray(existingSnapshots) && existingSnapshots.length
+    ? existingSnapshots
+      .map((entry) => Number(entry?.timestampMs))
+      .filter((value) => Number.isFinite(value) && value >= lookbackStartMs)
+      .sort((a, b) => a - b)[0]
+    : NaN;
+
+  return Number.isFinite(earliestExistingMs)
+    ? Math.min(earliestExistingMs, lookbackStartMs)
+    : lookbackStartMs;
 };
 
 const formatDateTime = (timestampMs) => {
@@ -292,8 +325,6 @@ export default function SaunaBookingTempCard({
   const currentTemp = toNum(tempEntity?.state);
   const targetTempSetting = toNum(settings?.targetTempValue);
   const targetTemp = targetTempSetting !== null ? targetTempSetting : toNum(targetEntity?.state);
-  const bookingActive = activeEntity ? isStateActive(activeEntity.state, settings?.activeOnStates) : false;
-  const serviceActive = serviceEntity ? getServiceStates(settings?.serviceOnStates).includes(normalizeState(serviceEntity.state)) : false;
 
   const summaryHours = clamp(settings?.summaryHours, 6, 168, 24);
   const keepDays = clamp(settings?.keepDays, 7, 365, 365);
@@ -350,27 +381,19 @@ export default function SaunaBookingTempCard({
     }
 
     const maybeCaptureHourlySnapshot = async () => {
-      if (captureInFlightRef.current || !bookingActive) return;
+      if (captureInFlightRef.current) return;
 
       const nowMs = Date.now();
-      const eligibleStartMs = getCurrentEligibleHourlyWindowStartMs({
-        bookingActive,
-        serviceActive,
-        activeEntity,
-        serviceEntity,
-        nowMs,
-      });
-      if (!Number.isFinite(eligibleStartMs)) return;
-
       const existing = normalizeSnapshots(settings?.bookingSnapshots);
       const ignoredSnapshotHours = normalizeIgnoredHours(settings?.ignoredSnapshotHours);
       const optimisticExistingHours = existing
         .map((entry) => entry.hourKey)
         .concat(lastLoggedHourRef.current ? [lastLoggedHourRef.current] : []);
+      const backfillStartMs = getInitialBackfillStartMs(existing, nowMs);
 
       const pendingSampleTimes = collectPendingHourlySampleTimes({
         nowMs,
-        eligibleStartMs,
+        eligibleStartMs: backfillStartMs,
         existingHourKeys: optimisticExistingHours,
         ignoredHourKeys: ignoredSnapshotHours,
         sampleMinute: HOURLY_SAMPLE_MINUTE,
@@ -384,6 +407,8 @@ export default function SaunaBookingTempCard({
         // still get the correct samples even if the app was throttled in the background.
         const historyEntityIds = Array.from(new Set([
           tempEntityId,
+          activeEntityId,
+          ...(serviceEntityId ? [serviceEntityId] : []),
           ...(targetTempEntityId && targetTempSetting === null ? [targetTempEntityId] : []),
         ]));
 
@@ -405,6 +430,17 @@ export default function SaunaBookingTempCard({
         const nextEntries = pendingSampleTimes
           .map((sampleMs) => {
             const hourKey = toHourKey(sampleMs);
+            const activeStateAtSample = getHistoryStateAt(historyById?.[activeEntityId], sampleMs, activeEntity?.state ?? null);
+            const serviceStateAtSample = serviceEntityId
+              ? getHistoryStateAt(historyById?.[serviceEntityId], sampleMs, serviceEntity?.state ?? null)
+              : null;
+            const activeAtSample = isStateActive(activeStateAtSample, settings?.activeOnStates);
+            const serviceAtSample = serviceEntityId
+              ? getServiceStates(settings?.serviceOnStates).includes(normalizeState(serviceStateAtSample))
+              : false;
+
+            if (!activeAtSample || serviceAtSample) return null;
+
             const sampleTemp = getNumericHistoryValueAt(historyById?.[tempEntityId], sampleMs, currentTemp);
             const sampleTarget = targetTempSetting !== null
               ? targetTempSetting
@@ -422,8 +458,8 @@ export default function SaunaBookingTempCard({
               deviationPct: calcDeviationPct(sampleTemp, sampleTarget),
               bookingType: 'regular',
               sampleMode: 'hourly',
-              serviceRaw: serviceEntity?.state ?? null,
-              activeRaw: activeEntity?.state ?? null,
+              serviceRaw: serviceStateAtSample,
+              activeRaw: activeStateAtSample,
             };
           })
           .filter(Boolean);
@@ -461,10 +497,10 @@ export default function SaunaBookingTempCard({
     targetTempEntityId,
     targetTempSetting,
     activeEntityId,
-    bookingActive,
     currentTemp,
     targetTemp,
-    serviceActive,
+    settings?.activeOnStates,
+    settings?.serviceOnStates,
     serviceEntityId,
     serviceEntity,
     serviceEntity?.state,
