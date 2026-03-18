@@ -205,8 +205,8 @@ export const handleAddSelected = (ctx) => {
       commitSingleCard(cardId, {
         type: 'sauna_booking_temp',
         summaryHours: 24,
-        keepDays: 120,
-        maxEntries: 500,
+        keepDays: 365,
+        maxEntries: 12000,
         recentRows: 6,
         targetTempValue: null,
         targetToleranceC: 0,

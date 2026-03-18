@@ -3,6 +3,15 @@ import { createPortal } from 'react-dom';
 import { AlertTriangle, Clock, Thermometer, TrendingUp, X, Trash2 } from '../../icons';
 import { getIconComponent } from '../../icons';
 import SparkLine from '../charts/SparkLine';
+import { getHistoryBatch } from '../../services';
+import {
+  collectPendingHourlySampleTimes,
+  getCurrentEligibleHourlyWindowStartMs,
+  getRecommendedHourlyMaxEntries,
+  HOURLY_SAMPLE_MINUTE,
+  parseTimestampMs,
+  toHourKey,
+} from '../../utils/hourlySampling';
 
 const DEFAULT_ACTIVE_STATES = ['on', 'true', '1', 'yes', 'active', 'booked', 'occupied', 'aktiv'];
 const DEFAULT_SERVICE_STATES = ['ja', 'yes', 'service', 'on', 'true', '1'];
@@ -22,8 +31,6 @@ const roundToOne = (value) => Math.round(Number(value) * 10) / 10;
 const SCORE_MISS_PENALTY = 10;
 const SCORE_HITRATE_WEIGHT = 0.25;
 const SCORE_TREND_WINDOW = 3;
-const HOURLY_SAMPLE_MINUTE = 1;
-const HOURLY_SAMPLE_LAST_MINUTE = 59;
 
 const calcScoreFromDeviationPct = (deviationPct, options = {}) => {
   const { hit = null, missPenalty = SCORE_MISS_PENALTY } = options;
@@ -49,21 +56,6 @@ const isTargetReached = (startTemp, targetTemp, toleranceC = 0) => {
   const safeTolerance = Number.isFinite(Number(toleranceC)) ? Number(toleranceC) : 0;
   return start >= (target - safeTolerance);
 };
-const toHourKey = (timestampMs) => {
-  const date = new Date(timestampMs);
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, '0');
-  const day = String(date.getDate()).padStart(2, '0');
-  const hour = String(date.getHours()).padStart(2, '0');
-  return `${year}-${month}-${day}-${hour}`;
-};
-
-const toScheduledHourlySampleMs = (timestampMs) => {
-  const date = new Date(timestampMs);
-  date.setMinutes(HOURLY_SAMPLE_MINUTE, 0, 0);
-  return date.getTime();
-};
-
 const normalizeState = (value) => String(value ?? '').trim().toLowerCase();
 
 const parseStateArray = (rawValue, fallback) => {
@@ -138,6 +130,42 @@ const serializeSnapshots = (snapshots) => snapshots.map((entry) => ({
   serviceRaw: entry.serviceRaw,
   activeRaw: entry.activeRaw,
 }));
+
+const parseHistoryEntryMs = (entry) => parseTimestampMs(
+  entry?.last_changed
+  || entry?.last_updated
+  || entry?.last_reported
+  || entry?.timestamp
+  || entry?.time
+  || entry?.lc
+  || entry?.lu
+  || entry?.lr,
+);
+
+const parseHistoryNumericState = (entry) => {
+  const parsed = Number.parseFloat(entry?.state ?? entry?.s);
+  return Number.isFinite(parsed) ? parsed : null;
+};
+
+const getNumericHistoryValueAt = (rawHistory, timestampMs, fallbackValue = null) => {
+  const history = Array.isArray(rawHistory) ? rawHistory : [];
+  let value = Number.isFinite(Number(fallbackValue)) ? Number(fallbackValue) : null;
+
+  history
+    .map((entry) => ({
+      ms: parseHistoryEntryMs(entry),
+      value: parseHistoryNumericState(entry),
+    }))
+    .filter((entry) => Number.isFinite(entry.ms) && entry.value !== null)
+    .sort((a, b) => a.ms - b.ms)
+    .forEach((entry) => {
+      if (entry.ms <= timestampMs) {
+        value = entry.value;
+      }
+    });
+
+  return value;
+};
 
 const formatDateTime = (timestampMs) => {
   if (!Number.isFinite(timestampMs)) return '--';
@@ -235,6 +263,7 @@ export default function SaunaBookingTempCard({
   settings,
   settingsKey,
   entities,
+  conn,
   dragProps,
   controls,
   cardStyle,
@@ -267,13 +296,15 @@ export default function SaunaBookingTempCard({
   const serviceActive = serviceEntity ? getServiceStates(settings?.serviceOnStates).includes(normalizeState(serviceEntity.state)) : false;
 
   const summaryHours = clamp(settings?.summaryHours, 6, 168, 24);
-  const keepDays = clamp(settings?.keepDays, 7, 365, 120);
-  const maxEntries = clamp(settings?.maxEntries, 25, 3000, 500);
+  const keepDays = clamp(settings?.keepDays, 7, 365, 365);
+  const configuredMaxEntries = clamp(settings?.maxEntries, 25, 20000, 12000);
+  const maxEntries = Math.max(configuredMaxEntries, getRecommendedHourlyMaxEntries(keepDays));
   const recentRows = clamp(settings?.recentRows, 3, 20, 6);
   const targetToleranceC = Number.isFinite(Number(settings?.targetToleranceC)) ? Number(settings.targetToleranceC) : 0;
 
   const snapshots = useMemo(() => normalizeSnapshots(settings?.bookingSnapshots), [settings?.bookingSnapshots]);
   const lastLoggedHourRef = useRef(null);
+  const captureInFlightRef = useRef(false);
   const [historyModal, setHistoryModal] = useState(null);
   const [showDetailsModal, setShowDetailsModal] = useState(false);
 
@@ -314,66 +345,130 @@ export default function SaunaBookingTempCard({
   };
 
   useEffect(() => {
-    if (editMode || !settingsKey || typeof saveCardSetting !== 'function') {
+    if (editMode || !settingsKey || typeof saveCardSetting !== 'function' || !tempEntityId || !activeEntityId) {
       return;
     }
 
-    const maybeCaptureHourlySnapshot = () => {
-      const now = new Date();
-      const minute = now.getMinutes();
-      // Capture once per hour after :01. This avoids missed samples when browsers
-      // throttle timers in background/mobile and still keeps the logged hour fixed.
-      if (minute < HOURLY_SAMPLE_MINUTE || minute > HOURLY_SAMPLE_LAST_MINUTE) return;
-      if (!bookingActive || currentTemp === null) return;
-      if (serviceEntityId && serviceActive) return;
+    const maybeCaptureHourlySnapshot = async () => {
+      if (captureInFlightRef.current || !bookingActive) return;
 
-      const nowMs = now.getTime();
-      const captureMs = toScheduledHourlySampleMs(nowMs);
-      const hourKey = toHourKey(captureMs);
-      if (lastLoggedHourRef.current === hourKey) return;
-      const ignoredSnapshotHours = normalizeIgnoredHours(settings?.ignoredSnapshotHours);
-      if (ignoredSnapshotHours.includes(hourKey)) {
-        lastLoggedHourRef.current = hourKey;
-        return;
-      }
+      const nowMs = Date.now();
+      const eligibleStartMs = getCurrentEligibleHourlyWindowStartMs({
+        bookingActive,
+        serviceActive,
+        activeEntity,
+        serviceEntity,
+        nowMs,
+      });
+      if (!Number.isFinite(eligibleStartMs)) return;
 
       const existing = normalizeSnapshots(settings?.bookingSnapshots);
-      if (existing.some((entry) => entry.hourKey === hourKey)) {
-        lastLoggedHourRef.current = hourKey;
-        return;
+      const ignoredSnapshotHours = normalizeIgnoredHours(settings?.ignoredSnapshotHours);
+      const optimisticExistingHours = existing
+        .map((entry) => entry.hourKey)
+        .concat(lastLoggedHourRef.current ? [lastLoggedHourRef.current] : []);
+
+      const pendingSampleTimes = collectPendingHourlySampleTimes({
+        nowMs,
+        eligibleStartMs,
+        existingHourKeys: optimisticExistingHours,
+        ignoredHourKeys: ignoredSnapshotHours,
+        sampleMinute: HOURLY_SAMPLE_MINUTE,
+      });
+      if (!pendingSampleTimes.length) return;
+
+      captureInFlightRef.current = true;
+
+      try {
+        // Rebuild any missing hourly points from HA history so continuous bookings
+        // still get the correct samples even if the app was throttled in the background.
+        const historyEntityIds = Array.from(new Set([
+          tempEntityId,
+          ...(targetTempEntityId && targetTempSetting === null ? [targetTempEntityId] : []),
+        ]));
+
+        const earliestPendingMs = pendingSampleTimes[0];
+        const historyStart = new Date(Math.max(0, earliestPendingMs - (2 * 60 * 60 * 1000)));
+        const historyEnd = new Date(nowMs);
+
+        let historyById = {};
+        if (conn && historyEntityIds.length > 0) {
+          historyById = await getHistoryBatch(conn, {
+            entityIds: historyEntityIds,
+            start: historyStart,
+            end: historyEnd,
+            minimal_response: false,
+            no_attributes: true,
+          });
+        }
+
+        const nextEntries = pendingSampleTimes
+          .map((sampleMs) => {
+            const hourKey = toHourKey(sampleMs);
+            const sampleTemp = getNumericHistoryValueAt(historyById?.[tempEntityId], sampleMs, currentTemp);
+            const sampleTarget = targetTempSetting !== null
+              ? targetTempSetting
+              : getNumericHistoryValueAt(historyById?.[targetTempEntityId], sampleMs, targetTemp);
+
+            if (sampleTemp === null) return null;
+
+            return {
+              id: `hourly_${hourKey}`,
+              timestamp: new Date(sampleMs).toISOString(),
+              hourKey,
+              startTemp: roundToOne(sampleTemp),
+              targetTemp: sampleTarget !== null ? roundToOne(sampleTarget) : null,
+              deviation: sampleTarget !== null ? roundToOne(sampleTemp - sampleTarget) : null,
+              deviationPct: calcDeviationPct(sampleTemp, sampleTarget),
+              bookingType: 'regular',
+              sampleMode: 'hourly',
+              serviceRaw: serviceEntity?.state ?? null,
+              activeRaw: activeEntity?.state ?? null,
+            };
+          })
+          .filter(Boolean);
+
+        if (!nextEntries.length) return;
+
+        const keepCutoff = nowMs - (keepDays * 24 * 60 * 60 * 1000);
+        const retained = existing.filter((entry) => entry.timestampMs >= keepCutoff);
+        const deduped = new Map();
+
+        [...retained, ...nextEntries]
+          .sort((a, b) => a.timestampMs - b.timestampMs)
+          .forEach((entry) => {
+            deduped.set(entry.hourKey, entry);
+          });
+
+        const trimmed = Array.from(deduped.values()).slice(-maxEntries);
+        saveCardSetting(settingsKey, 'bookingSnapshots', serializeSnapshots(trimmed));
+        lastLoggedHourRef.current = nextEntries[nextEntries.length - 1]?.hourKey || lastLoggedHourRef.current;
+      } catch (error) {
+        console.error('Failed to capture sauna booking KPI snapshots', error);
+      } finally {
+        captureInFlightRef.current = false;
       }
-
-      const keepCutoff = captureMs - (keepDays * 24 * 60 * 60 * 1000);
-      const nextEntry = {
-        id: `hourly_${hourKey}`,
-        timestamp: new Date(captureMs).toISOString(),
-        hourKey,
-        startTemp: roundToOne(currentTemp),
-        targetTemp: targetTemp !== null ? roundToOne(targetTemp) : null,
-        deviation: targetTemp !== null ? roundToOne(currentTemp - targetTemp) : null,
-        deviationPct: calcDeviationPct(currentTemp, targetTemp),
-        bookingType: 'regular',
-        sampleMode: 'hourly',
-        serviceRaw: serviceEntity?.state ?? null,
-        activeRaw: activeEntity?.state ?? null,
-      };
-
-      const retained = existing.filter((entry) => entry.timestampMs >= keepCutoff);
-      const trimmed = [...retained, nextEntry].slice(-maxEntries);
-      saveCardSetting(settingsKey, 'bookingSnapshots', serializeSnapshots(trimmed));
-      lastLoggedHourRef.current = hourKey;
     };
 
-    maybeCaptureHourlySnapshot();
-    const intervalId = window.setInterval(maybeCaptureHourlySnapshot, 15000);
+    void maybeCaptureHourlySnapshot();
+    const intervalId = window.setInterval(() => {
+      void maybeCaptureHourlySnapshot();
+    }, 15000);
     return () => window.clearInterval(intervalId);
   }, [
+    conn,
+    tempEntityId,
+    targetTempEntityId,
+    targetTempSetting,
+    activeEntityId,
     bookingActive,
     currentTemp,
     targetTemp,
     serviceActive,
     serviceEntityId,
+    serviceEntity,
     serviceEntity?.state,
+    activeEntity,
     activeEntity?.state,
     settings?.bookingSnapshots,
     settings?.ignoredSnapshotHours,

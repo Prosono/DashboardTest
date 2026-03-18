@@ -523,7 +523,7 @@ export function renderSaunaCard(cardId, dragProps, getControls, cardStyle, setti
 }
 
 export function renderSaunaBookingTempCard(cardId, dragProps, getControls, cardStyle, settingsKey, ctx) {
-  const { entities, editMode, cardSettings, customNames, customIcons, saveCardSetting, t } = ctx;
+  const { entities, editMode, cardSettings, customNames, customIcons, saveCardSetting, t, conn } = ctx;
   const trackerSettings = cardSettings[settingsKey] || cardSettings[cardId] || {};
   return (
     <SaunaBookingTempCard
@@ -531,6 +531,7 @@ export function renderSaunaBookingTempCard(cardId, dragProps, getControls, cardS
       settings={trackerSettings}
       settingsKey={settingsKey}
       entities={entities}
+      conn={conn}
       dragProps={dragProps}
       controls={getControls(cardId)}
       cardStyle={cardStyle}

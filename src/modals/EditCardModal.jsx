@@ -1611,7 +1611,7 @@ export default function EditCardModal({
                   {translateText('sauna.bookingTemp.cardOptions', 'Sauna hourly KPI logger')}
                 </div>
                 <div className="text-[11px] text-[var(--text-secondary)] leading-relaxed">
-                  {translateText('sauna.bookingTemp.description', 'Stores sauna KPIs each hour at :01 when sauna is active and service is off.')}
+                  {translateText('sauna.bookingTemp.description', 'Stores sauna KPIs each hour at :02 when booking is active and service is off, and backfills missed hours in the current active stretch.')}
                 </div>
               </div>
 
@@ -1717,7 +1717,7 @@ export default function EditCardModal({
                     max={365}
                     step={1}
                     className="w-full px-3 py-2 rounded-xl popup-surface text-[var(--text-primary)]"
-                    value={Number(editSettings.keepDays) || 120}
+                    value={Number(editSettings.keepDays) || 365}
                     onChange={(e) => {
                       const value = Number(e.target.value);
                       if (!Number.isFinite(value)) return;
@@ -1732,14 +1732,14 @@ export default function EditCardModal({
                   <input
                     type="number"
                     min={25}
-                    max={3000}
+                    max={20000}
                     step={25}
                     className="w-full px-3 py-2 rounded-xl popup-surface text-[var(--text-primary)]"
-                    value={Number(editSettings.maxEntries) || 500}
+                    value={Number(editSettings.maxEntries) || 12000}
                     onChange={(e) => {
                       const value = Number(e.target.value);
                       if (!Number.isFinite(value)) return;
-                      saveCardSetting(editSettingsKey, 'maxEntries', Math.max(25, Math.min(3000, Math.round(value))));
+                      saveCardSetting(editSettingsKey, 'maxEntries', Math.max(25, Math.min(20000, Math.round(value))));
                     }}
                   />
                 </div>
