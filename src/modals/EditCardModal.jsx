@@ -98,6 +98,7 @@ export default function EditCardModal({
   isEditSauna,
   isEditSaunaBookingTemp,
   isEditSaunaHealthScore,
+  isEditAlarmo,
   isEditPopupLauncher,
   isEditDivider,
   isEditAndroidTV,
@@ -226,6 +227,18 @@ export default function EditCardModal({
   const climateOptions = sortByName(byDomain('climate'));
   const calendarOptions = sortByName(byDomain('calendar'));
   const todoOptions = sortByName(byDomain('todo'));
+  const alarmOptions = sortByName(byDomain('alarm_control_panel'));
+  const autoArmOptions = sortByName(entityEntries
+    .filter(([id]) => id.startsWith('automation.') || id.startsWith('input_boolean.') || id.startsWith('switch.'))
+    .map(([id]) => id));
+  const countdownOptions = sortByName(entityEntries
+    .filter(([id]) => (
+      id.startsWith('timer.')
+      || id.startsWith('sensor.')
+      || id.startsWith('input_number.')
+      || id.startsWith('number.')
+    ))
+    .map(([id]) => id));
   const mediaPlayerOptions = sortByName(byDomain('media_player'));
   const saunaTempSensorOptions = sortByName(entityEntries
     .filter(([id, entity]) => {
@@ -252,6 +265,12 @@ export default function EditCardModal({
     .map(([id]) => id));
 
   const updateButtonOptions = sortByName(byDomain('button'));
+  const alarmArmModeOptions = [
+    { key: 'away', label: translateText('alarmo.mode.away', 'Away') },
+    { key: 'home', label: translateText('alarmo.mode.home', 'Home') },
+    { key: 'night', label: translateText('alarmo.mode.night', 'Night') },
+    { key: 'vacation', label: translateText('alarmo.mode.vacation', 'Vacation') },
+  ];
   const encodeCardTarget = React.useCallback((pageId, cardId) => `${pageId}::${cardId}`, []);
   const decodeCardTarget = React.useCallback((value) => {
     if (!value || typeof value !== 'string') return { pageId: null, cardId: null };
@@ -664,6 +683,96 @@ export default function EditCardModal({
                 >
                   <span className={`absolute top-1 left-1 bg-white w-4 h-4 rounded-full transition-transform ${editSettings.showEffects !== false ? 'translate-x-6' : 'translate-x-0'}`} />
                 </button>
+              </div>
+            </div>
+          )}
+
+          {isEditAlarmo && editSettingsKey && (
+            <div className="space-y-3">
+              <label className="text-xs uppercase font-bold text-gray-500 ml-1">
+                {translateText('alarmo.settings.title', 'Alarmo settings')}
+              </label>
+
+              <div className="rounded-2xl popup-surface p-4 space-y-4">
+                <SearchableSelect
+                  label={translateText('alarmo.settings.alarmEntity', 'Alarm entity')}
+                  value={editSettings?.alarmEntityId || editSettings?.entityIds?.[0] || null}
+                  options={alarmOptions}
+                  onChange={(value) => {
+                    saveCardSetting(editSettingsKey, 'alarmEntityId', value);
+                    saveCardSetting(editSettingsKey, 'entityIds', value ? [value] : []);
+                  }}
+                  placeholder={translateText('alarmo.settings.alarmEntityPlaceholder', 'Choose alarm')}
+                  entities={entities}
+                  t={t}
+                />
+
+                <SearchableSelect
+                  label={translateText('alarmo.settings.countdownEntity', 'Countdown source')}
+                  value={editSettings?.countdownEntityId || null}
+                  options={countdownOptions}
+                  onChange={(value) => saveCardSetting(editSettingsKey, 'countdownEntityId', value)}
+                  placeholder={translateText('alarmo.settings.countdownEntityPlaceholder', 'Optional countdown sensor or timer')}
+                  entities={entities}
+                  t={t}
+                />
+
+                <SearchableSelect
+                  label={translateText('alarmo.settings.autoArmEntity', 'Auto-arm entity')}
+                  value={editSettings?.autoArmEntityId || null}
+                  options={autoArmOptions}
+                  onChange={(value) => saveCardSetting(editSettingsKey, 'autoArmEntityId', value)}
+                  placeholder={translateText('alarmo.settings.autoArmEntityPlaceholder', 'Optional automation, switch or input_boolean')}
+                  entities={entities}
+                  t={t}
+                />
+
+                <div className="space-y-2">
+                  <label className="text-xs uppercase font-bold text-gray-500 ml-1">
+                    {translateText('alarmo.settings.armMode', 'Arm mode')}
+                  </label>
+                  <div className="grid grid-cols-2 gap-2">
+                    {alarmArmModeOptions.map((option) => {
+                      const selected = (editSettings?.armMode || 'away') === option.key;
+                      return (
+                        <button
+                          key={option.key}
+                          type="button"
+                          onClick={() => saveCardSetting(editSettingsKey, 'armMode', option.key)}
+                          className={`px-3 py-2 rounded-xl border text-[11px] uppercase tracking-widest font-bold transition-all ${
+                            selected
+                              ? 'bg-blue-500/15 border-blue-500/35 text-blue-400'
+                              : 'bg-[var(--glass-bg)] border-[var(--glass-border)] text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
+                          }`}
+                        >
+                          {option.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-[10px] uppercase tracking-widest font-bold text-[var(--text-secondary)]">
+                    {translateText('alarmo.settings.countdownWindow', 'Countdown window (sec)')}
+                  </label>
+                  <input
+                    type="number"
+                    min={5}
+                    max={600}
+                    step={1}
+                    className="w-full px-3 py-2 text-[var(--text-primary)] rounded-xl popup-surface focus:border-blue-500/50 outline-none transition-colors"
+                    value={Number(editSettings?.countdownWindowSec) || 60}
+                    onChange={(e) => {
+                      const parsed = Number(e.target.value);
+                      const next = Number.isFinite(parsed) ? Math.max(5, Math.min(600, Math.round(parsed))) : 60;
+                      saveCardSetting(editSettingsKey, 'countdownWindowSec', next);
+                    }}
+                  />
+                  <p className="text-[10px] text-[var(--text-secondary)]">
+                    {translateText('alarmo.settings.countdownWindowHint', 'Used as fallback when the selected countdown source does not expose a total duration.')}
+                  </p>
+                </div>
               </div>
             </div>
           )}

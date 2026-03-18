@@ -452,6 +452,10 @@ export default function AddCardContent({
                   }
                   return;
                 }
+                if (addCardType === 'alarmCard') {
+                  setSelectedEntities(prev => (prev[0] === id ? [] : [id]));
+                  return;
+                }
                 if (selectedEntities.includes(id)) setSelectedEntities(prev => prev.filter(e => e !== id));
                 else setSelectedEntities(prev => [...prev, id]);
               }} className={`w-full text-left p-3 rounded-2xl transition-colors flex items-center justify-between group entity-item border ${isSelected ? 'bg-blue-500/20 border-blue-500/50' : 'popup-surface popup-surface-hover border-transparent'}`}>
@@ -581,7 +585,11 @@ export default function AddCardContent({
         <div className="pt-6 mt-6 border-t border-[var(--glass-border)] flex flex-col gap-3">
           {addCardType !== 'weather' && addCardType !== 'cost' && selectedEntities.length > 0 && (
             <button onClick={onAddSelected} className="w-full py-4 rounded-2xl bg-blue-500 text-white font-bold uppercase tracking-widest hover:bg-blue-600 transition-colors shadow-lg shadow-blue-500/20 flex items-center justify-center gap-2">
-              <Plus className="w-5 h-5" /> {addCardType === 'media' ? `${t('addCard.add')} ${selectedEntities.length} ${t('addCard.players')}` : `${t('addCard.add')} ${selectedEntities.length} ${t('addCard.cards')}`}
+              <Plus className="w-5 h-5" /> {addCardType === 'media'
+                ? `${t('addCard.add')} ${selectedEntities.length} ${t('addCard.players')}`
+                : addCardType === 'alarmCard'
+                  ? `${t('addCard.add')} Alarmo`
+                  : `${t('addCard.add')} ${selectedEntities.length} ${t('addCard.cards')}`}
             </button>
           )}
           {addCardType === 'cost' && selectedCostTodayId && selectedCostMonthId && (

@@ -9,6 +9,7 @@
  *   dispatchCardRender(cardId, dragProps, getControls, cardStyle, settingsKey, ctx);
  */
 import {
+  AlarmoCard,
   CalendarCard,
   CalendarBookingCard,
   CarCard,
@@ -718,6 +719,52 @@ export function renderEntityGroupControlCard(cardId, dragProps, getControls, car
   );
 }
 
+export function renderAlarmoCard(cardId, dragProps, getControls, cardStyle, settingsKey, ctx) {
+  const {
+    entities,
+    editMode,
+    cardSettings,
+    customNames,
+    customIcons,
+    callService,
+    t,
+  } = ctx;
+  const settings = cardSettings[settingsKey] || cardSettings[cardId] || {};
+  const alarmEntityId = settings?.alarmEntityId || (Array.isArray(settings?.entityIds) ? settings.entityIds.find(Boolean) : null);
+  const entity = alarmEntityId ? entities?.[alarmEntityId] : null;
+  const countdownEntityId = settings?.countdownEntityId || null;
+  const autoArmEntityId = settings?.autoArmEntityId || null;
+  const countdownEntity = countdownEntityId ? entities?.[countdownEntityId] : null;
+  const autoArmEntity = autoArmEntityId ? entities?.[autoArmEntityId] : null;
+
+  if (!entity || !alarmEntityId) {
+    if (editMode) {
+      return <MissingEntityCard cardId={cardId} dragProps={dragProps} controls={getControls(cardId)} cardStyle={cardStyle} t={t} />;
+    }
+    return null;
+  }
+
+  return (
+    <AlarmoCard
+      key={cardId}
+      cardId={cardId}
+      settings={settings}
+      entityId={alarmEntityId}
+      entity={entity}
+      countdownEntity={countdownEntity}
+      autoArmEntity={autoArmEntity}
+      dragProps={dragProps}
+      controls={getControls(cardId)}
+      cardStyle={cardStyle}
+      editMode={editMode}
+      customNames={customNames}
+      customIcons={customIcons}
+      t={t}
+      callService={callService}
+    />
+  );
+}
+
 // ─── Card Type Dispatch ──────────────────────────────────────────────────────
 
 /**
@@ -833,6 +880,10 @@ export function dispatchCardRender(cardId, dragProps, getControls, cardStyle, se
     return renderEmptyCard(cardId, dragProps, getControls, cardStyle, settingsKey, ctx);
   }
 
+  if (cardId.startsWith('alarm_card_')) {
+    return renderAlarmoCard(cardId, dragProps, getControls, cardStyle, settingsKey, ctx);
+  }
+
   if (
     cardId.startsWith('fan_card_')
     || cardId.startsWith('door_card_')
@@ -841,7 +892,6 @@ export function dispatchCardRender(cardId, dragProps, getControls, cardStyle, se
     || cardId.startsWith('switch_card_')
     || cardId.startsWith('number_card_')
     || cardId.startsWith('camera_card_')
-    || cardId.startsWith('alarm_card_')
     || cardId.startsWith('timer_card_')
     || cardId.startsWith('select_card_')
     || cardId.startsWith('button_card_')

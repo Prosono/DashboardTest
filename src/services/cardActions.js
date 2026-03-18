@@ -355,7 +355,15 @@ export const handleAddSelected = (ctx) => {
     case 'alarmCard': {
       if (selectedEntities.length === 0) return;
       const cardId = `alarm_card_${Date.now()}`;
-      commitSingleCard(cardId, { type: 'group_control', fieldType: 'alarm', title: 'Alarm', entityIds: selectedEntities });
+      commitSingleCard(cardId, {
+        type: 'alarmo',
+        fieldType: 'alarm',
+        title: 'Alarm',
+        entityIds: selectedEntities,
+        alarmEntityId: selectedEntities[0] || null,
+        armMode: 'away',
+        countdownWindowSec: 60,
+      });
       setSelectedEntities([]);
       return;
     }
