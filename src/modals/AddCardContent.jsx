@@ -28,6 +28,7 @@ import {
   Shield,
   ToggleRight,
   Thermometer,
+  Type,
   Workflow,
   Minus,
   X,
@@ -234,6 +235,7 @@ export default function AddCardContent({
         return !(pagesConfig.settings || []).includes(id);
       }
       if (addCardType === 'vacuum') return id.startsWith('vacuum.') && !(pagesConfig[addCardTargetPage] || []).includes(id);
+      if (addCardType === 'thermostat') return id.startsWith('climate.');
       if (addCardType === 'cover') return id.startsWith('cover.');
       if (addCardType === 'climate') return id.startsWith('climate.');
       if (addCardType === 'fanCard') return id.startsWith('fan.') || id.startsWith('switch.');
@@ -254,6 +256,7 @@ export default function AddCardContent({
       if (addCardType === 'alarmCard') return id.startsWith('alarm_control_panel.');
       if (addCardType === 'timerCard') return id.startsWith('timer.');
       if (addCardType === 'selectCard') return id.startsWith('select.') || id.startsWith('input_select.');
+      if (addCardType === 'inputText') return id.startsWith('input_text.');
       if (addCardType === 'buttonCard') return id.startsWith('button.');
       if (addCardType === 'scriptCard') return id.startsWith('script.') || id.startsWith('scene.');
       if (addCardType === 'androidtv') return id.startsWith('media_player.') || id.startsWith('remote.');
@@ -514,7 +517,7 @@ export default function AddCardContent({
                 <TypeButton type="sensor" icon={Activity} label={t('addCard.type.sensor')} isActive={addCardType === 'sensor'} onSelect={setAddCardType} />
                 <TypeButton type="light" icon={Lightbulb} label={t('addCard.type.light')} isActive={addCardType === 'light'} onSelect={setAddCardType} />
                 <TypeButton type="vacuum" icon={Bot} label={t('addCard.type.vacuum')} isActive={addCardType === 'vacuum'} onSelect={setAddCardType} />
-                <TypeButton type="climate" icon={Thermometer} label={t('addCard.type.climate')} isActive={addCardType === 'climate'} onSelect={setAddCardType} />
+                <TypeButton type="thermostat" icon={Thermometer} label={getLabel('addCard.type.thermostat', 'Thermostat')} isActive={addCardType === 'thermostat'} onSelect={setAddCardType} />
                 <TypeButton type="cover" icon={ArrowUpDown} label={getLabel('addCard.type.cover', 'Cover')} isActive={addCardType === 'cover'} onSelect={setAddCardType} />
                 <TypeButton type="car" icon={Car} label={t('addCard.type.car')} isActive={addCardType === 'car'} onSelect={setAddCardType} />
                 <TypeButton type="androidtv" icon={Gamepad2} label={t('addCard.type.androidtv')} isActive={addCardType === 'androidtv'} onSelect={setAddCardType} />
@@ -544,6 +547,7 @@ export default function AddCardContent({
                 <TypeButton type="alarmCard" icon={Shield} label={getLabel('addCard.type.alarms', 'Alarms')} isActive={addCardType === 'alarmCard'} onSelect={setAddCardType} />
                 <TypeButton type="timerCard" icon={AlarmClock} label={getLabel('addCard.type.timers', 'Timers')} isActive={addCardType === 'timerCard'} onSelect={setAddCardType} />
                 <TypeButton type="selectCard" icon={ListChecks} label={getLabel('addCard.type.selects', 'Selects')} isActive={addCardType === 'selectCard'} onSelect={setAddCardType} />
+                <TypeButton type="inputText" icon={Type} label={getLabel('addCard.type.inputText', 'Text input')} isActive={addCardType === 'inputText'} onSelect={setAddCardType} />
                 <TypeButton type="buttonCard" icon={Zap} label={getLabel('addCard.type.buttons', 'Buttons')} isActive={addCardType === 'buttonCard'} onSelect={setAddCardType} />
                 <TypeButton type="scriptCard" icon={Workflow} label={getLabel('addCard.type.scripts', 'Scripts/Scenes')} isActive={addCardType === 'scriptCard'} onSelect={setAddCardType} />
               </div>

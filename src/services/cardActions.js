@@ -119,13 +119,40 @@ export const handleAddSelected = (ctx) => {
       return;
     }
 
-    case 'climate': {
+    case 'climate':
+    case 'thermostat': {
       if (selectedEntities.length === 0) return;
       const newSettings = { ...cardSettings };
       const newCardIds = selectedEntities.map((entityId) => {
-        const cardId = `climate_card_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+        const prefix = addCardType === 'thermostat' ? 'thermostat_card_' : 'climate_card_';
+        const cardId = `${prefix}${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
         const settingsKey = getCardSettingsKey(cardId, addCardTargetPage);
-        newSettings[settingsKey] = { ...(newSettings[settingsKey] || {}), climateId: entityId };
+        newSettings[settingsKey] = {
+          ...(newSettings[settingsKey] || {}),
+          ...(addCardType === 'thermostat' ? { type: 'thermostat' } : {}),
+          climateId: entityId
+        };
+        return cardId;
+      });
+      persistCardSettings(newSettings);
+      commitCards(newCardIds);
+      setSelectedEntities([]);
+      return;
+    }
+
+    case 'inputText': {
+      if (selectedEntities.length === 0) return;
+      const newSettings = { ...cardSettings };
+      const newCardIds = selectedEntities.map((entityId) => {
+        const cardId = `input_text_card_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+        const settingsKey = getCardSettingsKey(cardId, addCardTargetPage);
+        newSettings[settingsKey] = {
+          ...(newSettings[settingsKey] || {}),
+          type: 'input_text',
+          inputTextId: entityId,
+          rows: 3,
+          showCharacterCount: true
+        };
         return cardId;
       });
       persistCardSettings(newSettings);

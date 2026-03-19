@@ -16,6 +16,8 @@ const t = (key) => {
     'addCard.available.allEntities': 'All entities',
     'addCard.available.vacuums': 'Vacuums',
     'addCard.available.climates': 'Climate devices',
+    'addCard.available.thermostats': 'Thermostats',
+    'addCard.available.inputTexts': 'Text inputs',
     'addCard.available.costs': 'Cost sensors',
     'addCard.available.players': 'Media players',
     'addCard.available.cars': 'Cars',
@@ -27,6 +29,8 @@ const t = (key) => {
     'addCard.item.entities': 'entities',
     'addCard.item.vacuums': 'vacuums',
     'addCard.item.climates': 'climates',
+    'addCard.item.thermostats': 'thermostats',
+    'addCard.item.inputTexts': 'text inputs',
     'addCard.item.costs': 'costs',
     'addCard.item.players': 'players',
     'addCard.item.cars': 'cars',
@@ -157,12 +161,20 @@ describe('useAddCard › labels', () => {
     expect(result.current.getAddCardAvailableLabel()).toBe('Vacuums');
   });
 
+  it('getAddCardAvailableLabel returns correct label for thermostat type', () => {
+    const { result } = renderHook(() =>
+      useAddCard(makeProps({ showAddCardModal: true })),
+    );
+    act(() => result.current.setAddCardType('thermostat'));
+    expect(result.current.getAddCardAvailableLabel()).toBe('Thermostats');
+  });
+
   it('getAddCardNoneLeftLabel includes the item type', () => {
     const { result } = renderHook(() =>
       useAddCard(makeProps({ showAddCardModal: true })),
     );
-    act(() => result.current.setAddCardType('climate'));
-    expect(result.current.getAddCardNoneLeftLabel()).toBe('No more climates to add');
+    act(() => result.current.setAddCardType('inputText'));
+    expect(result.current.getAddCardNoneLeftLabel()).toBe('No more text inputs to add');
   });
 });
 

@@ -94,7 +94,9 @@ export function useAddCard({
     if (addCardTargetPage === 'header') return t('addCard.available.people');
     if (addCardTargetPage === 'settings') return t('addCard.available.allEntities');
     if (addCardType === 'vacuum') return t('addCard.available.vacuums');
+    if (addCardType === 'thermostat') return t('addCard.available.thermostats');
     if (addCardType === 'climate') return t('addCard.available.climates');
+    if (addCardType === 'inputText') return t('addCard.available.inputTexts');
     if (addCardType === 'cover') return t('addCard.available.covers');
     if (addCardType === 'cost') return t('addCard.available.costs');
     if (addCardType === 'media') return t('addCard.available.players');
@@ -132,8 +134,12 @@ export function useAddCard({
         ? 'addCard.item.entities'
         : addCardType === 'vacuum'
           ? 'addCard.item.vacuums'
+          : addCardType === 'thermostat'
+            ? 'addCard.item.thermostats'
           : addCardType === 'climate'
             ? 'addCard.item.climates'
+            : addCardType === 'inputText'
+              ? 'addCard.item.inputTexts'
             : addCardType === 'cover'
               ? 'addCard.item.covers'
             : addCardType === 'cost'

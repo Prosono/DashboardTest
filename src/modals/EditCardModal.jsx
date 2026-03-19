@@ -98,7 +98,9 @@ export default function EditCardModal({
   isEditSauna,
   isEditSaunaBookingTemp,
   isEditSaunaHealthScore,
+  isEditThermostat,
   isEditAlarmo,
+  isEditInputText,
   isEditPopupLauncher,
   isEditDivider,
   isEditAndroidTV,
@@ -225,6 +227,7 @@ export default function EditCardModal({
     .map(([id]) => id));
 
   const climateOptions = sortByName(byDomain('climate'));
+  const inputTextOptions = sortByName(byDomain('input_text'));
   const calendarOptions = sortByName(byDomain('calendar'));
   const todoOptions = sortByName(byDomain('todo'));
   const alarmOptions = sortByName(byDomain('alarm_control_panel'));
@@ -687,6 +690,35 @@ export default function EditCardModal({
             </div>
           )}
 
+          {isEditThermostat && editSettingsKey && (
+            <div className="space-y-3">
+              <label className="text-xs uppercase font-bold text-gray-500 ml-1">
+                {translateText('thermostat.settings.title', 'Thermostat settings')}
+              </label>
+
+              <div className="rounded-2xl popup-surface p-4 space-y-4">
+                <SearchableSelect
+                  label={translateText('thermostat.settings.entity', 'Thermostat entity')}
+                  value={editSettings?.climateId || null}
+                  options={climateOptions}
+                  onChange={(value) => saveCardSetting(editSettingsKey, 'climateId', value)}
+                  placeholder={translateText('thermostat.settings.entityPlaceholder', 'Choose thermostat')}
+                  entities={entities}
+                  t={t}
+                />
+
+                <div className="rounded-2xl border px-4 py-3 bg-[var(--glass-bg)] border-[var(--glass-border)]">
+                  <div className="text-[10px] uppercase tracking-widest font-bold text-[var(--text-secondary)]">
+                    {translateText('thermostat.settings.noteLabel', 'Controller')}
+                  </div>
+                  <div className="mt-2 text-sm text-[var(--text-primary)]">
+                    {translateText('thermostat.settings.note', 'This card uses the selected climate entity and opens the thermostat modal when tapped.')}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
           {isEditAlarmo && editSettingsKey && (
             <div className="space-y-3">
               <label className="text-xs uppercase font-bold text-gray-500 ml-1">
@@ -772,6 +804,63 @@ export default function EditCardModal({
                   <p className="text-[10px] text-[var(--text-secondary)]">
                     {translateText('alarm.settings.countdownWindowHint', 'Used as fallback when the selected countdown source does not expose a total duration.')}
                   </p>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {isEditInputText && editSettingsKey && (
+            <div className="space-y-3">
+              <label className="text-xs uppercase font-bold text-gray-500 ml-1">
+                {translateText('inputText.settings.title', 'Text input settings')}
+              </label>
+
+              <div className="rounded-2xl popup-surface p-4 space-y-4">
+                <SearchableSelect
+                  label={translateText('inputText.settings.entity', 'Text input entity')}
+                  value={editSettings?.inputTextId || null}
+                  options={inputTextOptions}
+                  onChange={(value) => saveCardSetting(editSettingsKey, 'inputTextId', value)}
+                  placeholder={translateText('inputText.settings.entityPlaceholder', 'Choose text input')}
+                  entities={entities}
+                  t={t}
+                />
+
+                <div className="space-y-1">
+                  <label className="text-[10px] uppercase tracking-widest font-bold text-[var(--text-secondary)]">
+                    {translateText('inputText.settings.rows', 'Rows shown')}
+                  </label>
+                  <input
+                    type="number"
+                    min={1}
+                    max={6}
+                    step={1}
+                    className="w-full px-3 py-2 text-[var(--text-primary)] rounded-xl popup-surface focus:border-blue-500/50 outline-none transition-colors"
+                    value={Number(editSettings?.rows) || 3}
+                    onChange={(e) => {
+                      const parsed = Number(e.target.value);
+                      const next = Number.isFinite(parsed) ? Math.max(1, Math.min(6, Math.round(parsed))) : 3;
+                      saveCardSetting(editSettingsKey, 'rows', next);
+                    }}
+                  />
+                </div>
+
+                <div className="flex items-center justify-between gap-4 rounded-2xl border px-4 py-3 bg-[var(--glass-bg)] border-[var(--glass-border)]">
+                  <div>
+                    <div className="text-sm font-semibold text-[var(--text-primary)]">
+                      {translateText('inputText.settings.showCounter', 'Show character count')}
+                    </div>
+                    <div className="text-xs text-[var(--text-secondary)] mt-1">
+                      {translateText('inputText.settings.showCounterHint', 'Useful when the entity has a maximum length.')}
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => saveCardSetting(editSettingsKey, 'showCharacterCount', editSettings?.showCharacterCount === false ? true : false)}
+                    className={`w-12 h-6 rounded-full transition-colors relative ${editSettings?.showCharacterCount === false ? 'bg-gray-600' : 'bg-blue-500'}`}
+                  >
+                    <span className={`absolute top-1 left-1 bg-white w-4 h-4 rounded-full transition-transform ${editSettings?.showCharacterCount === false ? 'translate-x-0' : 'translate-x-6'}`} />
+                  </button>
                 </div>
               </div>
             </div>

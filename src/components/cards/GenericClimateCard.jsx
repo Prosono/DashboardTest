@@ -24,7 +24,8 @@ export default function GenericClimateCard({
   onOpen,
   onSetTemperature,
   settings,
-  t
+  t,
+  defaultIcon = AirVent
 }) {
   if (!entity || !entityId) return null;
 
@@ -48,7 +49,7 @@ export default function GenericClimateCard({
   const isHeating = isHeatingState(entity);
   const clTheme = isCooling ? 'blue' : isHeating ? 'orange' : 'gray';
   const hvacAction = entity.attributes?.hvac_action || 'idle';
-  const DisplayIcon = Icon || AirVent;
+  const DisplayIcon = Icon || defaultIcon || AirVent;
 
   const stepTemp = (delta) => onSetTemperature((targetTemp || 21) + delta);
 
