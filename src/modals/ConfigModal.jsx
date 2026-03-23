@@ -822,6 +822,10 @@ export default function ConfigModal({
     setConfig((prev) => {
       const normalized = normalizeHaConfig(prev || {});
       const primaryId = normalized.primaryConnectionId || normalized.connections?.[0]?.id || 'primary';
+      const hasRawUrl = Object.prototype.hasOwnProperty.call(patch, 'url');
+      const hasRawFallbackUrl = Object.prototype.hasOwnProperty.call(patch, 'fallbackUrl');
+      const rawUrl = hasRawUrl ? String(patch.url || '').trim() : null;
+      const rawFallbackUrl = hasRawFallbackUrl ? String(patch.fallbackUrl || '').trim() : null;
       const nextConnections = normalized.connections.map((connection) => {
         if (connection.id !== primaryId) return connection;
         const nextAuthMethod = Object.prototype.hasOwnProperty.call(patch, 'authMethod')
@@ -837,7 +841,7 @@ export default function ConfigModal({
           token: nextAuthMethod === 'token' ? nextToken : '',
         };
       });
-      return normalizeHaConfig({
+      const nextState = normalizeHaConfig({
         ...normalized,
         ...patch,
         authMethod: patch.authMethod === 'token' ? 'token' : (patch.authMethod === 'oauth' ? 'oauth' : normalized.authMethod),
@@ -847,6 +851,22 @@ export default function ConfigModal({
         connections: nextConnections,
         primaryConnectionId: primaryId,
       });
+      const nextPrimaryConnections = nextState.connections.map((connection) => (
+        connection.id === primaryId
+          ? {
+            ...connection,
+            ...(hasRawUrl ? { url: rawUrl } : {}),
+            ...(hasRawFallbackUrl ? { fallbackUrl: rawFallbackUrl } : {}),
+          }
+          : connection
+      ));
+      return {
+        ...nextState,
+        ...(hasRawUrl ? { url: rawUrl } : {}),
+        ...(hasRawFallbackUrl ? { fallbackUrl: rawFallbackUrl } : {}),
+        connections: nextPrimaryConnections,
+        primaryConnectionId: primaryId,
+      };
     });
   };
 
@@ -880,8 +900,8 @@ export default function ConfigModal({
           <button
             type="button"
             onClick={startOAuthLogin}
-            disabled={!canManageConnection || !config.url || !validateUrl(config.url)}
-            className={`w-full py-3 rounded-xl font-bold uppercase tracking-widest text-sm flex items-center justify-center gap-2 shadow-lg transition-all ${!config.url || !validateUrl(config.url) ? 'bg-[var(--glass-bg)] text-[var(--text-secondary)] opacity-50 cursor-not-allowed' : 'bg-blue-500 hover:bg-blue-600 text-white shadow-blue-500/20'}`}
+            disabled={!canManageConnection || !primaryConfigUrlValid}
+            className={`w-full py-3 rounded-xl font-bold uppercase tracking-widest text-sm flex items-center justify-center gap-2 shadow-lg transition-all ${!primaryConfigUrlValid ? 'bg-[var(--glass-bg)] text-[var(--text-secondary)] opacity-50 cursor-not-allowed' : 'bg-blue-500 hover:bg-blue-600 text-white shadow-blue-500/20'}`}
           >
             <LogIn className="w-5 h-5" />
             {t('system.oauth.loginButton')}
@@ -910,7 +930,16 @@ export default function ConfigModal({
       const connections = normalized.connections.map((connection, index) => {
         if (connection.id !== connectionId) return connection;
         const nextConnection = typeof updater === 'function' ? updater(connection) : { ...connection, ...(updater || {}) };
-        return normalizeConnection(nextConnection, index);
+        const hasRawUrl = Object.prototype.hasOwnProperty.call(nextConnection, 'url');
+        const hasRawFallbackUrl = Object.prototype.hasOwnProperty.call(nextConnection, 'fallbackUrl');
+        const rawUrl = hasRawUrl ? String(nextConnection.url || '').trim() : connection.url;
+        const rawFallbackUrl = hasRawFallbackUrl ? String(nextConnection.fallbackUrl || '').trim() : connection.fallbackUrl;
+        const normalizedConnection = normalizeConnection(nextConnection, index);
+        return {
+          ...normalizedConnection,
+          ...(hasRawUrl ? { url: rawUrl } : {}),
+          ...(hasRawFallbackUrl ? { fallbackUrl: rawFallbackUrl } : {}),
+        };
       });
       return normalizeHaConfig({
         ...normalized,
@@ -1075,6 +1104,9 @@ export default function ConfigModal({
     }
   }, [getManagedConnectionAccessToken, selectedManagedConnection, t]);
 
+  const normalizedPrimaryConfigUrl = normalizeHaUrlInput(config.url);
+  const normalizedFallbackConfigUrl = normalizeHaUrlInput(config.fallbackUrl);
+  const primaryConfigUrlValid = Boolean(config.url && validateUrl(normalizedPrimaryConfigUrl));
   const primaryUrlMixedContentBlocked = isMixedContentBlockedHaUrl(config.url);
   const managedPrimaryUrlMixedContentBlocked = isMixedContentBlockedHaUrl(selectedManagedConnection?.url);
 
@@ -2688,7 +2720,7 @@ export default function ConfigModal({
               <label className="text-xs uppercase font-bold text-gray-500 ml-1 flex items-center gap-2">
                 <Wifi className="w-4 h-4" />
                 {t('system.haUrlPrimary')}
-                {connected && activeUrl === config.url && <span className="text-green-400 bg-green-500/10 px-2 py-0.5 rounded text-[10px] tracking-widest">{t('system.connected')}</span>}
+                {connected && activeUrl === normalizedPrimaryConfigUrl && <span className="text-green-400 bg-green-500/10 px-2 py-0.5 rounded text-[10px] tracking-widest">{t('system.connected')}</span>}
               </label>
               <div className="relative group">
                 <input
@@ -2726,7 +2758,7 @@ export default function ConfigModal({
                   <label className="text-xs uppercase font-bold text-gray-500 ml-1 flex items-center gap-2">
                     <Server className="w-4 h-4" />
                     {t('system.haUrlFallback')}
-                    {connected && activeUrl === config.fallbackUrl && <span className="text-green-400 bg-green-500/10 px-2 py-0.5 rounded text-[10px] tracking-widest">{t('system.connected')}</span>}
+                    {connected && activeUrl === normalizedFallbackConfigUrl && <span className="text-green-400 bg-green-500/10 px-2 py-0.5 rounded text-[10px] tracking-widest">{t('system.connected')}</span>}
                   </label>
                   <div className="relative group">
                     <input
@@ -4871,8 +4903,8 @@ export default function ConfigModal({
                       <>
                         <button
                           onClick={testConnection}
-                          disabled={!canManageConnection || !config.url || !config.token || !validateUrl(config.url) || testingConnection}
-                          className={`w-full py-2.5 rounded-xl font-bold uppercase tracking-widest transition-all flex items-center justify-center gap-2 shadow-lg text-sm ${!canManageConnection || !config.url || !config.token || !validateUrl(config.url) || testingConnection ? 'bg-[var(--glass-bg)] text-[var(--text-secondary)] opacity-50 cursor-not-allowed' : 'bg-blue-500 hover:bg-blue-600 text-white shadow-blue-500/20'}`}
+                          disabled={!canManageConnection || !primaryConfigUrlValid || !config.token || testingConnection}
+                          className={`w-full py-2.5 rounded-xl font-bold uppercase tracking-widest transition-all flex items-center justify-center gap-2 shadow-lg text-sm ${!canManageConnection || !primaryConfigUrlValid || !config.token || testingConnection ? 'bg-[var(--glass-bg)] text-[var(--text-secondary)] opacity-50 cursor-not-allowed' : 'bg-blue-500 hover:bg-blue-600 text-white shadow-blue-500/20'}`}
                         >
                           {testingConnection ? <RefreshCw className="w-5 h-5 animate-spin" /> : <Wifi className="w-5 h-5" />}
                           {testingConnection ? t('onboarding.testing') : t('onboarding.testConnection')}

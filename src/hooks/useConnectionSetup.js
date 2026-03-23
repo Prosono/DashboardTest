@@ -33,6 +33,7 @@ export function useConnectionSetup({
   const [testingConnection, setTestingConnection] = useState(false);
   const [connectionTestResult, setConnectionTestResult] = useState(null);
   const [configTab, setConfigTab] = useState('connection');
+  const normalizedConfigUrl = normalizeHaUrlInput(config.url);
 
   // ── Auto-close onboarding when OAuth connects ──────────────────────────
   useEffect(() => {
@@ -44,7 +45,7 @@ export function useConnectionSetup({
 
   // ── Connection test (long-lived token) ─────────────────────────────────
   const testConnection = async () => {
-    const normalizedUrl = normalizeHaUrlInput(config.url);
+    const normalizedUrl = normalizedConfigUrl;
     if (!validateUrl(normalizedUrl)) return;
     if (config.authMethod !== 'oauth' && !config.token) return;
     if (isMixedContentBlockedHaUrl(normalizedUrl)) {
@@ -139,8 +140,8 @@ export function useConnectionSetup({
   // ── Derived: can the user advance past onboarding step 0? ──────────────
   const canAdvanceOnboarding = onboardingStep === 0
     ? config.authMethod === 'oauth'
-      ? Boolean(config.url && validateUrl(config.url) && hasOAuthTokens())
-      : Boolean(config.url && config.token && validateUrl(config.url) && connectionTestResult?.success)
+      ? Boolean(config.url && validateUrl(normalizedConfigUrl) && hasOAuthTokens())
+      : Boolean(config.url && config.token && validateUrl(normalizedConfigUrl) && connectionTestResult?.success)
     : true;
 
   const isOnboardingActive = showOnboarding;
