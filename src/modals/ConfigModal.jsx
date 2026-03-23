@@ -43,7 +43,7 @@ import {
   Type,
   AlignLeft,
 } from '../icons';
-import { normalizeHaConfig, normalizeConnection, normalizeConnectionId } from '../utils/haConnections';
+import { normalizeHaConfig, normalizeConnection, normalizeConnectionId, normalizeHaUrlInput } from '../utils/haConnections';
 import { DEFAULT_NOTIFICATION_CONFIG, normalizeNotificationConfig } from '../utils/notificationConfig';
 import { getPhoneCountryCodeOptions, normalizePhoneCountryCode } from '../constants/phoneCountryCodes';
 
@@ -293,6 +293,8 @@ export default function ConfigModal({
   const [managedConnectionId, setManagedConnectionId] = useState('primary');
   const [managedConnectionLoading, setManagedConnectionLoading] = useState(false);
   const [managedConnectionSaving, setManagedConnectionSaving] = useState(false);
+  const [managedTestingConnection, setManagedTestingConnection] = useState(false);
+  const [managedConnectionTestResult, setManagedConnectionTestResult] = useState(null);
   const [assignTargetUserId, setAssignTargetUserId] = useState('');
   const [dashboardProfilesByClient, setDashboardProfilesByClient] = useState({});
   const [dashboardVersions, setDashboardVersions] = useState([]);
@@ -714,6 +716,7 @@ export default function ConfigModal({
     if (activeConfigTab !== 'connection' || !isPlatformAdmin || !connectionManageClientId || !userAdminApi?.fetchClientHaConfig) return;
     let cancelled = false;
     setManagedConnectionLoading(true);
+    setManagedConnectionTestResult(null);
     userAdminApi.fetchClientHaConfig(connectionManageClientId)
       .then((cfg) => {
         if (cancelled) return;
@@ -738,6 +741,10 @@ export default function ConfigModal({
       });
     return () => { cancelled = true; };
   }, [activeConfigTab, isPlatformAdmin, connectionManageClientId, userAdminApi]);
+
+  useEffect(() => {
+    setManagedConnectionTestResult(null);
+  }, [connectionManageClientId, managedConnectionId]);
 
   useEffect(() => {
     if (!canManageClients) return;
@@ -891,6 +898,7 @@ export default function ConfigModal({
   };
 
   const updateManagedConnection = (connectionId, updater) => {
+    setManagedConnectionTestResult(null);
     setManagedConnectionConfig((prev) => {
       const normalized = normalizeHaConfig(prev || {});
       const connections = normalized.connections.map((connection, index) => {
@@ -907,6 +915,7 @@ export default function ConfigModal({
   };
 
   const addManagedConnection = () => {
+    setManagedConnectionTestResult(null);
     const normalized = normalizeHaConfig(managedConnectionConfig || {});
     const nextId = normalizeConnectionId(`connection-${normalized.connections.length + 1}`);
     const nextState = normalizeHaConfig({
@@ -930,6 +939,7 @@ export default function ConfigModal({
 
   const removeManagedConnection = () => {
     if (!selectedManagedConnection) return;
+    setManagedConnectionTestResult(null);
     const normalized = normalizeHaConfig(managedConnectionConfig || {});
     const filtered = normalized.connections.filter((connection) => connection.id !== selectedManagedConnection.id);
     if (!filtered.length) return;
@@ -946,11 +956,101 @@ export default function ConfigModal({
   };
 
   const setManagedPrimaryConnection = (connectionId) => {
+    setManagedConnectionTestResult(null);
     setManagedConnectionConfig((prev) => normalizeHaConfig({
       ...(prev || {}),
       primaryConnectionId: connectionId,
     }));
   };
+
+  const getManagedConnectionAccessToken = useCallback((connection) => {
+    if (!connection) return '';
+    if (connection.authMethod === 'token') return String(connection.token || '').trim();
+    return String(connection.oauthTokens?.access_token || connection.oauthTokens?.accessToken || '').trim();
+  }, []);
+
+  const testManagedConnection = useCallback(async () => {
+    if (!selectedManagedConnection || !window.HAWS) return;
+
+    const primaryUrl = normalizeHaUrlInput(selectedManagedConnection.url);
+    const fallbackUrl = normalizeHaUrlInput(selectedManagedConnection.fallbackUrl);
+    const accessToken = getManagedConnectionAccessToken(selectedManagedConnection);
+
+    if (!validateUrl(primaryUrl)) {
+      setManagedConnectionTestResult({
+        connectionId: selectedManagedConnection.id,
+        success: false,
+        message: t('connection.testMissingUrl'),
+        url: '',
+        usedFallback: false,
+      });
+      return;
+    }
+
+    if (!accessToken) {
+      setManagedConnectionTestResult({
+        connectionId: selectedManagedConnection.id,
+        success: false,
+        message: selectedManagedConnection.authMethod === 'oauth'
+          ? t('connection.testMissingOauthToken')
+          : t('connection.testMissingToken'),
+        url: primaryUrl,
+        usedFallback: false,
+      });
+      return;
+    }
+
+    const { createConnection, createLongLivedTokenAuth } = window.HAWS;
+    const tryConnect = async (url) => {
+      const auth = createLongLivedTokenAuth(url, accessToken);
+      const connection = await createConnection({ auth });
+      connection.close();
+      return url;
+    };
+
+    setManagedTestingConnection(true);
+    setManagedConnectionTestResult(null);
+
+    try {
+      const successfulUrl = await tryConnect(primaryUrl);
+      setManagedConnectionTestResult({
+        connectionId: selectedManagedConnection.id,
+        success: true,
+        message: t('connection.testPrimarySuccess'),
+        url: successfulUrl,
+        usedFallback: false,
+      });
+      return;
+    } catch {
+      if (validateUrl(fallbackUrl) && fallbackUrl !== primaryUrl) {
+        try {
+          const successfulFallbackUrl = await tryConnect(fallbackUrl);
+          setManagedConnectionTestResult({
+            connectionId: selectedManagedConnection.id,
+            success: true,
+            message: t('connection.testFallbackSuccess'),
+            url: successfulFallbackUrl,
+            usedFallback: true,
+          });
+          return;
+        } catch {
+          // fall through to failure state
+        }
+      }
+
+      setManagedConnectionTestResult({
+        connectionId: selectedManagedConnection.id,
+        success: false,
+        message: validateUrl(fallbackUrl) && fallbackUrl !== primaryUrl
+          ? t('connection.testFailedBoth')
+          : t('connection.testFailedSingle'),
+        url: primaryUrl,
+        usedFallback: false,
+      });
+    } finally {
+      setManagedTestingConnection(false);
+    }
+  }, [getManagedConnectionAccessToken, selectedManagedConnection, t]);
 
   const handleSaveManagedConnection = async () => {
     if (!isPlatformAdmin || !connectionManageClientId || !userAdminApi?.saveClientHaConfig) return;
@@ -2165,6 +2265,12 @@ export default function ConfigModal({
   const renderConnectionTab = () => {
     const tokenManagedCount = managedConnections.filter((connection) => connection.authMethod === 'token').length;
     const oauthManagedCount = managedConnections.filter((connection) => connection.authMethod === 'oauth').length;
+    const managedTestResultForSelection = managedConnectionTestResult?.connectionId === selectedManagedConnection?.id
+      ? managedConnectionTestResult
+      : null;
+    const canAttemptManagedConnectionTest = Boolean(
+      selectedManagedConnection && !managedConnectionLoading && !managedConnectionSaving && !managedTestingConnection,
+    );
 
     const getManagedConnectionStatusMeta = (connection) => {
       if (!connection?.url) {
@@ -2467,10 +2573,46 @@ export default function ConfigModal({
 
             <div className="mx-5 mb-5 mt-1 rounded-2xl border border-[var(--glass-border)] bg-[color-mix(in_srgb,var(--glass-bg)_88%,transparent)] p-4 md:mx-6">
               <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-                <p className="text-sm leading-relaxed text-[var(--text-secondary)]">
-                  {t('connection.saveHint')}
-                </p>
+                <div className="space-y-2">
+                  <p className="text-sm leading-relaxed text-[var(--text-secondary)]">
+                    {t('connection.saveHint')}
+                  </p>
+                  {managedTestResultForSelection && (
+                    <div className={`inline-flex max-w-2xl flex-col gap-1 rounded-2xl border px-3 py-2 ${
+                      managedTestResultForSelection.success
+                        ? 'border-emerald-400/20 bg-emerald-500/10 text-emerald-100'
+                        : 'border-rose-400/20 bg-rose-500/10 text-rose-100'
+                    }`}>
+                      <div className="flex flex-wrap items-center gap-2">
+                        {managedTestResultForSelection.success ? (
+                          <Check className="h-4 w-4 shrink-0" />
+                        ) : (
+                          <AlertCircle className="h-4 w-4 shrink-0" />
+                        )}
+                        <span className="text-sm font-semibold">{managedTestResultForSelection.message}</span>
+                        {managedTestResultForSelection.usedFallback && (
+                          <span className="rounded-full border border-current/20 px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.18em]">
+                            {t('connection.testResultFallbackBadge')}
+                          </span>
+                        )}
+                      </div>
+                      {managedTestResultForSelection.url && (
+                        <p className="text-xs text-current/80">
+                          {t('connection.testResultUrl')}: <span className="font-mono">{managedTestResultForSelection.url}</span>
+                        </p>
+                      )}
+                    </div>
+                  )}
+                </div>
                 <div className="flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    onClick={testManagedConnection}
+                    disabled={!canAttemptManagedConnectionTest}
+                    className="rounded-xl border border-emerald-400/20 bg-emerald-500/10 px-3 py-2 text-[11px] font-bold uppercase tracking-[0.18em] text-emerald-200 transition-colors hover:bg-emerald-500/20 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    {managedTestingConnection ? t('onboarding.testing') : t('connection.testSelected')}
+                  </button>
                   <button
                     type="button"
                     onClick={removeManagedConnection}
