@@ -77,6 +77,8 @@ export default function PageNavigation({
         const isHidden = settings.hidden;
         const Icon = settings.icon ? (getIconComponent(settings.icon) || page.icon) : page.icon;
         const isDragOver = dragOverId === page.id;
+        const isLocked = Boolean(page.locked);
+        const canEditPage = editMode && !isLocked;
         
         if (!editMode && isHidden) return null;
         
@@ -87,25 +89,25 @@ export default function PageNavigation({
               if (node) pageButtonRefs.current.set(page.id, node);
               else pageButtonRefs.current.delete(page.id);
             }}
-            draggable={editMode}
-            onClick={() => editMode ? setEditingPage(page.id) : setActivePage(page.id)}
+            draggable={canEditPage}
+            onClick={() => (canEditPage ? setEditingPage(page.id) : setActivePage(page.id))}
             onDragStart={(event) => {
-              if (!editMode) return;
+              if (!canEditPage) return;
               event.dataTransfer.effectAllowed = 'move';
               event.dataTransfer.setData('text/plain', page.id);
             }}
             onDragOver={(event) => {
-              if (!editMode) return;
+              if (!canEditPage) return;
               event.preventDefault();
               event.dataTransfer.dropEffect = 'move';
               setDragOverId(page.id);
             }}
             onDragLeave={() => {
-              if (!editMode) return;
+              if (!canEditPage) return;
               setDragOverId(null);
             }}
             onDrop={(event) => {
-              if (!editMode) return;
+              if (!canEditPage) return;
               event.preventDefault();
               const sourceId = event.dataTransfer.getData('text/plain');
               setDragOverId(null);
@@ -116,11 +118,11 @@ export default function PageNavigation({
               activePage === page.id 
                 ? 'bg-[var(--glass-bg-hover)] text-[var(--text-primary)] border-[var(--glass-border)]' 
                 : 'bg-[var(--glass-bg)] text-[var(--text-secondary)] border-transparent hover:bg-[var(--glass-bg-hover)] hover:text-[var(--text-primary)]'
-            } ${editMode && isHidden ? 'opacity-50 border-gray-500 scale-95' : ''} ${editMode ? 'cursor-move' : ''} ${isDragOver ? 'border-blue-500/50' : ''}`}
+            } ${editMode && isHidden ? 'opacity-50 border-gray-500 scale-95' : ''} ${canEditPage ? 'cursor-move' : ''} ${isDragOver ? 'border-blue-500/50' : ''}`}
           >
             <Icon className={`w-4 h-4 ${editMode && isHidden ? 'animate-pulse' : ''}`} />
             <span className="inline max-w-[11ch] sm:max-w-none truncate">{label}</span>
-            {editMode && <Edit2 className="w-4 h-4 ml-1 text-blue-400 hidden sm:inline" />}
+            {canEditPage && <Edit2 className="w-4 h-4 ml-1 text-blue-400 hidden sm:inline" />}
           </button>
         );
       })}

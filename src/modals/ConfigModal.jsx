@@ -165,6 +165,8 @@ function NotificationRichTextEditor({ value, onChange, placeholder, t }) {
 export default function ConfigModal({
   open,
   isOnboardingActive,
+  displayMode = 'modal',
+  forcedTab = '',
   t,
   configTab,
   setConfigTab,
@@ -239,6 +241,7 @@ export default function ConfigModal({
   onClose,
   onFinishOnboarding
 }) {
+  const isEmbeddedPage = displayMode === 'page';
   const [installingIds, setInstallingIds] = useState({});
   const [expandedNotes, setExpandedNotes] = useState({});
   const [layoutPreview, setLayoutPreview] = useState(false);
@@ -390,26 +393,37 @@ export default function ConfigModal({
     password: '',
   });
 
-  const isLayoutPreview = configTab === 'layout' && layoutPreview;
-  const isAdmin = currentUser?.role === 'admin';
-  const isInspector = currentUser?.role === 'inspector';
+  const resolvedConfigTab = forcedTab || configTab;
+  const isLayoutPreview = !isEmbeddedPage && resolvedConfigTab === 'layout' && layoutPreview;
+  const normalizedCurrentUserRole = String(currentUser?.role || '').trim().toLowerCase();
+  const isAdmin = [
+    'admin',
+    'administrator',
+    'administratorclient',
+    'clientadmin',
+    'client_admin',
+    'localadmin',
+    'local_admin',
+  ].includes(normalizedCurrentUserRole);
+  const isInspector = normalizedCurrentUserRole === 'inspector' || normalizedCurrentUserRole === 'inspektør';
   const isPlatformAdmin = currentUser?.isPlatformAdmin === true;
-  const canManageConnection = currentUser?.isPlatformAdmin === true;
+  const canManageConnection = !isInspector && (isAdmin || isPlatformAdmin);
   const canAccessStorage = canManageAdministration;
   const canAccessNotifications = canManageNotifications && isAdmin;
   const canAccessUpdates = isAdmin && !currentUser?.isPlatformAdmin;
 
   useEffect(() => {
-    if (configTab !== 'layout' && layoutPreview) {
+    if (resolvedConfigTab !== 'layout' && layoutPreview) {
       setLayoutPreview(false);
     }
-  }, [configTab, layoutPreview]);
+  }, [resolvedConfigTab, layoutPreview]);
 
   useEffect(() => {
-    if (layoutPreview && configTab !== 'layout') {
+    if (forcedTab) return;
+    if (layoutPreview && resolvedConfigTab !== 'layout') {
       setConfigTab('layout');
     }
-  }, [layoutPreview, configTab, setConfigTab]);
+  }, [layoutPreview, resolvedConfigTab, forcedTab, setConfigTab]);
 
   useEffect(() => {
     if (currentUser?.isPlatformAdmin === true) return;
@@ -421,10 +435,10 @@ export default function ConfigModal({
   }, [globalDashboardProfiles, selectedGlobalDashboard, currentUser?.isPlatformAdmin]);
 
   useEffect(() => {
-    if (configTab === 'storage' && refreshGlobalDashboards) {
+    if (resolvedConfigTab === 'storage' && refreshGlobalDashboards) {
       refreshGlobalDashboards();
     }
-  }, [configTab, refreshGlobalDashboards]);
+  }, [resolvedConfigTab, refreshGlobalDashboards]);
 
   useEffect(() => {
     setNotificationDraft(normalizeNotificationConfig(notificationConfig || DEFAULT_NOTIFICATION_CONFIG));
@@ -487,12 +501,12 @@ export default function ConfigModal({
   }, [t, userAdminApi]);
 
   useEffect(() => {
-    if (!open || configTab !== 'notifications' || !canAccessNotifications) return;
+    if (!open || resolvedConfigTab !== 'notifications' || !canAccessNotifications) return;
     void loadAppActionHistory();
-  }, [open, configTab, canAccessNotifications, loadAppActionHistory]);
+  }, [open, resolvedConfigTab, canAccessNotifications, loadAppActionHistory]);
 
   useEffect(() => {
-    if (!open || configTab !== 'notifications' || !canAccessNotifications || !userAdminApi?.listUsers) return;
+    if (!open || resolvedConfigTab !== 'notifications' || !canAccessNotifications || !userAdminApi?.listUsers) return;
     let cancelled = false;
     userAdminApi.listUsers()
       .then((list) => {
@@ -515,10 +529,10 @@ export default function ConfigModal({
         if (!cancelled) setUsers([]);
       });
     return () => { cancelled = true; };
-  }, [open, configTab, canAccessNotifications, userAdminApi]);
+  }, [open, resolvedConfigTab, canAccessNotifications, userAdminApi]);
 
   useEffect(() => {
-    if (!open || configTab !== 'notifications' || !canAccessNotifications || !isPlatformAdmin || !userAdminApi?.fetchTwilioSmsConfig) return;
+    if (!open || resolvedConfigTab !== 'notifications' || !canAccessNotifications || !isPlatformAdmin || !userAdminApi?.fetchTwilioSmsConfig) return;
     let cancelled = false;
     setTwilioConfigLoading(true);
     setTwilioConfigMessage('');
@@ -543,10 +557,10 @@ export default function ConfigModal({
         if (!cancelled) setTwilioConfigLoading(false);
       });
     return () => { cancelled = true; };
-  }, [open, configTab, canAccessNotifications, isPlatformAdmin, userAdminApi]);
+  }, [open, resolvedConfigTab, canAccessNotifications, isPlatformAdmin, userAdminApi]);
 
   useEffect(() => {
-    if (configTab !== 'storage' || !canManageAdministration || !userAdminApi?.listUsers) return;
+    if (resolvedConfigTab !== 'storage' || !canManageAdministration || !userAdminApi?.listUsers) return;
     let cancelled = false;
     userAdminApi.listUsers().then((list) => {
       if (!cancelled) {
@@ -571,11 +585,11 @@ export default function ConfigModal({
       }
     });
     return () => { cancelled = true; };
-  }, [configTab, canManageAdministration, userAdminApi]);
+  }, [resolvedConfigTab, canManageAdministration, userAdminApi]);
 
   useEffect(() => {
     const canClientMgmtFromAuth = currentUser?.isPlatformAdmin === true;
-    if ((configTab !== 'storage' && configTab !== 'connection') || !canManageAdministration || !canClientMgmtFromAuth || !userAdminApi?.listClients) return;
+    if ((resolvedConfigTab !== 'storage' && resolvedConfigTab !== 'connection') || !canManageAdministration || !canClientMgmtFromAuth || !userAdminApi?.listClients) return;
     let cancelled = false;
     userAdminApi.listClients().then((list) => {
       if (cancelled) return;
@@ -597,15 +611,15 @@ export default function ConfigModal({
       }
     });
     return () => { cancelled = true; };
-  }, [configTab, canManageAdministration, userAdminApi, selectedClientId, connectionManageClientId, currentUser?.clientId, currentUser?.isPlatformAdmin, newUserClientId]);
+  }, [resolvedConfigTab, canManageAdministration, userAdminApi, selectedClientId, connectionManageClientId, currentUser?.clientId, currentUser?.isPlatformAdmin, newUserClientId]);
 
   useEffect(() => {
-    if (configTab !== 'storage') return;
+    if (resolvedConfigTab !== 'storage') return;
     if (storageSection !== 'clients') return;
     if (!canManageAdministration || !userAdminApi?.listClients) {
       setStorageSection('users');
     }
-  }, [configTab, storageSection, canManageAdministration, userAdminApi]);
+  }, [resolvedConfigTab, storageSection, canManageAdministration, userAdminApi]);
 
   const handleClose = () => {
     if (!isOnboardingActive) onClose?.();
@@ -621,7 +635,7 @@ export default function ConfigModal({
   const availableTabs = isLayoutPreview
     ? [{ key: 'layout', icon: LayoutGrid, label: t('system.tabLayout') }]
     : TABS;
-  const activeConfigTab = availableTabs.some((tab) => tab.key === configTab) ? configTab : 'connection';
+  const activeConfigTab = availableTabs.some((tab) => tab.key === resolvedConfigTab) ? resolvedConfigTab : 'connection';
   const canManageClients = currentUser?.isPlatformAdmin === true && typeof userAdminApi?.listClients === 'function';
   const selectedManagedClient = clients.find((client) => client.id === connectionManageClientId) || null;
   const managedConnections = Array.isArray(managedConnectionConfig?.connections) ? managedConnectionConfig.connections : [];
@@ -674,7 +688,7 @@ export default function ConfigModal({
 
   useEffect(() => {
     if (!open || !canManageClients || !canManageAdministration || !userAdminApi?.listClientDashboards) return;
-    if (configTab !== 'storage') return;
+    if (resolvedConfigTab !== 'storage') return;
     const clientIds = Array.from(new Set([
       ...users.map((user) => String(user?.clientId || '').trim()).filter(Boolean),
       ...clients.map((client) => String(client?.id || '').trim()).filter(Boolean),
@@ -710,7 +724,7 @@ export default function ConfigModal({
     open,
     canManageClients,
     canManageAdministration,
-    configTab,
+    resolvedConfigTab,
     users,
     clients,
     newUserClientId,
@@ -763,9 +777,9 @@ export default function ConfigModal({
   }, [canManageClients, dashboardProfilesByClient, selectedClientId, selectedGlobalDashboard]);
 
   useEffect(() => {
-    if (!open || configTab !== 'storage' || storageSection !== 'dashboards') return;
+    if (!open || resolvedConfigTab !== 'storage' || storageSection !== 'dashboards') return;
     refreshDashboardVersions();
-  }, [open, configTab, storageSection, normalizedSelectedDashboardId, activeDashboardClientId, refreshDashboardVersions]);
+  }, [open, resolvedConfigTab, storageSection, normalizedSelectedDashboardId, activeDashboardClientId, refreshDashboardVersions]);
 
   if (!open) return null;
 
@@ -4741,14 +4755,15 @@ export default function ConfigModal({
   // ─── Main Render ───
   return (
     <div
-      className={`fixed inset-0 z-50 flex ${
-        isLayoutPreview ? 'items-stretch justify-end' : 'items-center justify-center p-4 md:p-8'
-      }`}
-      style={{
+      className={isEmbeddedPage
+        ? 'w-full min-h-0'
+        : `fixed inset-0 z-50 flex ${isLayoutPreview ? 'items-stretch justify-end' : 'items-center justify-center p-4 md:p-8'}`
+      }
+      style={isEmbeddedPage ? undefined : {
         backdropFilter: isLayoutPreview ? 'none' : 'blur(20px)',
         backgroundColor: isLayoutPreview ? 'transparent' : 'rgba(0,0,0,0.3)'
       }}
-      onClick={handleClose}
+      onClick={isEmbeddedPage ? undefined : handleClose}
     >
       <style>{`
         .custom-scrollbar::-webkit-scrollbar {
@@ -4767,19 +4782,23 @@ export default function ConfigModal({
         }
       `}</style>
       <div
-        className={`border w-full relative font-sans flex flex-col overflow-hidden popup-anim text-[var(--text-primary)] ${
-          isLayoutPreview
-            ? 'max-w-[18rem] sm:max-w-[21rem] md:max-w-[23rem] h-full rounded-none md:rounded-l-[2.5rem] shadow-2xl origin-right scale-[0.94] sm:scale-[0.97] md:scale-100 animate-in slide-in-from-right-8 fade-in zoom-in-95 duration-300'
-            : 'max-w-[96vw] xl:max-w-[1420px] h-[84vh] max-h-[920px] rounded-3xl md:rounded-[3rem] shadow-2xl'
+        className={`border w-full relative font-sans flex flex-col overflow-hidden text-[var(--text-primary)] ${
+          isEmbeddedPage
+            ? 'h-[clamp(28rem,74vh,58rem)] rounded-[2rem] md:rounded-[2.5rem] shadow-[0_24px_80px_rgba(0,0,0,0.24)]'
+            : `popup-anim ${
+              isLayoutPreview
+                ? 'max-w-[18rem] sm:max-w-[21rem] md:max-w-[23rem] h-full rounded-none md:rounded-l-[2.5rem] shadow-2xl origin-right scale-[0.94] sm:scale-[0.97] md:scale-100 animate-in slide-in-from-right-8 fade-in zoom-in-95 duration-300'
+                : 'max-w-[96vw] xl:max-w-[1420px] h-[84vh] max-h-[920px] rounded-3xl md:rounded-[3rem] shadow-2xl'
+            }`
         }`}
         style={{
           background: 'linear-gradient(160deg, var(--card-bg) 0%, var(--modal-bg) 70%)',
           borderColor: 'var(--glass-border)',
           color: 'var(--text-primary)'
         }}
-        onClick={(e) => e.stopPropagation()}
+        onClick={isEmbeddedPage ? undefined : (e) => e.stopPropagation()}
       >
-        {!isOnboardingActive && (
+        {!isEmbeddedPage && !isOnboardingActive && (
           <button
             onClick={handleClose}
             className="absolute top-3 right-3 z-30 p-2 rounded-full border border-[var(--glass-border)] bg-[var(--card-bg)]/90 hover:bg-[var(--glass-bg-hover)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors backdrop-blur-md shadow-lg"
@@ -4998,7 +5017,7 @@ export default function ConfigModal({
           // ═══ SYSTEM SETTINGS LAYOUT ═══
           <div className={`flex h-full ${isLayoutPreview ? 'flex-col' : 'flex-col md:flex-row'}`}>
             {/* Sidebar — icons only on mobile, full labels on desktop */}
-            {!isLayoutPreview && (
+            {!isLayoutPreview && !isEmbeddedPage && (
               <div className="w-full md:w-56 flex flex-row md:flex-col gap-1 p-2 md:p-3 border-b md:border-b-0 md:border-r border-[var(--glass-border)] flex-shrink-0 bg-[linear-gradient(160deg,var(--glass-bg),transparent_70%)] animate-in fade-in slide-in-from-left-4 duration-300">
                 <div className="hidden md:flex items-center gap-3 px-3 py-4 mb-2">
                   <div className="p-2 bg-blue-500/10 rounded-lg text-blue-400">
@@ -5013,7 +5032,7 @@ export default function ConfigModal({
                   return (
                     <button
                       key={tab.key}
-                      onClick={() => setConfigTab(tab.key)}
+                      onClick={() => setConfigTab?.(tab.key)}
                       className={`flex-1 md:flex-none flex items-center justify-center md:justify-start gap-3 px-3 md:px-4 py-2.5 md:py-3 rounded-xl transition-all text-sm font-bold uppercase tracking-wide ${
                         active
                           ? 'bg-blue-500 text-white shadow-lg shadow-blue-500/20'
@@ -5042,7 +5061,25 @@ export default function ConfigModal({
 
             {/* Content Area */}
             <div className="flex-1 flex flex-col min-h-0">
-              <div className={`flex items-center justify-between p-4 border-b border-[var(--glass-border)] ${isLayoutPreview ? 'relative overflow-hidden bg-[var(--glass-bg)]' : 'md:hidden'}`}>
+              {isEmbeddedPage && !isLayoutPreview && (
+                <div className="border-b border-[var(--glass-border)] px-5 py-5 md:px-6 md:py-6 bg-[linear-gradient(155deg,color-mix(in_srgb,var(--glass-bg)_84%,transparent),transparent_72%)]">
+                  <p className="text-[10px] font-bold uppercase tracking-[0.24em] text-[var(--text-secondary)]">
+                    {t('adminPages.eyebrow')}
+                  </p>
+                  <h2 className="mt-2 text-2xl font-semibold tracking-tight text-[var(--text-primary)]">
+                    {availableTabs.find(tab => tab.key === activeConfigTab)?.label}
+                  </h2>
+                  <p className="mt-2 max-w-3xl text-sm leading-relaxed text-[var(--text-secondary)]">
+                    {activeConfigTab === 'connection'
+                      ? t('adminPages.connection.description')
+                      : activeConfigTab === 'notifications'
+                        ? t('adminPages.notifications.description')
+                        : t('adminPages.storage.description')}
+                  </p>
+                </div>
+              )}
+
+              <div className={`flex items-center justify-between p-4 border-b border-[var(--glass-border)] ${isLayoutPreview ? 'relative overflow-hidden bg-[var(--glass-bg)]' : 'md:hidden'} ${isEmbeddedPage ? 'md:hidden' : ''}`}>
                 {isLayoutPreview && (
                   <div className="absolute inset-0 bg-gradient-to-l from-[var(--accent-bg)]/50 via-transparent to-transparent pointer-events-none" />
                 )}
@@ -5054,12 +5091,12 @@ export default function ConfigModal({
                       {availableTabs.find(tb => tb.key === activeConfigTab)?.label}
                     </h3>
                 </div>
-                <button onClick={onClose} className="modal-close relative"><X className="w-4 h-4" /></button>
+                {!isEmbeddedPage && <button onClick={onClose} className="modal-close relative"><X className="w-4 h-4" /></button>}
               </div>
 
-              <div className={`flex-1 overflow-y-auto custom-scrollbar ${isLayoutPreview ? 'p-5 md:p-6' : 'p-5 md:p-8 xl:p-10'}`}>
+              <div className={`flex-1 overflow-y-auto custom-scrollbar ${isLayoutPreview ? 'p-5 md:p-6' : isEmbeddedPage ? 'p-5 md:p-6 xl:p-8' : 'p-5 md:p-8 xl:p-10'}`}>
                 {/* Desktop Header */}
-                {!isLayoutPreview && (
+                {!isLayoutPreview && !isEmbeddedPage && (
                   <div className="hidden md:flex items-center justify-between mb-8">
                     <h2 className="text-2xl font-bold">
                       {availableTabs.find(tab => tab.key === activeConfigTab)?.label}
@@ -5079,7 +5116,7 @@ export default function ConfigModal({
               </div>
 
               {/* Mobile Footer */}
-              {!isLayoutPreview && (
+              {!isLayoutPreview && !isEmbeddedPage && (
                 <div className="p-3 border-t border-[var(--glass-border)] md:hidden">
                   <button onClick={onClose} className="w-full py-2.5 rounded-xl bg-green-500 hover:bg-green-600 text-white font-bold uppercase tracking-widest transition-all shadow-lg shadow-green-500/20 text-sm">
                     {t('system.save')}

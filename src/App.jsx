@@ -1,6 +1,6 @@
 // src/App.jsx
 
-import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
+import { lazy, useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { en, nn, nb } from './i18n';
 import {
   AlertTriangle,
@@ -21,9 +21,11 @@ import {
 
 import SettingsDropdown from './components/ui/SettingsDropdown';
 import { Header, StatusBar } from './layouts';
+import { themes } from './config/themes';
 
 import {
   MediaPage,
+  ModalSuspense,
   PageNavigation,
   PersonStatus,
   SuperAdminOverview,
@@ -46,6 +48,7 @@ import {
 
 import { formatDuration } from './utils';
 import { getPhoneCountryCodeOptions, normalizePhoneCountryCode } from './constants/phoneCountryCodes';
+import { validateUrl } from './config/onboarding';
 import './styles/dashboard.css';
 
 import { clearAllOAuthTokens, clearOAuthTokens, loadTokensForConnection, saveTokens, saveTokensForConnection } from './services/oauthStorage';
@@ -112,7 +115,11 @@ import { normalizeHaConfig } from './utils/haConnections';
 import { DEFAULT_NOTIFICATION_CONFIG, normalizeNotificationConfig } from './utils/notificationConfig';
 
 const SUPER_ADMIN_OVERVIEW_PAGE_ID = '__super_admin_overview';
+const ADMIN_SETTINGS_PAGE_ID = '__admin_settings';
+const ADMIN_NOTIFICATIONS_PAGE_ID = '__admin_notifications';
+const ADMIN_USERS_PAGE_ID = '__admin_users';
 const AUTO_ALERT_PILL_HIDDEN_KEY_PREFIX = 'tunet_auto_alert_pills_hidden_';
+const EmbeddedConfigModal = lazy(() => import('./modals/ConfigModal'));
 
 const getAutoAlertPillsHiddenStorageKey = (clientScopeRaw) => {
   const scope = String(clientScopeRaw || '').trim().toLowerCase() || 'default';
@@ -385,6 +392,11 @@ function AppContent({
   const isPlatformAdmin = currentUser?.isPlatformAdmin === true;
   const currentUserRole = normalizeRole(currentUser?.role);
   const isLocalClientAdmin = currentUserRole === 'admin' && !isPlatformAdmin;
+  const localAdminFixedPages = useMemo(() => ([
+    ADMIN_SETTINGS_PAGE_ID,
+    ADMIN_NOTIFICATIONS_PAGE_ID,
+    ADMIN_USERS_PAGE_ID,
+  ]), []);
   const canEditDashboard = isLocalClientAdmin || isPlatformAdmin;
   const canEditGlobalBranding = isPlatformAdmin;
   const canEditClientSubtitle = isLocalClientAdmin;
@@ -1072,13 +1084,27 @@ function AppContent({
       const settings = pageSettings[id] || {};
       return isVisibleForRole(settings.visibleRoles, currentUserRole);
     });
-    if (!isPlatformAdmin) return roleFiltered;
+    const withLocalAdminPages = (() => {
+      if (!isLocalClientAdmin) return roleFiltered;
+      const extras = localAdminFixedPages.filter((id) => !roleFiltered.includes(id));
+      if (!extras.length) return roleFiltered;
+      const homeIndex = roleFiltered.indexOf('home');
+      if (homeIndex >= 0) {
+        return [
+          ...roleFiltered.slice(0, homeIndex + 1),
+          ...extras,
+          ...roleFiltered.slice(homeIndex + 1),
+        ];
+      }
+      return [...extras, ...roleFiltered];
+    })();
+    if (!isPlatformAdmin) return withLocalAdminPages;
     const deduped = [SUPER_ADMIN_OVERVIEW_PAGE_ID];
-    roleFiltered.forEach((id) => {
+    withLocalAdminPages.forEach((id) => {
       if (id !== SUPER_ADMIN_OVERVIEW_PAGE_ID) deduped.push(id);
     });
     return deduped;
-  }, [pagesConfig.pages, pageSettings, editMode, canEditDashboard, currentUserRole, isPlatformAdmin, isVisibleForRole]);
+  }, [pagesConfig.pages, pageSettings, editMode, canEditDashboard, currentUserRole, isLocalClientAdmin, isPlatformAdmin, isVisibleForRole, localAdminFixedPages]);
 
   const appliedSuperOverviewRef = useRef('');
   useEffect(() => {
@@ -1305,7 +1331,14 @@ function AppContent({
   const renderSettingsControl = () => (
     <div className="relative">
       <SettingsDropdown
-        onOpenSettings={() => { setShowConfigModal(true); setConfigTab('connection'); }}
+        onOpenSettings={() => {
+          if (isLocalClientAdmin) {
+            setActivePage(ADMIN_SETTINGS_PAGE_ID);
+            return;
+          }
+          setShowConfigModal(true);
+          setConfigTab('connection');
+        }}
         onOpenTheme={() => setShowThemeSidebar(true)}
         onOpenLayout={() => setShowLayoutSidebar(true)}
         onOpenHeader={() => setShowHeaderEditModal(true)}
@@ -1904,16 +1937,29 @@ function AppContent({
   const pageDefaults = {
     home: { label: t('page.home'), icon: LayoutGrid },
     [SUPER_ADMIN_OVERVIEW_PAGE_ID]: { label: t('superAdminOverview.pageLabel'), icon: Server },
+    [ADMIN_SETTINGS_PAGE_ID]: { label: t('system.tabConnection'), icon: Settings, locked: true },
+    [ADMIN_NOTIFICATIONS_PAGE_ID]: { label: t('system.tabNotifications'), icon: Bell, locked: true },
+    [ADMIN_USERS_PAGE_ID]: { label: t('userMgmt.menu'), icon: User, locked: true },
   };
+  const adminPageTabs = {
+    [ADMIN_SETTINGS_PAGE_ID]: 'connection',
+    [ADMIN_NOTIFICATIONS_PAGE_ID]: 'notifications',
+    [ADMIN_USERS_PAGE_ID]: 'storage',
+  };
+  const isLocalAdminUtilityPage = isLocalClientAdmin && Object.prototype.hasOwnProperty.call(adminPageTabs, activePage);
 
   const pages = visiblePageIds.map(id => ({
     id,
     label: pageDefaults[id]?.label || id,
-    icon: pageDefaults[id]?.icon || LayoutGrid
+    icon: pageDefaults[id]?.icon || LayoutGrid,
+    locked: Boolean(pageDefaults[id]?.locked),
   }));
   const activePageLabel = useMemo(() => {
     if (activePage === 'home') return t('page.home');
     if (activePage === SUPER_ADMIN_OVERVIEW_PAGE_ID) return t('superAdminOverview.pageLabel');
+    if (activePage === ADMIN_SETTINGS_PAGE_ID) return t('system.tabConnection');
+    if (activePage === ADMIN_NOTIFICATIONS_PAGE_ID) return t('system.tabNotifications');
+    if (activePage === ADMIN_USERS_PAGE_ID) return t('userMgmt.menu');
     return String(pageSettings?.[activePage]?.label || activePage || '').trim() || activePage;
   }, [activePage, pageSettings, t]);
   const activePageIndex = visiblePageIds.indexOf(activePage);
@@ -2626,6 +2672,90 @@ function AppContent({
                 userAdminApi={userAdminApi}
                 isMobile={isMobile}
               />
+            </div>
+          ) : isLocalAdminUtilityPage ? (
+            <div key={activePage} className={pageTransitionClass}>
+              <ModalSuspense>
+                <EmbeddedConfigModal
+                  open={true}
+                  displayMode="page"
+                  forcedTab={adminPageTabs[activePage]}
+                  isOnboardingActive={false}
+                  t={t}
+                  configTab={configTab}
+                  setConfigTab={setConfigTab}
+                  onboardingSteps={[]}
+                  onboardingStep={0}
+                  setOnboardingStep={setOnboardingStep}
+                  canAdvanceOnboarding={canAdvanceOnboarding}
+                  connected={connected}
+                  activeUrl={activeUrl}
+                  config={config}
+                  setConfig={setConfig}
+                  onboardingUrlError={onboardingUrlError}
+                  setOnboardingUrlError={setOnboardingUrlError}
+                  onboardingTokenError={onboardingTokenError}
+                  setOnboardingTokenError={setOnboardingTokenError}
+                  setConnectionTestResult={setConnectionTestResult}
+                  connectionTestResult={connectionTestResult}
+                  validateUrl={validateUrl}
+                  testConnection={testConnection}
+                  testingConnection={testingConnection}
+                  startOAuthLogin={startOAuthLogin}
+                  handleOAuthLogout={handleOAuthLogout}
+                  themes={themes}
+                  currentTheme={currentTheme}
+                  setCurrentTheme={setCurrentTheme}
+                  language={language}
+                  setLanguage={setLanguage}
+                  inactivityTimeout={inactivityTimeout}
+                  setInactivityTimeout={setInactivityTimeout}
+                  gridGapH={gridGapH}
+                  setGridGapH={setGridGapH}
+                  gridGapV={gridGapV}
+                  setGridGapV={setGridGapV}
+                  gridColumns={gridColumns}
+                  setGridColumns={setGridColumns}
+                  cardBorderRadius={cardBorderRadius}
+                  setCardBorderRadius={setCardBorderRadius}
+                  bgMode={bgMode}
+                  setBgMode={setBgMode}
+                  bgColor={bgColor}
+                  setBgColor={setBgColor}
+                  bgGradient={bgGradient}
+                  setBgGradient={setBgGradient}
+                  bgImage={bgImage}
+                  setBgImage={setBgImage}
+                  cardTransparency={cardTransparency}
+                  setCardTransparency={setCardTransparency}
+                  cardBorderOpacity={cardBorderOpacity}
+                  setCardBorderOpacity={setCardBorderOpacity}
+                  sectionSpacing={sectionSpacing}
+                  updateSectionSpacing={updateSectionSpacing}
+                  entities={entities}
+                  getEntityImageUrl={getEntityImageUrl}
+                  callService={callService}
+                  globalDashboardProfiles={globalDashboardProfiles}
+                  globalStorageBusy={globalStorageBusy}
+                  globalStorageError={globalStorageError}
+                  refreshGlobalDashboards={refreshGlobalDashboards}
+                  saveGlobalDashboard={saveGlobalDashboard}
+                  loadGlobalDashboard={loadGlobalDashboard}
+                  currentUser={currentUser}
+                  canEditDashboard={canEditDashboard}
+                  canManageAdministration={canManageUsersAndClients}
+                  canManageNotifications={canManageNotifications}
+                  notificationConfig={notificationConfig}
+                  notificationConfigLoading={notificationConfigLoading}
+                  notificationConfigSaving={notificationConfigSaving}
+                  notificationConfigMessage={notificationConfigMessage}
+                  onSaveNotificationConfig={handleSaveNotificationConfig}
+                  onLogout={onLogout}
+                  userAdminApi={userAdminApi}
+                  onClose={() => setActivePage('home')}
+                  onFinishOnboarding={() => {}}
+                />
+              </ModalSuspense>
             </div>
           ) : (pagesConfig[activePage] || []).filter(id => gridLayout[id]).length === 0 ? (
             <div key={`${activePage}-empty`} className="flex flex-col items-center justify-center min-h-[60vh] text-center p-8 opacity-90 animate-in fade-in zoom-in duration-500 font-sans">
