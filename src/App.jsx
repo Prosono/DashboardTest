@@ -8,6 +8,7 @@ import {
   Check,
   Edit2,
   LayoutGrid,
+  Settings,
   Server,
   Plus,
   Lock,
