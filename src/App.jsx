@@ -393,7 +393,7 @@ function AppContent({
   const isPlatformAdmin = currentUser?.isPlatformAdmin === true;
   const currentUserRole = normalizeRole(currentUser?.role);
   const isLocalClientAdmin = currentUserRole === 'admin' && !isPlatformAdmin;
-  const localAdminFixedPages = useMemo(() => ([
+  const superAdminFixedPages = useMemo(() => ([
     ADMIN_SETTINGS_PAGE_ID,
     ADMIN_NOTIFICATIONS_PAGE_ID,
     ADMIN_USERS_PAGE_ID,
@@ -1085,27 +1085,27 @@ function AppContent({
       const settings = pageSettings[id] || {};
       return isVisibleForRole(settings.visibleRoles, currentUserRole);
     });
-    const withLocalAdminPages = (() => {
-      if (!isLocalClientAdmin) return roleFiltered;
-      const extras = localAdminFixedPages.filter((id) => !roleFiltered.includes(id));
+    const withSuperAdminPages = (() => {
+      if (!isPlatformAdmin) return roleFiltered;
+      const extras = superAdminFixedPages.filter((id) => !roleFiltered.includes(id));
       if (!extras.length) return roleFiltered;
-      const homeIndex = roleFiltered.indexOf('home');
-      if (homeIndex >= 0) {
+      const overviewIndex = roleFiltered.indexOf(SUPER_ADMIN_OVERVIEW_PAGE_ID);
+      if (overviewIndex >= 0) {
         return [
-          ...roleFiltered.slice(0, homeIndex + 1),
+          ...roleFiltered.slice(0, overviewIndex + 1),
           ...extras,
-          ...roleFiltered.slice(homeIndex + 1),
+          ...roleFiltered.slice(overviewIndex + 1),
         ];
       }
       return [...extras, ...roleFiltered];
     })();
-    if (!isPlatformAdmin) return withLocalAdminPages;
+    if (!isPlatformAdmin) return withSuperAdminPages;
     const deduped = [SUPER_ADMIN_OVERVIEW_PAGE_ID];
-    withLocalAdminPages.forEach((id) => {
+    withSuperAdminPages.forEach((id) => {
       if (id !== SUPER_ADMIN_OVERVIEW_PAGE_ID) deduped.push(id);
     });
     return deduped;
-  }, [pagesConfig.pages, pageSettings, editMode, canEditDashboard, currentUserRole, isLocalClientAdmin, isPlatformAdmin, isVisibleForRole, localAdminFixedPages]);
+  }, [pagesConfig.pages, pageSettings, editMode, canEditDashboard, currentUserRole, isPlatformAdmin, isVisibleForRole, superAdminFixedPages]);
 
   const appliedSuperOverviewRef = useRef('');
   useEffect(() => {
@@ -1333,7 +1333,7 @@ function AppContent({
     <div className="relative">
       <SettingsDropdown
         onOpenSettings={() => {
-          if (isLocalClientAdmin) {
+          if (isPlatformAdmin) {
             setActivePage(ADMIN_SETTINGS_PAGE_ID);
             return;
           }
@@ -1947,7 +1947,7 @@ function AppContent({
     [ADMIN_NOTIFICATIONS_PAGE_ID]: 'notifications',
     [ADMIN_USERS_PAGE_ID]: 'storage',
   };
-  const isLocalAdminUtilityPage = isLocalClientAdmin && Object.prototype.hasOwnProperty.call(adminPageTabs, activePage);
+  const isSuperAdminUtilityPage = isPlatformAdmin && Object.prototype.hasOwnProperty.call(adminPageTabs, activePage);
 
   const pages = visiblePageIds.map(id => ({
     id,
@@ -2674,7 +2674,7 @@ function AppContent({
                 isMobile={isMobile}
               />
             </div>
-          ) : isLocalAdminUtilityPage ? (
+          ) : isSuperAdminUtilityPage ? (
             <div key={activePage} className={pageTransitionClass}>
               <ModalSuspense>
                 <EmbeddedConfigModal
