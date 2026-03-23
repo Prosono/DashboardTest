@@ -17,7 +17,8 @@ describe('normalizeHaUrlInput', () => {
   });
 
   it('preserves explicit http and https URLs', () => {
-    expect(normalizeHaUrlInput('http://192.168.105.120')).toBe('http://192.168.105.120');
+    expect(normalizeHaUrlInput('http://192.168.105.120')).toBe('http://192.168.105.120:8123');
+    expect(normalizeHaUrlInput('http://192.168.105.120:8123')).toBe('http://192.168.105.120:8123');
     expect(normalizeHaUrlInput('https://demo.ui.nabu.casa')).toBe('https://demo.ui.nabu.casa');
   });
 });

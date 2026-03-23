@@ -73,6 +73,9 @@ const normalizeHaUrlInput = (value) => {
     try {
       const parsed = new URL(raw);
       if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return raw;
+      if (!parsed.port && parsed.protocol === 'http:' && shouldDefaultToHttp(parsed.hostname)) {
+        parsed.port = '8123';
+      }
       return parsed.toString().replace(/\/$/, '');
     } catch {
       return raw;
