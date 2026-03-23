@@ -55,6 +55,15 @@ const shouldDefaultToHttp = (host) => {
     || normalizedHost.includes(':');
 };
 
+const isLoopbackHost = (host) => {
+  const normalizedHost = String(host || '').trim().toLowerCase();
+  return normalizedHost === 'localhost'
+    || normalizedHost === '::1'
+    || normalizedHost === '[::1]'
+    || normalizedHost === '127.0.0.1'
+    || normalizedHost.startsWith('127.');
+};
+
 export const normalizeHaUrlInput = (value) => {
   const raw = safeString(value);
   if (!raw) return '';
@@ -86,6 +95,21 @@ export const normalizeHaUrlInput = (value) => {
     return parsed.toString().replace(/\/$/, '');
   } catch {
     return raw;
+  }
+};
+
+export const isMixedContentBlockedHaUrl = (
+  value,
+  currentProtocol = (typeof window !== 'undefined' ? window.location?.protocol : ''),
+) => {
+  const normalized = normalizeHaUrlInput(value);
+  if (!normalized) return false;
+
+  try {
+    const parsed = new URL(normalized);
+    return currentProtocol === 'https:' && parsed.protocol === 'http:' && !isLoopbackHost(parsed.hostname);
+  } catch {
+    return false;
   }
 };
 

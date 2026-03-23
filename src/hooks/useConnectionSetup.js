@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { validateUrl } from '../config/onboarding';
 import { saveTokens, loadTokens, clearOAuthTokens, hasOAuthTokens } from '../services/oauthStorage';
 import { clearStoredHaConfig, writeStoredHaConfig } from '../services/appAuth';
-import { normalizeHaConfig, normalizeHaUrlInput } from '../utils/haConnections';
+import { isMixedContentBlockedHaUrl, normalizeHaConfig, normalizeHaUrlInput } from '../utils/haConnections';
 
 /**
  * Centralises connection-testing, OAuth login/logout and onboarding-step state.
@@ -47,6 +47,10 @@ export function useConnectionSetup({
     const normalizedUrl = normalizeHaUrlInput(config.url);
     if (!validateUrl(normalizedUrl)) return;
     if (config.authMethod !== 'oauth' && !config.token) return;
+    if (isMixedContentBlockedHaUrl(normalizedUrl)) {
+      setConnectionTestResult({ success: false, message: t('onboarding.testBlockedMixedContent') });
+      return;
+    }
     setTestingConnection(true);
     setConnectionTestResult(null);
     try {

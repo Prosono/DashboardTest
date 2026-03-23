@@ -22,12 +22,22 @@ vi.mock('../services/oauthStorage', () => ({
   hasOAuthTokens: vi.fn(() => false),
 }));
 
+vi.mock('../utils/haConnections', async () => {
+  const actual = await vi.importActual('../utils/haConnections');
+  return {
+    ...actual,
+    isMixedContentBlockedHaUrl: vi.fn(() => false),
+  };
+});
+
 import { hasOAuthTokens, clearOAuthTokens } from '../services/oauthStorage';
+import { isMixedContentBlockedHaUrl } from '../utils/haConnections';
 
 const t = (key) => {
   const map = {
     'onboarding.testSuccess': 'Connection successful!',
     'onboarding.testFailed': 'Connection failed',
+    'onboarding.testBlockedMixedContent': 'Browser blocked local HTTP',
     'system.oauth.redirectFailed': 'OAuth redirect failed',
   };
   return map[key] ?? key;
@@ -47,6 +57,7 @@ const makeProps = (overrides = {}) => ({
 
 beforeEach(() => {
   vi.clearAllMocks();
+  isMixedContentBlockedHaUrl.mockReturnValue(false);
   // Provide a stub for window.HAWS
   window.HAWS = {
     createConnection: vi.fn(),
@@ -154,6 +165,23 @@ describe('useConnectionSetup › testConnection', () => {
 
     expect(window.HAWS.createLongLivedTokenAuth).toHaveBeenCalledWith('http://192.168.105.120:8123', 'tok');
     expect(window.HAWS.createConnection).toHaveBeenCalledTimes(1);
+  });
+
+  it('surfaces a mixed-content error before trying the HA connection', async () => {
+    isMixedContentBlockedHaUrl.mockReturnValue(true);
+
+    const props = makeProps({ config: { url: '192.168.105.120', token: 'tok', authMethod: 'token' } });
+    const { result } = renderHook(() => useConnectionSetup(props));
+
+    await act(async () => {
+      await result.current.testConnection();
+    });
+
+    expect(result.current.connectionTestResult).toEqual({
+      success: false,
+      message: 'Browser blocked local HTTP',
+    });
+    expect(window.HAWS.createConnection).not.toHaveBeenCalled();
   });
 });
 

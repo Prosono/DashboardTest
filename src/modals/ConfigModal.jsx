@@ -43,7 +43,13 @@ import {
   Type,
   AlignLeft,
 } from '../icons';
-import { normalizeHaConfig, normalizeConnection, normalizeConnectionId, normalizeHaUrlInput } from '../utils/haConnections';
+import {
+  isMixedContentBlockedHaUrl,
+  normalizeHaConfig,
+  normalizeConnection,
+  normalizeConnectionId,
+  normalizeHaUrlInput,
+} from '../utils/haConnections';
 import { DEFAULT_NOTIFICATION_CONFIG, normalizeNotificationConfig } from '../utils/notificationConfig';
 import { getPhoneCountryCodeOptions, normalizePhoneCountryCode } from '../constants/phoneCountryCodes';
 
@@ -975,6 +981,9 @@ export default function ConfigModal({
     const primaryUrl = normalizeHaUrlInput(selectedManagedConnection.url);
     const fallbackUrl = normalizeHaUrlInput(selectedManagedConnection.fallbackUrl);
     const accessToken = getManagedConnectionAccessToken(selectedManagedConnection);
+    const primaryMixedContentBlocked = isMixedContentBlockedHaUrl(primaryUrl);
+    const fallbackIsUsable = validateUrl(fallbackUrl) && fallbackUrl !== primaryUrl;
+    const fallbackMixedContentBlocked = fallbackIsUsable && isMixedContentBlockedHaUrl(fallbackUrl);
 
     if (!validateUrl(primaryUrl)) {
       setManagedConnectionTestResult({
@@ -982,6 +991,17 @@ export default function ConfigModal({
         success: false,
         message: t('connection.testMissingUrl'),
         url: '',
+        usedFallback: false,
+      });
+      return;
+    }
+
+    if (primaryMixedContentBlocked && (!fallbackIsUsable || fallbackMixedContentBlocked)) {
+      setManagedConnectionTestResult({
+        connectionId: selectedManagedConnection.id,
+        success: false,
+        message: t('connection.testBlockedMixedContent'),
+        url: primaryUrl,
         usedFallback: false,
       });
       return;
@@ -1012,6 +1032,7 @@ export default function ConfigModal({
     setManagedConnectionTestResult(null);
 
     try {
+      if (primaryMixedContentBlocked) throw new Error('mixed-content-blocked');
       const successfulUrl = await tryConnect(primaryUrl);
       setManagedConnectionTestResult({
         connectionId: selectedManagedConnection.id,
@@ -1041,9 +1062,11 @@ export default function ConfigModal({
       setManagedConnectionTestResult({
         connectionId: selectedManagedConnection.id,
         success: false,
-        message: validateUrl(fallbackUrl) && fallbackUrl !== primaryUrl
+        message: fallbackIsUsable && !primaryMixedContentBlocked
           ? t('connection.testFailedBoth')
-          : t('connection.testFailedSingle'),
+          : primaryMixedContentBlocked
+            ? t('connection.testBlockedMixedContent')
+            : t('connection.testFailedSingle'),
         url: primaryUrl,
         usedFallback: false,
       });
@@ -1051,6 +1074,9 @@ export default function ConfigModal({
       setManagedTestingConnection(false);
     }
   }, [getManagedConnectionAccessToken, selectedManagedConnection, t]);
+
+  const primaryUrlMixedContentBlocked = isMixedContentBlockedHaUrl(config.url);
+  const managedPrimaryUrlMixedContentBlocked = isMixedContentBlockedHaUrl(selectedManagedConnection?.url);
 
   const handleSaveManagedConnection = async () => {
     if (!isPlatformAdmin || !connectionManageClientId || !userAdminApi?.saveClientHaConfig) return;
@@ -2535,6 +2561,12 @@ export default function ConfigModal({
                     <p className="text-[11px] leading-relaxed text-[var(--text-secondary)]">
                       {t('connection.localUrlHelper')}
                     </p>
+                    {managedPrimaryUrlMixedContentBlocked && (
+                      <div className="flex items-start gap-2 rounded-xl border border-amber-500/20 bg-amber-500/10 px-3 py-2 text-xs text-amber-300">
+                        <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                        <span>{t('connection.localUrlHttpsWarning')}</span>
+                      </div>
+                    )}
                   </div>
 
                   <div className="space-y-1.5 md:col-span-2">
@@ -2672,6 +2704,12 @@ export default function ConfigModal({
               <p className="text-[11px] leading-relaxed text-[var(--text-secondary)] ml-1">
                 {t('connection.localUrlHelper')}
               </p>
+              {primaryUrlMixedContentBlocked && (
+                <div className="flex items-start gap-2 rounded-lg border border-amber-500/20 bg-amber-500/10 px-3 py-2 text-xs text-amber-300">
+                  <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                  <span>{t('connection.localUrlHttpsWarning')}</span>
+                </div>
+              )}
               {config.url && config.url.endsWith('/') && (
                 <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-yellow-500/10 text-yellow-400 text-xs font-bold border border-yellow-500/20">
                   <AlertCircle className="w-3 h-3" />
@@ -4777,6 +4815,15 @@ export default function ConfigModal({
                           placeholder={t('onboarding.haUrlPlaceholder')}
                         />
                         {onboardingUrlError && <p className="text-xs text-red-400 font-bold ml-1">{onboardingUrlError}</p>}
+                        <p className="text-[11px] leading-relaxed text-[var(--text-secondary)] ml-1">
+                          {t('connection.localUrlHelper')}
+                        </p>
+                        {primaryUrlMixedContentBlocked && (
+                          <div className="flex items-start gap-2 rounded-lg border border-amber-500/20 bg-amber-500/10 px-3 py-2 text-xs text-amber-300">
+                            <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                            <span>{t('connection.localUrlHttpsWarning')}</span>
+                          </div>
+                        )}
                       </div>
 
                       {/* OAuth2 mode — show login button */}

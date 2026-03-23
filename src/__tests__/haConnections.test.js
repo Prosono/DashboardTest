@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { normalizeHaConfig, normalizeHaUrlInput } from '../utils/haConnections';
+import { isMixedContentBlockedHaUrl, normalizeHaConfig, normalizeHaUrlInput } from '../utils/haConnections';
 
 describe('normalizeHaUrlInput', () => {
   it('normalizes bare local IP addresses to the default HA HTTP endpoint', () => {
@@ -38,5 +38,18 @@ describe('normalizeHaConfig', () => {
       url: 'http://192.168.105.120:8123',
       fallbackUrl: 'https://demo.ui.nabu.casa',
     }));
+  });
+});
+
+describe('isMixedContentBlockedHaUrl', () => {
+  it('flags local HTTP HA URLs when the app runs over HTTPS', () => {
+    expect(isMixedContentBlockedHaUrl('192.168.105.120', 'https:')).toBe(true);
+    expect(isMixedContentBlockedHaUrl('http://192.168.105.120:8123', 'https:')).toBe(true);
+  });
+
+  it('allows loopback and HTTPS targets', () => {
+    expect(isMixedContentBlockedHaUrl('127.0.0.1:8123', 'https:')).toBe(false);
+    expect(isMixedContentBlockedHaUrl('https://demo.ui.nabu.casa', 'https:')).toBe(false);
+    expect(isMixedContentBlockedHaUrl('192.168.105.120', 'http:')).toBe(false);
   });
 });
