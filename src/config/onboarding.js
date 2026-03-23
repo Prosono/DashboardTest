@@ -1,4 +1,5 @@
 import { Wifi, Settings, Check } from 'lucide-react';
+import { normalizeHaUrlInput } from '../utils/haConnections';
 
 export const buildOnboardingSteps = (t) => [
   { key: 'connection', label: t('onboarding.step.connection'), icon: Wifi },
@@ -7,9 +8,10 @@ export const buildOnboardingSteps = (t) => [
 ];
 
 export const validateUrl = (url) => {
-  if (!url) return false;
+  const normalized = normalizeHaUrlInput(url);
+  if (!normalized) return false;
   try {
-    const parsed = new URL(url);
+    const parsed = new URL(normalized);
     return parsed.protocol === 'http:' || parsed.protocol === 'https:';
   } catch {
     return false;

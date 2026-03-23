@@ -140,6 +140,21 @@ describe('useConnectionSetup › testConnection', () => {
 
     expect(window.HAWS.createConnection).not.toHaveBeenCalled();
   });
+
+  it('normalizes bare local IP input before testing the connection', async () => {
+    const mockClose = vi.fn();
+    window.HAWS.createConnection.mockResolvedValueOnce({ close: mockClose });
+
+    const props = makeProps({ config: { url: '192.168.105.120', token: 'tok', authMethod: 'token' } });
+    const { result } = renderHook(() => useConnectionSetup(props));
+
+    await act(async () => {
+      await result.current.testConnection();
+    });
+
+    expect(window.HAWS.createLongLivedTokenAuth).toHaveBeenCalledWith('http://192.168.105.120:8123', 'tok');
+    expect(window.HAWS.createConnection).toHaveBeenCalledTimes(1);
+  });
 });
 
 // ═════════════════════════════════════════════════════════════════════════

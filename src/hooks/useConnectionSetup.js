@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { validateUrl } from '../config/onboarding';
 import { saveTokens, loadTokens, clearOAuthTokens, hasOAuthTokens } from '../services/oauthStorage';
 import { clearStoredHaConfig, writeStoredHaConfig } from '../services/appAuth';
-import { normalizeHaConfig } from '../utils/haConnections';
+import { normalizeHaConfig, normalizeHaUrlInput } from '../utils/haConnections';
 
 /**
  * Centralises connection-testing, OAuth login/logout and onboarding-step state.
@@ -44,13 +44,14 @@ export function useConnectionSetup({
 
   // ── Connection test (long-lived token) ─────────────────────────────────
   const testConnection = async () => {
-    if (!validateUrl(config.url)) return;
+    const normalizedUrl = normalizeHaUrlInput(config.url);
+    if (!validateUrl(normalizedUrl)) return;
     if (config.authMethod !== 'oauth' && !config.token) return;
     setTestingConnection(true);
     setConnectionTestResult(null);
     try {
       const { createConnection, createLongLivedTokenAuth } = window.HAWS;
-      const auth = createLongLivedTokenAuth(config.url, config.token);
+      const auth = createLongLivedTokenAuth(normalizedUrl, config.token);
       const testConn = await createConnection({ auth });
       testConn.close();
       setConnectionTestResult({ success: true, message: t('onboarding.testSuccess') });
@@ -63,8 +64,8 @@ export function useConnectionSetup({
 
   // ── OAuth login redirect ───────────────────────────────────────────────
   const startOAuthLogin = () => {
-    if (!validateUrl(config.url) || !window.HAWS) return;
-    const cleanUrl = config.url.replace(/\/$/, '');
+    const cleanUrl = normalizeHaUrlInput(config.url).replace(/\/$/, '');
+    if (!validateUrl(cleanUrl) || !window.HAWS) return;
     const normalized = normalizeHaConfig({
       ...config,
       url: cleanUrl,

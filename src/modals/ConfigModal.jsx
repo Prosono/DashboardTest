@@ -2162,265 +2162,437 @@ export default function ConfigModal({
   };
 
   // ─── Connection Tab ───
-  const renderConnectionTab = () => (
-    <div className="space-y-6 font-sans animate-in fade-in slide-in-from-right-4 duration-300">
-      {isPlatformAdmin && (
-        <div className="rounded-2xl border border-[var(--glass-border)] bg-[var(--glass-bg)] p-4 space-y-3">
-          <div className="flex items-center justify-between gap-3">
-            <h4 className="text-xs uppercase tracking-wider font-bold text-[var(--text-secondary)]">{t('connection.clientManager')}</h4>
-            <span className="text-[11px] text-[var(--text-secondary)]">
-              {t('connection.editingClient')}: <strong className="text-[var(--text-primary)]">{selectedManagedClient?.name || connectionManageClientId || '-'}</strong>
-            </span>
-          </div>
-          <div className="rounded-xl border border-[var(--glass-border)] bg-[var(--glass-bg-hover)] px-3 py-2 text-[11px] text-[var(--text-secondary)]">
-            <span className="font-semibold text-[var(--text-primary)]">{selectedManagedClient?.name || '-'}</span>
-            <span className="mx-2 text-[var(--text-muted)]">•</span>
-            <span>{selectedManagedClient?.id || '-'}</span>
-            <span className="mx-2 text-[var(--text-muted)]">•</span>
-            <span>{t('connection.selectedClientOnly')}</span>
-          </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-            <div className="space-y-1">
-              <label className="text-[10px] uppercase tracking-wider font-bold text-[var(--text-secondary)]">{t('userMgmt.selectClient')}</label>
-              <select
-                value={connectionManageClientId}
-                onChange={(e) => setConnectionManageClientId(e.target.value)}
-                className="w-full px-3 py-2 rounded-lg bg-[var(--glass-bg-hover)] border border-[var(--glass-border)] text-sm"
-              >
-                {clients.map((client) => (
-                  <option key={client.id} value={client.id}>{client.name || client.id} ({client.id})</option>
-                ))}
-              </select>
-            </div>
-            <div className="space-y-1">
-              <label className="text-[10px] uppercase tracking-wider font-bold text-[var(--text-secondary)]">Connection</label>
-              <select
-                value={selectedManagedConnection?.id || ''}
-                onChange={(e) => setManagedConnectionId(e.target.value)}
-                className="w-full px-3 py-2 rounded-lg bg-[var(--glass-bg-hover)] border border-[var(--glass-border)] text-sm"
-              >
-                {managedConnections.map((connection) => (
-                  <option key={connection.id} value={connection.id}>
-                    {connection.name || connection.id} ({connection.id}){connection.id === managedConnectionConfig.primaryConnectionId ? ' • Primary' : ''}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div className="md:col-span-2 flex flex-wrap gap-2">
-              <button
-                type="button"
-                onClick={addManagedConnection}
-                className="px-3 py-2 rounded-lg border border-[var(--glass-border)] bg-[var(--glass-bg-hover)] text-[11px] font-bold uppercase tracking-wider"
-              >
-                Add connection
-              </button>
-              <button
-                type="button"
-                onClick={removeManagedConnection}
-                disabled={!selectedManagedConnection || managedConnections.length <= 1}
-                className="px-3 py-2 rounded-lg border border-[var(--glass-border)] bg-[var(--glass-bg-hover)] text-[11px] font-bold uppercase tracking-wider disabled:opacity-50"
-              >
-                Remove selected
-              </button>
-              <button
-                type="button"
-                onClick={() => setManagedPrimaryConnection(selectedManagedConnection?.id)}
-                disabled={!selectedManagedConnection || selectedManagedConnection.id === managedConnectionConfig.primaryConnectionId}
-                className="px-3 py-2 rounded-lg border border-[var(--glass-border)] bg-[var(--glass-bg-hover)] text-[11px] font-bold uppercase tracking-wider disabled:opacity-50"
-              >
-                Set as primary
-              </button>
-            </div>
-            <div className="space-y-1">
-              <label className="text-[10px] uppercase tracking-wider font-bold text-[var(--text-secondary)]">Connection ID</label>
-              <input
-                value={selectedManagedConnection?.id || ''}
-                onChange={(e) => {
-                  const nextId = normalizeConnectionId(e.target.value, selectedManagedConnection?.id || 'primary');
-                  if (!selectedManagedConnection) return;
-                  updateManagedConnection(selectedManagedConnection.id, { ...selectedManagedConnection, id: nextId });
-                  setManagedConnectionId(nextId);
-                  if (managedConnectionConfig.primaryConnectionId === selectedManagedConnection.id) {
-                    setManagedPrimaryConnection(nextId);
-                  }
-                }}
-                className="w-full px-3 py-2 rounded-lg bg-[var(--glass-bg-hover)] border border-[var(--glass-border)] text-sm"
-                placeholder="primary"
-              />
-            </div>
-            <div className="space-y-1">
-              <label className="text-[10px] uppercase tracking-wider font-bold text-[var(--text-secondary)]">Connection name</label>
-              <input
-                value={selectedManagedConnection?.name || ''}
-                onChange={(e) => {
-                  if (!selectedManagedConnection) return;
-                  updateManagedConnection(selectedManagedConnection.id, { ...selectedManagedConnection, name: e.target.value });
-                }}
-                className="w-full px-3 py-2 rounded-lg bg-[var(--glass-bg-hover)] border border-[var(--glass-border)] text-sm"
-                placeholder="Main / Sauna 2 / Building B"
-              />
-            </div>
-            <div className="space-y-1">
-              <label className="text-[10px] uppercase tracking-wider font-bold text-[var(--text-secondary)]">{t('system.authMethod')}</label>
-              <select
-                value={selectedManagedConnection?.authMethod || 'oauth'}
-                onChange={(e) => {
-                  if (!selectedManagedConnection) return;
-                  const nextAuthMethod = e.target.value === 'token' ? 'token' : 'oauth';
-                  updateManagedConnection(selectedManagedConnection.id, {
-                    ...selectedManagedConnection,
-                    authMethod: nextAuthMethod,
-                    token: nextAuthMethod === 'token' ? selectedManagedConnection.token : '',
-                    oauthTokens: nextAuthMethod === 'oauth' ? selectedManagedConnection.oauthTokens : null,
-                  });
-                }}
-                className="w-full px-3 py-2 rounded-lg bg-[var(--glass-bg-hover)] border border-[var(--glass-border)] text-sm"
-              >
-                <option value="oauth">OAuth2</option>
-                <option value="token">Token</option>
-              </select>
-            </div>
-            <div className="space-y-1 md:col-span-2">
-              <label className="text-[10px] uppercase tracking-wider font-bold text-[var(--text-secondary)]">{t('system.haUrlPrimary')}</label>
-              <input
-                value={selectedManagedConnection?.url || ''}
-                onChange={(e) => {
-                  if (!selectedManagedConnection) return;
-                  updateManagedConnection(selectedManagedConnection.id, { ...selectedManagedConnection, url: e.target.value });
-                }}
-                className="w-full px-3 py-2 rounded-lg bg-[var(--glass-bg-hover)] border border-[var(--glass-border)] text-sm"
-                placeholder="https://homeassistant.local:8123"
-              />
-            </div>
-            <div className="space-y-1 md:col-span-2">
-              <label className="text-[10px] uppercase tracking-wider font-bold text-[var(--text-secondary)]">{t('system.haUrlFallback')}</label>
-              <input
-                value={selectedManagedConnection?.fallbackUrl || ''}
-                onChange={(e) => {
-                  if (!selectedManagedConnection) return;
-                  updateManagedConnection(selectedManagedConnection.id, { ...selectedManagedConnection, fallbackUrl: e.target.value });
-                }}
-                className="w-full px-3 py-2 rounded-lg bg-[var(--glass-bg-hover)] border border-[var(--glass-border)] text-sm"
-                placeholder={t('common.optional')}
-              />
-            </div>
-            {selectedManagedConnection?.authMethod === 'token' && (
-              <div className="space-y-1 md:col-span-2">
-                <label className="text-[10px] uppercase tracking-wider font-bold text-[var(--text-secondary)]">{t('system.token')}</label>
-                <textarea
-                  value={selectedManagedConnection?.token || ''}
-                  onChange={(e) => {
-                    if (!selectedManagedConnection) return;
-                    updateManagedConnection(selectedManagedConnection.id, { ...selectedManagedConnection, token: e.target.value });
-                  }}
-                  className="w-full px-3 py-2 rounded-lg bg-[var(--glass-bg-hover)] border border-[var(--glass-border)] text-sm h-24 resize-none font-mono"
-                  placeholder="ey..."
-                />
-              </div>
-            )}
-          </div>
-          <div className="flex justify-end">
-            <button
-              onClick={handleSaveManagedConnection}
-              disabled={managedConnectionLoading || managedConnectionSaving || !connectionManageClientId}
-              className="px-4 py-2 rounded-lg bg-indigo-500 hover:bg-indigo-600 text-white text-xs font-bold uppercase tracking-wider disabled:opacity-50"
-            >
-              {managedConnectionSaving ? t('common.saving') : t('connection.saveClientConfig')}
-            </button>
-          </div>
-        </div>
-      )}
+  const renderConnectionTab = () => {
+    const tokenManagedCount = managedConnections.filter((connection) => connection.authMethod === 'token').length;
+    const oauthManagedCount = managedConnections.filter((connection) => connection.authMethod === 'oauth').length;
 
-      <div className="rounded-xl border border-[var(--glass-border)] bg-[var(--glass-bg)] p-3">
-        <p className="text-[11px] uppercase tracking-wider text-[var(--text-secondary)] font-bold">
-          {t('connection.sessionInfo')}: <span className="text-[var(--text-primary)]">{currentUser?.clientId || '-'}</span>
-        </p>
-      </div>
+    const getManagedConnectionStatusMeta = (connection) => {
+      if (!connection?.url) {
+        return {
+          label: t('superAdminOverview.connection.status.missing_url'),
+          className: 'border-amber-400/20 bg-amber-500/10 text-amber-300',
+        };
+      }
+      if (connection.authMethod === 'token' && !String(connection.token || '').trim()) {
+        return {
+          label: t('superAdminOverview.connection.status.missing_token'),
+          className: 'border-amber-400/20 bg-amber-500/10 text-amber-300',
+        };
+      }
+      if (connection.authMethod === 'oauth' && !connection.oauthTokens) {
+        return {
+          label: t('superAdminOverview.connection.status.missing_oauth'),
+          className: 'border-sky-400/20 bg-sky-500/10 text-sky-300',
+        };
+      }
+      return {
+        label: t('superAdminOverview.connection.status.ready'),
+        className: 'border-emerald-400/20 bg-emerald-500/10 text-emerald-300',
+      };
+    };
 
-      {!isPlatformAdmin && (
-        <>
-          {/* Auth Method Toggle */}
-          {renderAuthMethodToggle()}
-
-          {/* URL — always shown */}
-          <div className="space-y-3">
-            <label className="text-xs uppercase font-bold text-gray-500 ml-1 flex items-center gap-2">
-              <Wifi className="w-4 h-4" />
-              {t('system.haUrlPrimary')}
-              {connected && activeUrl === config.url && <span className="text-green-400 bg-green-500/10 px-2 py-0.5 rounded text-[10px] tracking-widest">{t('system.connected')}</span>}
-            </label>
-            <div className="relative group">
-              <input
-                type="text"
-                className="w-full px-4 py-3 rounded-xl bg-[var(--glass-bg)] border border-[var(--glass-border)] text-[var(--text-primary)] focus:bg-[var(--glass-bg-hover)] focus:border-blue-500/50 outline-none transition-all placeholder:text-[var(--text-muted)]"
-                value={config.url}
-                disabled={!canManageConnection}
-                onChange={(e) => updatePrimaryConnectionConfig({ url: e.target.value.trim() })}
-                placeholder="https://homeassistant.local:8123"
-              />
-              <div className="absolute inset-0 rounded-xl bg-blue-500/5 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none" />
-            </div>
-            {config.url && config.url.endsWith('/') && (
-              <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-yellow-500/10 text-yellow-400 text-xs font-bold border border-yellow-500/20">
-                <AlertCircle className="w-3 h-3" />
-                {t('onboarding.urlTrailingSlash')}
-              </div>
-            )}
-          </div>
-
-          {/* OAuth2 mode — login button */}
-          {isOAuth && renderOAuthSection()}
-
-          {/* Token mode — fallback URL + token */}
-          {!isOAuth && (
-            <>
-              <div className="space-y-3">
-                <label className="text-xs uppercase font-bold text-gray-500 ml-1 flex items-center gap-2">
-                  <Server className="w-4 h-4" />
-                  {t('system.haUrlFallback')}
-                  {connected && activeUrl === config.fallbackUrl && <span className="text-green-400 bg-green-500/10 px-2 py-0.5 rounded text-[10px] tracking-widest">{t('system.connected')}</span>}
-                </label>
-                <div className="relative group">
-                  <input
-                    type="text"
-                    className="w-full px-4 py-3 rounded-xl bg-[var(--glass-bg)] border border-[var(--glass-border)] text-[var(--text-primary)] focus:bg-[var(--glass-bg-hover)] focus:border-blue-500/50 outline-none transition-all placeholder:text-[var(--text-muted)]"
-                    value={config.fallbackUrl}
-                    disabled={!canManageConnection}
-                    onChange={(e) => updatePrimaryConnectionConfig({ fallbackUrl: e.target.value.trim() })}
-                    placeholder={t('common.optional')}
-                  />
-                  <div className="absolute inset-0 rounded-xl bg-blue-500/5 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none" />
-                </div>
-                {config.fallbackUrl && config.fallbackUrl.endsWith('/') && (
-                  <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-yellow-500/10 text-yellow-400 text-xs font-bold border border-yellow-500/20">
-                    <AlertCircle className="w-3 h-3" />
-                    {t('onboarding.urlTrailingSlash')}
+    return (
+      <div className="space-y-6 font-sans animate-in fade-in slide-in-from-right-4 duration-300">
+        {isPlatformAdmin && (
+          <div className="overflow-hidden rounded-[2rem] border border-[var(--glass-border)] bg-[linear-gradient(180deg,color-mix(in_srgb,var(--glass-bg)_84%,transparent),color-mix(in_srgb,var(--card-bg)_90%,transparent))] shadow-[0_24px_80px_rgba(0,0,0,0.24)]">
+            <div className="border-b border-[var(--glass-border)] px-5 py-5 md:px-6">
+              <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
+                <div className="space-y-2">
+                  <p className="text-[10px] font-bold uppercase tracking-[0.26em] text-[var(--text-secondary)]">
+                    {t('connection.clientManager')}
+                  </p>
+                  <div className="flex flex-wrap items-center gap-2 text-[var(--text-primary)]">
+                    <h4 className="text-xl font-semibold tracking-tight">
+                      {selectedManagedClient?.name || connectionManageClientId || '-'}
+                    </h4>
+                    <span className="rounded-full border border-[var(--glass-border)] bg-[color-mix(in_srgb,var(--glass-bg-hover)_88%,transparent)] px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.2em] text-[var(--text-secondary)]">
+                      {selectedManagedClient?.id || '-'}
+                    </span>
                   </div>
-                )}
-              </div>
+                  <p className="max-w-2xl text-sm leading-relaxed text-[var(--text-secondary)]">
+                    {t('connection.selectedClientOnly')}
+                  </p>
+                </div>
 
-              <div className="space-y-3">
-                <label className="text-xs uppercase font-bold text-gray-500 ml-1 flex items-center gap-2">
-                  <Lock className="w-4 h-4" />
-                  {t('system.token')}
-                </label>
-                <div className="relative group">
-                  <textarea
-                    className="w-full px-4 py-3 h-32 rounded-xl bg-[var(--glass-bg)] border border-[var(--glass-border)] text-[var(--text-primary)] focus:bg-[var(--glass-bg-hover)] focus:border-blue-500/50 outline-none transition-all font-mono text-xs leading-relaxed resize-none"
-                    value={config.token}
-                    disabled={!canManageConnection}
-                    onChange={(e) => updatePrimaryConnectionConfig({ token: e.target.value.trim() })}
-                    placeholder="ey..."
-                  />
-                  <div className="absolute inset-0 rounded-xl bg-blue-500/5 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none" />
+                <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+                  <div className="rounded-2xl border border-[var(--glass-border)] bg-[color-mix(in_srgb,var(--glass-bg-hover)_90%,transparent)] px-4 py-3">
+                    <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-[var(--text-secondary)]">{t('connection.instanceCountLabel')}</p>
+                    <p className="mt-2 text-2xl font-semibold text-[var(--text-primary)]">{managedConnections.length}</p>
+                  </div>
+                  <div className="rounded-2xl border border-[var(--glass-border)] bg-[color-mix(in_srgb,var(--glass-bg-hover)_90%,transparent)] px-4 py-3">
+                    <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-[var(--text-secondary)]">{t('connection.tokenCountLabel')}</p>
+                    <p className="mt-2 text-2xl font-semibold text-[var(--text-primary)]">{tokenManagedCount}</p>
+                  </div>
+                  <div className="rounded-2xl border border-[var(--glass-border)] bg-[color-mix(in_srgb,var(--glass-bg-hover)_90%,transparent)] px-4 py-3 col-span-2 sm:col-span-1">
+                    <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-[var(--text-secondary)]">{t('connection.oauthCountLabel')}</p>
+                    <p className="mt-2 text-2xl font-semibold text-[var(--text-primary)]">{oauthManagedCount}</p>
+                  </div>
                 </div>
               </div>
-            </>
-          )}
-        </>
-      )}
-    </div>
-  );
+            </div>
+
+            <div className="grid gap-4 px-5 py-5 md:px-6 xl:grid-cols-[minmax(0,360px)_minmax(0,1fr)]">
+              <div className="space-y-4">
+                <div className="rounded-2xl border border-[var(--glass-border)] bg-[color-mix(in_srgb,var(--glass-bg)_88%,transparent)] p-4">
+                  <label className="text-[10px] uppercase tracking-[0.22em] font-bold text-[var(--text-secondary)]">
+                    {t('userMgmt.selectClient')}
+                  </label>
+                  <select
+                    value={connectionManageClientId}
+                    onChange={(e) => setConnectionManageClientId(e.target.value)}
+                    className="mt-2 w-full rounded-xl border border-[var(--glass-border)] bg-[var(--glass-bg-hover)] px-3 py-3 text-sm text-[var(--text-primary)] outline-none transition-all focus:border-blue-500/50"
+                  >
+                    {clients.map((client) => (
+                      <option key={client.id} value={client.id}>{client.name || client.id} ({client.id})</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="rounded-2xl border border-[var(--glass-border)] bg-[color-mix(in_srgb,var(--glass-bg)_88%,transparent)] p-4">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="space-y-1">
+                      <p className="text-[10px] uppercase tracking-[0.22em] font-bold text-[var(--text-secondary)]">
+                        {t('connection.instanceListTitle')}
+                      </p>
+                      <p className="text-sm leading-relaxed text-[var(--text-secondary)]">
+                        {t('connection.instanceListBody')}
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={addManagedConnection}
+                      className="inline-flex items-center gap-2 rounded-xl border border-blue-400/30 bg-blue-500/10 px-3 py-2 text-[11px] font-bold uppercase tracking-[0.2em] text-blue-200 transition-colors hover:bg-blue-500/20"
+                    >
+                      <Link className="h-3.5 w-3.5" />
+                      {t('connection.addInstance')}
+                    </button>
+                  </div>
+
+                  <div className="mt-4 space-y-2">
+                    {managedConnections.map((connection) => {
+                      const isSelected = connection.id === selectedManagedConnection?.id;
+                      const isPrimary = connection.id === managedConnectionConfig.primaryConnectionId;
+                      const statusMeta = getManagedConnectionStatusMeta(connection);
+                      return (
+                        <button
+                          key={connection.id}
+                          type="button"
+                          onClick={() => setManagedConnectionId(connection.id)}
+                          className={`w-full rounded-2xl border px-4 py-3 text-left transition-all ${
+                            isSelected
+                              ? 'border-blue-400/40 bg-blue-500/12 shadow-[0_12px_32px_rgba(59,130,246,0.16)]'
+                              : 'border-[var(--glass-border)] bg-[var(--glass-bg-hover)] hover:bg-[color-mix(in_srgb,var(--glass-bg-hover)_72%,white_4%)]'
+                          }`}
+                        >
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="min-w-0">
+                              <div className="flex flex-wrap items-center gap-2">
+                                <span className="truncate text-sm font-semibold text-[var(--text-primary)]">
+                                  {connection.name || t('connection.instanceUntitled')}
+                                </span>
+                                {isPrimary && (
+                                  <span className="rounded-full border border-blue-400/20 bg-blue-500/10 px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.18em] text-blue-200">
+                                    {t('connection.primaryBadge')}
+                                  </span>
+                                )}
+                              </div>
+                              <p className="mt-1 truncate text-[11px] uppercase tracking-[0.18em] text-[var(--text-secondary)]">
+                                {connection.id}
+                              </p>
+                            </div>
+                            <span className={`shrink-0 rounded-full border px-2 py-1 text-[9px] font-bold uppercase tracking-[0.18em] ${statusMeta.className}`}>
+                              {statusMeta.label}
+                            </span>
+                          </div>
+
+                          <div className="mt-3 space-y-1.5">
+                            <div className="flex items-center gap-2 text-[11px] text-[var(--text-secondary)]">
+                              <Server className="h-3.5 w-3.5 text-[var(--text-muted)]" />
+                              <span className="truncate">{connection.url || '—'}</span>
+                            </div>
+                            <div className="flex items-center gap-2 text-[11px] text-[var(--text-secondary)]">
+                              <Globe className="h-3.5 w-3.5 text-[var(--text-muted)]" />
+                              <span className="truncate">{connection.fallbackUrl || t('common.optional')}</span>
+                            </div>
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+
+              <div className="rounded-2xl border border-[var(--glass-border)] bg-[color-mix(in_srgb,var(--glass-bg)_88%,transparent)] p-4 md:p-5">
+                <div className="flex flex-col gap-2 border-b border-[var(--glass-border)] pb-4">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <p className="text-[10px] uppercase tracking-[0.22em] font-bold text-[var(--text-secondary)]">
+                      {t('connection.instanceEditorTitle')}
+                    </p>
+                    {selectedManagedConnection?.id === managedConnectionConfig.primaryConnectionId && (
+                      <span className="rounded-full border border-blue-400/20 bg-blue-500/10 px-2 py-1 text-[9px] font-bold uppercase tracking-[0.18em] text-blue-200">
+                        {t('connection.primaryBadge')}
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-sm leading-relaxed text-[var(--text-secondary)]">
+                    {t('connection.instanceEditorBody')}
+                  </p>
+                </div>
+
+                <div className="mt-4 grid gap-4 md:grid-cols-2">
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] uppercase tracking-[0.22em] font-bold text-[var(--text-secondary)]">{t('connection.connectionIdLabel')}</label>
+                    <input
+                      value={selectedManagedConnection?.id || ''}
+                      onChange={(e) => {
+                        const nextId = normalizeConnectionId(e.target.value, selectedManagedConnection?.id || 'primary');
+                        if (!selectedManagedConnection) return;
+                        updateManagedConnection(selectedManagedConnection.id, { ...selectedManagedConnection, id: nextId });
+                        setManagedConnectionId(nextId);
+                        if (managedConnectionConfig.primaryConnectionId === selectedManagedConnection.id) {
+                          setManagedPrimaryConnection(nextId);
+                        }
+                      }}
+                      className="w-full rounded-xl border border-[var(--glass-border)] bg-[var(--glass-bg-hover)] px-3 py-3 text-sm text-[var(--text-primary)] outline-none transition-all focus:border-blue-500/50"
+                      placeholder="primary"
+                    />
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] uppercase tracking-[0.22em] font-bold text-[var(--text-secondary)]">{t('connection.connectionNameLabel')}</label>
+                    <input
+                      value={selectedManagedConnection?.name || ''}
+                      onChange={(e) => {
+                        if (!selectedManagedConnection) return;
+                        updateManagedConnection(selectedManagedConnection.id, { ...selectedManagedConnection, name: e.target.value });
+                      }}
+                      className="w-full rounded-xl border border-[var(--glass-border)] bg-[var(--glass-bg-hover)] px-3 py-3 text-sm text-[var(--text-primary)] outline-none transition-all focus:border-blue-500/50"
+                      placeholder="Main / Sauna 2 / Building B"
+                    />
+                  </div>
+
+                  <div className="space-y-1.5 md:col-span-2">
+                    <label className="text-[10px] uppercase tracking-[0.22em] font-bold text-[var(--text-secondary)]">{t('system.authMethod')}</label>
+                    <div className="grid grid-cols-2 gap-2">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (!selectedManagedConnection) return;
+                          updateManagedConnection(selectedManagedConnection.id, {
+                            ...selectedManagedConnection,
+                            authMethod: 'oauth',
+                            token: '',
+                            oauthTokens: selectedManagedConnection.oauthTokens ?? null,
+                          });
+                        }}
+                        className={`rounded-xl border px-3 py-3 text-xs font-bold uppercase tracking-[0.2em] transition-all ${
+                          selectedManagedConnection?.authMethod === 'oauth'
+                            ? 'border-blue-400/30 bg-blue-500/12 text-blue-100'
+                            : 'border-[var(--glass-border)] bg-[var(--glass-bg-hover)] text-[var(--text-secondary)] hover:bg-[color-mix(in_srgb,var(--glass-bg-hover)_72%,white_4%)]'
+                        }`}
+                      >
+                        OAuth2
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (!selectedManagedConnection) return;
+                          updateManagedConnection(selectedManagedConnection.id, {
+                            ...selectedManagedConnection,
+                            authMethod: 'token',
+                            token: selectedManagedConnection.token,
+                            oauthTokens: null,
+                          });
+                        }}
+                        className={`rounded-xl border px-3 py-3 text-xs font-bold uppercase tracking-[0.2em] transition-all ${
+                          selectedManagedConnection?.authMethod === 'token'
+                            ? 'border-blue-400/30 bg-blue-500/12 text-blue-100'
+                            : 'border-[var(--glass-border)] bg-[var(--glass-bg-hover)] text-[var(--text-secondary)] hover:bg-[color-mix(in_srgb,var(--glass-bg-hover)_72%,white_4%)]'
+                        }`}
+                      >
+                        Token
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="space-y-1.5 md:col-span-2">
+                    <label className="text-[10px] uppercase tracking-[0.22em] font-bold text-[var(--text-secondary)]">{t('system.haUrlPrimary')}</label>
+                    <input
+                      value={selectedManagedConnection?.url || ''}
+                      onChange={(e) => {
+                        if (!selectedManagedConnection) return;
+                        updateManagedConnection(selectedManagedConnection.id, { ...selectedManagedConnection, url: e.target.value });
+                      }}
+                      className="w-full rounded-xl border border-[var(--glass-border)] bg-[var(--glass-bg-hover)] px-3 py-3 text-sm text-[var(--text-primary)] outline-none transition-all focus:border-blue-500/50"
+                      placeholder="https://homeassistant.local:8123"
+                    />
+                    <p className="text-[11px] leading-relaxed text-[var(--text-secondary)]">
+                      {t('connection.localUrlHelper')}
+                    </p>
+                  </div>
+
+                  <div className="space-y-1.5 md:col-span-2">
+                    <label className="text-[10px] uppercase tracking-[0.22em] font-bold text-[var(--text-secondary)]">{t('system.haUrlFallback')}</label>
+                    <input
+                      value={selectedManagedConnection?.fallbackUrl || ''}
+                      onChange={(e) => {
+                        if (!selectedManagedConnection) return;
+                        updateManagedConnection(selectedManagedConnection.id, { ...selectedManagedConnection, fallbackUrl: e.target.value });
+                      }}
+                      className="w-full rounded-xl border border-[var(--glass-border)] bg-[var(--glass-bg-hover)] px-3 py-3 text-sm text-[var(--text-primary)] outline-none transition-all focus:border-blue-500/50"
+                      placeholder={t('common.optional')}
+                    />
+                    <p className="text-[11px] leading-relaxed text-[var(--text-secondary)]">
+                      {t('connection.fallbackUrlHelper')}
+                    </p>
+                  </div>
+
+                  {selectedManagedConnection?.authMethod === 'token' && (
+                    <div className="space-y-1.5 md:col-span-2">
+                      <label className="text-[10px] uppercase tracking-[0.22em] font-bold text-[var(--text-secondary)]">{t('system.token')}</label>
+                      <textarea
+                        value={selectedManagedConnection?.token || ''}
+                        onChange={(e) => {
+                          if (!selectedManagedConnection) return;
+                          updateManagedConnection(selectedManagedConnection.id, { ...selectedManagedConnection, token: e.target.value });
+                        }}
+                        className="h-32 w-full resize-none rounded-xl border border-[var(--glass-border)] bg-[var(--glass-bg-hover)] px-3 py-3 font-mono text-xs leading-relaxed text-[var(--text-primary)] outline-none transition-all focus:border-blue-500/50"
+                        placeholder="ey..."
+                      />
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            <div className="mx-5 mb-5 mt-1 rounded-2xl border border-[var(--glass-border)] bg-[color-mix(in_srgb,var(--glass-bg)_88%,transparent)] p-4 md:mx-6">
+              <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                <p className="text-sm leading-relaxed text-[var(--text-secondary)]">
+                  {t('connection.saveHint')}
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    onClick={removeManagedConnection}
+                    disabled={!selectedManagedConnection || managedConnections.length <= 1}
+                    className="rounded-xl border border-[var(--glass-border)] bg-[var(--glass-bg-hover)] px-3 py-2 text-[11px] font-bold uppercase tracking-[0.18em] text-[var(--text-secondary)] transition-colors hover:bg-[color-mix(in_srgb,var(--glass-bg-hover)_72%,white_4%)] disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    {t('connection.removeSelected')}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setManagedPrimaryConnection(selectedManagedConnection?.id)}
+                    disabled={!selectedManagedConnection || selectedManagedConnection.id === managedConnectionConfig.primaryConnectionId}
+                    className="rounded-xl border border-blue-400/20 bg-blue-500/10 px-3 py-2 text-[11px] font-bold uppercase tracking-[0.18em] text-blue-200 transition-colors hover:bg-blue-500/20 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    {t('connection.setPrimary')}
+                  </button>
+                  <button
+                    onClick={handleSaveManagedConnection}
+                    disabled={managedConnectionLoading || managedConnectionSaving || !connectionManageClientId}
+                    className="rounded-xl bg-indigo-500 px-4 py-2 text-xs font-bold uppercase tracking-[0.18em] text-white transition-colors hover:bg-indigo-600 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    {managedConnectionSaving ? t('common.saving') : t('connection.saveClientConfig')}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        <div className="rounded-xl border border-[var(--glass-border)] bg-[var(--glass-bg)] p-3">
+          <p className="text-[11px] uppercase tracking-wider text-[var(--text-secondary)] font-bold">
+            {t('connection.sessionInfo')}: <span className="text-[var(--text-primary)]">{currentUser?.clientId || '-'}</span>
+          </p>
+        </div>
+
+        {!isPlatformAdmin && (
+          <>
+            {renderAuthMethodToggle()}
+
+            <div className="space-y-3">
+              <label className="text-xs uppercase font-bold text-gray-500 ml-1 flex items-center gap-2">
+                <Wifi className="w-4 h-4" />
+                {t('system.haUrlPrimary')}
+                {connected && activeUrl === config.url && <span className="text-green-400 bg-green-500/10 px-2 py-0.5 rounded text-[10px] tracking-widest">{t('system.connected')}</span>}
+              </label>
+              <div className="relative group">
+                <input
+                  type="text"
+                  className="w-full px-4 py-3 rounded-xl bg-[var(--glass-bg)] border border-[var(--glass-border)] text-[var(--text-primary)] focus:bg-[var(--glass-bg-hover)] focus:border-blue-500/50 outline-none transition-all placeholder:text-[var(--text-muted)]"
+                  value={config.url}
+                  disabled={!canManageConnection}
+                  onChange={(e) => updatePrimaryConnectionConfig({ url: e.target.value.trim() })}
+                  placeholder="https://homeassistant.local:8123"
+                />
+                <div className="absolute inset-0 rounded-xl bg-blue-500/5 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none" />
+              </div>
+              <p className="text-[11px] leading-relaxed text-[var(--text-secondary)] ml-1">
+                {t('connection.localUrlHelper')}
+              </p>
+              {config.url && config.url.endsWith('/') && (
+                <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-yellow-500/10 text-yellow-400 text-xs font-bold border border-yellow-500/20">
+                  <AlertCircle className="w-3 h-3" />
+                  {t('onboarding.urlTrailingSlash')}
+                </div>
+              )}
+            </div>
+
+            {isOAuth && renderOAuthSection()}
+
+            {!isOAuth && (
+              <>
+                <div className="space-y-3">
+                  <label className="text-xs uppercase font-bold text-gray-500 ml-1 flex items-center gap-2">
+                    <Server className="w-4 h-4" />
+                    {t('system.haUrlFallback')}
+                    {connected && activeUrl === config.fallbackUrl && <span className="text-green-400 bg-green-500/10 px-2 py-0.5 rounded text-[10px] tracking-widest">{t('system.connected')}</span>}
+                  </label>
+                  <div className="relative group">
+                    <input
+                      type="text"
+                      className="w-full px-4 py-3 rounded-xl bg-[var(--glass-bg)] border border-[var(--glass-border)] text-[var(--text-primary)] focus:bg-[var(--glass-bg-hover)] focus:border-blue-500/50 outline-none transition-all placeholder:text-[var(--text-muted)]"
+                      value={config.fallbackUrl}
+                      disabled={!canManageConnection}
+                      onChange={(e) => updatePrimaryConnectionConfig({ fallbackUrl: e.target.value.trim() })}
+                      placeholder={t('common.optional')}
+                    />
+                    <div className="absolute inset-0 rounded-xl bg-blue-500/5 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none" />
+                  </div>
+                  <p className="text-[11px] leading-relaxed text-[var(--text-secondary)] ml-1">
+                    {t('connection.fallbackUrlHelper')}
+                  </p>
+                  {config.fallbackUrl && config.fallbackUrl.endsWith('/') && (
+                    <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-yellow-500/10 text-yellow-400 text-xs font-bold border border-yellow-500/20">
+                      <AlertCircle className="w-3 h-3" />
+                      {t('onboarding.urlTrailingSlash')}
+                    </div>
+                  )}
+                </div>
+
+                <div className="space-y-3">
+                  <label className="text-xs uppercase font-bold text-gray-500 ml-1 flex items-center gap-2">
+                    <Lock className="w-4 h-4" />
+                    {t('system.token')}
+                  </label>
+                  <div className="relative group">
+                    <textarea
+                      className="w-full px-4 py-3 h-32 rounded-xl bg-[var(--glass-bg)] border border-[var(--glass-border)] text-[var(--text-primary)] focus:bg-[var(--glass-bg-hover)] focus:border-blue-500/50 outline-none transition-all font-mono text-xs leading-relaxed resize-none"
+                      value={config.token}
+                      disabled={!canManageConnection}
+                      onChange={(e) => updatePrimaryConnectionConfig({ token: e.target.value.trim() })}
+                      placeholder="ey..."
+                    />
+                    <div className="absolute inset-0 rounded-xl bg-blue-500/5 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none" />
+                  </div>
+                </div>
+              </>
+            )}
+          </>
+        )}
+      </div>
+    );
+  };
 
   const updateNotificationDraft = (updater) => {
     setNotificationDraft((prev) => {

@@ -2,6 +2,89 @@ export const ENTITY_CONNECTION_DELIMITER = '@@';
 export const DEFAULT_PRIMARY_CONNECTION_ID = 'primary';
 
 const safeString = (value) => String(value ?? '').trim();
+const IPV4_RE = /^(?:\d{1,3}\.){3}\d{1,3}$/;
+const HOSTNAME_RE = /^(?:localhost|[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)+)$/i;
+const HAS_SCHEME_RE = /^[a-z][a-z0-9+.-]*:\/\//i;
+
+const stripPathLikeSegments = (value) => String(value || '').split(/[/?#]/, 1)[0].trim();
+
+const splitBareHostAndPort = (value) => {
+  const raw = stripPathLikeSegments(value);
+  if (!raw) return { host: '', port: '' };
+
+  if (raw.startsWith('[')) {
+    const endIndex = raw.indexOf(']');
+    if (endIndex === -1) return { host: raw, port: '' };
+    const host = raw.slice(1, endIndex);
+    const port = raw.slice(endIndex + 1).replace(/^:/, '');
+    return { host, port };
+  }
+
+  const colonCount = (raw.match(/:/g) || []).length;
+  if (colonCount === 1) {
+    const [host, port = ''] = raw.split(':');
+    if (/^\d+$/.test(port)) return { host, port };
+  }
+
+  return { host: raw, port: '' };
+};
+
+const isPrivateIpv4 = (host) => {
+  if (!IPV4_RE.test(host)) return false;
+  const octets = host.split('.').map((part) => Number.parseInt(part, 10));
+  if (octets.some((part) => !Number.isFinite(part) || part < 0 || part > 255)) return false;
+  const [a, b] = octets;
+  return a === 10
+    || a === 127
+    || (a === 169 && b === 254)
+    || (a === 172 && b >= 16 && b <= 31)
+    || (a === 192 && b === 168);
+};
+
+const isLikelyBareHost = (host) => {
+  if (!host) return false;
+  if (host.includes(':')) return true;
+  return IPV4_RE.test(host) || HOSTNAME_RE.test(host);
+};
+
+const shouldDefaultToHttp = (host) => {
+  const normalizedHost = String(host || '').trim().toLowerCase();
+  return normalizedHost === 'localhost'
+    || normalizedHost.endsWith('.local')
+    || isPrivateIpv4(normalizedHost)
+    || normalizedHost.includes(':');
+};
+
+export const normalizeHaUrlInput = (value) => {
+  const raw = safeString(value);
+  if (!raw) return '';
+
+  if (HAS_SCHEME_RE.test(raw)) {
+    try {
+      const parsed = new URL(raw);
+      if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return raw;
+      return parsed.toString().replace(/\/$/, '');
+    } catch {
+      return raw;
+    }
+  }
+
+  const { host, port } = splitBareHostAndPort(raw);
+  if (!isLikelyBareHost(host)) return raw;
+
+  const scheme = shouldDefaultToHttp(host) ? 'http' : 'https';
+
+  try {
+    const parsed = new URL(`${scheme}://${raw}`);
+    // For raw local HA targets, assume the default Home Assistant port when omitted.
+    if (!port && scheme === 'http' && shouldDefaultToHttp(parsed.hostname)) {
+      parsed.port = '8123';
+    }
+    return parsed.toString().replace(/\/$/, '');
+  } catch {
+    return raw;
+  }
+};
 
 export const normalizeAuthMethod = (value) => (safeString(value).toLowerCase() === 'token' ? 'token' : 'oauth');
 
@@ -20,8 +103,8 @@ export const normalizeConnection = (candidate = {}, index = 0) => {
   return {
     id,
     name: safeString(candidate.name),
-    url: safeString(candidate.url),
-    fallbackUrl: safeString(candidate.fallbackUrl),
+    url: normalizeHaUrlInput(candidate.url),
+    fallbackUrl: normalizeHaUrlInput(candidate.fallbackUrl),
     authMethod,
     token: authMethod === 'token' ? safeString(candidate.token) : '',
     oauthTokens: candidate.oauthTokens ?? null,
