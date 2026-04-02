@@ -4,6 +4,7 @@ import { lazy, useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { en, nn, nb } from './i18n';
 import {
   AlertTriangle,
+  Archive,
   Bell,
   Check,
   Edit2,
@@ -29,6 +30,7 @@ import {
   ModalSuspense,
   PageNavigation,
   PersonStatus,
+  SuperAdminBackupsPage,
   SuperAdminOverview,
 } from './components';
 
@@ -72,6 +74,11 @@ import {
   updateClient as updateServerClient,
   deleteClient as deleteServerClient,
   fetchPlatformOverview as fetchServerPlatformOverview,
+  fetchClientBackupOverview as fetchServerClientBackupOverview,
+  fetchClientBackupFiles as fetchServerClientBackupFiles,
+  provisionClientBackupDirectory as provisionServerClientBackupDirectory,
+  deleteClientBackupFile as deleteServerClientBackupFile,
+  downloadClientBackupFile as downloadServerClientBackupFile,
   fetchClientHaConfig as fetchServerClientHaConfig,
   saveClientHaConfig as saveServerClientHaConfig,
   listClientDashboards as listServerClientDashboards,
@@ -116,6 +123,7 @@ import { normalizeHaConfig } from './utils/haConnections';
 import { DEFAULT_NOTIFICATION_CONFIG, normalizeNotificationConfig } from './utils/notificationConfig';
 
 const SUPER_ADMIN_OVERVIEW_PAGE_ID = '__super_admin_overview';
+const SUPER_ADMIN_BACKUPS_PAGE_ID = '__super_admin_backups';
 const ADMIN_SETTINGS_PAGE_ID = '__admin_settings';
 const ADMIN_NOTIFICATIONS_PAGE_ID = '__admin_notifications';
 const ADMIN_USERS_PAGE_ID = '__admin_users';
@@ -394,6 +402,7 @@ function AppContent({
   const currentUserRole = normalizeRole(currentUser?.role);
   const isLocalClientAdmin = currentUserRole === 'admin' && !isPlatformAdmin;
   const superAdminFixedPages = useMemo(() => ([
+    SUPER_ADMIN_BACKUPS_PAGE_ID,
     ADMIN_SETTINGS_PAGE_ID,
     ADMIN_NOTIFICATIONS_PAGE_ID,
     ADMIN_USERS_PAGE_ID,
@@ -1938,6 +1947,7 @@ function AppContent({
   const pageDefaults = {
     home: { label: t('page.home'), icon: LayoutGrid },
     [SUPER_ADMIN_OVERVIEW_PAGE_ID]: { label: t('superAdminOverview.pageLabel'), icon: Server },
+    [SUPER_ADMIN_BACKUPS_PAGE_ID]: { label: t('superAdminBackups.pageLabel'), icon: Archive, locked: true },
     [ADMIN_SETTINGS_PAGE_ID]: { label: t('system.tabConnection'), icon: Settings, locked: true },
     [ADMIN_NOTIFICATIONS_PAGE_ID]: { label: t('system.tabNotifications'), icon: Bell, locked: true },
     [ADMIN_USERS_PAGE_ID]: { label: t('userMgmt.menu'), icon: User, locked: true },
@@ -1958,6 +1968,7 @@ function AppContent({
   const activePageLabel = useMemo(() => {
     if (activePage === 'home') return t('page.home');
     if (activePage === SUPER_ADMIN_OVERVIEW_PAGE_ID) return t('superAdminOverview.pageLabel');
+    if (activePage === SUPER_ADMIN_BACKUPS_PAGE_ID) return t('superAdminBackups.pageLabel');
     if (activePage === ADMIN_SETTINGS_PAGE_ID) return t('system.tabConnection');
     if (activePage === ADMIN_NOTIFICATIONS_PAGE_ID) return t('system.tabNotifications');
     if (activePage === ADMIN_USERS_PAGE_ID) return t('userMgmt.menu');
@@ -2674,6 +2685,15 @@ function AppContent({
                 isMobile={isMobile}
               />
             </div>
+          ) : activePage === SUPER_ADMIN_BACKUPS_PAGE_ID && isPlatformAdmin ? (
+            <div key={activePage} className={pageTransitionClass}>
+              <SuperAdminBackupsPage
+                t={t}
+                language={language}
+                userAdminApi={userAdminApi}
+                isMobile={isMobile}
+              />
+            </div>
           ) : isSuperAdminUtilityPage ? (
             <div key={activePage} className={pageTransitionClass}>
               <ModalSuspense>
@@ -3298,6 +3318,11 @@ export default function App() {
     updateClient: updateServerClient,
     deleteClient: deleteServerClient,
     fetchClientHaConfig: fetchServerClientHaConfig,
+    fetchClientBackupOverview: fetchServerClientBackupOverview,
+    fetchClientBackupFiles: fetchServerClientBackupFiles,
+    provisionClientBackupDirectory: provisionServerClientBackupDirectory,
+    deleteClientBackupFile: deleteServerClientBackupFile,
+    downloadClientBackupFile: downloadServerClientBackupFile,
     saveClientHaConfig: saveServerClientHaConfig,
     listClientDashboards: listServerClientDashboards,
     fetchClientDashboard: fetchServerClientDashboard,

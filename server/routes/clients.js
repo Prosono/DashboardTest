@@ -11,6 +11,12 @@ import {
 } from '../dashboardVersions.js';
 import { mergeHaConfigPayload, parseHaConfigRow, serializeHaConnections } from '../haConfig.js';
 import { parseStoredAppActionHistory } from '../appActionHistory.js';
+import {
+  createClientBackupReadStream,
+  deleteClientBackupFile,
+  ensureClientBackupDirectory,
+  listClientBackupFiles,
+} from '../backupStorage.js';
 
 const router = Router();
 
@@ -21,6 +27,17 @@ const parseLimit = (value, fallback = 30) => {
   const parsed = Number.parseInt(String(value ?? ''), 10);
   if (!Number.isFinite(parsed)) return fallback;
   return Math.max(1, Math.min(200, parsed));
+};
+const normalizeLocationId = (value) => String(value ?? '')
+  .trim()
+  .toLowerCase()
+  .replace(/[^a-z0-9_-]+/g, '-')
+  .replace(/^-+|-+$/g, '');
+const resolveBackupLocationRequestId = (req) => {
+  const bodyLocationId = typeof req.body === 'object' && req.body !== null
+    ? req.body.locationId
+    : '';
+  return normalizeLocationId(req.query?.locationId || bodyLocationId || '');
 };
 const parseUrlHost = (value) => {
   const raw = String(value || '').trim();
@@ -80,6 +97,41 @@ const getConnectionConfigStatus = (connection) => {
     };
   }
   return { status: 'ready', ready: true, authMethod };
+};
+const getClientBackupLocations = (client, parsedConfig) => {
+  const primaryConnectionId = String(
+    parsedConfig?.primaryConnectionId
+    || parsedConfig?.connections?.[0]?.id
+    || 'primary',
+  ).trim() || 'primary';
+  const connections = Array.isArray(parsedConfig?.connections) && parsedConfig.connections.length
+    ? parsedConfig.connections
+    : [{
+      id: primaryConnectionId,
+      name: client?.name || 'Primary',
+      url: '',
+      fallbackUrl: '',
+      authMethod: 'oauth',
+    }];
+
+  return connections.map((connection, index) => {
+    const connectionId = normalizeLocationId(connection?.id || (index === 0 ? 'primary' : `connection-${index + 1}`))
+      || (index === 0 ? 'primary' : `connection-${index + 1}`);
+    return {
+      id: connectionId,
+      name: String(connection?.name || connectionId || 'Location').trim() || connectionId,
+      isPrimary: connectionId === primaryConnectionId,
+    };
+  });
+};
+const resolveRequestedLocationMeta = (locations, locationIdRaw) => {
+  const requestedLocationId = normalizeLocationId(locationIdRaw);
+  if (!requestedLocationId) return locations[0] || null;
+  return locations.find((location) => location.id === requestedLocationId) || {
+    id: requestedLocationId,
+    name: requestedLocationId,
+    isPrimary: false,
+  };
 };
 const toDashboardMeta = (row) => ({
   id: row.id,
@@ -409,6 +461,91 @@ router.get('/overview', (req, res) => {
   });
 });
 
+router.get('/backups/overview', async (_req, res) => {
+  const clients = db.prepare(`
+    SELECT
+      c.id,
+      c.name,
+      c.updated_at
+    FROM clients c
+    ORDER BY c.id ASC
+  `).all();
+  const haConfigRows = db.prepare('SELECT * FROM ha_config').all();
+  const haConfigByClient = new Map(haConfigRows.map((row) => [row.client_id, row]));
+
+  try {
+    const clientSummaries = await Promise.all(
+      clients.map(async (client) => {
+        const parsedConfig = parseHaConfigRow(haConfigByClient.get(client.id));
+        const locations = getClientBackupLocations(client, parsedConfig);
+        const locationSummaries = await Promise.all(
+          locations.map(async (location) => {
+            const backupInfo = await listClientBackupFiles(client.id, location.id);
+            return {
+              id: location.id,
+              name: location.name,
+              isPrimary: Boolean(location.isPrimary),
+              backupDirectoryExists: Boolean(backupInfo.exists),
+              backupDirectoryPath: backupInfo.displayDirectoryPath,
+              backupRootPath: backupInfo.displayRootPath,
+              backupFileCount: Number(backupInfo.fileCount || 0),
+              totalBackupBytes: Number(backupInfo.totalBytes || 0),
+              latestBackupAt: backupInfo.latestBackupAt || null,
+            };
+          }),
+        );
+
+        const backupFileCount = locationSummaries.reduce((sum, location) => sum + Number(location.backupFileCount || 0), 0);
+        const totalBackupBytes = locationSummaries.reduce((sum, location) => sum + Number(location.totalBackupBytes || 0), 0);
+        const latestBackupAt = locationSummaries.reduce((latest, location) => {
+          const currentTs = Date.parse(String(location.latestBackupAt || ''));
+          const latestTs = Date.parse(String(latest || ''));
+          if (!Number.isFinite(currentTs)) return latest;
+          if (!Number.isFinite(latestTs) || currentTs > latestTs) return location.latestBackupAt;
+          return latest;
+        }, null);
+
+        return {
+          id: client.id,
+          name: client.name,
+          updatedAt: client.updated_at,
+          locationCount: locationSummaries.length,
+          readyLocationCount: locationSummaries.filter((location) => location.backupDirectoryExists).length,
+          missingLocationCount: locationSummaries.filter((location) => !location.backupDirectoryExists).length,
+          backupFileCount,
+          totalBackupBytes,
+          latestBackupAt,
+          locations: locationSummaries,
+        };
+      }),
+    );
+
+    const totals = clientSummaries.reduce((acc, client) => ({
+      clients: acc.clients + 1,
+      locations: acc.locations + Number(client.locationCount || 0),
+      readyDirectories: acc.readyDirectories + Number(client.readyLocationCount || 0),
+      missingDirectories: acc.missingDirectories + Number(client.missingLocationCount || 0),
+      backupFiles: acc.backupFiles + Number(client.backupFileCount || 0),
+      totalBackupBytes: acc.totalBackupBytes + Number(client.totalBackupBytes || 0),
+    }), {
+      clients: 0,
+      locations: 0,
+      readyDirectories: 0,
+      missingDirectories: 0,
+      backupFiles: 0,
+      totalBackupBytes: 0,
+    });
+
+    return res.json({
+      generatedAt: new Date().toISOString(),
+      totals,
+      clients: clientSummaries,
+    });
+  } catch (error) {
+    return res.status(500).json({ error: error?.message || 'Failed to load backup overview' });
+  }
+});
+
 router.post('/', (req, res) => {
   const rawClientId = String(req.body?.clientId || '').trim();
   const clientId = normalizeClientId(rawClientId);
@@ -543,6 +680,131 @@ router.put('/:clientId/ha-config', (req, res) => {
   return res.json({
     config: savedConfig,
   });
+});
+
+router.get('/:clientId/backups', async (req, res) => {
+  const clientId = normalizeClientId(req.params.clientId);
+  if (!clientId) return res.status(400).json({ error: 'Valid clientId is required' });
+
+  const client = db.prepare('SELECT id, name FROM clients WHERE id = ?').get(clientId);
+  if (!client) return res.status(404).json({ error: 'Client not found' });
+
+  try {
+    const parsedConfig = parseHaConfigRow(db.prepare('SELECT * FROM ha_config WHERE client_id = ?').get(clientId));
+    const locations = getClientBackupLocations(client, parsedConfig);
+    const location = resolveRequestedLocationMeta(locations, resolveBackupLocationRequestId(req));
+    const backupInfo = await listClientBackupFiles(clientId, location?.id || '');
+    return res.json({
+      client: {
+        id: client.id,
+        name: client.name,
+      },
+      location: location ? {
+        id: location.id,
+        name: location.name,
+        isPrimary: Boolean(location.isPrimary),
+      } : null,
+      directory: {
+        exists: Boolean(backupInfo.exists),
+        path: backupInfo.displayDirectoryPath,
+        clientPath: backupInfo.displayClientDirectoryPath,
+        rootPath: backupInfo.displayRootPath,
+      },
+      summary: {
+        fileCount: Number(backupInfo.fileCount || 0),
+        totalBytes: Number(backupInfo.totalBytes || 0),
+        latestBackupAt: backupInfo.latestBackupAt || null,
+      },
+      files: Array.isArray(backupInfo.files) ? backupInfo.files : [],
+    });
+  } catch (error) {
+    return res.status(error?.statusCode || 500).json({ error: error?.message || 'Failed to load client backups' });
+  }
+});
+
+router.post('/:clientId/backups/provision', async (req, res) => {
+  const clientId = normalizeClientId(req.params.clientId);
+  if (!clientId) return res.status(400).json({ error: 'Valid clientId is required' });
+
+  const client = db.prepare('SELECT id, name FROM clients WHERE id = ?').get(clientId);
+  if (!client) return res.status(404).json({ error: 'Client not found' });
+
+  try {
+    const parsedConfig = parseHaConfigRow(db.prepare('SELECT * FROM ha_config WHERE client_id = ?').get(clientId));
+    const locations = getClientBackupLocations(client, parsedConfig);
+    const location = resolveRequestedLocationMeta(locations, resolveBackupLocationRequestId(req));
+    const backupInfo = await ensureClientBackupDirectory(clientId, location?.id || '');
+    return res.json({
+      client: {
+        id: client.id,
+        name: client.name,
+      },
+      location: location ? {
+        id: location.id,
+        name: location.name,
+        isPrimary: Boolean(location.isPrimary),
+      } : null,
+      directory: {
+        exists: Boolean(backupInfo.exists),
+        path: backupInfo.displayDirectoryPath,
+        clientPath: backupInfo.displayClientDirectoryPath,
+        rootPath: backupInfo.displayRootPath,
+      },
+      summary: {
+        fileCount: Number(backupInfo.fileCount || 0),
+        totalBytes: Number(backupInfo.totalBytes || 0),
+        latestBackupAt: backupInfo.latestBackupAt || null,
+      },
+    });
+  } catch (error) {
+    return res.status(error?.statusCode || 500).json({ error: error?.message || 'Failed to prepare backup directory' });
+  }
+});
+
+router.delete('/:clientId/backups/files/:fileName', async (req, res) => {
+  const clientId = normalizeClientId(req.params.clientId);
+  if (!clientId) return res.status(400).json({ error: 'Valid clientId is required' });
+
+  const client = db.prepare('SELECT id FROM clients WHERE id = ?').get(clientId);
+  if (!client) return res.status(404).json({ error: 'Client not found' });
+
+  try {
+    const deleted = await deleteClientBackupFile(clientId, req.params.fileName, resolveBackupLocationRequestId(req));
+    return res.json({
+      success: true,
+      fileName: deleted.fileName,
+      clientId: deleted.clientId,
+      locationId: deleted.locationId || '',
+    });
+  } catch (error) {
+    return res.status(error?.statusCode || 500).json({ error: error?.message || 'Failed to delete backup file' });
+  }
+});
+
+router.get('/:clientId/backups/files/:fileName/download', async (req, res) => {
+  const clientId = normalizeClientId(req.params.clientId);
+  if (!clientId) return res.status(400).json({ error: 'Valid clientId is required' });
+
+  const client = db.prepare('SELECT id FROM clients WHERE id = ?').get(clientId);
+  if (!client) return res.status(404).json({ error: 'Client not found' });
+
+  try {
+    const file = await createClientBackupReadStream(clientId, req.params.fileName, resolveBackupLocationRequestId(req));
+    const safeFileName = String(file.fileName || 'backup.tar').replace(/"/g, '');
+    res.setHeader('Content-Type', 'application/octet-stream');
+    res.setHeader('Content-Length', String(file.sizeBytes || 0));
+    res.setHeader('Content-Disposition', `attachment; filename="${safeFileName}"`);
+    file.stream.on('error', () => {
+      if (!res.headersSent) {
+        res.status(500).json({ error: 'Failed to stream backup file' });
+      } else {
+        res.destroy();
+      }
+    });
+    return file.stream.pipe(res);
+  } catch (error) {
+    return res.status(error?.statusCode || 500).json({ error: error?.message || 'Failed to download backup file' });
+  }
 });
 
 router.get('/:clientId/dashboards', (req, res) => {

@@ -19,6 +19,36 @@ const resolveApiPath = (path) => {
   return `${API_BASE}/${input}`;
 };
 
+const buildApiHeaders = (headers = {}) => {
+  const token = getAuthToken();
+  const nextHeaders = {
+    'Content-Type': 'application/json',
+    ...(headers || {}),
+  };
+  if (token) nextHeaders.Authorization = `Bearer ${token}`;
+  return nextHeaders;
+};
+
+const createApiError = async (res) => {
+  const body = await res.json().catch(() => ({}));
+  const err = new Error(body.error || `API error ${res.status}`);
+  err.status = res.status;
+  return err;
+};
+
+const apiFetch = async (path, options = {}) => {
+  const res = await fetch(resolveApiPath(path), {
+    ...options,
+    headers: buildApiHeaders(options.headers),
+  });
+
+  if (!res.ok) {
+    throw await createApiError(res);
+  }
+
+  return res;
+};
+
 export const getAuthToken = () => {
   try {
     return localStorage.getItem(TOKEN_KEY) || '';
@@ -126,26 +156,31 @@ export const clearStoredHaConfig = (clientId = getClientId()) => {
 };
 
 export const apiRequest = async (path, options = {}) => {
-  const token = getAuthToken();
-  const headers = {
-    'Content-Type': 'application/json',
-    ...(options.headers || {}),
-  };
-  if (token) headers.Authorization = `Bearer ${token}`;
+  const res = await apiFetch(path, options);
+  return res.json();
+};
 
-  const res = await fetch(resolveApiPath(path), {
-    ...options,
-    headers,
-  });
+const parseDownloadFileName = (contentDisposition, fallback = 'download.bin') => {
+  const raw = String(contentDisposition || '').trim();
+  if (!raw) return fallback;
 
-  if (!res.ok) {
-    const body = await res.json().catch(() => ({}));
-    const err = new Error(body.error || `API error ${res.status}`);
-    err.status = res.status;
-    throw err;
+  const utfMatch = raw.match(/filename\*=UTF-8''([^;]+)/i);
+  if (utfMatch?.[1]) {
+    try {
+      return decodeURIComponent(utfMatch[1]);
+    } catch {
+      return utfMatch[1];
+    }
   }
 
-  return res.json();
+  const plainMatch = raw.match(/filename="?([^";]+)"?/i);
+  return plainMatch?.[1] || fallback;
+};
+const appendLocationIdQuery = (path, locationId) => {
+  const normalizedLocationId = String(locationId || '').trim();
+  if (!normalizedLocationId) return path;
+  const separator = String(path).includes('?') ? '&' : '?';
+  return `${path}${separator}locationId=${encodeURIComponent(normalizedLocationId)}`;
 };
 
 export const loginWithPassword = async (clientId, username, password) => {
@@ -246,6 +281,52 @@ export const fetchPlatformOverview = async (logLimit = 50) => {
   const safeLimit = Math.max(1, Math.min(200, Number.parseInt(String(logLimit ?? ''), 10) || 50));
   const payload = await apiRequest(`/api/clients/overview?logLimit=${safeLimit}`, { method: 'GET' });
   return payload && typeof payload === 'object' ? payload : null;
+};
+
+export const fetchClientBackupOverview = async () => {
+  const payload = await apiRequest('/api/clients/backups/overview', { method: 'GET' });
+  return payload && typeof payload === 'object' ? payload : null;
+};
+
+export const fetchClientBackupFiles = async (clientId, locationId = '') => {
+  const payload = await apiRequest(
+    appendLocationIdQuery(`/api/clients/${encodeURIComponent(clientId)}/backups`, locationId),
+    { method: 'GET' },
+  );
+  return payload && typeof payload === 'object' ? payload : null;
+};
+
+export const provisionClientBackupDirectory = async (clientId, locationId = '') => {
+  const payload = await apiRequest(`/api/clients/${encodeURIComponent(clientId)}/backups/provision`, {
+    method: 'POST',
+    body: JSON.stringify(locationId ? { locationId } : {}),
+  });
+  return payload && typeof payload === 'object' ? payload : null;
+};
+
+export const deleteClientBackupFile = async (clientId, fileName, locationId = '') => {
+  const payload = await apiRequest(
+    appendLocationIdQuery(`/api/clients/${encodeURIComponent(clientId)}/backups/files/${encodeURIComponent(fileName)}`, locationId),
+    { method: 'DELETE' },
+  );
+  return Boolean(payload?.success);
+};
+
+export const downloadClientBackupFile = async (clientId, fileName, locationId = '') => {
+  const response = await apiFetch(
+    appendLocationIdQuery(`/api/clients/${encodeURIComponent(clientId)}/backups/files/${encodeURIComponent(fileName)}/download`, locationId),
+    {
+      method: 'GET',
+      headers: {
+        Accept: 'application/octet-stream',
+      },
+    },
+  );
+  const blob = await response.blob();
+  return {
+    blob,
+    fileName: parseDownloadFileName(response.headers.get('Content-Disposition'), fileName || 'backup.tar'),
+  };
 };
 
 export const createClient = async (clientId, name = '') => {
