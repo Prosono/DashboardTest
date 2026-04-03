@@ -109,11 +109,13 @@ const normalizeConnectionId = (value, fallback = DEFAULT_PRIMARY_CONNECTION_ID) 
 const normalizeConnection = (candidate, index = 0) => {
   const fallbackId = index === 0 ? DEFAULT_PRIMARY_CONNECTION_ID : `connection-${index + 1}`;
   const id = normalizeConnectionId(candidate?.id || candidate?.connectionId, fallbackId);
+  const backupLocationId = normalizeConnectionId(candidate?.backupLocationId || '', '');
   const authMethod = normalizeAuthMethod(candidate?.authMethod);
   const token = authMethod === 'token' ? safeString(candidate?.token) : '';
 
   return {
     id,
+    backupLocationId: backupLocationId || '',
     name: safeString(candidate?.name) || '',
     url: normalizeHaUrlInput(candidate?.url),
     fallbackUrl: normalizeHaUrlInput(candidate?.fallbackUrl),

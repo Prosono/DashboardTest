@@ -208,6 +208,7 @@ export default function SuperAdminBackupsPage({
   );
   const selectedLocationLabel = locationFiles?.location?.name || selectedLocationSummary?.name || '-';
   const selectedLocationCode = locationFiles?.location?.id || selectedLocationSummary?.id || '';
+  const selectedConnectionCode = locationFiles?.location?.connectionId || selectedLocationSummary?.connectionId || '';
   const selectedPath = locationFiles?.directory?.path || selectedLocationSummary?.backupDirectoryPath || '-';
 
   const handleRefresh = useCallback(async () => {
@@ -432,8 +433,8 @@ export default function SuperAdminBackupsPage({
                         {selectedClientSummary.name || selectedClientSummary.id}
                       </h3>
                       <p className="mt-2 text-sm text-[var(--text-secondary)]">
-                        {t('superAdminBackups.selectedLocation')}: <span className="text-[var(--text-primary)]">{selectedLocationLabel}</span>
-                      </p>
+                      {t('superAdminBackups.selectedLocation')}: <span className="text-[var(--text-primary)]">{selectedLocationLabel}</span>
+                    </p>
                     </div>
 
                     <div className="flex flex-wrap items-center gap-2">
@@ -458,9 +459,9 @@ export default function SuperAdminBackupsPage({
                         {t('superAdminBackups.locationsTitle')}
                       </p>
                     </div>
-                    <p className="mt-2 text-xs text-[var(--text-secondary)]">
-                      {t('superAdminBackups.locationsSubtitle')}
-                    </p>
+                      <p className="mt-2 text-xs text-[var(--text-secondary)]">
+                        {t('superAdminBackups.locationsSubtitle')}
+                      </p>
 
                     {!locations.length ? (
                       <p className="mt-3 text-sm text-[var(--text-secondary)]">{t('superAdminBackups.emptyLocations')}</p>
@@ -503,6 +504,10 @@ export default function SuperAdminBackupsPage({
                     <div className="rounded-2xl border border-[var(--glass-border)] bg-[var(--glass-bg)] px-4 py-3">
                       <p className="text-[10px] uppercase tracking-[0.16em] text-[var(--text-muted)]">{t('superAdminBackups.locationIdLabel')}</p>
                       <p className="mt-2 text-sm font-medium text-[var(--text-primary)]">{selectedLocationCode || '-'}</p>
+                    </div>
+                    <div className="rounded-2xl border border-[var(--glass-border)] bg-[var(--glass-bg)] px-4 py-3">
+                      <p className="text-[10px] uppercase tracking-[0.16em] text-[var(--text-muted)]">{t('superAdminBackups.connectionIdLabel')}</p>
+                      <p className="mt-2 text-sm font-medium text-[var(--text-primary)]">{selectedConnectionCode || '-'}</p>
                     </div>
                     <div className="rounded-2xl border border-[var(--glass-border)] bg-[var(--glass-bg)] px-4 py-3">
                       <p className="text-[10px] uppercase tracking-[0.16em] text-[var(--text-muted)]">{t('superAdminBackups.fileCount')}</p>

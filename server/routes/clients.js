@@ -117,8 +117,10 @@ const getClientBackupLocations = (client, parsedConfig) => {
   return connections.map((connection, index) => {
     const connectionId = normalizeLocationId(connection?.id || (index === 0 ? 'primary' : `connection-${index + 1}`))
       || (index === 0 ? 'primary' : `connection-${index + 1}`);
+    const backupLocationId = normalizeLocationId(connection?.backupLocationId || connectionId) || connectionId;
     return {
-      id: connectionId,
+      id: backupLocationId,
+      connectionId,
       name: String(connection?.name || connectionId || 'Location').trim() || connectionId,
       isPrimary: connectionId === primaryConnectionId,
     };
@@ -483,6 +485,7 @@ router.get('/backups/overview', async (_req, res) => {
             const backupInfo = await listClientBackupFiles(client.id, location.id);
             return {
               id: location.id,
+              connectionId: location.connectionId,
               name: location.name,
               isPrimary: Boolean(location.isPrimary),
               backupDirectoryExists: Boolean(backupInfo.exists),
@@ -701,6 +704,7 @@ router.get('/:clientId/backups', async (req, res) => {
       },
       location: location ? {
         id: location.id,
+        connectionId: location.connectionId,
         name: location.name,
         isPrimary: Boolean(location.isPrimary),
       } : null,
@@ -741,6 +745,7 @@ router.post('/:clientId/backups/provision', async (req, res) => {
       },
       location: location ? {
         id: location.id,
+        connectionId: location.connectionId,
         name: location.name,
         isPrimary: Boolean(location.isPrimary),
       } : null,
