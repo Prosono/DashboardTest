@@ -29,22 +29,38 @@ const localeByLanguage = {
 };
 
 const statusTheme = {
+  not_required: {
+    labelKey: 'superAdminOverview.connection.status.not_required',
+    className: 'bg-[var(--status-neutral-bg)] text-[var(--status-neutral-text)] border border-[var(--status-neutral-border)]',
+  },
   ready: {
     labelKey: 'superAdminOverview.connection.status.ready',
-    className: 'bg-green-500/15 text-green-300 border border-green-500/30',
+    className: 'bg-[var(--status-success-bg)] text-[var(--status-success-text)] border border-[var(--status-success-border)]',
   },
   missing_url: {
     labelKey: 'superAdminOverview.connection.status.missing_url',
-    className: 'bg-red-500/15 text-red-300 border border-red-500/30',
+    className: 'bg-[var(--status-danger-bg)] text-[var(--status-danger-text)] border border-[var(--status-danger-border)]',
   },
   missing_token: {
     labelKey: 'superAdminOverview.connection.status.missing_token',
-    className: 'bg-amber-500/15 text-amber-300 border border-amber-500/30',
+    className: 'bg-[var(--status-warning-bg)] text-[var(--status-warning-text)] border border-[var(--status-warning-border)]',
   },
   missing_oauth: {
     labelKey: 'superAdminOverview.connection.status.missing_oauth',
-    className: 'bg-amber-500/15 text-amber-300 border border-amber-500/30',
+    className: 'bg-[var(--status-warning-bg)] text-[var(--status-warning-text)] border border-[var(--status-warning-border)]',
   },
+};
+
+const semanticToneClass = {
+  good: 'text-[var(--status-success-text)] border-[var(--status-success-border)] bg-[var(--status-success-bg)]',
+  warn: 'text-[var(--status-warning-text)] border-[var(--status-warning-border)] bg-[var(--status-warning-bg)]',
+  neutral: 'text-[var(--text-primary)] border-[var(--glass-border)] bg-[var(--glass-bg)]',
+};
+
+const isConnectionIssue = (instance) => {
+  if (!instance || typeof instance !== 'object') return false;
+  if (typeof instance.isIssue === 'boolean') return instance.isIssue;
+  return instance.status !== 'ready' && instance.status !== 'not_required';
 };
 
 const formatNumber = (value) => {
@@ -169,11 +185,7 @@ const buildHistorySeries = (history, metricKey, windowHours) => {
 };
 
 function StatCard({ icon: Icon, label, value, tone = 'neutral', onClick, hint }) {
-  const toneClass = tone === 'good'
-    ? 'text-green-300 border-green-500/30 bg-green-500/10'
-    : tone === 'warn'
-      ? 'text-amber-300 border-amber-500/30 bg-amber-500/10'
-      : 'text-[var(--text-primary)] border-[var(--glass-border)] bg-[var(--glass-bg)]';
+  const toneClass = semanticToneClass[tone] || semanticToneClass.neutral;
   const interactiveClass = onClick
     ? 'hover:bg-[var(--glass-bg-hover)] cursor-pointer transition-colors'
     : '';
@@ -300,6 +312,9 @@ export default function SuperAdminOverview({
         authMethod: connection.authMethod,
         status: connection.status,
         ready: Boolean(connection.ready),
+        isIssue: typeof connection.isIssue === 'boolean'
+          ? connection.isIssue
+          : connection.status !== 'ready' && connection.status !== 'not_required',
         urlHost: connection.urlHost || '',
         fallbackUrlHost: connection.fallbackUrlHost || '',
         updatedAt: connection.updatedAt || client.updatedAt || null,
@@ -309,8 +324,13 @@ export default function SuperAdminOverview({
 
   const issues = useMemo(() => {
     if (Array.isArray(overview?.issues)) return overview.issues;
-    return instances.filter((instance) => instance.status !== 'ready');
+    return instances.filter((instance) => isConnectionIssue(instance));
   }, [overview?.issues, instances]);
+  const connectionStats = useMemo(() => ({
+    connections: instances.length,
+    readyConnections: instances.filter((instance) => instance.ready).length,
+    issueConnections: instances.filter((instance) => isConnectionIssue(instance)).length,
+  }), [instances]);
 
   const statCards = useMemo(() => ([
     {
@@ -338,22 +358,22 @@ export default function SuperAdminOverview({
       key: 'connections',
       icon: Wifi,
       label: t('superAdminOverview.stats.connections'),
-      value: totals.connections || 0,
+      value: connectionStats.connections || totals.connections || 0,
       tone: 'neutral',
     },
     {
       key: 'readyConnections',
       icon: Check,
       label: t('superAdminOverview.stats.readyConnections'),
-      value: totals.readyConnections || 0,
-      tone: 'good',
+      value: connectionStats.readyConnections || 0,
+      tone: connectionStats.readyConnections > 0 ? 'good' : 'neutral',
     },
     {
       key: 'issueConnections',
       icon: AlertTriangle,
       label: t('superAdminOverview.stats.issueConnections'),
-      value: totals.issueConnections || 0,
-      tone: Number(totals.issueConnections || 0) > 0 ? 'warn' : 'good',
+      value: connectionStats.issueConnections || 0,
+      tone: Number(connectionStats.issueConnections || 0) > 0 ? 'warn' : 'good',
     },
     {
       key: 'dashboards',
@@ -390,7 +410,7 @@ export default function SuperAdminOverview({
       value: totals.appActions || 0,
       tone: 'neutral',
     },
-  ]), [t, totals]);
+  ]), [connectionStats.connections, connectionStats.issueConnections, connectionStats.readyConnections, t, totals]);
 
   const kpiMap = useMemo(
     () => Object.fromEntries(statCards.map((card) => [card.key, card])),
@@ -576,7 +596,7 @@ export default function SuperAdminOverview({
                 <h3 className="text-xs md:text-sm font-bold uppercase tracking-[0.2em] text-[var(--text-secondary)]">
                   {t('superAdminOverview.issues.title')}
                 </h3>
-                <span className={`px-2 py-1 rounded-full text-[10px] uppercase tracking-[0.14em] ${issues.length > 0 ? 'bg-amber-500/15 text-amber-300 border border-amber-500/30' : 'bg-green-500/15 text-green-300 border border-green-500/30'}`}>
+                <span className={`px-2 py-1 rounded-full text-[10px] uppercase tracking-[0.14em] ${issues.length > 0 ? statusTheme.missing_token.className : statusTheme.ready.className}`}>
                   {formatNumber(issues.length)}
                 </span>
               </div>
@@ -588,15 +608,15 @@ export default function SuperAdminOverview({
                   {issues.map((issue, index) => (
                     <div
                       key={`${issue.clientId}-${issue.connectionId}-${index}`}
-                      className="rounded-xl border border-amber-500/25 bg-amber-500/10 px-3 py-2.5"
+                      className="rounded-xl border border-[var(--status-warning-border)] bg-[var(--status-warning-bg)] px-3 py-2.5"
                     >
-                      <p className="text-xs font-semibold text-[var(--text-primary)]">
+                      <p className="text-xs font-semibold text-[var(--status-warning-text)]">
                         {(issue.clientName || issue.clientId)} / {(issue.connectionName || issue.connectionId)}
                       </p>
-                      <p className="text-[11px] text-[var(--text-secondary)] mt-0.5">
+                      <p className="text-[11px] text-[var(--text-primary)] mt-0.5">
                         {t(`superAdminOverview.connection.reason.${issue.status}`)}
                       </p>
-                      <p className="text-[10px] uppercase tracking-[0.14em] text-[var(--text-muted)] mt-1">
+                      <p className="text-[10px] uppercase tracking-[0.14em] text-[var(--status-warning-text)] mt-1 opacity-90">
                         {t((statusTheme[issue.status] || statusTheme.missing_url).labelKey)}
                       </p>
                     </div>
@@ -790,7 +810,7 @@ export default function SuperAdminOverview({
                 {t('superAdminOverview.sections.liveSessions')}
               </h3>
               <div className="inline-flex items-center gap-2 text-[10px] uppercase tracking-[0.16em] text-[var(--text-muted)]">
-                <span className="px-2 py-1 rounded-full border border-emerald-500/30 bg-emerald-500/10 text-emerald-300">
+                <span className={`px-2 py-1 rounded-full ${statusTheme.ready.className}`}>
                   {t('superAdminOverview.sessions.online')}: {formatNumber(onlineSessions.length)}
                 </span>
                 <span className="px-2 py-1 rounded-full border border-[var(--glass-border)] bg-[var(--glass-bg)] text-[var(--text-secondary)]">
@@ -817,10 +837,10 @@ export default function SuperAdminOverview({
                           {t('superAdminOverview.client.id')}: {session.clientId || '-'}
                         </p>
                       </div>
-                      <span className={`px-2 py-1 rounded-full text-[10px] uppercase tracking-[0.14em] border ${
+                      <span className={`px-2 py-1 rounded-full text-[10px] uppercase tracking-[0.14em] ${
                         session.isOnline
-                          ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30'
-                          : 'bg-amber-500/15 text-amber-300 border-amber-500/30'
+                          ? statusTheme.ready.className
+                          : statusTheme.missing_token.className
                       }`}>
                         {session.isOnline ? t('superAdminOverview.sessions.online') : t('superAdminOverview.sessions.idle')}
                       </span>

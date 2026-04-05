@@ -20,8 +20,11 @@ import {
 
 const router = Router();
 
-const PLATFORM_ADMIN_CLIENT_ID = normalizeClientId(process.env.PLATFORM_ADMIN_CLIENT_ID || DEFAULT_CLIENT_ID) || DEFAULT_CLIENT_ID;
+const PLATFORM_ADMIN_CLIENT_ID = normalizeClientId(globalThis.process?.env?.PLATFORM_ADMIN_CLIENT_ID || DEFAULT_CLIENT_ID) || DEFAULT_CLIENT_ID;
 const APP_ACTION_HISTORY_KEY_PREFIX = 'app_action_history::';
+const isPlatformAdminClientId = (value) => (
+  (normalizeClientId(value) || DEFAULT_CLIENT_ID) === PLATFORM_ADMIN_CLIENT_ID
+);
 const normalizeDashboardId = (value) => String(value || 'default').trim().replace(/\s+/g, '_').toLowerCase();
 const parseLimit = (value, fallback = 30) => {
   const parsed = Number.parseInt(String(value ?? ''), 10);
@@ -43,7 +46,7 @@ const parseUrlHost = (value) => {
   const raw = String(value || '').trim();
   if (!raw) return '';
   try {
-    const parsed = new URL(raw);
+    const parsed = new globalThis.URL(raw);
     return parsed.host || parsed.hostname || '';
   } catch {
     return raw.replace(/^https?:\/\//i, '').split('/')[0] || raw;
@@ -76,7 +79,7 @@ const shortUserAgent = (userAgentValue) => {
   if (/linux/i.test(raw)) return 'Linux';
   return raw.slice(0, 80);
 };
-const getConnectionConfigStatus = (connection) => {
+const getConnectionConfigStatus = (connection, clientId = '') => {
   const authMethod = String(connection?.authMethod || 'oauth').trim() === 'token' ? 'token' : 'oauth';
   const url = String(connection?.url || '').trim();
   const token = String(connection?.token || '').trim();
@@ -87,16 +90,30 @@ const getConnectionConfigStatus = (connection) => {
   const hasCredentials = authMethod === 'token' ? Boolean(token) : hasOAuthAccessToken;
 
   if (!url) {
-    return { status: 'missing_url', ready: false, authMethod };
+    if (isPlatformAdminClientId(clientId)) {
+      return {
+        status: 'not_required',
+        ready: false,
+        isIssue: false,
+        authMethod,
+      };
+    }
+    return {
+      status: 'missing_url',
+      ready: false,
+      isIssue: true,
+      authMethod,
+    };
   }
   if (!hasCredentials) {
     return {
       status: authMethod === 'token' ? 'missing_token' : 'missing_oauth',
       ready: false,
+      isIssue: true,
       authMethod,
     };
   }
-  return { status: 'ready', ready: true, authMethod };
+  return { status: 'ready', ready: true, isIssue: false, authMethod };
 };
 const getClientBackupLocations = (client, parsedConfig) => {
   const primaryConnectionId = String(
@@ -330,7 +347,7 @@ router.get('/overview', (req, res) => {
     const connections = Array.isArray(parsedConfig?.connections) ? parsedConfig.connections : [];
     const connectionOverview = connections.map((connection) => {
       const connectionId = String(connection?.id || 'primary').trim() || 'primary';
-      const statusMeta = getConnectionConfigStatus(connection);
+      const statusMeta = getConnectionConfigStatus(connection, client.id);
       return {
         id: connectionId,
         name: String(connection?.name || connectionId || 'Connection').trim() || connectionId,
@@ -338,6 +355,7 @@ router.get('/overview', (req, res) => {
         authMethod: statusMeta.authMethod,
         status: statusMeta.status,
         ready: statusMeta.ready,
+        isIssue: statusMeta.isIssue !== false,
         urlHost: parseUrlHost(connection?.url),
         fallbackUrlHost: parseUrlHost(connection?.fallbackUrl),
         hasUrl: Boolean(String(connection?.url || '').trim()),
@@ -346,7 +364,7 @@ router.get('/overview', (req, res) => {
       };
     });
     const readyConnectionCount = connectionOverview.filter((connection) => connection.ready).length;
-    const issueConnectionCount = Math.max(0, connectionOverview.length - readyConnectionCount);
+    const issueConnectionCount = connectionOverview.filter((connection) => connection.isIssue).length;
     const dashboardCount = Number(dashboardCounts.get(client.id) || 0);
     const activeSessionCount = Number(sessionCounts.get(client.id) || 0);
     const loggedInUserCount = Number(loggedInUserCounts.get(client.id) || 0);
@@ -438,6 +456,7 @@ router.get('/overview', (req, res) => {
       authMethod: connection.authMethod,
       status: connection.status,
       ready: Boolean(connection.ready),
+      isIssue: Boolean(connection.isIssue),
       urlHost: connection.urlHost || '',
       fallbackUrlHost: connection.fallbackUrlHost || '',
       hasUrl: Boolean(connection.hasUrl),
@@ -445,7 +464,7 @@ router.get('/overview', (req, res) => {
       updatedAt: connection.updatedAt || client.updatedAt || null,
     }))
   ));
-  const issues = instances.filter((instance) => instance.status !== 'ready');
+  const issues = instances.filter((instance) => instance.isIssue);
 
   return res.json({
     generatedAt: new Date().toISOString(),

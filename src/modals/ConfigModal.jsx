@@ -411,6 +411,8 @@ export default function ConfigModal({
   const canAccessStorage = canManageAdministration;
   const canAccessNotifications = canManageNotifications && isAdmin;
   const canAccessUpdates = isAdmin && !currentUser?.isPlatformAdmin;
+  const managedClientIdNormalized = String(connectionManageClientId || '').trim().toLowerCase();
+  const isManagedPlatformAdminClient = isPlatformAdmin && managedClientIdNormalized === 'administratorclient';
 
   useEffect(() => {
     if (resolvedConfigTab !== 'layout' && layoutPreview) {
@@ -1440,8 +1442,8 @@ export default function ConfigModal({
           schemaVersion: 1,
           dashboard: data,
         };
-        const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
-        const url = URL.createObjectURL(blob);
+        const blob = new globalThis.Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+        const url = globalThis.URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
         a.download = `${target}-dashboard-export.json`;
@@ -2346,26 +2348,32 @@ export default function ConfigModal({
 
     const getManagedConnectionStatusMeta = (connection) => {
       if (!connection?.url) {
+        if (isManagedPlatformAdminClient) {
+          return {
+            label: t('superAdminOverview.connection.status.not_required'),
+            className: 'border-[var(--status-neutral-border)] bg-[var(--status-neutral-bg)] text-[var(--status-neutral-text)]',
+          };
+        }
         return {
           label: t('superAdminOverview.connection.status.missing_url'),
-          className: 'border-amber-400/20 bg-amber-500/10 text-amber-300',
+          className: 'border-[var(--status-warning-border)] bg-[var(--status-warning-bg)] text-[var(--status-warning-text)]',
         };
       }
       if (connection.authMethod === 'token' && !String(connection.token || '').trim()) {
         return {
           label: t('superAdminOverview.connection.status.missing_token'),
-          className: 'border-amber-400/20 bg-amber-500/10 text-amber-300',
+          className: 'border-[var(--status-warning-border)] bg-[var(--status-warning-bg)] text-[var(--status-warning-text)]',
         };
       }
       if (connection.authMethod === 'oauth' && !connection.oauthTokens) {
         return {
           label: t('superAdminOverview.connection.status.missing_oauth'),
-          className: 'border-sky-400/20 bg-sky-500/10 text-sky-300',
+          className: 'border-[var(--status-warning-border)] bg-[var(--status-warning-bg)] text-[var(--status-warning-text)]',
         };
       }
       return {
         label: t('superAdminOverview.connection.status.ready'),
-        className: 'border-emerald-400/20 bg-emerald-500/10 text-emerald-300',
+        className: 'border-[var(--status-success-border)] bg-[var(--status-success-bg)] text-[var(--status-success-text)]',
       };
     };
 
@@ -3126,7 +3134,7 @@ export default function ConfigModal({
   const toggleNotificationRuleExpanded = (ruleId) => {
     const normalizedRuleId = String(ruleId || '').trim();
     if (!normalizedRuleId) return;
-    setNotificationRuleExpanded((prev) => ({ ...prev, [normalizedRuleId]: !Boolean(prev[normalizedRuleId]) }));
+    setNotificationRuleExpanded((prev) => ({ ...prev, [normalizedRuleId]: !prev[normalizedRuleId] }));
   };
 
   const toggleNotificationRuleChannel = (ruleId, channelKey) => {
@@ -3144,7 +3152,7 @@ export default function ConfigModal({
             browser: Boolean(channels.browser),
             native: Boolean(channels.native),
             sms: Boolean(channels.sms),
-            [channelKey]: !Boolean(channels[channelKey]),
+            [channelKey]: !channels[channelKey],
           },
         };
       }),
