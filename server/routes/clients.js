@@ -17,15 +17,11 @@ import {
   ensureClientBackupDirectory,
   listClientBackupFiles,
 } from '../backupStorage.js';
+import { PLATFORM_ADMIN_CLIENT_ID, isPlatformAdminClientId } from '../platformAdmin.js';
 
 const router = Router();
 
-const SUPER_ADMIN_CLIENT_ID = normalizeClientId(globalThis.process?.env?.SUPER_ADMIN_CLIENT_ID || 'AdministratorClient') || 'administratorclient';
-const PLATFORM_ADMIN_CLIENT_ID = normalizeClientId(globalThis.process?.env?.PLATFORM_ADMIN_CLIENT_ID || SUPER_ADMIN_CLIENT_ID) || SUPER_ADMIN_CLIENT_ID;
 const APP_ACTION_HISTORY_KEY_PREFIX = 'app_action_history::';
-const isPlatformAdminClientId = (value) => (
-  (normalizeClientId(value) || DEFAULT_CLIENT_ID) === PLATFORM_ADMIN_CLIENT_ID
-);
 const normalizeDashboardId = (value) => String(value || 'default').trim().replace(/\s+/g, '_').toLowerCase();
 const parseLimit = (value, fallback = 30) => {
   const parsed = Number.parseInt(String(value ?? ''), 10);

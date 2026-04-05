@@ -1,4 +1,5 @@
 import { normalizeClientId } from './db.js';
+import { toE164Phone } from './twilioSms.js';
 
 export const DEFAULT_NOTIFICATION_CONFIG = {
   enabled: true,
@@ -30,11 +31,20 @@ export const DEFAULT_NOTIFICATION_CONFIG = {
     },
     cooldownSeconds: 0,
   },
+  remoteInstanceHealth: {
+    enabled: false,
+    intervalMinutes: 60,
+    timeoutSeconds: 12,
+    cooldownMinutes: 60,
+    smsCountryCode: '+47',
+    smsNumbers: [],
+  },
   rules: [],
 };
 
 const MAX_RULES = 60;
 const MAX_TARGET_USERS = 100;
+const MAX_DIRECT_SMS_NUMBERS = 20;
 const CONDITION_TYPES = new Set(['greater_than', 'less_than', 'equals', 'is_active']);
 const LEVEL_TYPES = new Set(['info', 'warning', 'critical', 'success', 'error']);
 const ROLE_TARGETS = new Set(['admin', 'user', 'inspector']);
@@ -57,6 +67,30 @@ const clampInt = (value, fallback, min, max) => {
 const normalizeEntityId = (value, fallback) => {
   const normalized = String(value || '').trim();
   return normalized || fallback;
+};
+
+const normalizePhoneCountryCode = (value, fallback = '+47') => {
+  const raw = String(value || fallback || '+47').trim().replace(/[^\d+]/g, '');
+  if (!raw) return '+47';
+  return raw.startsWith('+') ? raw : `+${raw}`;
+};
+
+const normalizeDirectSmsNumbers = (value, countryCode) => {
+  const source = Array.isArray(value)
+    ? value
+    : String(value || '').split(/[\n,;]+/g);
+  const seen = new Set();
+  const normalized = [];
+
+  source.forEach((entry) => {
+    if (normalized.length >= MAX_DIRECT_SMS_NUMBERS) return;
+    const phone = toE164Phone(countryCode, String(entry || '').trim());
+    if (!phone || seen.has(phone)) return;
+    seen.add(phone);
+    normalized.push(phone);
+  });
+
+  return normalized;
 };
 
 const normalizeSmsTargets = (value, fallback = { groups: ['admin'], userIds: [] }) => {
@@ -91,6 +125,19 @@ const normalizeLevelConfig = (value, fallback) => {
     sms: toBool(input.sms, fallback.sms),
     smsTargets: normalizeSmsTargets(input.smsTargets, fallback.smsTargets),
     cooldownSeconds: clampInt(input.cooldownSeconds, fallback.cooldownSeconds, 0, 86400),
+  };
+};
+
+const normalizeRemoteInstanceHealthConfig = (value, fallback = DEFAULT_NOTIFICATION_CONFIG.remoteInstanceHealth) => {
+  const input = value && typeof value === 'object' ? value : {};
+  const smsCountryCode = normalizePhoneCountryCode(input.smsCountryCode, fallback.smsCountryCode);
+  return {
+    enabled: toBool(input.enabled, fallback.enabled),
+    intervalMinutes: clampInt(input.intervalMinutes, fallback.intervalMinutes, 5, 1440),
+    timeoutSeconds: clampInt(input.timeoutSeconds, fallback.timeoutSeconds, 3, 60),
+    cooldownMinutes: clampInt(input.cooldownMinutes, fallback.cooldownMinutes, 0, 10080),
+    smsCountryCode,
+    smsNumbers: normalizeDirectSmsNumbers(input.smsNumbers, smsCountryCode),
   };
 };
 
@@ -155,6 +202,10 @@ export const normalizeNotificationConfig = (value) => {
     ),
     warning: normalizeLevelConfig(input.warning, DEFAULT_NOTIFICATION_CONFIG.warning),
     critical: normalizeLevelConfig(input.critical, DEFAULT_NOTIFICATION_CONFIG.critical),
+    remoteInstanceHealth: normalizeRemoteInstanceHealthConfig(
+      input.remoteInstanceHealth,
+      DEFAULT_NOTIFICATION_CONFIG.remoteInstanceHealth,
+    ),
     rules: normalizeRules(input.rules),
   };
 };

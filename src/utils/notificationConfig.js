@@ -28,12 +28,21 @@ export const DEFAULT_NOTIFICATION_CONFIG = {
     },
     cooldownSeconds: 0,
   },
+  remoteInstanceHealth: {
+    enabled: false,
+    intervalMinutes: 60,
+    timeoutSeconds: 12,
+    cooldownMinutes: 60,
+    smsCountryCode: '+47',
+    smsNumbers: [],
+  },
   rules: [],
 };
 
 const MAX_RULES = 60;
 const MAX_RULE_CONDITIONS = 8;
 const MAX_TARGET_USERS = 100;
+const MAX_DIRECT_SMS_NUMBERS = 20;
 const CONDITION_TYPES = new Set(['greater_than', 'less_than', 'equals', 'is_active']);
 const CONDITION_OPERATORS = new Set(['and', 'or']);
 const LEVEL_TYPES = new Set(['info', 'warning', 'critical', 'success', 'error']);
@@ -54,6 +63,23 @@ const clampInt = (value, fallback, min, max) => {
   return Math.max(min, Math.min(max, parsed));
 };
 
+const normalizePhoneCountryCode = (value, fallback = '+47') => {
+  const raw = String(value || fallback || '+47').trim().replace(/[^\d+]/g, '');
+  if (!raw) return '+47';
+  return raw.startsWith('+') ? raw : `+${raw}`;
+};
+
+const normalizeDirectSmsNumbers = (value) => {
+  const source = Array.isArray(value)
+    ? value
+    : String(value || '').split(/[\n,;]+/g);
+  return Array.from(new Set(
+    source
+      .map((entry) => String(entry || '').trim())
+      .filter(Boolean),
+  )).slice(0, MAX_DIRECT_SMS_NUMBERS);
+};
+
 const normalizeLevelConfig = (value, fallback) => {
   const input = value && typeof value === 'object' ? value : {};
   return {
@@ -63,6 +89,18 @@ const normalizeLevelConfig = (value, fallback) => {
     sms: toBool(input.sms, fallback.sms),
     smsTargets: normalizeSmsTargets(input.smsTargets, fallback.smsTargets),
     cooldownSeconds: clampInt(input.cooldownSeconds, fallback.cooldownSeconds, 0, 86400),
+  };
+};
+
+const normalizeRemoteInstanceHealthConfig = (value, fallback = DEFAULT_NOTIFICATION_CONFIG.remoteInstanceHealth) => {
+  const input = value && typeof value === 'object' ? value : {};
+  return {
+    enabled: toBool(input.enabled, fallback.enabled),
+    intervalMinutes: clampInt(input.intervalMinutes, fallback.intervalMinutes, 5, 1440),
+    timeoutSeconds: clampInt(input.timeoutSeconds, fallback.timeoutSeconds, 3, 60),
+    cooldownMinutes: clampInt(input.cooldownMinutes, fallback.cooldownMinutes, 0, 10080),
+    smsCountryCode: normalizePhoneCountryCode(input.smsCountryCode, fallback.smsCountryCode),
+    smsNumbers: normalizeDirectSmsNumbers(input.smsNumbers),
   };
 };
 
@@ -181,6 +219,10 @@ export const normalizeNotificationConfig = (value) => {
     ),
     warning: normalizeLevelConfig(input.warning, DEFAULT_NOTIFICATION_CONFIG.warning),
     critical: normalizeLevelConfig(input.critical, DEFAULT_NOTIFICATION_CONFIG.critical),
+    remoteInstanceHealth: normalizeRemoteInstanceHealthConfig(
+      input.remoteInstanceHealth,
+      DEFAULT_NOTIFICATION_CONFIG.remoteInstanceHealth,
+    ),
     rules: normalizeRules(input.rules),
     updatedAt: input.updatedAt || null,
   };

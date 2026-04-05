@@ -497,6 +497,14 @@ export const sendNotificationSmsDispatch = async (payloadInput) => {
   return payload && typeof payload === 'object' ? payload : {};
 };
 
+export const runRemoteInstanceHealthCheck = async () => {
+  const payload = await apiRequest('/api/auth/remote-instance-health-check', {
+    method: 'POST',
+    body: JSON.stringify({}),
+  });
+  return payload && typeof payload === 'object' ? payload : {};
+};
+
 export const fetchNotificationHistory = async () => {
   const payload = await apiRequest('/api/auth/notification-history', { method: 'GET' });
   return Array.isArray(payload?.history) ? payload.history : [];

@@ -64,6 +64,13 @@ const stripRichTextToPlain = (input) => String(input || '')
   .replace(/&quot;/gi, '"')
   .replace(/&#39;/gi, "'");
 
+const parsePhoneListInput = (input) => Array.from(new Set(
+  String(input || '')
+    .split(/[\n,;]+/g)
+    .map((entry) => String(entry || '').trim())
+    .filter(Boolean),
+));
+
 const sanitizeRichHtml = (input) => String(input || '')
   .replace(/<script[\s\S]*?>[\s\S]*?<\/script>/gi, '')
   .replace(/<style[\s\S]*?>[\s\S]*?<\/style>/gi, '')
@@ -331,6 +338,8 @@ export default function ConfigModal({
   const [twilioTestTo, setTwilioTestTo] = useState('');
   const [twilioTestMessage, setTwilioTestMessage] = useState('Smart Sauna test message');
   const [twilioTestSending, setTwilioTestSending] = useState(false);
+  const [remoteHealthRunBusy, setRemoteHealthRunBusy] = useState(false);
+  const [remoteHealthRunMessage, setRemoteHealthRunMessage] = useState('');
   const [appActionHistory, setAppActionHistory] = useState([]);
   const [appActionHistoryLoading, setAppActionHistoryLoading] = useState(false);
   const [appActionHistoryBusy, setAppActionHistoryBusy] = useState(false);
@@ -3236,6 +3245,59 @@ export default function ConfigModal({
     }
   };
 
+  const updateRemoteInstanceHealthDraft = (patch) => {
+    updateNotificationDraft((prev) => ({
+      ...prev,
+      remoteInstanceHealth: {
+        ...DEFAULT_NOTIFICATION_CONFIG.remoteInstanceHealth,
+        ...(prev?.remoteInstanceHealth && typeof prev.remoteInstanceHealth === 'object' ? prev.remoteInstanceHealth : {}),
+        ...(patch && typeof patch === 'object' ? patch : {}),
+      },
+    }));
+  };
+
+  const handleRunRemoteInstanceHealthCheck = async () => {
+    if (!isPlatformAdmin || typeof userAdminApi?.runRemoteInstanceHealthCheck !== 'function') return;
+    setRemoteHealthRunBusy(true);
+    setRemoteHealthRunMessage('');
+    try {
+      if (notificationDirty && typeof onSaveNotificationConfig === 'function') {
+        const saveResult = await onSaveNotificationConfig(
+          normalizeNotificationConfig(notificationDraft || DEFAULT_NOTIFICATION_CONFIG),
+        );
+        if (!saveResult?.ok) {
+          setRemoteHealthRunMessage(String(saveResult?.error || t('notifications.saveFailed')));
+          return;
+        }
+        setNotificationDirty(false);
+        if (saveResult?.config) {
+          setNotificationDraft(normalizeNotificationConfig(saveResult.config));
+        }
+      }
+
+      const result = await userAdminApi.runRemoteInstanceHealthCheck();
+      const failureCount = Math.max(0, Number(result?.failedInstanceCount || 0));
+      const sentCount = Math.max(0, Number(result?.alert?.sent || 0));
+      const alertReason = String(result?.alert?.reason || '').trim();
+
+      if (result?.skipped && result?.reason === 'disabled') {
+        setRemoteHealthRunMessage(t('notifications.remoteHealthRunDisabled'));
+      } else if (failureCount === 0) {
+        setRemoteHealthRunMessage(t('notifications.remoteHealthRunOk'));
+      } else {
+        let detail = t('notifications.remoteHealthRunDetected');
+        if (sentCount > 0) detail = `${detail} ${t('notifications.remoteHealthRunSmsSent')}`;
+        else if (alertReason === 'no_recipients') detail = `${detail} ${t('notifications.remoteHealthRunSmsMissingRecipients')}`;
+        else if (alertReason === 'twilio_not_configured') detail = `${detail} ${t('notifications.remoteHealthRunSmsMissingTwilio')}`;
+        setRemoteHealthRunMessage(detail);
+      }
+    } catch (error) {
+      setRemoteHealthRunMessage(String(error?.message || t('notifications.remoteHealthRunFailed')));
+    } finally {
+      setRemoteHealthRunBusy(false);
+    }
+  };
+
   const renderNotificationsTab = () => {
     const draftSource = notificationDraft && typeof notificationDraft === 'object'
       ? notificationDraft
@@ -3263,10 +3325,17 @@ export default function ConfigModal({
             : {}),
         },
       },
+      remoteInstanceHealth: {
+        ...DEFAULT_NOTIFICATION_CONFIG.remoteInstanceHealth,
+        ...(draftSource.remoteInstanceHealth && typeof draftSource.remoteInstanceHealth === 'object'
+          ? draftSource.remoteInstanceHealth
+          : {}),
+      },
       rules: Array.isArray(draftSource.rules) ? draftSource.rules : [],
     };
     const warningChannelsEnabled = Boolean(draft.warning.inApp || draft.warning.browser || draft.warning.native || draft.warning.sms);
     const criticalChannelsEnabled = Boolean(draft.critical.inApp || draft.critical.browser || draft.critical.native || draft.critical.sms);
+    const remoteHealthDraft = draft.remoteInstanceHealth || DEFAULT_NOTIFICATION_CONFIG.remoteInstanceHealth;
     const saveBlocked = !notificationDirty || notificationConfigSaving || notificationConfigLoading;
 
     return (
@@ -3470,6 +3539,113 @@ export default function ConfigModal({
                   {twilioTestSending ? t('common.saving') : 'Send test'}
                 </button>
               </div>
+            </div>
+          </div>
+        ) : null}
+
+        {isPlatformAdmin ? (
+          <div className="rounded-2xl border border-[var(--glass-border)] bg-[linear-gradient(145deg,color-mix(in_srgb,var(--glass-bg)_92%,rgba(59,130,246,0.08)),color-mix(in_srgb,var(--glass-bg)_95%,transparent))] p-4 space-y-3">
+            <div className="flex items-start justify-between gap-3">
+              <div className="flex items-start gap-3">
+                <div className="w-9 h-9 rounded-xl border border-sky-400/25 bg-sky-500/10 text-sky-300 flex items-center justify-center shrink-0">
+                  <Wifi className="w-4 h-4" />
+                </div>
+                <div>
+                  <h4 className="text-[11px] uppercase tracking-wider font-bold text-[var(--text-secondary)]">
+                    {t('notifications.remoteHealthTitle')}
+                  </h4>
+                  <p className="text-xs text-[var(--text-secondary)] mt-1">
+                    {t('notifications.remoteHealthDescription')}
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => updateRemoteInstanceHealthDraft({ enabled: !remoteHealthDraft.enabled })}
+                className={`w-10 h-6 rounded-full p-1 transition-colors relative ${remoteHealthDraft.enabled ? 'bg-emerald-500' : 'bg-gray-500/30'}`}
+              >
+                <div className={`w-4 h-4 rounded-full bg-white shadow-sm transition-transform ${remoteHealthDraft.enabled ? 'translate-x-4' : 'translate-x-0'}`} />
+              </button>
+            </div>
+
+            {!remoteHealthDraft.enabled ? (
+              <div className="rounded-lg border border-amber-500/20 bg-amber-500/10 px-3 py-2 text-xs text-[var(--status-warning-text)]">
+                {t('notifications.remoteHealthDisabledHint')}
+              </div>
+            ) : null}
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <div className="space-y-1">
+                <label className="text-[10px] uppercase tracking-wider font-bold text-[var(--text-secondary)]">
+                  {t('notifications.remoteHealthIntervalMinutes')}
+                </label>
+                <input
+                  type="number"
+                  min={5}
+                  max={1440}
+                  value={Math.max(5, Number(remoteHealthDraft.intervalMinutes || 60))}
+                  onChange={(e) => updateRemoteInstanceHealthDraft({
+                    intervalMinutes: Math.max(5, Math.min(1440, Number.parseInt(e.target.value || '60', 10) || 60)),
+                  })}
+                  className="w-full px-3 py-2 rounded-lg bg-[var(--glass-bg-hover)] border border-[var(--glass-border)] text-sm"
+                />
+              </div>
+              <div className="space-y-1">
+                <label className="text-[10px] uppercase tracking-wider font-bold text-[var(--text-secondary)]">
+                  {t('notifications.remoteHealthTimeoutSeconds')}
+                </label>
+                <input
+                  type="number"
+                  min={3}
+                  max={60}
+                  value={Math.max(3, Number(remoteHealthDraft.timeoutSeconds || 12))}
+                  onChange={(e) => updateRemoteInstanceHealthDraft({
+                    timeoutSeconds: Math.max(3, Math.min(60, Number.parseInt(e.target.value || '12', 10) || 12)),
+                  })}
+                  className="w-full px-3 py-2 rounded-lg bg-[var(--glass-bg-hover)] border border-[var(--glass-border)] text-sm"
+                />
+              </div>
+            </div>
+
+            <div className="rounded-xl border border-[var(--glass-border)] bg-[var(--glass-bg)] p-3 space-y-2">
+              <p className="text-[10px] uppercase tracking-wider font-bold text-[var(--text-secondary)]">
+                {t('notifications.remoteHealthSmsRecipients')}
+              </p>
+              <div className="grid grid-cols-1 md:grid-cols-[7rem_minmax(0,1fr)] gap-2">
+                <select
+                  value={normalizePhoneCountryCode(remoteHealthDraft.smsCountryCode) || '+47'}
+                  onChange={(e) => updateRemoteInstanceHealthDraft({ smsCountryCode: e.target.value })}
+                  className="w-full px-3 py-2 rounded-lg bg-[var(--glass-bg-hover)] border border-[var(--glass-border)] text-sm"
+                >
+                  {getPhoneCountryCodeOptions(remoteHealthDraft.smsCountryCode).map((option) => (
+                    <option key={`remote_health_cc_${option.value}`} value={option.value}>{option.label}</option>
+                  ))}
+                </select>
+                <textarea
+                  value={Array.isArray(remoteHealthDraft.smsNumbers) ? remoteHealthDraft.smsNumbers.join('\n') : ''}
+                  onChange={(e) => updateRemoteInstanceHealthDraft({ smsNumbers: parsePhoneListInput(e.target.value) })}
+                  className="w-full px-3 py-2 rounded-lg bg-[var(--glass-bg-hover)] border border-[var(--glass-border)] text-sm min-h-[92px]"
+                  placeholder={t('notifications.remoteHealthSmsPlaceholder')}
+                />
+              </div>
+              <p className="text-[11px] text-[var(--text-secondary)]">
+                {t('notifications.remoteHealthSmsHint')}
+              </p>
+            </div>
+
+            <div className="rounded-lg border border-sky-500/20 bg-sky-500/10 px-3 py-2 text-xs text-sky-200">
+              {t('notifications.remoteHealthScopeHint')}
+            </div>
+
+            <div className="flex items-center justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => void handleRunRemoteInstanceHealthCheck()}
+                disabled={remoteHealthRunBusy || notificationConfigLoading}
+                className="px-4 py-2 rounded-lg border border-[var(--glass-border)] bg-[var(--glass-bg-hover)] text-xs font-bold uppercase tracking-wider disabled:opacity-50"
+              >
+                {remoteHealthRunBusy ? t('common.saving') : t('notifications.remoteHealthRunNow')}
+              </button>
             </div>
           </div>
         ) : null}
@@ -4152,9 +4328,9 @@ export default function ConfigModal({
           </div>
         </div>
 
-        {(notificationSaveMessage || notificationConfigMessage || twilioConfigMessage) && (
+        {(notificationSaveMessage || notificationConfigMessage || twilioConfigMessage || remoteHealthRunMessage) && (
           <div className="rounded-xl p-3 text-xs font-semibold bg-[var(--glass-bg)] border border-[var(--glass-border)]">
-            {notificationSaveMessage || notificationConfigMessage || twilioConfigMessage}
+            {notificationSaveMessage || notificationConfigMessage || twilioConfigMessage || remoteHealthRunMessage}
           </div>
         )}
 

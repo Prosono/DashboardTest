@@ -18,6 +18,10 @@ import {
   getLoginThrottleStatus,
   recordFailedLoginAttempt,
 } from '../loginRateLimiter.js';
+import {
+  PLATFORM_ADMIN_CLIENT_ID,
+  SUPER_ADMIN_CLIENT_ID,
+} from '../platformAdmin.js';
 import { hashPassword, verifyPassword } from '../password.js';
 import { mergeHaConfigPayload, parseHaConfigRow, serializeHaConnections } from '../haConfig.js';
 import {
@@ -54,11 +58,14 @@ import {
   serializeAppActionHistory,
   shouldDedupeAppActionEntry,
 } from '../appActionHistory.js';
+import { runRemoteInstanceHealthCheck } from '../remoteInstanceHealthMonitor.js';
 
-const SUPER_ADMIN_CLIENT_ID = normalizeClientId(process.env.SUPER_ADMIN_CLIENT_ID || 'AdministratorClient') || 'administratorclient';
-const PLATFORM_ADMIN_CLIENT_ID = normalizeClientId(process.env.PLATFORM_ADMIN_CLIENT_ID || SUPER_ADMIN_CLIENT_ID) || SUPER_ADMIN_CLIENT_ID;
-const SUPER_ADMIN_USERNAME = String(process.env.SUPER_ADMIN_USERNAME || process.env.DEFAULT_ADMIN_USERNAME || '').trim();
-const SUPER_ADMIN_PASSWORD = String(process.env.SUPER_ADMIN_PASSWORD || process.env.DEFAULT_ADMIN_PASSWORD || '');
+const SUPER_ADMIN_USERNAME = String(
+  globalThis.process?.env?.SUPER_ADMIN_USERNAME || globalThis.process?.env?.DEFAULT_ADMIN_USERNAME || '',
+).trim();
+const SUPER_ADMIN_PASSWORD = String(
+  globalThis.process?.env?.SUPER_ADMIN_PASSWORD || globalThis.process?.env?.DEFAULT_ADMIN_PASSWORD || '',
+);
 const SUPER_ADMIN_USER_ID = 'platform-super-admin';
 const SUPER_ADMIN_DB_USERNAME = '__platform_super_admin__';
 
@@ -595,6 +602,22 @@ router.post('/notification-sms', authRequired, adminRequired, async (req, res) =
     deduped: false,
     errors: errors.slice(0, 20),
   });
+});
+
+router.post('/remote-instance-health-check', authRequired, adminRequired, async (req, res) => {
+  if (!req.auth?.user?.isPlatformAdmin) {
+    return res.status(403).json({ error: 'Only platform admin can run remote instance health checks' });
+  }
+
+  try {
+    const result = await runRemoteInstanceHealthCheck({
+      ignoreSchedule: true,
+      trigger: 'manual',
+    });
+    return res.json(result);
+  } catch (error) {
+    return res.status(500).json({ error: String(error?.message || 'Failed to run remote instance health check') });
+  }
 });
 
 const loadNotificationHistoryForClient = (clientId) => {

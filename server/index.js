@@ -8,10 +8,11 @@ import dashboardsRouter from './routes/dashboards.js';
 import iconsRouter from './routes/icons.js';
 import clientsRouter from './routes/clients.js';
 import brandingRouter from './routes/branding.js';
+import { startRemoteInstanceHealthMonitor } from './remoteInstanceHealthMonitor.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const PORT = parseInt(process.env.PORT || '3002', 10);
-const isProduction = process.env.NODE_ENV === 'production';
+const PORT = parseInt(globalThis.process?.env?.PORT || '3002', 10);
+const isProduction = globalThis.process?.env?.NODE_ENV === 'production';
 
 const app = express();
 app.use(express.json({ limit: '3mb' }));
@@ -32,7 +33,7 @@ app.use('/api/clients', clientsRouter);
 app.use('/api/branding', brandingRouter);
 
 app.get('/api/health', (_req, res) => {
-  res.json({ status: 'ok', version: process.env.npm_package_version || 'unknown' });
+  res.json({ status: 'ok', version: globalThis.process?.env?.npm_package_version || 'unknown' });
 });
 
 if (isProduction) {
@@ -77,7 +78,9 @@ if (isProduction) {
 }
 
 app.listen(PORT, '0.0.0.0', () => {
-  console.log(`[server] Dashboard backend running on port ${PORT}`);
+  globalThis.console?.log(`[server] Dashboard backend running on port ${PORT}`);
 });
+
+startRemoteInstanceHealthMonitor();
 
 export default app;
