@@ -249,6 +249,7 @@ export default function ConfigModal({
   onFinishOnboarding
 }) {
   const isEmbeddedPage = displayMode === 'page';
+  const embeddedPageSurfaceClass = 'popup-surface rounded-3xl border border-[var(--glass-border)]';
   const [installingIds, setInstallingIds] = useState({});
   const [expandedNotes, setExpandedNotes] = useState({});
   const [layoutPreview, setLayoutPreview] = useState(false);
@@ -647,6 +648,15 @@ export default function ConfigModal({
     ? [{ key: 'layout', icon: LayoutGrid, label: t('system.tabLayout') }]
     : TABS;
   const activeConfigTab = availableTabs.some((tab) => tab.key === resolvedConfigTab) ? resolvedConfigTab : 'connection';
+  const activeTabMeta = availableTabs.find((tab) => tab.key === activeConfigTab) || availableTabs[0] || null;
+  const ActiveEmbeddedTabIcon = activeTabMeta?.icon || LayoutGrid;
+  const embeddedPageDescription = activeConfigTab === 'connection'
+    ? t('adminPages.connection.description')
+    : activeConfigTab === 'notifications'
+      ? t('adminPages.notifications.description')
+      : activeConfigTab === 'storage'
+        ? t('adminPages.storage.description')
+        : '';
   const canManageClients = currentUser?.isPlatformAdmin === true && typeof userAdminApi?.listClients === 'function';
   const selectedManagedClient = clients.find((client) => client.id === connectionManageClientId) || null;
   const managedConnections = Array.isArray(managedConnectionConfig?.connections) ? managedConnectionConfig.connections : [];
@@ -1701,8 +1711,11 @@ export default function ConfigModal({
     };
 
     return (
-      <div className="space-y-5 font-sans animate-in fade-in slide-in-from-right-4 duration-300">
-        <div className="rounded-2xl p-5 bg-[var(--glass-bg)] border border-[var(--glass-border)] space-y-5 shadow-[0_20px_60px_-40px_rgba(0,0,0,0.55)]">
+      <div className={`font-sans animate-in fade-in slide-in-from-right-4 duration-300 ${isEmbeddedPage ? 'space-y-6' : 'space-y-5'}`}>
+        <div className={isEmbeddedPage
+          ? `${embeddedPageSurfaceClass} p-4 md:p-6 space-y-5`
+          : 'rounded-2xl p-5 bg-[var(--glass-bg)] border border-[var(--glass-border)] space-y-5 shadow-[0_20px_60px_-40px_rgba(0,0,0,0.55)]'
+        }>
           <div className="flex items-center justify-between gap-3">
             <div>
               <h3 className="text-sm font-bold uppercase tracking-wider text-[var(--text-primary)]">
@@ -1749,9 +1762,13 @@ export default function ConfigModal({
               );
             })}
           </div>
+        </div>
 
-          {storageSection === 'clients' && canManageClients && (
-            <div className="space-y-3 pt-2 border-t border-[var(--glass-border)]">
+        {storageSection === 'clients' && canManageClients && (
+          <div className={isEmbeddedPage
+            ? `${embeddedPageSurfaceClass} p-4 md:p-5 space-y-3`
+            : 'space-y-3 pt-2 border-t border-[var(--glass-border)]'
+          }>
               <h4 className="text-xs uppercase font-bold tracking-wider text-[var(--text-secondary)]">{t('userMgmt.clientManagement')}</h4>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -1803,11 +1820,14 @@ export default function ConfigModal({
                   ))}
                 </div>
               </div>
-            </div>
-          )}
+          </div>
+        )}
 
-          {storageSection === 'dashboards' && (
-            <>
+        {storageSection === 'dashboards' && (
+          <div className={isEmbeddedPage
+            ? `${embeddedPageSurfaceClass} p-4 md:p-5 space-y-2`
+            : 'space-y-2'
+          }>
               {canManageClients && (
                 <div className="space-y-2">
                   <label className="text-xs uppercase font-bold text-[var(--text-secondary)]">{t('userMgmt.selectClient')}</label>
@@ -1960,11 +1980,14 @@ export default function ConfigModal({
                   </button>
                 </div>
               )}
-            </>
-          )}
+          </div>
+        )}
 
-          {storageSection === 'users' && canManageAdministration && (
-            <div className="space-y-3 pt-2 border-t border-[var(--glass-border)]">
+        {storageSection === 'users' && canManageAdministration && (
+          <div className={isEmbeddedPage
+            ? `${embeddedPageSurfaceClass} p-4 md:p-5 space-y-3`
+            : 'space-y-3 pt-2 border-t border-[var(--glass-border)]'
+          }>
               <h4 className="text-xs uppercase font-bold tracking-wider text-[var(--text-secondary)]">{t('userMgmt.userAccounts')}</h4>
 
               <button
@@ -2010,10 +2033,10 @@ export default function ConfigModal({
                   })}
                 </div>
               </div>
-            </div>
-          )}
+          </div>
+        )}
 
-          {showCreateUserModal && (
+        {showCreateUserModal && (
             <div className="fixed inset-0 z-40 bg-black/45 backdrop-blur-sm flex items-center justify-center p-4" onClick={() => setShowCreateUserModal(false)}>
               <div className="w-full max-w-2xl rounded-2xl border border-[var(--glass-border)] bg-[var(--card-bg)] p-5 space-y-4 shadow-2xl" onClick={(e) => e.stopPropagation()}>
                 <div className="flex items-center justify-between">
@@ -2097,9 +2120,9 @@ export default function ConfigModal({
                 </div>
               </div>
             </div>
-          )}
+        )}
 
-          {showEditUserModal && editingUserId && (
+        {showEditUserModal && editingUserId && (
             <div className="fixed inset-0 z-40 bg-black/45 backdrop-blur-sm flex items-center justify-center p-4" onClick={() => { setShowEditUserModal(false); setEditingUserId(''); setEditUserDashboardOptions([]); }}>
               <div className="w-full max-w-2xl rounded-2xl border border-[var(--glass-border)] bg-[var(--card-bg)] p-5 space-y-4 shadow-2xl" onClick={(e) => e.stopPropagation()}>
                 <div className="flex items-center justify-between">
@@ -2219,9 +2242,9 @@ export default function ConfigModal({
                 })()}
               </div>
             </div>
-          )}
+        )}
 
-          {showCreateClientModal && (
+        {showCreateClientModal && (
             <div className="fixed inset-0 z-40 bg-black/45 backdrop-blur-sm flex items-center justify-center p-4" onClick={() => setShowCreateClientModal(false)}>
               <div className="w-full max-w-lg rounded-2xl border border-[var(--glass-border)] bg-[var(--card-bg)] p-5 space-y-4 shadow-2xl" onClick={(e) => e.stopPropagation()}>
                 <div className="flex items-center justify-between">
@@ -2244,9 +2267,9 @@ export default function ConfigModal({
                 </div>
               </div>
             </div>
-          )}
+        )}
 
-          {showCreateClientAdminModal && (
+        {showCreateClientAdminModal && (
             <div className="fixed inset-0 z-40 bg-black/45 backdrop-blur-sm flex items-center justify-center p-4" onClick={() => setShowCreateClientAdminModal(false)}>
               <div className="w-full max-w-2xl rounded-2xl border border-[var(--glass-border)] bg-[var(--card-bg)] p-5 space-y-4 shadow-2xl" onClick={(e) => e.stopPropagation()}>
                 <div className="flex items-center justify-between">
@@ -2280,9 +2303,9 @@ export default function ConfigModal({
                 </div>
               </div>
             </div>
-          )}
+        )}
 
-          {showEditClientModal && (
+        {showEditClientModal && (
             <div className="fixed inset-0 z-40 bg-black/45 backdrop-blur-sm flex items-center justify-center p-4" onClick={() => setShowEditClientModal(false)}>
               <div className="w-full max-w-lg rounded-2xl border border-[var(--glass-border)] bg-[var(--card-bg)] p-5 space-y-4 shadow-2xl" onClick={(e) => e.stopPropagation()}>
                 <div className="flex items-center justify-between">
@@ -2305,9 +2328,9 @@ export default function ConfigModal({
                 </div>
               </div>
             </div>
-          )}
+        )}
 
-          {showDeleteClientModal && (
+        {showDeleteClientModal && (
             <div className="fixed inset-0 z-40 bg-black/45 backdrop-blur-sm flex items-center justify-center p-4" onClick={() => setShowDeleteClientModal(false)}>
               <div className="w-full max-w-lg rounded-2xl border border-[var(--glass-border)] bg-[var(--card-bg)] p-5 space-y-4 shadow-2xl" onClick={(e) => e.stopPropagation()}>
                 <div className="flex items-center justify-between">
@@ -2332,14 +2355,13 @@ export default function ConfigModal({
                 </div>
               </div>
             </div>
-          )}
+        )}
 
-          {(globalStorageError || globalActionMessage) && (
-            <div className={`rounded-xl p-3 text-xs font-semibold ${globalStorageError ? 'bg-red-500/10 text-red-400 border border-red-500/20' : 'bg-green-500/10 text-green-400 border border-green-500/20'}`}>
-              {globalStorageError || globalActionMessage}
-            </div>
-          )}
-        </div>
+        {(globalStorageError || globalActionMessage) && (
+          <div className={`rounded-xl p-3 text-xs font-semibold ${globalStorageError ? 'bg-red-500/10 text-red-400 border border-red-500/20' : 'bg-green-500/10 text-green-400 border border-green-500/20'}`}>
+            {globalStorageError || globalActionMessage}
+          </div>
+        )}
       </div>
     );
   };
@@ -2389,7 +2411,10 @@ export default function ConfigModal({
     return (
       <div className="space-y-6 font-sans animate-in fade-in slide-in-from-right-4 duration-300">
         {isPlatformAdmin && (
-          <div className="overflow-hidden rounded-[2rem] border border-[var(--glass-border)] bg-[linear-gradient(180deg,color-mix(in_srgb,var(--glass-bg)_84%,transparent),color-mix(in_srgb,var(--card-bg)_90%,transparent))] shadow-[0_24px_80px_rgba(0,0,0,0.24)]">
+          <div className={isEmbeddedPage
+            ? `${embeddedPageSurfaceClass} overflow-hidden`
+            : 'overflow-hidden rounded-[2rem] border border-[var(--glass-border)] bg-[linear-gradient(180deg,color-mix(in_srgb,var(--glass-bg)_84%,transparent),color-mix(in_srgb,var(--card-bg)_90%,transparent))] shadow-[0_24px_80px_rgba(0,0,0,0.24)]'
+          }>
             <div className="border-b border-[var(--glass-border)] px-5 py-5 md:px-6">
               <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
                 <div className="space-y-2">
@@ -2666,7 +2691,10 @@ export default function ConfigModal({
               </div>
             </div>
 
-            <div className="mx-5 mb-5 mt-1 rounded-2xl border border-[var(--glass-border)] bg-[color-mix(in_srgb,var(--glass-bg)_88%,transparent)] p-4 md:mx-6">
+            <div className={isEmbeddedPage
+              ? 'mx-5 mb-5 mt-1 rounded-3xl border border-[var(--glass-border)] bg-[color-mix(in_srgb,var(--glass-bg)_88%,transparent)] p-4 md:mx-6'
+              : 'mx-5 mb-5 mt-1 rounded-2xl border border-[var(--glass-border)] bg-[color-mix(in_srgb,var(--glass-bg)_88%,transparent)] p-4 md:mx-6'
+            }>
               <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
                 <div className="space-y-2">
                   <p className="text-sm leading-relaxed text-[var(--text-secondary)]">
@@ -2737,7 +2765,10 @@ export default function ConfigModal({
           </div>
         )}
 
-        <div className="rounded-xl border border-[var(--glass-border)] bg-[var(--glass-bg)] p-3">
+        <div className={isEmbeddedPage
+          ? `${embeddedPageSurfaceClass} p-4`
+          : 'rounded-xl border border-[var(--glass-border)] bg-[var(--glass-bg)] p-3'
+        }>
           <p className="text-[11px] uppercase tracking-wider text-[var(--text-secondary)] font-bold">
             {t('connection.sessionInfo')}: <span className="text-[var(--text-primary)]">{currentUser?.clientId || '-'}</span>
           </p>
@@ -3339,8 +3370,11 @@ export default function ConfigModal({
     const saveBlocked = !notificationDirty || notificationConfigSaving || notificationConfigLoading;
 
     return (
-      <div className="space-y-5 font-sans animate-in fade-in slide-in-from-right-4 duration-300">
-        <div className="rounded-2xl border border-[var(--glass-border)] bg-[linear-gradient(145deg,color-mix(in_srgb,var(--glass-bg)_92%,rgba(56,189,248,0.08)),color-mix(in_srgb,var(--glass-bg)_94%,rgba(14,165,233,0.02)))] p-4 space-y-3">
+      <div className={`font-sans animate-in fade-in slide-in-from-right-4 duration-300 ${isEmbeddedPage ? 'space-y-6' : 'space-y-5'}`}>
+        <div className={isEmbeddedPage
+          ? `${embeddedPageSurfaceClass} p-4 md:p-5 space-y-3`
+          : 'rounded-2xl border border-[var(--glass-border)] bg-[linear-gradient(145deg,color-mix(in_srgb,var(--glass-bg)_92%,rgba(56,189,248,0.08)),color-mix(in_srgb,var(--glass-bg)_94%,rgba(14,165,233,0.02)))] p-4 space-y-3'
+        }>
           <div className="flex items-start justify-between gap-3">
             <div className="flex items-start gap-3">
               <div className="w-9 h-9 rounded-xl border border-sky-400/25 bg-sky-500/10 text-sky-300 flex items-center justify-center shrink-0">
@@ -3449,7 +3483,10 @@ export default function ConfigModal({
         </div>
 
         {isPlatformAdmin ? (
-          <div className="rounded-2xl border border-[var(--glass-border)] bg-[linear-gradient(145deg,color-mix(in_srgb,var(--glass-bg)_92%,rgba(34,197,94,0.07)),color-mix(in_srgb,var(--glass-bg)_95%,transparent))] p-4 space-y-3">
+          <div className={isEmbeddedPage
+            ? `${embeddedPageSurfaceClass} p-4 md:p-5 space-y-3`
+            : 'rounded-2xl border border-[var(--glass-border)] bg-[linear-gradient(145deg,color-mix(in_srgb,var(--glass-bg)_92%,rgba(34,197,94,0.07)),color-mix(in_srgb,var(--glass-bg)_95%,transparent))] p-4 space-y-3'
+          }>
             <div className="flex items-center justify-between gap-3">
               <div>
                 <h4 className="text-[11px] uppercase tracking-wider font-bold text-[var(--text-secondary)]">
@@ -3544,7 +3581,10 @@ export default function ConfigModal({
         ) : null}
 
         {isPlatformAdmin ? (
-          <div className="rounded-2xl border border-[var(--glass-border)] bg-[linear-gradient(145deg,color-mix(in_srgb,var(--glass-bg)_92%,rgba(59,130,246,0.08)),color-mix(in_srgb,var(--glass-bg)_95%,transparent))] p-4 space-y-3">
+          <div className={isEmbeddedPage
+            ? `${embeddedPageSurfaceClass} p-4 md:p-5 space-y-3`
+            : 'rounded-2xl border border-[var(--glass-border)] bg-[linear-gradient(145deg,color-mix(in_srgb,var(--glass-bg)_92%,rgba(59,130,246,0.08)),color-mix(in_srgb,var(--glass-bg)_95%,transparent))] p-4 space-y-3'
+          }>
             <div className="flex items-start justify-between gap-3">
               <div className="flex items-start gap-3">
                 <div className="w-9 h-9 rounded-xl border border-sky-400/25 bg-sky-500/10 text-sky-300 flex items-center justify-center shrink-0">
@@ -3650,7 +3690,10 @@ export default function ConfigModal({
           </div>
         ) : null}
 
-        <div className="rounded-2xl border border-[var(--glass-border)] bg-[linear-gradient(145deg,color-mix(in_srgb,var(--glass-bg)_92%,rgba(45,212,191,0.07)),color-mix(in_srgb,var(--glass-bg)_95%,transparent))] p-4 space-y-3">
+        <div className={isEmbeddedPage
+          ? `${embeddedPageSurfaceClass} p-4 md:p-5 space-y-3`
+          : 'rounded-2xl border border-[var(--glass-border)] bg-[linear-gradient(145deg,color-mix(in_srgb,var(--glass-bg)_92%,rgba(45,212,191,0.07)),color-mix(in_srgb,var(--glass-bg)_95%,transparent))] p-4 space-y-3'
+        }>
           <div className="flex items-center justify-between gap-3">
             <div>
               <h4 className="text-[11px] uppercase tracking-wider font-bold text-[var(--text-secondary)]">
@@ -3760,7 +3803,7 @@ export default function ConfigModal({
           ].map((entry) => (
             <div
               key={entry.key}
-              className={`rounded-2xl border border-[var(--glass-border)] p-4 space-y-3 ${
+              className={`${isEmbeddedPage ? 'popup-surface rounded-3xl' : 'rounded-2xl'} border border-[var(--glass-border)] p-4 space-y-3 ${
                 entry.accent === 'rose'
                   ? 'bg-[linear-gradient(145deg,color-mix(in_srgb,var(--glass-bg)_94%,rgba(244,63,94,0.09)),color-mix(in_srgb,var(--glass-bg)_96%,transparent))]'
                   : 'bg-[linear-gradient(145deg,color-mix(in_srgb,var(--glass-bg)_94%,rgba(245,158,11,0.08)),color-mix(in_srgb,var(--glass-bg)_96%,transparent))]'
@@ -3876,7 +3919,10 @@ export default function ConfigModal({
           ))}
         </div>
 
-        <div className="rounded-2xl border border-[var(--glass-border)] bg-[linear-gradient(145deg,color-mix(in_srgb,var(--glass-bg)_92%,rgba(167,139,250,0.08)),color-mix(in_srgb,var(--glass-bg)_95%,transparent))] p-4 space-y-3">
+        <div className={isEmbeddedPage
+          ? `${embeddedPageSurfaceClass} p-4 md:p-5 space-y-3`
+          : 'rounded-2xl border border-[var(--glass-border)] bg-[linear-gradient(145deg,color-mix(in_srgb,var(--glass-bg)_92%,rgba(167,139,250,0.08)),color-mix(in_srgb,var(--glass-bg)_95%,transparent))] p-4 space-y-3'
+        }>
           <div className="flex items-center justify-between gap-3">
             <div className="flex items-start gap-3">
               <div className="w-8 h-8 rounded-lg border border-violet-400/25 bg-violet-500/10 text-violet-300 flex items-center justify-center shrink-0">
@@ -4940,7 +4986,7 @@ export default function ConfigModal({
   return (
     <div
       className={isEmbeddedPage
-        ? 'w-full min-h-0'
+        ? 'w-full'
         : `fixed inset-0 z-50 flex ${isLayoutPreview ? 'items-stretch justify-end' : 'items-center justify-center p-4 md:p-8'}`
       }
       style={isEmbeddedPage ? undefined : {
@@ -4966,16 +5012,16 @@ export default function ConfigModal({
         }
       `}</style>
       <div
-        className={`border w-full relative font-sans flex flex-col overflow-hidden text-[var(--text-primary)] ${
+        className={`w-full relative font-sans flex flex-col text-[var(--text-primary)] ${
           isEmbeddedPage
-            ? 'h-[clamp(28rem,74vh,58rem)] rounded-[2rem] md:rounded-[2.5rem] shadow-[0_24px_80px_rgba(0,0,0,0.24)]'
-            : `popup-anim ${
+            ? 'overflow-visible border-0 bg-transparent shadow-none'
+            : `border overflow-hidden popup-anim ${
               isLayoutPreview
                 ? 'max-w-[18rem] sm:max-w-[21rem] md:max-w-[23rem] h-full rounded-none md:rounded-l-[2.5rem] shadow-2xl origin-right scale-[0.94] sm:scale-[0.97] md:scale-100 animate-in slide-in-from-right-8 fade-in zoom-in-95 duration-300'
                 : 'max-w-[96vw] xl:max-w-[1420px] h-[84vh] max-h-[920px] rounded-3xl md:rounded-[3rem] shadow-2xl'
             }`
         }`}
-        style={{
+        style={isEmbeddedPage ? { color: 'var(--text-primary)' } : {
           background: 'linear-gradient(160deg, var(--card-bg) 0%, var(--modal-bg) 70%)',
           borderColor: 'var(--glass-border)',
           color: 'var(--text-primary)'
@@ -5199,7 +5245,7 @@ export default function ConfigModal({
           </div>
         ) : (
           // ═══ SYSTEM SETTINGS LAYOUT ═══
-          <div className={`flex h-full ${isLayoutPreview ? 'flex-col' : 'flex-col md:flex-row'}`}>
+          <div className={`flex ${isLayoutPreview ? 'h-full flex-col' : isEmbeddedPage ? 'flex-col gap-6' : 'h-full flex-col md:flex-row'}`}>
             {/* Sidebar — icons only on mobile, full labels on desktop */}
             {!isLayoutPreview && !isEmbeddedPage && (
               <div className="w-full md:w-56 flex flex-row md:flex-col gap-1 p-2 md:p-3 border-b md:border-b-0 md:border-r border-[var(--glass-border)] flex-shrink-0 bg-[linear-gradient(160deg,var(--glass-bg),transparent_70%)] animate-in fade-in slide-in-from-left-4 duration-300">
@@ -5246,21 +5292,30 @@ export default function ConfigModal({
             {/* Content Area */}
             <div className="flex-1 flex flex-col min-h-0">
               {isEmbeddedPage && !isLayoutPreview && (
-                <div className="border-b border-[var(--glass-border)] px-5 py-5 md:px-6 md:py-6 bg-[linear-gradient(155deg,color-mix(in_srgb,var(--glass-bg)_84%,transparent),transparent_72%)]">
-                  <p className="text-[10px] font-bold uppercase tracking-[0.24em] text-[var(--text-secondary)]">
-                    {t('adminPages.eyebrow')}
-                  </p>
-                  <h2 className="mt-2 text-2xl font-semibold tracking-tight text-[var(--text-primary)]">
-                    {availableTabs.find(tab => tab.key === activeConfigTab)?.label}
-                  </h2>
-                  <p className="mt-2 max-w-3xl text-sm leading-relaxed text-[var(--text-secondary)]">
-                    {activeConfigTab === 'connection'
-                      ? t('adminPages.connection.description')
-                      : activeConfigTab === 'notifications'
-                        ? t('adminPages.notifications.description')
-                        : t('adminPages.storage.description')}
-                  </p>
-                </div>
+                <section className={`${embeddedPageSurfaceClass} px-5 py-5 md:px-6 md:py-6`}>
+                  <div className="flex flex-col gap-4">
+                    <div className="max-w-3xl">
+                      <p className="text-[10px] font-bold uppercase tracking-[0.24em] text-[var(--text-secondary)]">
+                        {t('adminPages.eyebrow')}
+                      </p>
+                      <div className="mt-3 flex items-center gap-3">
+                        <div className="flex h-11 w-11 items-center justify-center rounded-2xl border border-[var(--glass-border)] bg-[var(--glass-bg)] text-[var(--text-primary)]">
+                          <ActiveEmbeddedTabIcon className="h-5 w-5" />
+                        </div>
+                        <div>
+                          <h2 className="text-2xl font-semibold tracking-tight text-[var(--text-primary)]">
+                            {activeTabMeta?.label}
+                          </h2>
+                          {embeddedPageDescription && (
+                            <p className="mt-2 text-sm leading-relaxed text-[var(--text-secondary)]">
+                              {embeddedPageDescription}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </section>
               )}
 
               <div className={`flex items-center justify-between p-4 border-b border-[var(--glass-border)] ${isLayoutPreview ? 'relative overflow-hidden bg-[var(--glass-bg)]' : 'md:hidden'} ${isEmbeddedPage ? 'md:hidden' : ''}`}>
@@ -5278,7 +5333,12 @@ export default function ConfigModal({
                 {!isEmbeddedPage && <button onClick={onClose} className="modal-close relative"><X className="w-4 h-4" /></button>}
               </div>
 
-              <div className={`flex-1 overflow-y-auto custom-scrollbar ${isLayoutPreview ? 'p-5 md:p-6' : isEmbeddedPage ? 'p-5 md:p-6 xl:p-8' : 'p-5 md:p-8 xl:p-10'}`}>
+              <div className={isLayoutPreview
+                ? 'flex-1 overflow-y-auto custom-scrollbar p-5 md:p-6'
+                : isEmbeddedPage
+                  ? 'flex-1 overflow-visible space-y-6'
+                  : 'flex-1 overflow-y-auto custom-scrollbar p-5 md:p-8 xl:p-10'
+              }>
                 {/* Desktop Header */}
                 {!isLayoutPreview && !isEmbeddedPage && (
                   <div className="hidden md:flex items-center justify-between mb-8">
