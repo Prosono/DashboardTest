@@ -82,6 +82,18 @@ const summarizeFailure = (failure) => ({
   error: String(failure?.error || '').trim(),
 });
 
+const summarizeInstanceState = (entry) => ({
+  clientId: String(entry?.clientId || '').trim(),
+  clientName: String(entry?.clientName || '').trim(),
+  connectionId: String(entry?.connectionId || '').trim(),
+  connectionName: String(entry?.connectionName || '').trim(),
+  host: String(entry?.host || '').trim(),
+  checkedUrl: String(entry?.checkedUrl || '').trim(),
+  lastCheckedAt: String(entry?.lastCheckedAt || '').trim() || null,
+  status: String(entry?.status || '').trim() === 'down' ? 'down' : 'up',
+  error: String(entry?.error || '').trim(),
+});
+
 const normalizeMonitorState = (value) => {
   const input = value && typeof value === 'object' ? value : {};
   return {
@@ -94,6 +106,7 @@ const normalizeMonitorState = (value) => {
     healthyInstanceCount: Math.max(0, Number.parseInt(String(input.healthyInstanceCount || 0), 10) || 0),
     failedInstanceCount: Math.max(0, Number.parseInt(String(input.failedInstanceCount || 0), 10) || 0),
     failures: Array.isArray(input.failures) ? input.failures.map(summarizeFailure).slice(0, 12) : [],
+    instances: Array.isArray(input.instances) ? input.instances.map(summarizeInstanceState).slice(0, 400) : [],
     lastAlertReason: String(input.lastAlertReason || '').trim(),
   };
 };
@@ -170,6 +183,8 @@ const listRemoteInstances = () => {
 
   return result;
 };
+
+const getRemoteInstanceKey = (clientId, connectionId) => `${String(clientId || '').trim()}::${String(connectionId || '').trim()}`;
 
 const probeReachability = async (url, timeoutMs) => {
   const controller = new globalThis.AbortController();
@@ -352,6 +367,17 @@ export const runRemoteInstanceHealthCheck = async ({ ignoreSchedule = false, tri
         host: entry.host || entry.instance?.host,
         error: entry.error,
       }));
+    const instanceStates = checks.map((entry) => summarizeInstanceState({
+      clientId: entry.instance?.clientId,
+      clientName: entry.instance?.clientName,
+      connectionId: entry.instance?.connectionId,
+      connectionName: entry.instance?.connectionName,
+      host: entry.host || entry.instance?.host,
+      checkedUrl: entry.checkedUrl || '',
+      lastCheckedAt: now,
+      status: entry.ok ? 'up' : 'down',
+      error: entry.ok ? '' : entry.error,
+    }));
 
     let alert = {
       attempted: 0,
@@ -368,6 +394,7 @@ export const runRemoteInstanceHealthCheck = async ({ ignoreSchedule = false, tri
       healthyInstanceCount: healthy.length,
       failedInstanceCount: failures.length,
       failures,
+      instances: instanceStates,
       lastAlertReason: '',
     });
 
@@ -384,6 +411,7 @@ export const runRemoteInstanceHealthCheck = async ({ ignoreSchedule = false, tri
         healthyInstanceCount: healthy.length,
         failedInstanceCount: 0,
         failures: [],
+        instances: instanceStates,
         alert,
         state: nextState,
       };
@@ -418,6 +446,7 @@ export const runRemoteInstanceHealthCheck = async ({ ignoreSchedule = false, tri
       healthyInstanceCount: healthy.length,
       failedInstanceCount: failures.length,
       failures,
+      instances: instanceStates,
       alert,
       state: nextState,
     };
@@ -456,4 +485,53 @@ export const stopRemoteInstanceHealthMonitor = () => {
     schedulerTimer = null;
   }
   schedulerStarted = false;
+};
+
+export const getRemoteInstanceHealthOverview = () => {
+  const config = loadRemoteInstanceHealthConfig();
+  const state = loadMonitorState();
+  const remoteInstances = listRemoteInstances();
+  const instanceStateMap = new Map(
+    (Array.isArray(state.instances) ? state.instances : [])
+      .map((entry) => [getRemoteInstanceKey(entry.clientId, entry.connectionId), summarizeInstanceState(entry)]),
+  );
+
+  const instances = remoteInstances
+    .map((instance) => {
+      const persisted = instanceStateMap.get(getRemoteInstanceKey(instance.clientId, instance.connectionId));
+      return {
+        clientId: instance.clientId,
+        clientName: instance.clientName,
+        connectionId: instance.connectionId,
+        connectionName: instance.connectionName,
+        host: instance.host,
+        checkedUrl: persisted?.checkedUrl || '',
+        lastCheckedAt: persisted?.lastCheckedAt || null,
+        monitored: true,
+        status: config.enabled ? (persisted?.status || 'pending') : 'disabled',
+        error: persisted?.status === 'down' ? String(persisted?.error || '').trim() : '',
+      };
+    })
+    .sort((a, b) => {
+      const order = { down: 0, pending: 1, up: 2, disabled: 3 };
+      const aOrder = order[a.status] ?? 9;
+      const bOrder = order[b.status] ?? 9;
+      if (aOrder !== bOrder) return aOrder - bOrder;
+      return `${a.clientName}/${a.connectionName}`.localeCompare(`${b.clientName}/${b.connectionName}`);
+    });
+
+  return {
+    enabled: Boolean(config.enabled),
+    intervalMinutes: Math.max(5, Number(config.intervalMinutes || 60)),
+    timeoutSeconds: Math.max(3, Number(config.timeoutSeconds || 12)),
+    lastRunAt: state.lastRunAt || null,
+    lastOkAt: state.lastOkAt || null,
+    lastFailureAt: state.lastFailureAt || null,
+    lastAlertAt: state.lastAlertAt || null,
+    monitoredInstanceCount: instances.length,
+    healthyInstanceCount: instances.filter((entry) => entry.status === 'up').length,
+    failedInstanceCount: instances.filter((entry) => entry.status === 'down').length,
+    pendingInstanceCount: instances.filter((entry) => entry.status === 'pending').length,
+    instances,
+  };
 };

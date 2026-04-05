@@ -51,6 +51,29 @@ const statusTheme = {
   },
 };
 
+const remoteHealthTheme = {
+  up: {
+    labelKey: 'superAdminOverview.remoteHealth.status.up',
+    className: 'bg-[var(--status-success-bg)] text-[var(--status-success-text)] border border-[var(--status-success-border)]',
+  },
+  down: {
+    labelKey: 'superAdminOverview.remoteHealth.status.down',
+    className: 'bg-[var(--status-danger-bg)] text-[var(--status-danger-text)] border border-[var(--status-danger-border)]',
+  },
+  pending: {
+    labelKey: 'superAdminOverview.remoteHealth.status.pending',
+    className: 'bg-[var(--status-warning-bg)] text-[var(--status-warning-text)] border border-[var(--status-warning-border)]',
+  },
+  disabled: {
+    labelKey: 'superAdminOverview.remoteHealth.status.disabled',
+    className: 'bg-[var(--status-neutral-bg)] text-[var(--status-neutral-text)] border border-[var(--status-neutral-border)]',
+  },
+  not_monitored: {
+    labelKey: 'superAdminOverview.remoteHealth.status.not_monitored',
+    className: 'bg-[var(--status-neutral-bg)] text-[var(--status-neutral-text)] border border-[var(--status-neutral-border)]',
+  },
+};
+
 const semanticToneClass = {
   good: 'text-[var(--status-success-text)] border-[var(--status-success-border)] bg-[var(--status-success-bg)]',
   warn: 'text-[var(--status-warning-text)] border-[var(--status-warning-border)] bg-[var(--status-warning-bg)]',
@@ -72,6 +95,27 @@ const isConnectionIssue = (instance) => {
   const status = getEffectiveConnectionStatus(instance);
   if (typeof instance.isIssue === 'boolean') return instance.isIssue && status !== 'not_required';
   return status !== 'ready' && status !== 'not_required';
+};
+
+const getRemoteHealthState = (instance) => {
+  const remoteHealth = instance?.remoteHealth && typeof instance.remoteHealth === 'object'
+    ? instance.remoteHealth
+    : {};
+  const status = String(remoteHealth.status || '').trim();
+  if (['up', 'down', 'pending', 'disabled', 'not_monitored'].includes(status)) {
+    return {
+      ...remoteHealth,
+      status,
+    };
+  }
+  return {
+    monitored: false,
+    status: 'not_monitored',
+    lastCheckedAt: null,
+    host: '',
+    checkedUrl: '',
+    error: '',
+  };
 };
 
 const formatNumber = (value) => {
@@ -310,6 +354,10 @@ export default function SuperAdminOverview({
     [overview?.recentAppActions],
   );
   const generatedAt = overview?.generatedAt || null;
+  const remoteHealthOverview = useMemo(
+    () => (overview?.remoteHealth && typeof overview.remoteHealth === 'object' ? overview.remoteHealth : {}),
+    [overview?.remoteHealth],
+  );
 
   const instances = useMemo(() => {
     const sourceInstances = Array.isArray(overview?.instances) && overview.instances.length
@@ -335,14 +383,26 @@ export default function SuperAdminOverview({
 
     return sourceInstances.map((instance) => {
       const status = getEffectiveConnectionStatus(instance);
+      const remoteHealth = getRemoteHealthState(instance);
       return {
         ...instance,
         status,
         ready: status === 'ready',
+        remoteHealth,
         isIssue: typeof instance?.isIssue === 'boolean'
           ? instance.isIssue && status !== 'not_required'
           : status !== 'ready' && status !== 'not_required',
       };
+    }).sort((a, b) => {
+      const remoteOrder = { down: 0, pending: 1, up: 2, disabled: 3, not_monitored: 4 };
+      const aRemote = remoteOrder[a.remoteHealth?.status] ?? 9;
+      const bRemote = remoteOrder[b.remoteHealth?.status] ?? 9;
+      if (aRemote !== bRemote) return aRemote - bRemote;
+      const aConfigIssue = isConnectionIssue(a) ? 0 : 1;
+      const bConfigIssue = isConnectionIssue(b) ? 0 : 1;
+      if (aConfigIssue !== bConfigIssue) return aConfigIssue - bConfigIssue;
+      return `${a.clientName || a.clientId}/${a.connectionName || a.connectionId}`
+        .localeCompare(`${b.clientName || b.clientId}/${b.connectionName || b.connectionId}`);
     });
   }, [overview?.instances, clients]);
 
@@ -362,6 +422,17 @@ export default function SuperAdminOverview({
     readyConnections: instances.filter((instance) => instance.ready).length,
     issueConnections: instances.filter((instance) => isConnectionIssue(instance)).length,
   }), [instances]);
+  const remoteHealthStats = useMemo(() => {
+    const monitoredInstances = instances.filter((instance) => instance.remoteHealth?.status !== 'not_monitored');
+    return {
+      enabled: Boolean(remoteHealthOverview.enabled),
+      monitored: monitoredInstances.length,
+      healthy: monitoredInstances.filter((instance) => instance.remoteHealth?.status === 'up').length,
+      down: monitoredInstances.filter((instance) => instance.remoteHealth?.status === 'down').length,
+      pending: monitoredInstances.filter((instance) => instance.remoteHealth?.status === 'pending').length,
+      lastRunAt: remoteHealthOverview.lastRunAt || null,
+    };
+  }, [instances, remoteHealthOverview.enabled, remoteHealthOverview.lastRunAt]);
 
   const statCards = useMemo(() => ([
     {
@@ -493,10 +564,10 @@ export default function SuperAdminOverview({
         return instances.map((instance) => ({
           id: `${instance.clientId}:${instance.connectionId}`,
           title: `${instance.clientName || instance.clientId} / ${instance.connectionName || instance.connectionId}`,
-          subtitle: `${t('superAdminOverview.connection.authLabel')}: ${instance.authMethod === 'token' ? t('superAdminOverview.connection.auth.token') : t('superAdminOverview.connection.auth.oauth')}`,
+          subtitle: `${t('superAdminOverview.connection.authLabel')}: ${instance.authMethod === 'token' ? t('superAdminOverview.connection.auth.token') : t('superAdminOverview.connection.auth.oauth')} • ${t((remoteHealthTheme[instance.remoteHealth?.status] || remoteHealthTheme.not_monitored).labelKey)}`,
           value: t((statusTheme[instance.status] || statusTheme.missing_url).labelKey),
           status: instance.status,
-          date: instance.updatedAt,
+          date: instance.remoteHealth?.lastCheckedAt || instance.updatedAt,
         }));
       case 'readyConnections':
         return instances
@@ -504,10 +575,10 @@ export default function SuperAdminOverview({
           .map((instance) => ({
             id: `${instance.clientId}:${instance.connectionId}`,
             title: `${instance.clientName || instance.clientId} / ${instance.connectionName || instance.connectionId}`,
-            subtitle: `${t('superAdminOverview.connection.authLabel')}: ${instance.authMethod === 'token' ? t('superAdminOverview.connection.auth.token') : t('superAdminOverview.connection.auth.oauth')}`,
+            subtitle: `${t('superAdminOverview.connection.authLabel')}: ${instance.authMethod === 'token' ? t('superAdminOverview.connection.auth.token') : t('superAdminOverview.connection.auth.oauth')} • ${t((remoteHealthTheme[instance.remoteHealth?.status] || remoteHealthTheme.not_monitored).labelKey)}`,
             value: t((statusTheme[instance.status] || statusTheme.ready).labelKey),
             status: instance.status,
-            date: instance.updatedAt,
+            date: instance.remoteHealth?.lastCheckedAt || instance.updatedAt,
           }));
       case 'issueConnections':
         return issues.map((issue, index) => ({
@@ -666,12 +737,35 @@ export default function SuperAdminOverview({
                 </span>
               </div>
 
+              <div className="grid grid-cols-2 xl:grid-cols-4 gap-2 mb-4">
+                <div className="rounded-xl border border-[var(--glass-border)] bg-[var(--card-bg)] px-3 py-2">
+                  <p className="text-[10px] uppercase tracking-[0.16em] text-[var(--text-muted)]">{t('superAdminOverview.remoteHealth.monitored')}</p>
+                  <p className="text-base font-semibold text-[var(--text-primary)]">{formatNumber(remoteHealthStats.monitored)}</p>
+                </div>
+                <div className="rounded-xl border border-[var(--status-success-border)] bg-[var(--status-success-bg)] px-3 py-2">
+                  <p className="text-[10px] uppercase tracking-[0.16em] text-[var(--status-success-text)] opacity-80">{t('superAdminOverview.remoteHealth.healthy')}</p>
+                  <p className="text-base font-semibold text-[var(--status-success-text)]">{formatNumber(remoteHealthStats.healthy)}</p>
+                </div>
+                <div className="rounded-xl border border-[var(--status-danger-border)] bg-[var(--status-danger-bg)] px-3 py-2">
+                  <p className="text-[10px] uppercase tracking-[0.16em] text-[var(--status-danger-text)] opacity-80">{t('superAdminOverview.remoteHealth.down')}</p>
+                  <p className="text-base font-semibold text-[var(--status-danger-text)]">{formatNumber(remoteHealthStats.down)}</p>
+                </div>
+                <div className="rounded-xl border border-[var(--glass-border)] bg-[var(--card-bg)] px-3 py-2">
+                  <p className="text-[10px] uppercase tracking-[0.16em] text-[var(--text-muted)]">{t('superAdminOverview.remoteHealth.lastRun')}</p>
+                  <p className="text-[11px] font-semibold text-[var(--text-primary)] leading-tight">
+                    {formatDateTime(remoteHealthStats.lastRunAt, language)}
+                  </p>
+                </div>
+              </div>
+
               {instances.length === 0 ? (
                 <p className="text-sm text-[var(--text-secondary)]">{t('superAdminOverview.instances.empty')}</p>
               ) : (
                 <div className="space-y-2 max-h-[44vh] overflow-y-auto custom-scrollbar pr-1">
                   {instances.map((instance) => {
                     const status = statusTheme[instance.status] || statusTheme.missing_url;
+                    const remoteHealth = getRemoteHealthState(instance);
+                    const remoteStatus = remoteHealthTheme[remoteHealth.status] || remoteHealthTheme.not_monitored;
                     return (
                       <div
                         key={`${instance.clientId}:${instance.connectionId}`}
@@ -681,12 +775,20 @@ export default function SuperAdminOverview({
                           <p className="text-xs font-semibold text-[var(--text-primary)]">
                             {(instance.clientName || instance.clientId)} / {(instance.connectionName || instance.connectionId)}
                           </p>
-                          <span className={`px-2 py-1 rounded-full text-[10px] uppercase tracking-[0.14em] ${status.className}`}>
-                            {t(status.labelKey)}
-                          </span>
+                          <div className="flex flex-wrap items-center gap-1.5">
+                            <span className={`px-2 py-1 rounded-full text-[10px] uppercase tracking-[0.14em] ${remoteStatus.className}`}>
+                              {t(remoteStatus.labelKey)}
+                            </span>
+                            <span className={`px-2 py-1 rounded-full text-[10px] uppercase tracking-[0.14em] ${status.className}`}>
+                              {t(status.labelKey)}
+                            </span>
+                          </div>
                         </div>
                         <p className="text-[11px] text-[var(--text-secondary)] mt-1">
                           {t('superAdminOverview.connection.authLabel')}: {instance.authMethod === 'token' ? t('superAdminOverview.connection.auth.token') : t('superAdminOverview.connection.auth.oauth')}
+                        </p>
+                        <p className="text-[11px] text-[var(--text-secondary)]">
+                          {t('superAdminOverview.remoteHealth.lastChecked')}: {formatDateTime(remoteHealth.lastCheckedAt, language)}
                         </p>
                         <p className="text-[11px] text-[var(--text-secondary)]">
                           {t('superAdminOverview.instances.url')}: {instance.urlHost || '-'}
@@ -694,6 +796,16 @@ export default function SuperAdminOverview({
                         <p className="text-[11px] text-[var(--text-secondary)]">
                           {t('superAdminOverview.instances.fallback')}: {instance.fallbackUrlHost || '-'}
                         </p>
+                        {remoteHealth.status === 'not_monitored' ? (
+                          <p className="text-[11px] text-[var(--text-muted)] mt-1">
+                            {t('superAdminOverview.remoteHealth.notMonitoredReason')}
+                          </p>
+                        ) : null}
+                        {remoteHealth.status === 'down' && remoteHealth.error ? (
+                          <p className="text-[11px] text-[var(--status-danger-text)] mt-1">
+                            {t('superAdminOverview.remoteHealth.error')}: {remoteHealth.error}
+                          </p>
+                        ) : null}
                       </div>
                     );
                   })}

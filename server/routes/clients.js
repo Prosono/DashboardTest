@@ -17,6 +17,7 @@ import {
   ensureClientBackupDirectory,
   listClientBackupFiles,
 } from '../backupStorage.js';
+import { getRemoteInstanceHealthOverview } from '../remoteInstanceHealthMonitor.js';
 import { PLATFORM_ADMIN_CLIENT_ID, isPlatformAdminClientId } from '../platformAdmin.js';
 
 const router = Router();
@@ -112,6 +113,7 @@ const getConnectionConfigStatus = (connection, clientId = '') => {
   }
   return { status: 'ready', ready: true, isIssue: false, authMethod };
 };
+const getRemoteInstanceKey = (clientId, connectionId) => `${String(clientId || '').trim()}::${String(connectionId || '').trim()}`;
 const getClientBackupLocations = (client, parsedConfig) => {
   const primaryConnectionId = String(
     parsedConfig?.primaryConnectionId
@@ -461,7 +463,26 @@ router.get('/overview', (req, res) => {
       updatedAt: connection.updatedAt || client.updatedAt || null,
     }))
   ));
-  const issues = instances.filter((instance) => instance.isIssue);
+  const remoteHealth = getRemoteInstanceHealthOverview();
+  const remoteHealthMap = new Map(
+    (Array.isArray(remoteHealth?.instances) ? remoteHealth.instances : [])
+      .map((entry) => [getRemoteInstanceKey(entry.clientId, entry.connectionId), entry]),
+  );
+  const instancesWithRemoteHealth = instances.map((instance) => {
+    const remoteState = remoteHealthMap.get(getRemoteInstanceKey(instance.clientId, instance.connectionId));
+    return {
+      ...instance,
+      remoteHealth: remoteState || {
+        monitored: false,
+        status: 'not_monitored',
+        lastCheckedAt: null,
+        host: '',
+        checkedUrl: '',
+        error: '',
+      },
+    };
+  });
+  const issues = instancesWithRemoteHealth.filter((instance) => instance.isIssue);
 
   return res.json({
     generatedAt: new Date().toISOString(),
@@ -472,8 +493,9 @@ router.get('/overview', (req, res) => {
     },
     clients: clientOverview,
     sessions: allSessionOverview,
-    instances,
+    instances: instancesWithRemoteHealth,
     issues,
+    remoteHealth,
     recentLogs,
     recentAppActions,
   });
