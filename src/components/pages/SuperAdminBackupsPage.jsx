@@ -42,22 +42,26 @@ const formatBytes = (value) => {
 };
 
 const triggerBlobDownload = (blob, fileName) => {
-  const url = URL.createObjectURL(blob);
+  const url = globalThis.URL.createObjectURL(blob);
   const link = document.createElement('a');
   link.href = url;
   link.download = fileName;
   document.body.appendChild(link);
   link.click();
   link.remove();
-  window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+  window.setTimeout(() => globalThis.URL.revokeObjectURL(url), 1000);
+};
+
+const normalizeClientIdValue = (value) => String(value || '').trim().toLowerCase();
+const isPlatformAdminClient = (clientId) => normalizeClientIdValue(clientId) === 'administratorclient';
+const semanticToneClass = {
+  good: 'border-[var(--status-success-border)] bg-[var(--status-success-bg)] text-[var(--status-success-text)]',
+  warn: 'border-[var(--status-warning-border)] bg-[var(--status-warning-bg)] text-[var(--status-warning-text)]',
+  neutral: 'border-[var(--glass-border)] bg-[var(--glass-bg)] text-[var(--text-primary)]',
 };
 
 function SummaryCard({ icon: Icon, label, value, tone = 'neutral', hint }) {
-  const toneClass = tone === 'good'
-    ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-200'
-    : tone === 'warn'
-      ? 'border-amber-500/30 bg-amber-500/10 text-amber-200'
-      : 'border-[var(--glass-border)] bg-[var(--glass-bg)] text-[var(--text-primary)]';
+  const toneClass = semanticToneClass[tone] || semanticToneClass.neutral;
 
   return (
     <div className={`rounded-2xl border px-4 py-3 ${toneClass}`}>
@@ -73,8 +77,8 @@ function SummaryCard({ icon: Icon, label, value, tone = 'neutral', hint }) {
 
 const getStatusClasses = (ready) => (
   ready
-    ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300'
-    : 'border-amber-500/30 bg-amber-500/10 text-amber-300'
+    ? 'border-[var(--status-success-border)] bg-[var(--status-success-bg)] text-[var(--status-success-text)]'
+    : 'border-[var(--status-warning-border)] bg-[var(--status-warning-bg)] text-[var(--status-warning-text)]'
 );
 
 export default function SuperAdminBackupsPage({
@@ -148,20 +152,39 @@ export default function SuperAdminBackupsPage({
     () => (Array.isArray(overview?.clients) ? overview.clients : []),
     [overview?.clients],
   );
+  const visibleClients = useMemo(
+    () => clients.filter((client) => !isPlatformAdminClient(client.id)),
+    [clients],
+  );
+  const totals = useMemo(() => visibleClients.reduce((acc, client) => ({
+    clients: acc.clients + 1,
+    locations: acc.locations + Number(client.locationCount || 0),
+    readyDirectories: acc.readyDirectories + Number(client.readyLocationCount || 0),
+    missingDirectories: acc.missingDirectories + Number(client.missingLocationCount || 0),
+    backupFiles: acc.backupFiles + Number(client.backupFileCount || 0),
+    totalBackupBytes: acc.totalBackupBytes + Number(client.totalBackupBytes || 0),
+  }), {
+    clients: 0,
+    locations: 0,
+    readyDirectories: 0,
+    missingDirectories: 0,
+    backupFiles: 0,
+    totalBackupBytes: 0,
+  }), [visibleClients]);
 
   useEffect(() => {
-    if (!clients.length) {
+    if (!visibleClients.length) {
       setSelectedClientId('');
       setLocationFiles(null);
       return;
     }
-    if (clients.some((client) => client.id === selectedClientId)) return;
-    setSelectedClientId(clients[0].id);
-  }, [clients, selectedClientId]);
+    if (visibleClients.some((client) => client.id === selectedClientId)) return;
+    setSelectedClientId(visibleClients[0].id);
+  }, [visibleClients, selectedClientId]);
 
   const selectedClientSummary = useMemo(
-    () => clients.find((client) => client.id === selectedClientId) || null,
-    [clients, selectedClientId],
+    () => visibleClients.find((client) => client.id === selectedClientId) || null,
+    [visibleClients, selectedClientId],
   );
 
   const locations = useMemo(
@@ -199,7 +222,6 @@ export default function SuperAdminBackupsPage({
     [locations, selectedLocationId],
   );
 
-  const totals = overview?.totals && typeof overview.totals === 'object' ? overview.totals : {};
   const files = Array.isArray(locationFiles?.files) ? locationFiles.files : [];
   const selectedDirectoryExists = Boolean(
     locationFiles?.directory?.exists
@@ -213,9 +235,12 @@ export default function SuperAdminBackupsPage({
 
   const handleRefresh = useCallback(async () => {
     const payload = await loadOverview(true);
-    const nextClientId = selectedClientId || payload?.clients?.[0]?.id || '';
-    const nextClient = Array.isArray(payload?.clients)
-      ? payload.clients.find((client) => client.id === nextClientId) || payload.clients[0]
+    const nextClients = Array.isArray(payload?.clients)
+      ? payload.clients.filter((client) => !isPlatformAdminClient(client.id))
+      : [];
+    const nextClientId = selectedClientId || nextClients[0]?.id || '';
+    const nextClient = nextClients.length
+      ? nextClients.find((client) => client.id === nextClientId) || nextClients[0]
       : null;
     const nextLocationId = nextClient?.locations?.some((location) => location.id === selectedLocationId)
       ? selectedLocationId
@@ -317,7 +342,7 @@ export default function SuperAdminBackupsPage({
       )}
 
       {actionMessage && !error && (
-        <section className="rounded-2xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-200">
+        <section className="rounded-2xl border border-[var(--status-success-border)] bg-[var(--status-success-bg)] px-4 py-3 text-sm text-[var(--status-success-text)]">
           {actionMessage}
         </section>
       )}
@@ -373,15 +398,15 @@ export default function SuperAdminBackupsPage({
                 </p>
               </div>
               <span className="text-[10px] uppercase tracking-[0.14em] text-[var(--text-muted)]">
-                {clients.length}
+                {visibleClients.length}
               </span>
             </div>
 
-            {clients.length === 0 ? (
+            {visibleClients.length === 0 ? (
               <p className="text-sm text-[var(--text-secondary)]">{t('superAdminBackups.emptyClients')}</p>
             ) : (
               <div className="space-y-2 max-h-[65vh] overflow-y-auto custom-scrollbar pr-1">
-                {clients.map((client) => {
+                {visibleClients.map((client) => {
                   const isActive = client.id === selectedClientId;
                   const hasMissingLocations = Number(client.missingLocationCount || 0) > 0;
                   return (
@@ -443,7 +468,7 @@ export default function SuperAdminBackupsPage({
                           type="button"
                           onClick={handleProvisionDirectory}
                           disabled={provisioning}
-                          className="inline-flex items-center justify-center gap-2 px-4 py-2 rounded-xl border border-emerald-500/30 bg-emerald-500/10 text-emerald-200 text-xs font-bold uppercase tracking-[0.16em] hover:bg-emerald-500/15 transition-colors disabled:opacity-60"
+                          className="inline-flex items-center justify-center gap-2 px-4 py-2 rounded-xl border border-[var(--status-success-border)] bg-[var(--status-success-bg)] text-[var(--status-success-text)] text-xs font-bold uppercase tracking-[0.16em] hover:brightness-[0.98] transition-colors disabled:opacity-60"
                         >
                           <Plus className="w-4 h-4" />
                           {provisioning ? t('common.saving') : t('superAdminBackups.provisionButton')}
@@ -555,12 +580,12 @@ export default function SuperAdminBackupsPage({
                   <p className="text-sm text-[var(--text-secondary)]">{t('superAdminBackups.emptyLocations')}</p>
                 </div>
               ) : !selectedDirectoryExists ? (
-                <div className="rounded-2xl border border-amber-500/25 bg-amber-500/10 px-4 py-4">
+                <div className="rounded-2xl border border-[var(--status-warning-border)] bg-[var(--status-warning-bg)] px-4 py-4">
                   <div className="flex items-start gap-3">
-                    <AlertTriangle className="w-5 h-5 text-amber-300 mt-0.5" />
+                    <AlertTriangle className="w-5 h-5 text-[var(--status-warning-text)] mt-0.5" />
                     <div>
-                      <p className="text-sm font-semibold text-amber-100">{t('superAdminBackups.directoryMissing')}</p>
-                      <p className="mt-1 text-sm text-amber-200/90">{t('superAdminBackups.directoryMissingHelp')}</p>
+                      <p className="text-sm font-semibold text-[var(--status-warning-text)]">{t('superAdminBackups.directoryMissing')}</p>
+                      <p className="mt-1 text-sm text-[var(--text-primary)]">{t('superAdminBackups.directoryMissingHelp')}</p>
                     </div>
                   </div>
                 </div>

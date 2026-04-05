@@ -57,10 +57,21 @@ const semanticToneClass = {
   neutral: 'text-[var(--text-primary)] border-[var(--glass-border)] bg-[var(--glass-bg)]',
 };
 
+const normalizeClientIdValue = (value) => String(value || '').trim().toLowerCase();
+
+const getEffectiveConnectionStatus = (instance) => {
+  const status = String(instance?.status || 'missing_url').trim() || 'missing_url';
+  if (normalizeClientIdValue(instance?.clientId) === 'administratorclient' && status === 'missing_url') {
+    return 'not_required';
+  }
+  return status;
+};
+
 const isConnectionIssue = (instance) => {
   if (!instance || typeof instance !== 'object') return false;
-  if (typeof instance.isIssue === 'boolean') return instance.isIssue;
-  return instance.status !== 'ready' && instance.status !== 'not_required';
+  const status = getEffectiveConnectionStatus(instance);
+  if (typeof instance.isIssue === 'boolean') return instance.isIssue && status !== 'not_required';
+  return status !== 'ready' && status !== 'not_required';
 };
 
 const formatNumber = (value) => {
@@ -301,8 +312,9 @@ export default function SuperAdminOverview({
   const generatedAt = overview?.generatedAt || null;
 
   const instances = useMemo(() => {
-    if (Array.isArray(overview?.instances) && overview.instances.length) return overview.instances;
-    return clients.flatMap((client) => (
+    const sourceInstances = Array.isArray(overview?.instances) && overview.instances.length
+      ? overview.instances
+      : clients.flatMap((client) => (
       (Array.isArray(client.connections) ? client.connections : []).map((connection) => ({
         clientId: client.id,
         clientName: client.name,
@@ -319,11 +331,30 @@ export default function SuperAdminOverview({
         fallbackUrlHost: connection.fallbackUrlHost || '',
         updatedAt: connection.updatedAt || client.updatedAt || null,
       }))
-    ));
+      ));
+
+    return sourceInstances.map((instance) => {
+      const status = getEffectiveConnectionStatus(instance);
+      return {
+        ...instance,
+        status,
+        ready: status === 'ready',
+        isIssue: typeof instance?.isIssue === 'boolean'
+          ? instance.isIssue && status !== 'not_required'
+          : status !== 'ready' && status !== 'not_required',
+      };
+    });
   }, [overview?.instances, clients]);
 
   const issues = useMemo(() => {
-    if (Array.isArray(overview?.issues)) return overview.issues;
+    if (Array.isArray(overview?.issues)) {
+      return overview.issues
+        .map((issue) => ({
+          ...issue,
+          status: getEffectiveConnectionStatus(issue),
+        }))
+        .filter((issue) => isConnectionIssue(issue));
+    }
     return instances.filter((instance) => isConnectionIssue(instance));
   }, [overview?.issues, instances]);
   const connectionStats = useMemo(() => ({

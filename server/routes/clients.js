@@ -20,7 +20,8 @@ import {
 
 const router = Router();
 
-const PLATFORM_ADMIN_CLIENT_ID = normalizeClientId(globalThis.process?.env?.PLATFORM_ADMIN_CLIENT_ID || DEFAULT_CLIENT_ID) || DEFAULT_CLIENT_ID;
+const SUPER_ADMIN_CLIENT_ID = normalizeClientId(globalThis.process?.env?.SUPER_ADMIN_CLIENT_ID || 'AdministratorClient') || 'administratorclient';
+const PLATFORM_ADMIN_CLIENT_ID = normalizeClientId(globalThis.process?.env?.PLATFORM_ADMIN_CLIENT_ID || SUPER_ADMIN_CLIENT_ID) || SUPER_ADMIN_CLIENT_ID;
 const APP_ACTION_HISTORY_KEY_PREFIX = 'app_action_history::';
 const isPlatformAdminClientId = (value) => (
   (normalizeClientId(value) || DEFAULT_CLIENT_ID) === PLATFORM_ADMIN_CLIENT_ID
@@ -490,7 +491,7 @@ router.get('/backups/overview', async (_req, res) => {
       c.updated_at
     FROM clients c
     ORDER BY c.id ASC
-  `).all();
+  `).all().filter((client) => !isPlatformAdminClientId(client.id));
   const haConfigRows = db.prepare('SELECT * FROM ha_config').all();
   const haConfigByClient = new Map(haConfigRows.map((row) => [row.client_id, row]));
 

@@ -38,27 +38,33 @@ const normalizeLevel = (value) => {
   return 'info';
 };
 
+const normalizeClientIdValue = (value) => String(value || '').trim().toLowerCase();
+const isPlatformAdminMissingUrlIssue = (entry) => (
+  normalizeClientIdValue(entry?.clientId) === 'administratorclient'
+  && String(entry?.status || '').trim() === 'missing_url'
+);
+
 const levelMeta = (level) => {
   switch (normalizeLevel(level)) {
     case 'critical':
       return {
         icon: AlertTriangle,
-        chipClass: 'border-rose-500/35 bg-rose-500/15 text-rose-300',
+        chipClass: 'border-[var(--status-danger-border)] bg-[var(--status-danger-bg)] text-[var(--status-danger-text)]',
       };
     case 'error':
       return {
         icon: AlertCircle,
-        chipClass: 'border-rose-500/35 bg-rose-500/15 text-rose-300',
+        chipClass: 'border-[var(--status-danger-border)] bg-[var(--status-danger-bg)] text-[var(--status-danger-text)]',
       };
     case 'warning':
       return {
         icon: AlertTriangle,
-        chipClass: 'border-amber-500/35 bg-amber-500/15 text-amber-300',
+        chipClass: 'border-[var(--status-warning-border)] bg-[var(--status-warning-bg)] text-[var(--status-warning-text)]',
       };
     case 'success':
       return {
         icon: Check,
-        chipClass: 'border-emerald-500/35 bg-emerald-500/15 text-emerald-300',
+        chipClass: 'border-[var(--status-success-border)] bg-[var(--status-success-bg)] text-[var(--status-success-text)]',
       };
     default:
       return {
@@ -75,7 +81,7 @@ const sourceMeta = {
   },
   dashboard_save: {
     icon: Building2,
-    chipClass: 'border-emerald-500/35 bg-emerald-500/15 text-emerald-300',
+    chipClass: 'border-[var(--status-success-border)] bg-[var(--status-success-bg)] text-[var(--status-success-text)]',
   },
   session_activity: {
     icon: User,
@@ -83,7 +89,7 @@ const sourceMeta = {
   },
   connection_issue: {
     icon: Shield,
-    chipClass: 'border-amber-500/35 bg-amber-500/15 text-amber-300',
+    chipClass: 'border-[var(--status-warning-border)] bg-[var(--status-warning-bg)] text-[var(--status-warning-text)]',
   },
 };
 
@@ -120,15 +126,15 @@ const csvCell = (value) => `"${String(value ?? '').replace(/"/g, '""')}"`;
 
 const downloadBlob = (content, fileName, mimeType) => {
   if (typeof window === 'undefined') return;
-  const blob = new Blob([content], { type: mimeType });
-  const url = URL.createObjectURL(blob);
+  const blob = new globalThis.Blob([content], { type: mimeType });
+  const url = globalThis.URL.createObjectURL(blob);
   const anchor = document.createElement('a');
   anchor.href = url;
   anchor.download = fileName;
   document.body.appendChild(anchor);
   anchor.click();
   anchor.remove();
-  URL.revokeObjectURL(url);
+  globalThis.URL.revokeObjectURL(url);
 };
 
 const buildActivityChart = (rows, timeWindowFilter) => {
@@ -329,7 +335,9 @@ const buildTimelineRows = ({
   }
 
   if (includeConnectionIssues) {
-    const issues = Array.isArray(overview.issues) ? overview.issues : [];
+    const issues = Array.isArray(overview.issues)
+      ? overview.issues.filter((entry) => !isPlatformAdminMissingUrlIssue(entry) && entry?.isIssue !== false)
+      : [];
     issues.forEach((entry, index) => {
       const clientId = toSafeText(entry?.clientId || '');
       const clientName = toSafeText(entry?.clientName || clientNameById.get(clientId) || clientId || '-');
@@ -877,7 +885,7 @@ export default function GlobalTimelineCard({
                 {' '}
                 {tr(t, 'globalTimeline.chart.total', 'events')}
                 {' • '}
-                <span className="font-semibold text-amber-300">{activityChart.highSeverityCount}</span>
+                <span className="font-semibold text-[var(--status-warning-text)]">{activityChart.highSeverityCount}</span>
                 {' '}
                 {tr(t, 'globalTimeline.chart.highSeverity', 'high')}
               </div>
@@ -900,7 +908,7 @@ export default function GlobalTimelineCard({
                   {
                     id: 'high-severity',
                     label: 'high-severity',
-                    color: '#f59e0b',
+                    color: 'var(--status-warning-text)',
                     strokeWidth: 1.35,
                     data: activityChart.highSeries,
                   },
