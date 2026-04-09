@@ -59,8 +59,8 @@ export default function GenericUtilityModal({
   const [cameraFeedErrored, setCameraFeedErrored] = React.useState(false);
   const cameraUnavailable = mode === 'camera' ? isCameraUnavailable(entity) : unavailable;
   const cameraStreamUrl = React.useMemo(
-    () => (mode === 'camera' ? getCameraStreamUrl({ entityId, getEntityImageUrl }) : null),
-    [mode, entityId, getEntityImageUrl],
+    () => (mode === 'camera' ? getCameraStreamUrl({ entityId, entity, getEntityImageUrl }) : null),
+    [mode, entityId, entity, getEntityImageUrl],
   );
   const cameraSnapshotUrl = React.useMemo(
     () => (mode === 'camera' ? getCameraSnapshotUrl({

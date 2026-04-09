@@ -7,6 +7,35 @@ const normalizeCameraEntityId = (entityId) => {
   return parsed?.entityId || String(entityId || '').trim();
 };
 
+const readTokenFromUrl = (url) => {
+  const source = String(url || '').trim();
+  if (!source) return '';
+
+  try {
+    const parsed = new URL(source, 'http://localhost');
+    return String(parsed.searchParams.get('token') || '').trim();
+  } catch {
+    const match = source.match(/[?&]token=([^&]+)/i);
+    return match ? decodeURIComponent(match[1]) : '';
+  }
+};
+
+export const getCameraAccessToken = (entity) => {
+  const explicitToken = String(entity?.attributes?.access_token || entity?.attributes?.accessToken || '').trim();
+  if (explicitToken) return explicitToken;
+  return readTokenFromUrl(entity?.attributes?.entity_picture);
+};
+
+const withCameraToken = (url, entity) => {
+  const source = String(url || '').trim();
+  if (!source) return '';
+  if (readTokenFromUrl(source)) return source;
+
+  const token = getCameraAccessToken(entity);
+  if (!token) return source;
+  return appendCameraQueryParam(source, 'token', token);
+};
+
 export const appendCameraQueryParam = (url, key, value) => {
   const source = String(url || '').trim();
   if (!source) return '';
@@ -35,12 +64,13 @@ export const getCameraSnapshotUrl = ({
     || `/api/camera_proxy/${encodeURIComponent(resolvedEntityId)}`;
   const absoluteUrl = getEntityImageUrl(rawPicture);
   if (!absoluteUrl) return null;
-
-  return cacheBust ? appendCameraQueryParam(absoluteUrl, '_t', cacheBust) : absoluteUrl;
+  const tokenizedUrl = withCameraToken(absoluteUrl, entity);
+  return cacheBust ? appendCameraQueryParam(tokenizedUrl, '_t', cacheBust) : tokenizedUrl;
 };
 
 export const getCameraStreamUrl = ({
   entityId,
+  entity,
   getEntityImageUrl,
   cacheBust,
 }) => {
@@ -50,8 +80,8 @@ export const getCameraStreamUrl = ({
 
   const absoluteUrl = getEntityImageUrl(`/api/camera_proxy_stream/${encodeURIComponent(resolvedEntityId)}`);
   if (!absoluteUrl) return null;
-
-  return cacheBust ? appendCameraQueryParam(absoluteUrl, '_t', cacheBust) : absoluteUrl;
+  const tokenizedUrl = withCameraToken(absoluteUrl, entity);
+  return cacheBust ? appendCameraQueryParam(tokenizedUrl, '_t', cacheBust) : tokenizedUrl;
 };
 
 export const isCameraUnavailable = (entity) => {

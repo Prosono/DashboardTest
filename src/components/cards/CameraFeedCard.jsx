@@ -90,8 +90,8 @@ export default function CameraFeedCard({
   }, [transport, refreshSeconds]);
 
   const streamUrl = React.useMemo(
-    () => getCameraStreamUrl({ entityId: activeId, getEntityImageUrl }),
-    [activeId, getEntityImageUrl],
+    () => getCameraStreamUrl({ entityId: activeId, entity, getEntityImageUrl }),
+    [activeId, entity, getEntityImageUrl],
   );
   const snapshotUrl = React.useMemo(
     () => getCameraSnapshotUrl({
