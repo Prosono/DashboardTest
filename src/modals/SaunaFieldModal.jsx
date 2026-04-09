@@ -9,6 +9,7 @@ import GenericNumberModal from './GenericNumberModal';
 import GenericLockModal from './GenericLockModal';
 import GenericSwitchModal from './GenericSwitchModal';
 import GenericUtilityModal from './GenericUtilityModal';
+import CameraFeedModal from './CameraFeedModal';
 
 const domainFor = (entityId = '') => String(entityId).split('.')[0] || '';
 const getFriendlyName = (entityId, entities) => entities?.[entityId]?.attributes?.friendly_name || entityId;
@@ -310,11 +311,9 @@ export default function SaunaFieldModal({
     if (!entity) return null;
 
     return (
-      <GenericUtilityModal
-        mode="camera"
+      <CameraFeedModal
         entityId={entityId}
         entity={entity}
-        callService={callService}
         onClose={onClose}
         t={t}
         getEntityImageUrl={getEntityImageUrl}
@@ -1162,13 +1161,10 @@ export default function SaunaFieldModal({
         />
       )}
       {activeCameraEntityModal && entities?.[activeCameraEntityModal] && (
-        <GenericUtilityModal
-          mode="camera"
+        <CameraFeedModal
           entityId={activeCameraEntityModal}
           entity={entities[activeCameraEntityModal]}
-          callService={callService}
           t={t}
-          overlayOpacity={0}
           getEntityImageUrl={getEntityImageUrl}
           onClose={() => setActiveCameraEntityModal(null)}
         />

@@ -1,7 +1,7 @@
 import React from 'react';
 import { ArrowLeftRight, Camera, Maximize2, RefreshCw } from '../../icons';
 import { getIconComponent } from '../../icons';
-import GenericUtilityModal from '../../modals/GenericUtilityModal';
+import CameraFeedModal from '../../modals/CameraFeedModal';
 import { getCameraSnapshotUrl, getCameraStreamUrl, isCameraUnavailable } from '../../utils/cameraFeeds';
 
 const clampRefreshSeconds = (value, fallback = 5) => {
@@ -300,11 +300,9 @@ export default function CameraFeedCard({
       </div>
 
       {showCameraModal && entity && (
-        <GenericUtilityModal
-          mode="camera"
+        <CameraFeedModal
           entityId={activeId}
           entity={entity}
-          callService={() => {}}
           onClose={() => setShowCameraModal(false)}
           t={t}
           getEntityImageUrl={getEntityImageUrl}
