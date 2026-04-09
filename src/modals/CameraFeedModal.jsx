@@ -1,4 +1,5 @@
 import React from 'react';
+import { createPortal } from 'react-dom';
 import { RefreshCw, X } from '../icons';
 import { getCameraSnapshotUrl, getCameraStreamUrl, isCameraUnavailable } from '../utils/cameraFeeds';
 
@@ -34,6 +35,15 @@ export default function CameraFeedModal({
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [entityId, onClose]);
+
+  React.useEffect(() => {
+    if (typeof document === 'undefined') return undefined;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = previousOverflow;
+    };
+  }, []);
 
   React.useEffect(() => {
     setTransport('stream');
@@ -88,7 +98,7 @@ export default function CameraFeedModal({
 
   if (!entityId || !entity) return null;
 
-  return (
+  const content = (
     <div
       className="fixed inset-0 z-[90] flex items-center justify-center p-3 sm:p-5 md:p-8"
       style={{ backgroundColor: 'rgba(2, 6, 23, 0.76)', backdropFilter: 'blur(20px)' }}
@@ -184,4 +194,7 @@ export default function CameraFeedModal({
       </div>
     </div>
   );
+
+  if (typeof document === 'undefined') return null;
+  return createPortal(content, document.body);
 }
