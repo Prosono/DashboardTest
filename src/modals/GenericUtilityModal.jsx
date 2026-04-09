@@ -56,13 +56,14 @@ export default function GenericUtilityModal({
   const unavailable = state === 'unknown' || state === 'unavailable';
   const options = Array.isArray(entity?.attributes?.options) ? entity.attributes.options : [];
   const [cameraTransport, setCameraTransport] = React.useState('stream');
+  const [cameraStreamTick, setCameraStreamTick] = React.useState(Date.now());
   const [cameraSnapshotTick, setCameraSnapshotTick] = React.useState(Date.now());
   const [cameraFeedLoaded, setCameraFeedLoaded] = React.useState(false);
   const [cameraFeedErrored, setCameraFeedErrored] = React.useState(false);
   const cameraUnavailable = mode === 'camera' ? isCameraUnavailable(entity) : unavailable;
   const cameraStreamUrl = React.useMemo(
-    () => (mode === 'camera' ? getCameraStreamUrl({ entityId, entity, getEntityImageUrl }) : null),
-    [mode, entityId, entity, getEntityImageUrl],
+    () => (mode === 'camera' ? getCameraStreamUrl({ entityId, entity, getEntityImageUrl, cacheBust: cameraStreamTick }) : null),
+    [mode, entityId, entity, getEntityImageUrl, cameraStreamTick],
   );
   const cameraSnapshotUrl = React.useMemo(
     () => (mode === 'camera' ? getCameraSnapshotUrl({
@@ -80,6 +81,7 @@ export default function GenericUtilityModal({
   React.useEffect(() => {
     if (mode !== 'camera') return;
     setCameraTransport('stream');
+    setCameraStreamTick(Date.now());
     setCameraSnapshotTick(Date.now());
     setCameraFeedLoaded(false);
     setCameraFeedErrored(false);
@@ -158,12 +160,8 @@ export default function GenericUtilityModal({
   const cameraRefresh = () => {
     setCameraFeedErrored(false);
     setCameraFeedLoaded(false);
-    if (cameraTransport === 'snapshot') {
-      setCameraSnapshotTick(Date.now());
-      return;
-    }
-    setCameraTransport('snapshot');
-    setCameraSnapshotTick(Date.now());
+    setCameraTransport('stream');
+    setCameraStreamTick(Date.now());
   };
 
   const handleCameraFeedError = () => {

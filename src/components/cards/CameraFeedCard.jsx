@@ -1,6 +1,7 @@
 import React from 'react';
 import { ArrowLeftRight, Camera, Maximize2, RefreshCw } from '../../icons';
 import { getIconComponent } from '../../icons';
+import GenericUtilityModal from '../../modals/GenericUtilityModal';
 import { getCameraSnapshotUrl, getCameraStreamUrl, isCameraUnavailable } from '../../utils/cameraFeeds';
 
 const clampRefreshSeconds = (value, fallback = 5) => {
@@ -46,7 +47,6 @@ export default function CameraFeedCard({
   customIcons,
   getEntityImageUrl,
   saveCardSetting,
-  onOpen,
   language,
   t,
 }) {
@@ -70,12 +70,15 @@ export default function CameraFeedCard({
   const fitMode = settings?.fitMode === 'contain' ? 'contain' : 'cover';
   const unavailable = isCameraUnavailable(entity);
   const [transport, setTransport] = React.useState('stream');
+  const [streamTick, setStreamTick] = React.useState(Date.now());
   const [snapshotTick, setSnapshotTick] = React.useState(Date.now());
   const [feedErrored, setFeedErrored] = React.useState(false);
   const [feedLoaded, setFeedLoaded] = React.useState(false);
+  const [showCameraModal, setShowCameraModal] = React.useState(false);
 
   React.useEffect(() => {
     setTransport('stream');
+    setStreamTick(Date.now());
     setSnapshotTick(Date.now());
     setFeedErrored(false);
     setFeedLoaded(false);
@@ -90,8 +93,8 @@ export default function CameraFeedCard({
   }, [transport, refreshSeconds]);
 
   const streamUrl = React.useMemo(
-    () => getCameraStreamUrl({ entityId: activeId, entity, getEntityImageUrl }),
-    [activeId, entity, getEntityImageUrl],
+    () => getCameraStreamUrl({ entityId: activeId, entity, getEntityImageUrl, cacheBust: streamTick }),
+    [activeId, entity, getEntityImageUrl, streamTick],
   );
   const snapshotUrl = React.useMemo(
     () => getCameraSnapshotUrl({
@@ -128,17 +131,13 @@ export default function CameraFeedCard({
     event.stopPropagation();
     setFeedErrored(false);
     setFeedLoaded(false);
-    if (transport === 'snapshot') {
-      setSnapshotTick(Date.now());
-      return;
-    }
-    setTransport('snapshot');
-    setSnapshotTick(Date.now());
+    setTransport('stream');
+    setStreamTick(Date.now());
   };
 
   const handleOpen = () => {
     if (editMode) return;
-    onOpen?.();
+    setShowCameraModal(true);
   };
 
   const handleFeedError = () => {
@@ -299,6 +298,18 @@ export default function CameraFeedCard({
           </div>
         </div>
       </div>
+
+      {showCameraModal && entity && (
+        <GenericUtilityModal
+          mode="camera"
+          entityId={activeId}
+          entity={entity}
+          callService={() => {}}
+          onClose={() => setShowCameraModal(false)}
+          t={t}
+          getEntityImageUrl={getEntityImageUrl}
+        />
+      )}
     </div>
   );
 }
