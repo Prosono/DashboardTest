@@ -314,6 +314,7 @@ export default function ModalOrchestrator({
     const isEditSaunaHealthScore = !!editId && editId.startsWith('sauna_health_score_card_');
     const isEditThermostat = !!editId && (editId.startsWith('thermostat_card_') || editId.startsWith('climate_card_'));
     const isEditAlarmo = !!editId && editId.startsWith('alarm_card_');
+    const isEditCamera = !!editId && editId.startsWith('camera_card_');
     const isEditInputText = !!editId && editId.startsWith('input_text_card_');
     const isEditPopupLauncher = !!editId && editId.startsWith('popup_launcher_card_');
     const isEditDivider = !!editId && editId.startsWith('divider_card_');
@@ -339,7 +340,7 @@ export default function ModalOrchestrator({
     return {
       canEditName, canEditIcon, canEditStatus,
       isEditLight, isEditCalendar, isEditCalendarBooking, isEditTodo, isEditCost, isEditGenericType,
-      isEditAndroidTV, isEditCar, isEditRoom, isEditSauna, isEditSaunaBookingTemp, isEditSaunaHealthScore, isEditThermostat, isEditAlarmo, isEditInputText, isEditPopupLauncher, isEditDivider, isEditEmpty, isEditSensor, isEditWeatherTemp,
+      isEditAndroidTV, isEditCar, isEditRoom, isEditSauna, isEditSaunaBookingTemp, isEditSaunaHealthScore, isEditThermostat, isEditAlarmo, isEditCamera, isEditInputText, isEditPopupLauncher, isEditDivider, isEditEmpty, isEditSensor, isEditWeatherTemp,
       editSettingsKey, editSettings,
     };
   }, [showEditCardModal, editSettingsKey, cardSettings, entities]);
@@ -754,6 +755,7 @@ export default function ModalOrchestrator({
             callService={callService}
             onClose={() => setActiveSaunaFieldModal(null)}
             t={t}
+            getEntityImageUrl={getEntityImageUrl}
             setShowLightModal={setShowLightModal}
             setActiveClimateEntityModal={setActiveClimateEntityModal}
             setShowSensorInfoModal={setShowSensorInfoModal}

@@ -10,6 +10,7 @@
  */
 import {
   AlarmoCard,
+  CameraFeedCard,
   CalendarCard,
   CalendarBookingCard,
   CarCard,
@@ -786,6 +787,52 @@ export function renderEntityGroupControlCard(cardId, dragProps, getControls, car
   );
 }
 
+export function renderCameraFeedCard(cardId, dragProps, getControls, cardStyle, settingsKey, ctx) {
+  const {
+    entities,
+    editMode,
+    cardSettings,
+    customNames,
+    customIcons,
+    getEntityImageUrl,
+    saveCardSetting,
+    language,
+    setActiveSaunaFieldModal,
+    t,
+  } = ctx;
+  const settings = cardSettings[settingsKey] || cardSettings[cardId] || {};
+  const entityIds = Array.isArray(settings?.entityIds) ? settings.entityIds.filter(Boolean) : [];
+  const availableIds = entityIds.filter((entityId) => entities?.[entityId]);
+
+  if (!availableIds.length) {
+    if (editMode) {
+      return <MissingEntityCard cardId={cardId} dragProps={dragProps} controls={getControls(cardId)} cardStyle={cardStyle} t={t} />;
+    }
+    return null;
+  }
+
+  return (
+    <CameraFeedCard
+      key={cardId}
+      cardId={cardId}
+      settingsKey={settingsKey}
+      settings={settings}
+      entities={entities}
+      dragProps={dragProps}
+      controls={getControls(cardId)}
+      cardStyle={cardStyle}
+      editMode={editMode}
+      customNames={customNames}
+      customIcons={customIcons}
+      getEntityImageUrl={getEntityImageUrl}
+      saveCardSetting={saveCardSetting}
+      onOpen={() => setActiveSaunaFieldModal({ title: settings?.title, entityIds, cardId, fieldType: 'camera' })}
+      language={language}
+      t={t}
+    />
+  );
+}
+
 export function renderAlarmoCard(cardId, dragProps, getControls, cardStyle, settingsKey, ctx) {
   const {
     entities,
@@ -959,6 +1006,10 @@ export function dispatchCardRender(cardId, dragProps, getControls, cardStyle, se
     return renderInputTextCard(cardId, dragProps, getControls, cardStyle, settingsKey, ctx);
   }
 
+  if (cardId.startsWith('camera_card_')) {
+    return renderCameraFeedCard(cardId, dragProps, getControls, cardStyle, settingsKey, ctx);
+  }
+
   if (
     cardId.startsWith('fan_card_')
     || cardId.startsWith('door_card_')
@@ -966,7 +1017,6 @@ export function dispatchCardRender(cardId, dragProps, getControls, cardStyle, se
     || cardId.startsWith('lock_card_')
     || cardId.startsWith('switch_card_')
     || cardId.startsWith('number_card_')
-    || cardId.startsWith('camera_card_')
     || cardId.startsWith('timer_card_')
     || cardId.startsWith('select_card_')
     || cardId.startsWith('button_card_')

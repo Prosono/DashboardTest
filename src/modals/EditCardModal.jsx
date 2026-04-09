@@ -100,6 +100,7 @@ export default function EditCardModal({
   isEditSaunaHealthScore,
   isEditThermostat,
   isEditAlarmo,
+  isEditCamera,
   isEditInputText,
   isEditPopupLauncher,
   isEditDivider,
@@ -227,6 +228,7 @@ export default function EditCardModal({
     .map(([id]) => id));
 
   const climateOptions = sortByName(byDomain('climate'));
+  const cameraOptions = sortByName(byDomain('camera'));
   const inputTextOptions = sortByName(byDomain('input_text'));
   const calendarOptions = sortByName(byDomain('calendar'));
   const todoOptions = sortByName(byDomain('todo'));
@@ -713,6 +715,138 @@ export default function EditCardModal({
                   </div>
                   <div className="mt-2 text-sm text-[var(--text-primary)]">
                     {translateText('thermostat.settings.note', 'This card uses the selected climate entity and opens the thermostat modal when tapped.')}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {isEditCamera && editSettingsKey && (
+            <div className="space-y-3">
+              <label className="text-xs uppercase font-bold text-gray-500 ml-1">
+                {translateText('cameraCard.settings.title', 'Camera settings')}
+              </label>
+
+              <div className="rounded-2xl popup-surface p-4 space-y-4">
+                <SearchableSelect
+                  label={translateText('cameraCard.settings.primary', 'Primary camera')}
+                  value={editSettings?.activeId || editSettings?.entityIds?.[0] || null}
+                  options={cameraOptions}
+                  onChange={(value) => {
+                    const current = Array.isArray(editSettings?.entityIds) ? editSettings.entityIds.filter(Boolean) : [];
+                    if (!value) {
+                      saveCardSetting(editSettingsKey, 'activeId', current[0] || null);
+                      return;
+                    }
+                    const nextIds = current.includes(value) ? current : [value, ...current];
+                    saveCardSetting(editSettingsKey, 'entityIds', nextIds);
+                    saveCardSetting(editSettingsKey, 'activeId', value);
+                  }}
+                  placeholder={translateText('cameraCard.settings.primaryPlaceholder', 'Choose camera')}
+                  entities={entities}
+                  t={t}
+                />
+
+                <div className="space-y-2">
+                  <label className="text-xs uppercase font-bold text-gray-500 ml-1">
+                    {translateText('cameraCard.settings.selected', 'Included cameras')}
+                  </label>
+                  <div className="popup-surface rounded-2xl p-3 max-h-56 overflow-y-auto custom-scrollbar space-y-2">
+                    {cameraOptions.length === 0 && (
+                      <p className="text-xs text-[var(--text-muted)] text-center py-4">
+                        {translateText('cameraCard.settings.noneFound', 'No cameras found')}
+                      </p>
+                    )}
+                    {cameraOptions.map((id) => {
+                      const selectedIds = Array.isArray(editSettings?.entityIds) ? editSettings.entityIds.filter(Boolean) : [];
+                      const selected = selectedIds.includes(id);
+                      return (
+                        <button
+                          key={id}
+                          type="button"
+                          onClick={() => {
+                            const nextIds = selected
+                              ? selectedIds.filter((item) => item !== id)
+                              : [...selectedIds, id];
+                            saveCardSetting(editSettingsKey, 'entityIds', nextIds);
+
+                            const currentActiveId = editSettings?.activeId || selectedIds[0] || null;
+                            if (!nextIds.length) {
+                              saveCardSetting(editSettingsKey, 'activeId', null);
+                              return;
+                            }
+                            if (!selected && !currentActiveId) {
+                              saveCardSetting(editSettingsKey, 'activeId', id);
+                              return;
+                            }
+                            if (selected && currentActiveId === id) {
+                              saveCardSetting(editSettingsKey, 'activeId', nextIds[0] || null);
+                            }
+                          }}
+                          className={`w-full text-left px-3 py-2 rounded-xl transition-colors border ${
+                            selected
+                              ? 'bg-blue-500/15 border-blue-500/30 text-blue-400'
+                              : 'border-transparent hover:bg-[var(--glass-bg-hover)] text-[var(--text-secondary)]'
+                          }`}
+                        >
+                          <div className="text-sm font-bold truncate">{entities[id]?.attributes?.friendly_name || id}</div>
+                          <div className="text-[10px] text-[var(--text-muted)] truncate">{id}</div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <p className="text-[10px] text-[var(--text-secondary)]">
+                    {translateText('cameraCard.settings.galleryHint', 'Tap the card to open a larger camera gallery view.')}
+                  </p>
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-[10px] uppercase tracking-widest font-bold text-[var(--text-secondary)]">
+                    {translateText('cameraCard.settings.refreshSeconds', 'Snapshot refresh (sec)')}
+                  </label>
+                  <input
+                    type="number"
+                    min={2}
+                    max={60}
+                    step={1}
+                    className="w-full px-3 py-2 text-[var(--text-primary)] rounded-xl popup-surface focus:border-blue-500/50 outline-none transition-colors"
+                    value={Number(editSettings?.refreshSeconds) || 5}
+                    onChange={(e) => {
+                      const parsed = Number(e.target.value);
+                      const next = Number.isFinite(parsed) ? Math.max(2, Math.min(60, Math.round(parsed))) : 5;
+                      saveCardSetting(editSettingsKey, 'refreshSeconds', next);
+                    }}
+                  />
+                  <p className="text-[10px] text-[var(--text-secondary)]">
+                    {translateText('cameraCard.settings.refreshHint', 'Used when the card falls back from stream to snapshots.')}
+                  </p>
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-xs uppercase font-bold text-gray-500 ml-1">
+                    {translateText('cameraCard.settings.fitMode', 'Preview fit')}
+                  </label>
+                  <div className="grid grid-cols-2 gap-2">
+                    {[
+                      { key: 'cover', label: translateText('cameraCard.settings.fitCover', 'Fill frame') },
+                      { key: 'contain', label: translateText('cameraCard.settings.fitContain', 'Show full image') },
+                    ].map((option) => {
+                      const selected = (editSettings?.fitMode || 'cover') === option.key;
+                      return (
+                        <button
+                          key={option.key}
+                          type="button"
+                          onClick={() => saveCardSetting(editSettingsKey, 'fitMode', option.key)}
+                          className={`px-3 py-2 rounded-xl border text-[11px] uppercase tracking-widest font-bold transition-all ${
+                            selected
+                              ? 'bg-blue-500/15 border-blue-500/35 text-blue-400'
+                              : 'bg-[var(--glass-bg)] border-[var(--glass-border)] text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
+                          }`}
+                        >
+                          {option.label}
+                        </button>
+                      );
+                    })}
                   </div>
                 </div>
               </div>

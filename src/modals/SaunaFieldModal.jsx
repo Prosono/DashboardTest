@@ -97,6 +97,7 @@ export default function SaunaFieldModal({
   callService,
   onClose,
   t,
+  getEntityImageUrl,
   setShowLightModal,
   setActiveClimateEntityModal,
   setShowSensorInfoModal,
@@ -629,6 +630,7 @@ export default function SaunaFieldModal({
                       callService={callService}
                       t={t}
                       onShowHistory={showEntityHistory}
+                      getEntityImageUrl={getEntityImageUrl}
                       embedded
                       showCloseButton={false}
                     />
@@ -661,6 +663,7 @@ export default function SaunaFieldModal({
                       callService={callService}
                       t={t}
                       onShowHistory={showEntityHistory}
+                      getEntityImageUrl={getEntityImageUrl}
                       embedded
                       showCloseButton={false}
                     />
@@ -693,6 +696,7 @@ export default function SaunaFieldModal({
                       callService={callService}
                       t={t}
                       onShowHistory={showEntityHistory}
+                      getEntityImageUrl={getEntityImageUrl}
                       embedded
                       showCloseButton={false}
                     />
@@ -725,6 +729,7 @@ export default function SaunaFieldModal({
                       callService={callService}
                       t={t}
                       onShowHistory={showEntityHistory}
+                      getEntityImageUrl={getEntityImageUrl}
                       embedded
                       showCloseButton={false}
                     />
@@ -757,6 +762,7 @@ export default function SaunaFieldModal({
                       callService={callService}
                       t={t}
                       onShowHistory={showEntityHistory}
+                      getEntityImageUrl={getEntityImageUrl}
                       embedded
                       showCloseButton={false}
                     />
@@ -789,6 +795,7 @@ export default function SaunaFieldModal({
                       callService={callService}
                       t={t}
                       onShowHistory={showEntityHistory}
+                      getEntityImageUrl={getEntityImageUrl}
                       embedded
                       showCloseButton={false}
                     />

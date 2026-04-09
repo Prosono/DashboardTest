@@ -374,7 +374,15 @@ export const handleAddSelected = (ctx) => {
     case 'cameraCard': {
       if (selectedEntities.length === 0) return;
       const cardId = `camera_card_${Date.now()}`;
-      commitSingleCard(cardId, { type: 'group_control', fieldType: 'camera', title: 'Kamera', entityIds: selectedEntities });
+      commitSingleCard(cardId, {
+        type: 'camera_feed',
+        fieldType: 'camera',
+        title: 'Kamera',
+        entityIds: selectedEntities,
+        activeId: selectedEntities[0] || null,
+        refreshSeconds: 5,
+        fitMode: 'cover',
+      });
       setSelectedEntities([]);
       return;
     }
