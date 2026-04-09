@@ -36,6 +36,8 @@ export default function GenericUtilityModal({
   callService,
   onClose,
   onShowHistory,
+  onOpenDetails,
+  detailActionLabel,
   t,
   embedded = false,
   showCloseButton = true,
@@ -135,13 +137,23 @@ export default function GenericUtilityModal({
   })();
 
   const primaryLabel = (() => {
-    if (mode === 'camera') return tr('common.history', 'Historikk');
+    if (mode === 'camera') return detailActionLabel || tr('common.open', 'Åpne');
     if (mode === 'alarm') return (state.startsWith('armed') || state === 'triggered') ? tr('common.disarm', 'Deaktiver') : tr('common.arm', 'Aktiver');
     if (mode === 'timer') return state === 'active' ? tr('common.pause', 'Pause') : tr('common.start', 'Start');
     if (mode === 'button') return tr('common.press', 'Trykk');
     if (mode === 'script') return tr('common.run', 'Kjor');
     return tr('common.open', 'Åpne');
   })();
+  const canOpenCameraDetails = typeof onOpenDetails === 'function' || typeof onShowHistory === 'function';
+  const shouldShowPrimaryButton = mode !== 'select' && (mode !== 'camera' || canOpenCameraDetails);
+
+  const handleCameraOpen = () => {
+    if (typeof onOpenDetails === 'function') {
+      onOpenDetails(entityId);
+      return;
+    }
+    onShowHistory?.(entityId);
+  };
 
   const cameraRefresh = () => {
     setCameraFeedErrored(false);
@@ -200,7 +212,11 @@ export default function GenericUtilityModal({
 
           {mode === 'camera' ? (
             <div className="space-y-4">
-              <div className="relative overflow-hidden rounded-[2rem] border min-h-[15rem] md:min-h-[19rem]" style={{ borderColor: 'var(--glass-border)', background: 'linear-gradient(160deg, rgba(15,23,42,0.88), rgba(2,6,23,0.96))' }}>
+              <div
+                className={`relative overflow-hidden rounded-[2rem] border min-h-[15rem] md:min-h-[19rem] ${typeof onOpenDetails === 'function' ? 'cursor-pointer' : ''}`}
+                style={{ borderColor: 'var(--glass-border)', background: 'linear-gradient(160deg, rgba(15,23,42,0.88), rgba(2,6,23,0.96))' }}
+                onClick={typeof onOpenDetails === 'function' ? handleCameraOpen : undefined}
+              >
                 {cameraFeedSrc && !cameraUnavailable && !cameraFeedErrored ? (
                   <img
                     key={`${entityId}-${cameraTransport}-${cameraTransport === 'snapshot' ? cameraSnapshotTick : 'live'}`}
@@ -302,19 +318,19 @@ export default function GenericUtilityModal({
         </div>
 
         <div className="lg:col-span-2 space-y-4 py-2">
-          {mode !== 'select' && (
+          {shouldShowPrimaryButton && (
             <button
               type="button"
               onClick={() => {
                 if (mode === 'camera') {
-                  onShowHistory?.(entityId);
+                  handleCameraOpen();
                   return;
                 }
                 primaryAction();
               }}
-              disabled={mode === 'camera' ? typeof onShowHistory !== 'function' : unavailable}
+              disabled={mode === 'camera' ? !canOpenCameraDetails : unavailable}
               className={`w-full h-12 px-4 rounded-2xl border inline-flex items-center justify-center transition-all ${
-                ((mode === 'camera' && typeof onShowHistory !== 'function') || (mode !== 'camera' && unavailable))
+                ((mode === 'camera' && !canOpenCameraDetails) || (mode !== 'camera' && unavailable))
                   ? 'opacity-50 cursor-not-allowed bg-[var(--glass-bg)] border-[var(--glass-border)] text-[var(--text-secondary)]'
                   : 'bg-[var(--glass-bg)] border-[var(--glass-border)] text-[var(--text-primary)]'
               }`}

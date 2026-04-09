@@ -114,6 +114,7 @@ export default function SaunaFieldModal({
   const [activeNumberEntityModal, setActiveNumberEntityModal] = React.useState(null);
   const [activeLockEntityModal, setActiveLockEntityModal] = React.useState(null);
   const [activeSwitchEntityModal, setActiveSwitchEntityModal] = React.useState(null);
+  const [activeCameraEntityModal, setActiveCameraEntityModal] = React.useState(null);
 
   const grouped = {};
   ids.forEach((entityId) => {
@@ -244,6 +245,10 @@ export default function SaunaFieldModal({
       setActiveSwitchEntityModal(entityId);
       return;
     }
+    if (domain === 'camera') {
+      setActiveCameraEntityModal(entityId);
+      return;
+    }
     if (setShowSensorInfoModal) {
       setShowSensorInfoModal(entityId);
       onClose?.();
@@ -298,6 +303,24 @@ export default function SaunaFieldModal({
     if (!entityId || !setShowSensorInfoModal) return;
     setShowSensorInfoModal(entityId);
   };
+
+  if (cameraOnly && cameraEntityIds.length === 1) {
+    const entityId = cameraEntityIds[0];
+    const entity = entities?.[entityId];
+    if (!entity) return null;
+
+    return (
+      <GenericUtilityModal
+        mode="camera"
+        entityId={entityId}
+        entity={entity}
+        callService={callService}
+        onClose={onClose}
+        t={t}
+        getEntityImageUrl={getEntityImageUrl}
+      />
+    );
+  }
 
   return (
     <>
@@ -629,7 +652,8 @@ export default function SaunaFieldModal({
                       entity={ent}
                       callService={callService}
                       t={t}
-                      onShowHistory={showEntityHistory}
+                      onOpenDetails={(value) => setActiveCameraEntityModal(value)}
+                      detailActionLabel={tr('common.open', 'Åpne')}
                       getEntityImageUrl={getEntityImageUrl}
                       embedded
                       showCloseButton={false}
@@ -1135,6 +1159,18 @@ export default function SaunaFieldModal({
             showEntityHistory(entityId);
           }}
           onClose={() => setActiveNumberEntityModal(null)}
+        />
+      )}
+      {activeCameraEntityModal && entities?.[activeCameraEntityModal] && (
+        <GenericUtilityModal
+          mode="camera"
+          entityId={activeCameraEntityModal}
+          entity={entities[activeCameraEntityModal]}
+          callService={callService}
+          t={t}
+          overlayOpacity={0}
+          getEntityImageUrl={getEntityImageUrl}
+          onClose={() => setActiveCameraEntityModal(null)}
         />
       )}
     </>
