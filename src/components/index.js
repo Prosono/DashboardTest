@@ -22,6 +22,7 @@ export { default as SensorCard } from './cards/SensorCard';
 export { default as SaunaCard } from './cards/SaunaCard';
 export { default as SaunaBookingTempCard } from './cards/SaunaBookingTempCard';
 export { default as SaunaHealthScoreCard } from './cards/SaunaHealthScoreCard';
+export { default as SaunaMapCard } from './cards/SaunaMapCard';
 export { default as PopupLauncherCard } from './cards/PopupLauncherCard';
 export { default as NotificationTimelineCard } from './cards/NotificationTimelineCard';
 export { default as GlobalTimelineCard } from './cards/GlobalTimelineCard';

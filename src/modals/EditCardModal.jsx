@@ -98,6 +98,7 @@ export default function EditCardModal({
   isEditSauna,
   isEditSaunaBookingTemp,
   isEditSaunaHealthScore,
+  isEditSaunaMap,
   isEditThermostat,
   isEditAlarmo,
   isEditCamera,
@@ -210,6 +211,7 @@ export default function EditCardModal({
     .map(([id]) => id));
 
   const locationOptions = sortByName(byDomain('device_tracker'));
+  const zoneOptions = sortByName(byDomain('zone'));
 
   const chargingOptions = sortByName(entityEntries
     .filter(([id, entity]) => {
@@ -1654,6 +1656,80 @@ export default function EditCardModal({
           })()}
 
 
+          {isEditSaunaMap && editSettingsKey && (() => {
+            const selectedZones = Array.isArray(editSettings.zoneEntityIds)
+              ? editSettings.zoneEntityIds.filter(Boolean)
+              : [];
+            const allZones = selectedZones.length === 0;
+
+            return (
+              <div className="space-y-4">
+                <div className="popup-surface rounded-2xl p-4 space-y-3">
+                  <div className="text-xs uppercase font-bold tracking-widest text-gray-500">
+                    {translateText('saunaMap.cardOptions', 'Badstu kart')}
+                  </div>
+                  <div className="text-[11px] text-[var(--text-secondary)] leading-relaxed">
+                    {translateText('saunaMap.description', 'Viser HA-soner som kartmarkører og matcher temperatur og score fra badstu-kort der navn eller valgt sone passer.')}
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-xs uppercase font-bold text-gray-500 ml-1">
+                    {translateText('saunaMap.zones', 'HA-soner')}
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => saveCardSetting(editSettingsKey, 'zoneEntityIds', [])}
+                    className={`w-full text-left px-4 py-3 rounded-2xl border transition-colors ${
+                      allZones
+                        ? 'bg-blue-500/15 border-blue-500/35 text-blue-400'
+                        : 'bg-[var(--glass-bg)] border-[var(--glass-border)] text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
+                    }`}
+                  >
+                    <div className="text-xs font-bold uppercase tracking-widest">
+                      {translateText('saunaMap.allZones', 'Alle soner med koordinater')}
+                    </div>
+                    <div className="text-[10px] text-[var(--text-muted)] mt-1">
+                      {translateText('saunaMap.allZonesHint', 'La kortet bruke alle HA-soner som har latitude/longitude.')}
+                    </div>
+                  </button>
+
+                  <div className="popup-surface rounded-2xl p-3 max-h-64 overflow-y-auto custom-scrollbar space-y-1">
+                    {zoneOptions.length === 0 && (
+                      <div className="px-3 py-5 text-center text-xs text-[var(--text-muted)]">
+                        {translateText('saunaMap.noZones', 'Ingen HA-soner funnet')}
+                      </div>
+                    )}
+                    {zoneOptions.map((id) => {
+                      const selected = selectedZones.includes(id);
+                      return (
+                        <button
+                          key={id}
+                          type="button"
+                          onClick={() => {
+                            const next = selected
+                              ? selectedZones.filter((zoneId) => zoneId !== id)
+                              : [...selectedZones, id];
+                            saveCardSetting(editSettingsKey, 'zoneEntityIds', next);
+                          }}
+                          className={`w-full text-left px-3 py-2 rounded-xl transition-colors border ${
+                            selected
+                              ? 'bg-blue-500/15 border-blue-500/30 text-blue-400'
+                              : 'border-transparent hover:bg-[var(--glass-bg-hover)] text-[var(--text-secondary)]'
+                          }`}
+                        >
+                          <div className="text-sm font-bold truncate">{entities[id]?.attributes?.friendly_name || id}</div>
+                          <div className="text-[10px] text-[var(--text-muted)] truncate">{id}</div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+            );
+          })()}
+
+
           {isEditSauna && editSettingsKey && (() => {
             const allEntityIds = Object.keys(entities || {});
             const saunaToggleOptions = [
@@ -1673,6 +1749,11 @@ export default function EditCardModal({
             ];
 
             const singleSelectors = [
+              {
+                key: 'zoneEntityId',
+                label: translateText('sauna.zoneEntity', 'Lokasjon - HA-sone'),
+                filter: (id) => id.startsWith('zone.'),
+              },
               {
                 key: 'tempEntityId',
                 label: translateText('sauna.tempSensor', 'Temperatur - sensor'),
@@ -1948,6 +2029,16 @@ export default function EditCardModal({
               </div>
 
               <SearchableSelect
+                label={translateText('sauna.zoneEntity', 'Lokasjon - HA-sone')}
+                value={editSettings.zoneEntityId || null}
+                options={zoneOptions}
+                onChange={(value) => saveCardSetting(editSettingsKey, 'zoneEntityId', value)}
+                placeholder={translateText('dropdown.noneSelected', 'None selected')}
+                entities={entities}
+                t={t}
+              />
+
+              <SearchableSelect
                 label={translateText('sauna.bookingTemp.tempEntity', 'Current temperature sensor')}
                 value={editSettings.tempEntityId || null}
                 options={saunaTempSensorOptions}
@@ -2154,6 +2245,16 @@ export default function EditCardModal({
                   {translateText('sauna.healthScore.description', 'Logs one sample every hour at :01 while booking is active and service is off. Score is based on deviation from target temperature.')}
                 </div>
               </div>
+
+              <SearchableSelect
+                label={translateText('sauna.zoneEntity', 'Lokasjon - HA-sone')}
+                value={editSettings.zoneEntityId || null}
+                options={zoneOptions}
+                onChange={(value) => saveCardSetting(editSettingsKey, 'zoneEntityId', value)}
+                placeholder={translateText('dropdown.noneSelected', 'None selected')}
+                entities={entities}
+                t={t}
+              />
 
               <SearchableSelect
                 label={translateText('sauna.healthScore.tempEntity', 'Current temperature sensor')}

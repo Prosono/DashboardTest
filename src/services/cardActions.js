@@ -260,6 +260,17 @@ export const handleAddSelected = (ctx) => {
       return;
     }
 
+    case 'saunaMap': {
+      const cardId = `sauna_map_card_${Date.now()}`;
+      commitSingleCard(cardId, {
+        type: 'sauna_map',
+        zoneEntityIds: [],
+        gridColSpan: 4,
+        gridRowSpan: 3,
+      }, { openEdit: true });
+      return;
+    }
+
     case 'notificationTimeline': {
       const cardId = `notification_timeline_card_${Date.now()}`;
       commitSingleCard(cardId, {

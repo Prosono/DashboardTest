@@ -7,7 +7,7 @@
 const REMOVABLE_PREFIXES = [
   'light_', 'light.', 'vacuum.', 'media_player.', 'media_group_',
   'weather_temp_', 'calendar_card_', 'calendar_booking_card_', 'climate_card_', 'thermostat_card_', 'cost_card_',
-  'androidtv_card_', 'car_card_', 'nordpool_card_', 'todo_card_', 'room_card_', 'sauna_card_', 'sauna_booking_temp_card_', 'sauna_health_score_card_',
+  'androidtv_card_', 'car_card_', 'nordpool_card_', 'todo_card_', 'room_card_', 'sauna_card_', 'sauna_booking_temp_card_', 'sauna_health_score_card_', 'sauna_map_card_',
   'notification_timeline_card_',
   'global_timeline_card_',
   'reports_card_',
@@ -21,7 +21,7 @@ const REMOVABLE_PREFIXES = [
 const SPECIAL_CARD_PREFIXES = [
   'media_group_', 'weather_temp_', 'calendar_card_', 'calendar_booking_card_', 'climate_card_', 'thermostat_card_',
   'cost_card_', 'androidtv_card_', 'car_card_', 'nordpool_card_',
-  'todo_card_', 'room_card_', 'sauna_card_', 'sauna_booking_temp_card_', 'sauna_health_score_card_', 'cover_card_',
+  'todo_card_', 'room_card_', 'sauna_card_', 'sauna_booking_temp_card_', 'sauna_health_score_card_', 'sauna_map_card_', 'cover_card_',
   'notification_timeline_card_',
   'global_timeline_card_',
   'reports_card_',

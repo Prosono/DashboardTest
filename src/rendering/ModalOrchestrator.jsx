@@ -312,6 +312,7 @@ export default function ModalOrchestrator({
     const isEditSauna = !!editId && editId.startsWith('sauna_card_');
     const isEditSaunaBookingTemp = !!editId && editId.startsWith('sauna_booking_temp_card_');
     const isEditSaunaHealthScore = !!editId && editId.startsWith('sauna_health_score_card_');
+    const isEditSaunaMap = !!editId && editId.startsWith('sauna_map_card_');
     const isEditThermostat = !!editId && (editId.startsWith('thermostat_card_') || editId.startsWith('climate_card_'));
     const isEditAlarmo = !!editId && editId.startsWith('alarm_card_');
     const isEditCamera = !!editId && editId.startsWith('camera_card_');
@@ -321,12 +322,12 @@ export default function ModalOrchestrator({
     const isEditEmpty = !!editId && editId.startsWith('empty_card_');
     const isEditCover = !!editId && editId.startsWith('cover_card_');
     const editSettings = isEditCar ? resolveCarSettings(editId, rawEditSettings) : rawEditSettings;
-    const isEditGenericType = (!!editSettings?.type && (editSettings.type === 'entity' || editSettings.type === 'toggle' || editSettings.type === 'sensor' || editSettings.type === 'divider' || editSettings.type === 'empty' || editSettings.type === 'calendar_booking' || editSettings.type === 'popup_launcher' || editSettings.type === 'notification_timeline' || editSettings.type === 'global_timeline' || editSettings.type === 'sauna_health_score' || editSettings.type === 'alarmo' || editSettings.type === 'thermostat' || editSettings.type === 'input_text')) || isEditVacuum || isEditAutomation || isEditCar || isEditAndroidTV || isEditRoom || isEditSauna || isEditSaunaBookingTemp || isEditSaunaHealthScore || isEditThermostat || isEditAlarmo || isEditInputText || isEditPopupLauncher || isEditDivider || isEditEmpty || isEditCalendarBooking;
+    const isEditGenericType = (!!editSettings?.type && (editSettings.type === 'entity' || editSettings.type === 'toggle' || editSettings.type === 'sensor' || editSettings.type === 'divider' || editSettings.type === 'empty' || editSettings.type === 'calendar_booking' || editSettings.type === 'popup_launcher' || editSettings.type === 'notification_timeline' || editSettings.type === 'global_timeline' || editSettings.type === 'sauna_health_score' || editSettings.type === 'sauna_map' || editSettings.type === 'alarmo' || editSettings.type === 'thermostat' || editSettings.type === 'input_text')) || isEditVacuum || isEditAutomation || isEditCar || isEditAndroidTV || isEditRoom || isEditSauna || isEditSaunaBookingTemp || isEditSaunaHealthScore || isEditSaunaMap || isEditThermostat || isEditAlarmo || isEditInputText || isEditPopupLauncher || isEditDivider || isEditEmpty || isEditCalendarBooking;
     const isEditSensor = !!editSettings?.type && editSettings.type === 'sensor';
     const isEditWeatherTemp = !!editId && editId.startsWith('weather_temp_');
     const canEditName = !!editId && !isEditWeatherTemp && !isEditDivider && !isEditEmpty && editId !== 'media_player' && editId !== 'sonos';
     const canEditIcon = !!editId && (
-      isEditLight || isEditCalendar || isEditCalendarBooking || isEditTodo || isEditRoom || isEditSauna || isEditSaunaBookingTemp || isEditSaunaHealthScore || isEditCover || isEditDivider
+      isEditLight || isEditCalendar || isEditCalendarBooking || isEditTodo || isEditRoom || isEditSauna || isEditSaunaBookingTemp || isEditSaunaHealthScore || isEditSaunaMap || isEditCover || isEditDivider
       || editId.startsWith('automation.') || editId.startsWith('vacuum.')
       || editId.startsWith('climate_card_') || editId.startsWith('thermostat_card_') || editId.startsWith('cost_card_')
       || editId.startsWith('fan_card_') || editId.startsWith('door_card_') || editId.startsWith('motion_card_')
@@ -340,7 +341,7 @@ export default function ModalOrchestrator({
     return {
       canEditName, canEditIcon, canEditStatus,
       isEditLight, isEditCalendar, isEditCalendarBooking, isEditTodo, isEditCost, isEditGenericType,
-      isEditAndroidTV, isEditCar, isEditRoom, isEditSauna, isEditSaunaBookingTemp, isEditSaunaHealthScore, isEditThermostat, isEditAlarmo, isEditCamera, isEditInputText, isEditPopupLauncher, isEditDivider, isEditEmpty, isEditSensor, isEditWeatherTemp,
+      isEditAndroidTV, isEditCar, isEditRoom, isEditSauna, isEditSaunaBookingTemp, isEditSaunaHealthScore, isEditSaunaMap, isEditThermostat, isEditAlarmo, isEditCamera, isEditInputText, isEditPopupLauncher, isEditDivider, isEditEmpty, isEditSensor, isEditWeatherTemp,
       editSettingsKey, editSettings,
     };
   }, [showEditCardModal, editSettingsKey, cardSettings, entities]);

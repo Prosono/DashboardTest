@@ -235,6 +235,150 @@
   filter: brightness(1.05);
 }
 
+.sauna-map-card .leaflet-container {
+  width: 100%;
+  height: 100%;
+  min-height: 100%;
+  background: #0b1114;
+  font: inherit;
+}
+
+.sauna-map-card .leaflet-tile {
+  filter: grayscale(0.92) invert(0.9) hue-rotate(165deg) brightness(0.58) contrast(1.08) saturate(0.62);
+}
+
+.sauna-map-card .leaflet-control-attribution {
+  background: rgba(4, 10, 20, 0.58);
+  color: rgba(226, 232, 240, 0.74);
+  border-radius: 8px 0 0 0;
+  font-size: 9px;
+}
+
+.sauna-map-card .leaflet-control-attribution a {
+  color: rgba(191, 219, 254, 0.9);
+}
+
+.sauna-map-marker-shell {
+  background: transparent;
+  border: 0;
+}
+
+.sauna-map-marker {
+  --marker-accent: #64748b;
+  --marker-glow: rgba(100, 116, 139, 0.35);
+  position: relative;
+  width: 48px;
+  height: 48px;
+  display: grid;
+  place-items: center;
+}
+
+.sauna-map-marker--good {
+  --marker-accent: #22c55e;
+  --marker-glow: rgba(34, 197, 94, 0.38);
+}
+
+.sauna-map-marker--warn {
+  --marker-accent: #f59e0b;
+  --marker-glow: rgba(245, 158, 11, 0.42);
+}
+
+.sauna-map-marker--bad {
+  --marker-accent: #ef4444;
+  --marker-glow: rgba(239, 68, 68, 0.42);
+}
+
+.sauna-map-marker__pulse {
+  position: absolute;
+  inset: 2px;
+  border-radius: 9999px;
+  background: var(--marker-glow);
+  filter: blur(8px);
+  opacity: 0.8;
+}
+
+.sauna-map-marker__body {
+  position: relative;
+  width: 40px;
+  height: 40px;
+  border-radius: 14px;
+  display: grid;
+  place-items: center;
+  background: rgba(6, 12, 18, 0.92);
+  border: 1px solid color-mix(in srgb, var(--marker-accent) 70%, white 12%);
+  color: #f8fafc;
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.12);
+}
+
+.sauna-map-marker__temp {
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1;
+  letter-spacing: 0;
+}
+
+.sauna-map-marker__score {
+  position: absolute;
+  right: -5px;
+  bottom: -5px;
+  min-width: 19px;
+  height: 19px;
+  padding: 0 4px;
+  border-radius: 9999px;
+  display: grid;
+  place-items: center;
+  background: var(--marker-accent);
+  color: #03110a;
+  font-size: 9px;
+  font-weight: 900;
+  line-height: 1;
+  letter-spacing: 0;
+  border: 1px solid rgba(255, 255, 255, 0.62);
+}
+
+.sauna-map-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.4rem 0.6rem;
+  border-radius: 9999px;
+  background: rgba(4, 10, 20, 0.72);
+  color: rgba(226, 232, 240, 0.9);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.28);
+  backdrop-filter: blur(12px);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.sauna-map-chip--active {
+  color: #bbf7d0;
+  border-color: rgba(34, 197, 94, 0.32);
+}
+
+.sauna-map-chip--service {
+  color: #fed7aa;
+  border-color: rgba(249, 115, 22, 0.34);
+}
+
+.sauna-map-score--good {
+  color: #86efac;
+}
+
+.sauna-map-score--warn {
+  color: #fcd34d;
+}
+
+.sauna-map-score--bad {
+  color: #fda4af;
+}
+
+.sauna-map-score--unknown {
+  color: var(--text-secondary);
+}
+
 /* Keep timeline card border stable inside popup while hovering. */
 .notification-timeline-card-surface.touch-feedback:hover,
 .notification-timeline-card-surface.touch-feedback:active {

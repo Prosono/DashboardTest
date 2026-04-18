@@ -104,6 +104,7 @@ export function useAddCard({
     if (addCardType === 'calendarBooking') return t('addCard.available.entities');
     if (addCardType === 'saunaBookingTemp') return t('addCard.available.entities');
     if (addCardType === 'saunaHealthScore') return t('addCard.available.entities');
+    if (addCardType === 'saunaMap') return t('addCard.available.entities');
     if (addCardType === 'popupLauncher') return t('addCard.available.entities');
     if (addCardType === 'globalTimeline') return t('addCard.available.entities');
     if (addCardType === 'empty') return t('addCard.available.entities');
@@ -153,6 +154,8 @@ export function useAddCard({
             : addCardType === 'saunaBookingTemp'
               ? 'addCard.item.entities'
             : addCardType === 'saunaHealthScore'
+              ? 'addCard.item.entities'
+            : addCardType === 'saunaMap'
               ? 'addCard.item.entities'
             : addCardType === 'popupLauncher'
               ? 'addCard.item.entities'
