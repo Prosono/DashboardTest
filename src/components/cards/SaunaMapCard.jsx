@@ -313,14 +313,26 @@ const buildSourceCards = ({ cardSettings, entities, customNames, tr }) => {
 
 const makeMarkerHtml = (location) => {
   const tone = getScoreTone(location.healthScore);
+  const score = Number.isFinite(Number(location.healthScore))
+    ? clamp(Math.round(Number(location.healthScore)), 0, 100)
+    : null;
+  const scoreDeg = score !== null ? `${score * 3.6}deg` : '0deg';
   const tempLabel = location.currentTemp !== null ? `${Math.round(location.currentTemp)}°` : '--';
+  const imageHtml = location.imageUrl
+    ? `<img src="${escapeHtml(location.imageUrl)}" alt="" class="sauna-map-marker__image" draggable="false" />`
+    : '<span class="sauna-map-marker__fallback">S</span>';
   return `
-    <div class="sauna-map-marker sauna-map-marker--${tone}" title="${escapeHtml(location.name)}">
-      <span class="sauna-map-marker__pulse"></span>
-      <span class="sauna-map-marker__body">
-        <span class="sauna-map-marker__temp">${escapeHtml(tempLabel)}</span>
+    <div class="sauna-map-marker sauna-map-marker--${tone}" title="${escapeHtml(location.name)}" style="--score-deg: ${scoreDeg}">
+      <span class="sauna-map-marker__glow"></span>
+      <span class="sauna-map-marker__portrait">
+        <span class="sauna-map-marker__ring">
+          <span class="sauna-map-marker__inner">
+            ${imageHtml}
+          </span>
+        </span>
         <span class="sauna-map-marker__score">${escapeHtml(formatScore(location.healthScore))}</span>
       </span>
+      <span class="sauna-map-marker__temp">${escapeHtml(tempLabel)}</span>
     </div>
   `;
 };
@@ -343,6 +355,7 @@ export default function SaunaMapCard({
   const mapElRef = useRef(null);
   const markerLayerRef = useRef(null);
   const resizeObserverRef = useRef(null);
+  const lastFitBoundsKeyRef = useRef('');
   const [selectedZoneId, setSelectedZoneId] = useState(null);
 
   const cardName = customNames?.[cardId] || settings?.name || settings?.heading || tr('saunaMap.title', 'Sauna map');
@@ -356,9 +369,9 @@ export default function SaunaMapCard({
     tr,
   }), [cardSettings, customNames, entities, tr]);
 
-  const saunaSources = sourceCards.filter((source) => source.kind === 'sauna');
-  const healthSources = sourceCards.filter((source) => source.kind === 'health');
-  const bookingSources = sourceCards.filter((source) => source.kind === 'booking');
+  const saunaSources = useMemo(() => sourceCards.filter((source) => source.kind === 'sauna'), [sourceCards]);
+  const healthSources = useMemo(() => sourceCards.filter((source) => source.kind === 'health'), [sourceCards]);
+  const bookingSources = useMemo(() => sourceCards.filter((source) => source.kind === 'booking'), [sourceCards]);
 
   const temperatureEntities = useMemo(() => Object.entries(entities || {})
     .filter(([id, entity]) => {
@@ -430,6 +443,10 @@ export default function SaunaMapCard({
       .sort((a, b) => a.name.localeCompare(b.name));
   }, [bookingSources, entities, healthSources, saunaSources, settings?.zoneEntityIds, temperatureEntities]);
 
+  const locationBoundsKey = useMemo(() => locations
+    .map((location) => `${location.zoneId}:${location.lat.toFixed(5)},${location.lng.toFixed(5)}`)
+    .join('|'), [locations]);
+
   const selectedLocation = locations.find((location) => location.zoneId === selectedZoneId) || locations[0] || null;
 
   const stats = useMemo(() => {
@@ -470,12 +487,12 @@ export default function SaunaMapCard({
 
     if (typeof ResizeObserver !== 'undefined') {
       resizeObserverRef.current = new ResizeObserver(() => {
-        window.requestAnimationFrame(() => map.invalidateSize());
+        window.requestAnimationFrame(() => map.invalidateSize({ pan: false }));
       });
       resizeObserverRef.current.observe(mapElRef.current);
     }
 
-    window.requestAnimationFrame(() => map.invalidateSize());
+    window.requestAnimationFrame(() => map.invalidateSize({ pan: false }));
 
     return () => {
       if (resizeObserverRef.current) {
@@ -521,8 +538,8 @@ export default function SaunaMapCard({
         icon: L.divIcon({
           className: 'sauna-map-marker-shell',
           html: makeMarkerHtml(location),
-          iconSize: [48, 48],
-          iconAnchor: [24, 24],
+          iconSize: [88, 96],
+          iconAnchor: [44, 38],
         }),
         title: location.name,
       });
@@ -534,14 +551,17 @@ export default function SaunaMapCard({
       bounds.extend([location.lat, location.lng]);
     });
 
-    if (bounds.isValid()) {
+    const shouldAutoFit = locationBoundsKey !== lastFitBoundsKeyRef.current;
+    if (bounds.isValid() && shouldAutoFit) {
       map.fitBounds(bounds, { padding: [28, 28], maxZoom: 13 });
-    } else {
+      lastFitBoundsKeyRef.current = locationBoundsKey;
+    } else if (!bounds.isValid() && shouldAutoFit) {
       map.setView(NORWAY_CENTER, 5);
+      lastFitBoundsKeyRef.current = locationBoundsKey;
     }
 
-    window.requestAnimationFrame(() => map.invalidateSize());
-  }, [editMode, locations]);
+    window.requestAnimationFrame(() => map.invalidateSize({ pan: false }));
+  }, [editMode, locationBoundsKey, locations]);
 
   return (
     <div
