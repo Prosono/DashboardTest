@@ -200,6 +200,14 @@ const formatTemp = (value) => {
 
 const formatScore = (score) => (Number.isFinite(Number(score)) ? `${Math.round(Number(score))}` : '--');
 
+const formatPeopleCount = (value) => {
+  const raw = String(value ?? '').trim();
+  if (!raw || ['unknown', 'unavailable', 'none', 'null'].includes(raw.toLowerCase())) return '0';
+  const parsed = Number.parseFloat(raw.replace(',', '.'));
+  if (Number.isFinite(parsed)) return `${Math.max(0, Math.round(parsed))}`;
+  return raw.slice(0, 3);
+};
+
 const getZoneCoordinates = (zoneEntity) => {
   const attrs = zoneEntity?.attributes || {};
   const lat = toNum(attrs.latitude ?? attrs.lat);
@@ -300,6 +308,8 @@ const buildSourceCards = ({ cardSettings, entities, customNames, tr, getEntityIm
       const activeEntity = activeEntityId ? entities?.[activeEntityId] : null;
       const serviceEntityId = settings?.serviceEntityId || '';
       const serviceEntity = serviceEntityId ? entities?.[serviceEntityId] : null;
+      const peopleNowEntityId = settings?.peopleNowEntityId || '';
+      const peopleNowEntity = peopleNowEntityId ? entities?.[peopleNowEntityId] : null;
       const activeStates = parseStateSet(settings?.activeOnStates, ACTIVE_STATES);
       const serviceStates = parseStateSet(settings?.serviceOnStates, SERVICE_STATES);
       const name = getCardName({
@@ -321,6 +331,7 @@ const buildSourceCards = ({ cardSettings, entities, customNames, tr, getEntityIm
         tempEntityId,
         currentTemp: toNum(tempEntity?.state),
         healthScore: kind === 'health' || kind === 'booking' ? computeHealthScore(settings) : null,
+        peopleNow: kind === 'sauna' ? (peopleNowEntity?.state ?? '0') : null,
         active: activeEntity ? isActiveState(activeEntity.state, activeStates) : false,
         service: serviceEntity ? isServiceState(serviceEntity.state, serviceStates) : false,
         matchTexts: [
@@ -330,6 +341,7 @@ const buildSourceCards = ({ cardSettings, entities, customNames, tr, getEntityIm
           settings?.name,
           getEntityName(entities, tempEntityId),
           getEntityName(entities, activeEntityId),
+          getEntityName(entities, peopleNowEntityId),
         ].filter(Boolean),
       };
     })
@@ -343,9 +355,10 @@ const makeMarkerHtml = (location) => {
     : null;
   const scoreDeg = score !== null ? `${score * 3.6}deg` : '0deg';
   const tempLabel = location.currentTemp !== null ? `${Math.round(location.currentTemp)}°` : '--';
+  const peopleLabel = formatPeopleCount(location.peopleNow);
   const imageHtml = location.imageUrl
-    ? `<span class="sauna-map-marker__fallback">S</span><img src="${escapeHtml(location.imageUrl)}" alt="" class="sauna-map-marker__image" draggable="false" />`
-    : '<span class="sauna-map-marker__fallback">S</span>';
+    ? `<span class="sauna-map-marker__fallback">${escapeHtml(peopleLabel)}</span><img src="${escapeHtml(location.imageUrl)}" alt="" class="sauna-map-marker__image" draggable="false" />`
+    : `<span class="sauna-map-marker__fallback">${escapeHtml(peopleLabel)}</span>`;
   return `
     <div class="sauna-map-marker sauna-map-marker--${tone}" title="${escapeHtml(location.name)}" style="--score-deg: ${scoreDeg}">
       <span class="sauna-map-marker__glow"></span>
@@ -457,6 +470,7 @@ export default function SaunaMapCard({
         const imageUrl = saunaSource?.imageUrl || healthSource?.imageUrl || bookingSource?.imageUrl || null;
         const targetCardId = saunaSource?.cardId || '';
         const targetPageId = saunaSource?.pageId || '';
+        const peopleNow = saunaSource?.peopleNow ?? '0';
 
         return {
           ...zone,
@@ -468,6 +482,7 @@ export default function SaunaMapCard({
           imageUrl,
           targetCardId,
           targetPageId,
+          peopleNow,
           scoreTone: getScoreTone(healthScore),
         };
       })
@@ -721,8 +736,8 @@ export default function SaunaMapCard({
                   onError={() => markBrokenImage(selectedLocation.imageUrl)}
                 />
               ) : (
-                <div className="w-full h-full grid place-items-center">
-                  <Flame className="w-5 h-5 text-[var(--text-secondary)]" />
+                <div className="w-full h-full grid place-items-center text-xl font-black tabular-nums text-[var(--text-primary)]">
+                  {formatPeopleCount(selectedLocation.peopleNow)}
                 </div>
               )}
             </div>
@@ -781,7 +796,7 @@ export default function SaunaMapCard({
                         />
                       ) : (
                         <span className="w-6 h-6 rounded-md grid place-items-center border border-[var(--glass-border)] bg-[var(--glass-bg-hover)] text-[10px] font-black text-[var(--text-secondary)] shrink-0">
-                          S
+                          {formatPeopleCount(location.peopleNow)}
                         </span>
                       )}
                       <span className="text-xs font-semibold text-[var(--text-primary)] truncate">{location.name}</span>
