@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Flame, Thermometer, Lock, DoorOpen, Activity, Lightbulb, Shield, Fan, Hash, ToggleRight, Wrench, Power, User } from '../../icons';
 import { getIconComponent } from '../../icons';
 import SparkLine from '../charts/SparkLine';
@@ -128,15 +128,31 @@ const FlameAnimated = ({ className, isLightTheme = false }) => (
   </div>
 );
 
-function resolveImageUrl(settings, entities) {
+const isAbsoluteImageUrl = (value) => /^(https?:|data:|blob:)/i.test(String(value || '').trim());
+
+const shouldResolveWithHaBase = (value) => /^\/(?:api|local|media)\//i.test(String(value || '').trim());
+
+function resolveImageValue(value, getEntityImageUrl, { forceHaBase = false } = {}) {
+  const raw = String(value ?? '').trim();
+  if (!raw) return null;
+  if (isAbsoluteImageUrl(raw)) return raw;
+  if (typeof getEntityImageUrl === 'function' && (forceHaBase || shouldResolveWithHaBase(raw))) {
+    return getEntityImageUrl(raw);
+  }
+  return raw;
+}
+
+function resolveImageUrl(settings, entities, getEntityImageUrl) {
   const raw = String(settings?.imageUrl ?? '').trim();
-  if (raw) return raw;
+  if (raw) return resolveImageValue(raw, getEntityImageUrl);
   if (settings?.imageEntityId) {
     const ent = entities?.[settings.imageEntityId];
     const pic = ent?.attributes?.entity_picture;
-    if (pic) return pic;
+    if (pic) return resolveImageValue(pic, getEntityImageUrl, { forceHaBase: true });
     const state = String(ent?.state ?? '');
-    if (state.startsWith('http://') || state.startsWith('https://') || state.startsWith('/')) return state;
+    if (isAbsoluteImageUrl(state) || state.startsWith('/')) {
+      return resolveImageValue(state, getEntityImageUrl, { forceHaBase: state.startsWith('/') });
+    }
   }
   return null;
 }
@@ -349,6 +365,7 @@ export default function SaunaCard({
   editMode,
   customNames,
   customIcons,
+  getEntityImageUrl,
   t,
   modals,
   tempHistoryById,
@@ -457,7 +474,11 @@ export default function SaunaCard({
   const peopleNowNumeric = Number.parseFloat(String(peopleNow).replace(',', '.'));
   const peopleNowIsZero = Number.isFinite(peopleNowNumeric) && peopleNowNumeric <= 0;
 
-  const imageUrl = useMemo(() => resolveImageUrl(settings, entities), [settings, entities]);
+  const imageUrl = useMemo(() => resolveImageUrl(settings, entities, getEntityImageUrl), [settings, entities, getEntityImageUrl]);
+  const [imageFailed, setImageFailed] = useState(false);
+  useEffect(() => {
+    setImageFailed(false);
+  }, [imageUrl]);
 
   const statusGraphEntityId = settings?.statusGraphEntityId || settings?.tempEntityId;
   const statusGraphHistoryRaw = statusGraphEntityId ? tempHistoryById?.[statusGraphEntityId] : null;
@@ -864,7 +885,17 @@ export default function SaunaCard({
                 'relative w-40 h-40 rounded-full overflow-hidden border border-[var(--glass-border)] bg-[var(--glass-bg-hover)]',
                 isLightTheme ? 'shadow-[0_8px_24px_rgba(15,23,42,0.18)]' : 'shadow-[0_16px_45px_rgba(0,0,0,0.45)]'
               )}>
-                {imageUrl ? <img src={imageUrl} alt={saunaName} className="w-full h-full object-cover" draggable={false} /> : <div className="w-full h-full bg-gradient-to-br from-white/10 to-black/20" />}
+                {imageUrl && !imageFailed ? (
+                  <img
+                    src={imageUrl}
+                    alt={saunaName}
+                    className="w-full h-full object-cover"
+                    draggable={false}
+                    onError={() => setImageFailed(true)}
+                  />
+                ) : (
+                  <div className="w-full h-full bg-gradient-to-br from-white/10 to-black/20" />
+                )}
                 <div className="absolute inset-0 rounded-full ring-1 ring-white/10" />
                 <div
                   className={cx(

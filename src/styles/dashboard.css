@@ -367,6 +367,7 @@
 }
 
 .sauna-map-marker__inner {
+  position: relative;
   width: 100%;
   height: 100%;
   border-radius: 9999px;
@@ -378,6 +379,8 @@
 }
 
 .sauna-map-marker__image {
+  position: absolute;
+  inset: 0;
   width: 100%;
   height: 100%;
   object-fit: cover;
@@ -385,6 +388,8 @@
 }
 
 .sauna-map-marker__fallback {
+  position: relative;
+  z-index: 1;
   color: rgba(248, 250, 252, 0.88);
   font-size: 22px;
   font-weight: 900;

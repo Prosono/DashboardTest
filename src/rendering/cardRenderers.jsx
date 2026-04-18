@@ -572,7 +572,7 @@ export function renderRoomCard(cardId, dragProps, getControls, cardStyle, settin
 
 
 export function renderSaunaCard(cardId, dragProps, getControls, cardStyle, settingsKey, ctx) {
-  const { entities, editMode, cardSettings, customNames, customIcons, tempHistoryById, setShowLightModal, setActiveSaunaFieldModal, setShowSensorInfoModal, setShowSaunaDebugModal, t } = ctx;
+  const { entities, editMode, cardSettings, customNames, customIcons, getEntityImageUrl, tempHistoryById, setShowLightModal, setActiveSaunaFieldModal, setShowSensorInfoModal, setShowSaunaDebugModal, t } = ctx;
   const saunaSettings = cardSettings[settingsKey] || cardSettings[cardId] || {};
   return (
     <SaunaCard
@@ -585,6 +585,7 @@ export function renderSaunaCard(cardId, dragProps, getControls, cardStyle, setti
       editMode={editMode}
       customNames={customNames}
       customIcons={customIcons}
+      getEntityImageUrl={getEntityImageUrl}
       modals={{ setShowLightModal, setActiveSaunaFieldModal, setShowSensorInfoModal, setShowSaunaDebugModal }}
       tempHistoryById={tempHistoryById}
       t={t}
@@ -636,7 +637,7 @@ export function renderSaunaHealthScoreCard(cardId, dragProps, getControls, cardS
 }
 
 export function renderSaunaMapCard(cardId, dragProps, getControls, cardStyle, settingsKey, ctx) {
-  const { entities, editMode, cardSettings, customNames, customIcons, t } = ctx;
+  const { entities, editMode, cardSettings, customNames, customIcons, getEntityImageUrl, setShowPopupCardModal, t } = ctx;
   const mapSettings = cardSettings[settingsKey] || cardSettings[cardId] || {};
   return (
     <SaunaMapCard
@@ -650,6 +651,8 @@ export function renderSaunaMapCard(cardId, dragProps, getControls, cardStyle, se
       editMode={editMode}
       customNames={customNames}
       customIcons={customIcons}
+      getEntityImageUrl={getEntityImageUrl}
+      setShowPopupCardModal={setShowPopupCardModal}
       t={t}
     />
   );

@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { Activity, AlertTriangle, Flame, MapPin, Thermometer } from '../../icons';
@@ -97,15 +97,31 @@ const getCardName = ({ cardId, settings, entities, customNames, fallback }) => {
     || cardId;
 };
 
-const resolveImageUrl = (settings, entities) => {
+const isAbsoluteImageUrl = (value) => /^(https?:|data:|blob:)/i.test(String(value || '').trim());
+
+const shouldResolveWithHaBase = (value) => /^\/(?:api|local|media)\//i.test(String(value || '').trim());
+
+const resolveImageValue = (value, getEntityImageUrl, { forceHaBase = false } = {}) => {
+  const raw = String(value ?? '').trim();
+  if (!raw) return null;
+  if (isAbsoluteImageUrl(raw)) return raw;
+  if (typeof getEntityImageUrl === 'function' && (forceHaBase || shouldResolveWithHaBase(raw))) {
+    return getEntityImageUrl(raw);
+  }
+  return raw;
+};
+
+const resolveImageUrl = (settings, entities, getEntityImageUrl) => {
   const raw = String(settings?.imageUrl ?? '').trim();
-  if (raw) return raw;
+  if (raw) return resolveImageValue(raw, getEntityImageUrl);
   if (settings?.imageEntityId) {
     const ent = entities?.[settings.imageEntityId];
     const pic = ent?.attributes?.entity_picture;
-    if (pic) return pic;
+    if (pic) return resolveImageValue(pic, getEntityImageUrl, { forceHaBase: true });
     const state = String(ent?.state ?? '');
-    if (state.startsWith('http://') || state.startsWith('https://') || state.startsWith('/')) return state;
+    if (isAbsoluteImageUrl(state) || state.startsWith('/')) {
+      return resolveImageValue(state, getEntityImageUrl, { forceHaBase: state.startsWith('/') });
+    }
   }
   return null;
 };
@@ -255,7 +271,12 @@ const getSourceKind = (cardId, settings) => {
   return null;
 };
 
-const buildSourceCards = ({ cardSettings, entities, customNames, tr }) => {
+const getSettingsPageId = (settingsKey) => {
+  const parts = String(settingsKey || '').split('::');
+  return parts.length > 1 ? parts[0] : '';
+};
+
+const buildSourceCards = ({ cardSettings, entities, customNames, tr, getEntityImageUrl }) => {
   const byCardId = new Map();
   Object.entries(cardSettings || {}).forEach(([settingsKey, value]) => {
     if (!value || typeof value !== 'object' || Array.isArray(value)) return;
@@ -263,12 +284,14 @@ const buildSourceCards = ({ cardSettings, entities, customNames, tr }) => {
     const existing = byCardId.get(cardId);
     byCardId.set(cardId, {
       cardId,
+      settingsKey: existing?.settingsKey || settingsKey,
+      pageId: existing?.pageId || getSettingsPageId(settingsKey),
       settings: { ...(existing?.settings || {}), ...value },
     });
   });
 
   return Array.from(byCardId.values())
-    .map(({ cardId, settings }) => {
+    .map(({ cardId, settingsKey, pageId, settings }) => {
       const kind = getSourceKind(cardId, settings);
       if (!kind) return null;
       const tempEntityId = settings?.tempEntityId || '';
@@ -290,8 +313,10 @@ const buildSourceCards = ({ cardSettings, entities, customNames, tr }) => {
       return {
         kind,
         cardId,
+        settingsKey,
+        pageId,
         name,
-        imageUrl: resolveImageUrl(settings, entities),
+        imageUrl: resolveImageUrl(settings, entities, getEntityImageUrl),
         zoneEntityId: settings?.zoneEntityId || settings?.locationZoneEntityId || '',
         tempEntityId,
         currentTemp: toNum(tempEntity?.state),
@@ -319,7 +344,7 @@ const makeMarkerHtml = (location) => {
   const scoreDeg = score !== null ? `${score * 3.6}deg` : '0deg';
   const tempLabel = location.currentTemp !== null ? `${Math.round(location.currentTemp)}°` : '--';
   const imageHtml = location.imageUrl
-    ? `<img src="${escapeHtml(location.imageUrl)}" alt="" class="sauna-map-marker__image" draggable="false" />`
+    ? `<span class="sauna-map-marker__fallback">S</span><img src="${escapeHtml(location.imageUrl)}" alt="" class="sauna-map-marker__image" draggable="false" />`
     : '<span class="sauna-map-marker__fallback">S</span>';
   return `
     <div class="sauna-map-marker sauna-map-marker--${tone}" title="${escapeHtml(location.name)}" style="--score-deg: ${scoreDeg}">
@@ -348,6 +373,8 @@ export default function SaunaMapCard({
   editMode,
   customNames,
   customIcons,
+  getEntityImageUrl,
+  setShowPopupCardModal,
   t,
 }) {
   const tr = useMemo(() => makeTr(t), [t]);
@@ -366,8 +393,9 @@ export default function SaunaMapCard({
     cardSettings,
     entities,
     customNames,
+    getEntityImageUrl,
     tr,
-  }), [cardSettings, customNames, entities, tr]);
+  }), [cardSettings, customNames, entities, getEntityImageUrl, tr]);
 
   const saunaSources = useMemo(() => sourceCards.filter((source) => source.kind === 'sauna'), [sourceCards]);
   const healthSources = useMemo(() => sourceCards.filter((source) => source.kind === 'health'), [sourceCards]);
@@ -427,6 +455,8 @@ export default function SaunaMapCard({
         const service = Boolean(saunaSource?.service || healthSource?.service || bookingSource?.service);
         const matchedName = saunaSource?.name || healthSource?.name || bookingSource?.name || tempFallback?.entityId || '';
         const imageUrl = saunaSource?.imageUrl || healthSource?.imageUrl || bookingSource?.imageUrl || null;
+        const targetCardId = saunaSource?.cardId || '';
+        const targetPageId = saunaSource?.pageId || '';
 
         return {
           ...zone,
@@ -436,6 +466,8 @@ export default function SaunaMapCard({
           service,
           matchedName,
           imageUrl,
+          targetCardId,
+          targetPageId,
           scoreTone: getScoreTone(healthScore),
         };
       })
@@ -448,6 +480,29 @@ export default function SaunaMapCard({
     .join('|'), [locations]);
 
   const selectedLocation = locations.find((location) => location.zoneId === selectedZoneId) || locations[0] || null;
+  const [brokenImageUrls, setBrokenImageUrls] = useState(() => new Set());
+  const isBrokenImage = useCallback((url) => Boolean(url && brokenImageUrls.has(url)), [brokenImageUrls]);
+  const markBrokenImage = useCallback((url) => {
+    if (!url) return;
+    setBrokenImageUrls((prev) => {
+      if (prev.has(url)) return prev;
+      const next = new Set(prev);
+      next.add(url);
+      return next;
+    });
+  }, []);
+
+  const openLocation = useCallback((location) => {
+    if (!location) return;
+    setSelectedZoneId(location.zoneId);
+    if (editMode || !location.targetCardId || typeof setShowPopupCardModal !== 'function') return;
+    setShowPopupCardModal({
+      targetCardId: location.targetCardId,
+      targetPageId: location.targetPageId,
+      sourceCardId: cardId,
+      buttonLabel: location.matchedName || location.name,
+    });
+  }, [cardId, editMode, setShowPopupCardModal]);
 
   const stats = useMemo(() => {
     const temps = locations.map((location) => location.currentTemp).filter((value) => value !== null);
@@ -545,7 +600,11 @@ export default function SaunaMapCard({
       });
 
       marker.on('click', () => {
-        if (!editMode) setSelectedZoneId(location.zoneId);
+        if (!editMode) openLocation(location);
+      });
+      marker.on('add', () => {
+        const image = marker.getElement()?.querySelector?.('.sauna-map-marker__image');
+        image?.addEventListener?.('error', () => image.remove(), { once: true });
       });
       marker.addTo(layer);
       bounds.extend([location.lat, location.lng]);
@@ -561,7 +620,7 @@ export default function SaunaMapCard({
     }
 
     window.requestAnimationFrame(() => map.invalidateSize({ pan: false }));
-  }, [editMode, locationBoundsKey, locations]);
+  }, [editMode, locationBoundsKey, locations, openLocation]);
 
   return (
     <div
@@ -643,14 +702,23 @@ export default function SaunaMapCard({
         </div>
 
         {selectedLocation && (
-          <div className="grid grid-cols-[auto_1fr_auto_auto] items-center gap-3 rounded-2xl border border-[var(--glass-border)] bg-[var(--glass-bg-hover)] px-3 py-2.5">
+          <button
+            type="button"
+            disabled={editMode || !selectedLocation.targetCardId}
+            onClick={() => openLocation(selectedLocation)}
+            className={`grid w-full grid-cols-[auto_1fr_auto_auto] items-center gap-3 rounded-2xl border border-[var(--glass-border)] bg-[var(--glass-bg-hover)] px-3 py-2.5 text-left transition-colors ${
+              !editMode && selectedLocation.targetCardId ? 'hover:bg-[var(--glass-bg)] cursor-pointer' : 'cursor-default'
+            }`}
+            aria-label={`${tr('popupLauncher.openCard', 'Open card')}: ${selectedLocation.name}`}
+          >
             <div className="w-14 h-14 rounded-xl overflow-hidden border border-[var(--glass-border)] bg-[var(--glass-bg)] shrink-0">
-              {selectedLocation.imageUrl ? (
+              {selectedLocation.imageUrl && !isBrokenImage(selectedLocation.imageUrl) ? (
                 <img
                   src={selectedLocation.imageUrl}
                   alt={selectedLocation.name}
                   className="w-full h-full object-cover"
                   draggable={false}
+                  onError={() => markBrokenImage(selectedLocation.imageUrl)}
                 />
               ) : (
                 <div className="w-full h-full grid place-items-center">
@@ -683,7 +751,7 @@ export default function SaunaMapCard({
                 {formatScore(selectedLocation.healthScore)}
               </div>
             </div>
-          </div>
+          </button>
         )}
 
         {locations.length > 1 && (
@@ -699,19 +767,22 @@ export default function SaunaMapCard({
                       ? 'border-blue-400/45 bg-blue-500/15'
                       : 'border-[var(--glass-border)] bg-[var(--glass-bg)] hover:bg-[var(--glass-bg-hover)]'
                   }`}
-                  onClick={() => {
-                    if (!editMode) setSelectedZoneId(location.zoneId);
-                  }}
+                  onClick={() => openLocation(location)}
                 >
                   <div className="flex items-center justify-between gap-2">
                     <span className="min-w-0 inline-flex items-center gap-2">
-                      {location.imageUrl && (
+                      {location.imageUrl && !isBrokenImage(location.imageUrl) ? (
                         <img
                           src={location.imageUrl}
                           alt=""
                           className="w-6 h-6 rounded-md object-cover border border-[var(--glass-border)] shrink-0"
                           draggable={false}
+                          onError={() => markBrokenImage(location.imageUrl)}
                         />
+                      ) : (
+                        <span className="w-6 h-6 rounded-md grid place-items-center border border-[var(--glass-border)] bg-[var(--glass-bg-hover)] text-[10px] font-black text-[var(--text-secondary)] shrink-0">
+                          S
+                        </span>
                       )}
                       <span className="text-xs font-semibold text-[var(--text-primary)] truncate">{location.name}</span>
                     </span>
