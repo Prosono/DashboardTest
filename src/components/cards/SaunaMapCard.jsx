@@ -97,6 +97,19 @@ const getCardName = ({ cardId, settings, entities, customNames, fallback }) => {
     || cardId;
 };
 
+const resolveImageUrl = (settings, entities) => {
+  const raw = String(settings?.imageUrl ?? '').trim();
+  if (raw) return raw;
+  if (settings?.imageEntityId) {
+    const ent = entities?.[settings.imageEntityId];
+    const pic = ent?.attributes?.entity_picture;
+    if (pic) return pic;
+    const state = String(ent?.state ?? '');
+    if (state.startsWith('http://') || state.startsWith('https://') || state.startsWith('/')) return state;
+  }
+  return null;
+};
+
 const parseSampleTimestamp = (entry) => {
   const raw = entry?.timestamp || entry?.time || entry?.last_changed || entry?.last_updated;
   const timestampMs = Date.parse(String(raw || '').trim());
@@ -278,6 +291,7 @@ const buildSourceCards = ({ cardSettings, entities, customNames, tr }) => {
         kind,
         cardId,
         name,
+        imageUrl: resolveImageUrl(settings, entities),
         zoneEntityId: settings?.zoneEntityId || settings?.locationZoneEntityId || '',
         tempEntityId,
         currentTemp: toNum(tempEntity?.state),
@@ -399,6 +413,7 @@ export default function SaunaMapCard({
         const active = Boolean(saunaSource?.active || healthSource?.active || bookingSource?.active);
         const service = Boolean(saunaSource?.service || healthSource?.service || bookingSource?.service);
         const matchedName = saunaSource?.name || healthSource?.name || bookingSource?.name || tempFallback?.entityId || '';
+        const imageUrl = saunaSource?.imageUrl || healthSource?.imageUrl || bookingSource?.imageUrl || null;
 
         return {
           ...zone,
@@ -407,6 +422,7 @@ export default function SaunaMapCard({
           active,
           service,
           matchedName,
+          imageUrl,
           scoreTone: getScoreTone(healthScore),
         };
       })
@@ -435,7 +451,7 @@ export default function SaunaMapCard({
     const map = L.map(mapElRef.current, {
       attributionControl: false,
       zoomControl: false,
-      scrollWheelZoom: false,
+      scrollWheelZoom: true,
       doubleClickZoom: true,
       dragging: true,
       tap: true,
@@ -446,6 +462,7 @@ export default function SaunaMapCard({
       attribution: '&copy; OpenStreetMap',
     }).addTo(map);
 
+    L.control.zoom({ position: 'bottomleft' }).addTo(map);
     L.control.attribution({ prefix: false, position: 'bottomright' }).addTo(map);
     markerLayerRef.current = L.layerGroup().addTo(map);
     map.setView(NORWAY_CENTER, 5);
@@ -480,14 +497,15 @@ export default function SaunaMapCard({
       map.doubleClickZoom.disable();
       map.boxZoom.disable();
       map.keyboard.disable();
+      map.scrollWheelZoom.disable();
     } else {
       map.dragging.enable();
       map.touchZoom.enable();
       map.doubleClickZoom.enable();
       map.boxZoom.enable();
       map.keyboard.enable();
+      map.scrollWheelZoom.enable();
     }
-    map.scrollWheelZoom.disable();
   }, [editMode]);
 
   useEffect(() => {
@@ -605,7 +623,21 @@ export default function SaunaMapCard({
         </div>
 
         {selectedLocation && (
-          <div className="grid grid-cols-[1fr_auto_auto] items-center gap-3 rounded-2xl border border-[var(--glass-border)] bg-[var(--glass-bg-hover)] px-3 py-2.5">
+          <div className="grid grid-cols-[auto_1fr_auto_auto] items-center gap-3 rounded-2xl border border-[var(--glass-border)] bg-[var(--glass-bg-hover)] px-3 py-2.5">
+            <div className="w-14 h-14 rounded-xl overflow-hidden border border-[var(--glass-border)] bg-[var(--glass-bg)] shrink-0">
+              {selectedLocation.imageUrl ? (
+                <img
+                  src={selectedLocation.imageUrl}
+                  alt={selectedLocation.name}
+                  className="w-full h-full object-cover"
+                  draggable={false}
+                />
+              ) : (
+                <div className="w-full h-full grid place-items-center">
+                  <Flame className="w-5 h-5 text-[var(--text-secondary)]" />
+                </div>
+              )}
+            </div>
             <div className="min-w-0">
               <div className="text-sm font-semibold text-[var(--text-primary)] truncate">
                 {selectedLocation.name}
@@ -652,7 +684,17 @@ export default function SaunaMapCard({
                   }}
                 >
                   <div className="flex items-center justify-between gap-2">
-                    <span className="text-xs font-semibold text-[var(--text-primary)] truncate">{location.name}</span>
+                    <span className="min-w-0 inline-flex items-center gap-2">
+                      {location.imageUrl && (
+                        <img
+                          src={location.imageUrl}
+                          alt=""
+                          className="w-6 h-6 rounded-md object-cover border border-[var(--glass-border)] shrink-0"
+                          draggable={false}
+                        />
+                      )}
+                      <span className="text-xs font-semibold text-[var(--text-primary)] truncate">{location.name}</span>
+                    </span>
                     <span className={`text-xs font-semibold tabular-nums sauna-map-score sauna-map-score--${location.scoreTone}`}>
                       {formatScore(location.healthScore)}
                     </span>

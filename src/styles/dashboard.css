@@ -258,6 +258,41 @@
   color: rgba(191, 219, 254, 0.9);
 }
 
+.sauna-map-card .leaflet-control-zoom {
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 8px;
+  overflow: hidden;
+  background: rgba(4, 10, 20, 0.78);
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.32);
+  backdrop-filter: blur(12px);
+}
+
+.sauna-map-card .leaflet-control-zoom a {
+  width: 34px;
+  height: 34px;
+  line-height: 32px;
+  background: rgba(4, 10, 20, 0.72);
+  color: rgba(248, 250, 252, 0.92);
+  border: 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  font-size: 18px;
+  font-weight: 800;
+}
+
+.sauna-map-card .leaflet-control-zoom a:last-child {
+  border-bottom: 0;
+}
+
+.sauna-map-card .leaflet-control-zoom a:hover {
+  background: rgba(15, 23, 42, 0.9);
+  color: #ffffff;
+}
+
+.sauna-map-card .leaflet-control-zoom a.leaflet-disabled {
+  background: rgba(4, 10, 20, 0.46);
+  color: rgba(148, 163, 184, 0.58);
+}
+
 .sauna-map-marker-shell {
   background: transparent;
   border: 0;
