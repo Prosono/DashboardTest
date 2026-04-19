@@ -148,18 +148,22 @@ const calcScoreFromDeviationPct = (deviationPct) => {
 const normalizeSamples = (rawValue) => {
   if (!Array.isArray(rawValue)) return [];
   return rawValue
-    .map((entry) => {
-      const timestampMs = parseSampleTimestamp(entry);
+    .map((entry, index) => {
+      const timestamp = String(entry?.timestamp || entry?.time || '').trim();
+      const timestampMs = Number.isFinite(Date.parse(timestamp))
+        ? Date.parse(timestamp)
+        : parseSampleTimestamp(entry);
       const startTemp = toNum(entry?.startTemp ?? entry?.temperature ?? entry?.temp);
       if (!Number.isFinite(timestampMs) || startTemp === null) return null;
       const targetTemp = toNum(entry?.targetTemp);
-      const providedDeviationPct = toNum(entry?.deviationPct ?? entry?.deviationPercent);
+      const deviationPct = toNum(entry?.deviationPct);
       return {
+        id: String(entry?.id || `${timestamp}_${index}`),
+        timestamp,
         timestampMs,
-        startTemp,
+        startTemp: roundToOne(startTemp),
         targetTemp,
-        deviationPct: providedDeviationPct !== null ? roundToOne(providedDeviationPct) : calcDeviationPct(startTemp, targetTemp),
-        bookingType: String(entry?.bookingType || 'regular').toLowerCase(),
+        deviationPct: deviationPct !== null ? roundToOne(deviationPct) : calcDeviationPct(startTemp, targetTemp),
       };
     })
     .filter(Boolean)
@@ -167,28 +171,28 @@ const normalizeSamples = (rawValue) => {
 };
 
 const computeHealthScore = (settings) => {
-  const snapshots = normalizeSamples(settings?.healthSnapshots || settings?.bookingSnapshots);
+  const snapshots = normalizeSamples(settings?.healthSnapshots);
   if (!snapshots.length) return null;
 
   const summaryHours = clamp(Number(settings?.summaryHours) || 48, 6, 168);
   const windowStart = Date.now() - (summaryHours * 60 * 60 * 1000);
-  const recent = snapshots.filter((entry) => entry.timestampMs >= windowStart && entry.bookingType !== 'service');
-  const targetSamples = (recent.length ? recent : snapshots)
-    .filter((entry) => entry.deviationPct !== null);
+  const recentSorted = snapshots
+    .filter((entry) => entry.timestampMs >= windowStart)
+    .sort((a, b) => a.timestampMs - b.timestampMs);
+  const targetSamples = recentSorted
+    .filter((entry) => entry.targetTemp !== null && entry.deviationPct !== null);
 
   if (!targetSamples.length) return null;
 
-  const scores = targetSamples
-    .map((entry) => calcScoreFromDeviationPct(entry.deviationPct))
-    .filter((score) => Number.isFinite(Number(score)));
-
-  if (!scores.length) return null;
-  return Math.round(scores.reduce((sum, score) => sum + score, 0) / scores.length);
+  const avgDeviationPct = roundToOne(
+    targetSamples.reduce((sum, entry) => sum + (entry.deviationPct ?? 0), 0) / targetSamples.length
+  );
+  return calcScoreFromDeviationPct(avgDeviationPct);
 };
 
 const getScoreTone = (score) => {
   if (!Number.isFinite(Number(score))) return 'unknown';
-  if (Number(score) >= 90) return 'good';
+  if (Number(score) > 90) return 'good';
   if (Number(score) >= 70) return 'warn';
   return 'bad';
 };
