@@ -209,6 +209,16 @@ const isTargetReached = (startTemp, targetTemp, toleranceC = 0) => {
   return start >= (target - Math.max(0, Number(toleranceC) || 0));
 };
 
+const getBookingOutcome = (entry, toleranceC = 0) => {
+  const start = toNum(entry?.startTemp);
+  const target = toNum(entry?.targetTemp);
+  if (start === null || target === null) return 'noTarget';
+  const safeTolerance = Number.isFinite(Number(toleranceC)) ? Math.max(0, Number(toleranceC)) : 0;
+  const delta = start - target;
+  if (Math.abs(delta) <= safeTolerance) return 'onTarget';
+  return delta > safeTolerance ? 'aboveTarget' : 'belowTarget';
+};
+
 const computeScoreFromTargetSamples = (samples) => {
   const targetSamples = Array.isArray(samples)
     ? samples.filter((entry) => entry.targetTemp !== null && entry.deviationPct !== null)
@@ -491,14 +501,25 @@ const buildDailyTrend = (records, periodDays) => {
     const bookingSamples = records.flatMap((record) => record.bookingTargetSamplesWithPct
       .filter((entry) => entry.timestampMs >= start && entry.timestampMs < end)
       .map((entry) => ({ ...entry, targetToleranceC: record.targetToleranceC })));
+    const bookingDaySamples = records.flatMap((record) => record.bookingSamples
+      .filter((entry) => entry.timestampMs >= start && entry.timestampMs < end)
+      .map((entry) => ({ ...entry, targetToleranceC: record.targetToleranceC })));
+    const bookingBreakdown = bookingDaySamples.reduce((acc, entry) => {
+      const outcome = getBookingOutcome(entry, entry.targetToleranceC);
+      acc[outcome] = (acc[outcome] || 0) + 1;
+      return acc;
+    }, { onTarget: 0, aboveTarget: 0, belowTarget: 0, noTarget: 0 });
     days.push({
       key: day.toISOString().slice(0, 10),
       label: day.toLocaleDateString([], { day: '2-digit', month: '2-digit' }),
       score: healthSamples.length
         ? computeScoreFromTargetSamples(healthSamples)
         : computeBookingScoreFromSamples(bookingSamples),
-      bookingHours: records.reduce((sum, record) => sum + record.bookingSamples
-        .filter((entry) => entry.timestampMs >= start && entry.timestampMs < end).length, 0),
+      bookingHours: bookingDaySamples.length,
+      bookingOnTarget: bookingBreakdown.onTarget,
+      bookingAboveTarget: bookingBreakdown.aboveTarget,
+      bookingBelowTarget: bookingBreakdown.belowTarget,
+      bookingNoTarget: bookingBreakdown.noTarget,
     });
   }
   return days;
@@ -667,6 +688,13 @@ const getScoreHex = (score) => {
   return '#ef4444';
 };
 
+const getBookingOutcomeHex = (outcome) => {
+  if (outcome === 'onTarget') return '#22c55e';
+  if (outcome === 'aboveTarget') return '#f59e0b';
+  if (outcome === 'belowTarget') return '#ef4444';
+  return '#60a5fa';
+};
+
 const getDeltaText = (value) => {
   if (!Number.isFinite(Number(value))) return '--';
   const num = Number(value);
@@ -795,22 +823,30 @@ const createPdfBlob = ({ report, title, subtitle, tr }) => {
 
   const pill = (value, x, yy, w, fill = palette.panelRaised, textColor = palette.text) => {
     roundRect(x, yy, w, 18, 9, fill, palette.borderSoft);
-    text(value, x + 8, yy + 6, 7, 'F2', textColor);
+    const maxChars = Math.max(8, Math.floor((w - 16) / 3.8));
+    text(truncateText(value, maxChars), x + 8, yy + 6, 7, 'F2', textColor);
   };
 
   const logoMark = (x, yy, size = 28) => {
-    roundRect(x, yy, size, size, 8, '#edf5ff', '#edf5ff');
-    const cx = x + (size / 2);
-    rect(cx - 2, yy + 6, 4, 4, palette.page);
-    line(cx - 8, yy + 14, cx + 8, yy + 14, palette.page);
-    line(cx - 5, yy + 19, cx + 5, yy + 19, palette.page);
-    ops.push(`${color(palette.page)} rg ${(x + 8).toFixed(2)} ${(yy + 8).toFixed(2)} m ${(x + 5).toFixed(2)} ${(yy + 19).toFixed(2)} ${(x + 13).toFixed(2)} ${(yy + 24).toFixed(2)} ${(x + 12).toFixed(2)} ${(yy + 11).toFixed(2)} c ${(x + 17).toFixed(2)} ${(yy + 18).toFixed(2)} ${(x + 25).toFixed(2)} ${(yy + 16).toFixed(2)} ${(x + 19).toFixed(2)} ${(yy + 7).toFixed(2)} c h f`);
+    roundRect(x, yy, size, size, 8, '#0f2031', palette.border);
+    const sx = size / 28;
+    const px = (value) => x + (value * sx);
+    const py = (value) => yy + (value * sx);
+    ops.push(`${color('#edf5ff')} rg ${px(13.8).toFixed(2)} ${py(3.8).toFixed(2)} m ${px(8).toFixed(2)} ${py(9.8).toFixed(2)} ${px(6).toFixed(2)} ${py(16).toFixed(2)} ${px(11).toFixed(2)} ${py(22.5).toFixed(2)} c ${px(15.5).toFixed(2)} ${py(18.2).toFixed(2)} ${px(12.5).toFixed(2)} ${py(13.8).toFixed(2)} ${px(18.2).toFixed(2)} ${py(8.4).toFixed(2)} c ${px(23).toFixed(2)} ${py(13.6).toFixed(2)} ${px(22).toFixed(2)} ${py(20.6).toFixed(2)} ${px(14).toFixed(2)} ${py(24.2).toFixed(2)} c ${px(6.5).toFixed(2)} ${py(20.4).toFixed(2)} ${px(4.8).toFixed(2)} ${py(11.5).toFixed(2)} ${px(13.8).toFixed(2)} ${py(3.8).toFixed(2)} c h f`);
+    line(px(8.5), py(14.2), px(19.5), py(14.2), palette.page);
+    line(px(10.5), py(17.5), px(17.5), py(17.5), palette.page);
+    rect(px(13.1), py(20), 1.8 * sx, 1.8 * sx, palette.page);
   };
 
   const metricBox = ({ label, value, x, yy, w, tone = palette.text }) => {
     panel(x, yy, w, 56, palette.panelAlt, palette.borderSoft);
     text(label, x + 10, yy + 36, 7, 'F2', palette.muted);
-    text(value, x + 10, yy + 14, 17, 'F2', tone);
+    const valueText = String(value ?? '');
+    const valueLines = wrapText(valueText, w - 20, valueText.length > 12 ? 10 : 17).slice(0, 2);
+    const valueSize = valueLines.length > 1 ? 9.5 : (valueText.length > 12 ? 11 : 17);
+    valueLines.forEach((entry, index) => {
+      text(entry, x + 10, yy + 16 - (index * 11), valueSize, 'F2', tone);
+    });
   };
 
   const callout = ({ title: calloutTitle, body, tone = palette.accent }) => {
@@ -827,22 +863,26 @@ const createPdfBlob = ({ report, title, subtitle, tr }) => {
     y = boxY - 18;
   };
 
-  const valueBarChart = ({ title: chartTitle, entries, valueAccessor, labelAccessor, maxValue = 100, valueFormatter = formatNumber, colorAccessor = () => '#2563eb', height = 118 }) => {
-    const containerH = height + 52;
+  const valueBarChart = ({ title: chartTitle, entries, valueAccessor, labelAccessor, maxValue = 100, valueFormatter = formatNumber, colorAccessor = () => '#2563eb', height = 118, scaleLabel = '' }) => {
+    const containerH = height + 60;
     ensureSpace(containerH + 12);
     const chartX = margin;
     const chartY = y - containerH;
     const chartW = pageWidth - (margin * 2);
     panel(chartX, chartY, chartW, containerH, palette.panelAlt, palette.border);
     text(chartTitle, chartX + 14, y - 22, 10, 'F2', palette.text);
+    if (scaleLabel) text(scaleLabel, chartX + 14, y - 36, 7.5, 'F1', palette.subtle);
     const safeEntries = Array.isArray(entries) ? entries : [];
     const hasValues = safeEntries.some((entry) => Number.isFinite(Number(valueAccessor(entry))));
-    const plotX = chartX + 14;
+    const plotX = chartX + 34;
     const plotY = chartY + 34;
-    const plotW = chartW - 28;
-    const plotH = height - 6;
+    const plotW = chartW - 48;
+    const plotH = height - 2;
     line(plotX, plotY + 14, plotX + plotW, plotY + 14, palette.borderSoft);
+    line(plotX, plotY + Math.round(plotH / 2), plotX + plotW, plotY + Math.round(plotH / 2), palette.borderSoft);
     line(plotX, plotY + plotH - 18, plotX + plotW, plotY + plotH - 18, palette.borderSoft);
+    text(valueFormatter(maxValue), chartX + 14, plotY + plotH - 22, 7, 'F1', palette.subtle);
+    text('0', chartX + 20, plotY + 12, 7, 'F1', palette.subtle);
     if (!hasValues) {
       text(tr('reports.noChartData', 'No chart data in selected period'), plotX, plotY + Math.round(plotH / 2), 9, 'F1', palette.muted);
       y = chartY - 16;
@@ -859,6 +899,9 @@ const createPdfBlob = ({ report, title, subtitle, tr }) => {
       const barH = Math.max(Number.isFinite(value) ? 5 : 2, normalized * (plotH - 38));
       const barY = plotY + 14;
       rect(x, barY, barW, barH, Number.isFinite(value) ? colorAccessor(entry) : '#31465c');
+      if (Number.isFinite(value) && safeEntries.length <= 14) {
+        text(valueFormatter(value), x - 1, Math.min(plotY + plotH - 9, barY + barH + 5), 6.5, 'F2', palette.muted);
+      }
       if (safeEntries.length <= 14) {
         text(labelAccessor(entry), x - 1, chartY + 14, 6.5, 'F1', palette.subtle);
       }
@@ -866,6 +909,68 @@ const createPdfBlob = ({ report, title, subtitle, tr }) => {
     const latest = safeEntries.slice().reverse().find((entry) => Number.isFinite(Number(valueAccessor(entry))));
     if (latest) {
       text(`${tr('reports.latest', 'Latest')}: ${valueFormatter(valueAccessor(latest))}`, chartX + chartW - 128, y - 22, 8, 'F2', palette.muted);
+    }
+    y = chartY - 16;
+  };
+
+  const stackedBarChart = ({ title: chartTitle, entries, segments, labelAccessor, maxValue = 1, height = 102, scaleLabel = '' }) => {
+    const containerH = height + 72;
+    ensureSpace(containerH + 12);
+    const chartX = margin;
+    const chartY = y - containerH;
+    const chartW = contentWidth;
+    panel(chartX, chartY, chartW, containerH, palette.panelAlt, palette.border);
+    text(chartTitle, chartX + 14, y - 22, 10, 'F2', palette.text);
+    if (scaleLabel) text(scaleLabel, chartX + 14, y - 36, 7.5, 'F1', palette.subtle);
+    let legendX = chartX + 14;
+    segments.forEach((segment) => {
+      rect(legendX, y - 53, 8, 8, segment.color);
+      text(segment.label, legendX + 12, y - 52, 7, 'F1', palette.muted);
+      legendX += Math.max(64, segment.label.length * 4.6 + 22);
+    });
+
+    const safeEntries = Array.isArray(entries) ? entries : [];
+    const hasValues = safeEntries.some((entry) => segments.some((segment) => Number(segment.valueAccessor(entry)) > 0));
+    const plotX = chartX + 34;
+    const plotY = chartY + 34;
+    const plotW = chartW - 48;
+    const plotH = height - 2;
+    line(plotX, plotY + 14, plotX + plotW, plotY + 14, palette.borderSoft);
+    line(plotX, plotY + Math.round(plotH / 2), plotX + plotW, plotY + Math.round(plotH / 2), palette.borderSoft);
+    line(plotX, plotY + plotH - 18, plotX + plotW, plotY + plotH - 18, palette.borderSoft);
+    text(`${formatNumber(maxValue)}h`, chartX + 14, plotY + plotH - 22, 7, 'F1', palette.subtle);
+    text('0', chartX + 20, plotY + 12, 7, 'F1', palette.subtle);
+    if (!hasValues) {
+      text(tr('reports.noChartData', 'No chart data in selected period'), plotX, plotY + Math.round(plotH / 2), 9, 'F1', palette.muted);
+      y = chartY - 16;
+      return;
+    }
+
+    const gap = safeEntries.length > 12 ? 3 : 6;
+    const barW = safeEntries.length
+      ? Math.max(6, (plotW - (gap * (safeEntries.length - 1))) / safeEntries.length)
+      : 0;
+    safeEntries.forEach((entry, index) => {
+      const x = plotX + (index * (barW + gap));
+      const total = segments.reduce((sum, segment) => sum + Math.max(0, Number(segment.valueAccessor(entry)) || 0), 0);
+      let stackedY = plotY + 14;
+      segments.forEach((segment) => {
+        const value = Math.max(0, Number(segment.valueAccessor(entry)) || 0);
+        if (!value) return;
+        const segmentH = Math.max(2, (value / Math.max(1, maxValue)) * (plotH - 38));
+        rect(x, stackedY, barW, segmentH, segment.color);
+        stackedY += segmentH;
+      });
+      if (safeEntries.length <= 14) {
+        if (total > 0) text(`${formatNumber(total)}h`, x - 1, Math.min(plotY + plotH - 9, stackedY + 5), 6.5, 'F2', palette.muted);
+        text(labelAccessor(entry), x - 1, chartY + 14, 6.5, 'F1', palette.subtle);
+      }
+    });
+
+    const latest = safeEntries.slice().reverse().find((entry) => segments.some((segment) => Number(segment.valueAccessor(entry)) > 0));
+    if (latest) {
+      const total = segments.reduce((sum, segment) => sum + Math.max(0, Number(segment.valueAccessor(latest)) || 0), 0);
+      text(`${tr('reports.latest', 'Latest')}: ${formatNumber(total)}h`, chartX + chartW - 128, y - 22, 8, 'F2', palette.muted);
     }
     y = chartY - 16;
   };
@@ -982,16 +1087,36 @@ const createPdfBlob = ({ report, title, subtitle, tr }) => {
     maxValue: 100,
     valueFormatter: formatScore,
     colorAccessor: (entry) => getScoreHex(entry.score),
+    scaleLabel: tr('reports.scoreScale', 'Score scale 0-100'),
   });
-  valueBarChart({
+  stackedBarChart({
     title: tr('reports.bookingDevelopment', 'Booking development'),
     entries: report.trend,
-    valueAccessor: (entry) => entry.bookingHours,
     labelAccessor: (entry) => entry.label,
     maxValue: Math.max(1, ...report.trend.map((entry) => entry.bookingHours)),
-    valueFormatter: (value) => `${formatNumber(value)}h`,
-    colorAccessor: () => '#2563eb',
-    height: 88,
+    scaleLabel: tr('reports.bookingScale', 'Booking hours by target outcome'),
+    segments: [
+      {
+        label: tr('reports.bookingOnTarget', 'On target'),
+        color: getBookingOutcomeHex('onTarget'),
+        valueAccessor: (entry) => entry.bookingOnTarget,
+      },
+      {
+        label: tr('reports.bookingAboveTarget', 'Above target'),
+        color: getBookingOutcomeHex('aboveTarget'),
+        valueAccessor: (entry) => entry.bookingAboveTarget,
+      },
+      {
+        label: tr('reports.bookingBelowTarget', 'Below target'),
+        color: getBookingOutcomeHex('belowTarget'),
+        valueAccessor: (entry) => entry.bookingBelowTarget,
+      },
+      {
+        label: tr('reports.bookingNoTarget', 'No target'),
+        color: getBookingOutcomeHex('noTarget'),
+        valueAccessor: (entry) => entry.bookingNoTarget,
+      },
+    ],
   });
 
   sectionTitle(tr('reports.comparison', 'Comparison'));
@@ -1076,6 +1201,7 @@ const createPdfBlob = ({ report, title, subtitle, tr }) => {
       ensureSpace(24);
       rect(margin, y - 15, contentWidth, 19, palette.panelAlt);
       strokeRect(margin, y - 15, contentWidth, 19, palette.borderSoft);
+      rect(margin, y - 15, 4, 19, getBookingOutcomeHex(getBookingOutcome(entry, record.targetToleranceC)));
       text(`${formatDateTime(entry.timestampMs)} / ${truncateText(record.name, 28)}`, margin + 10, y - 7, 8, 'F2', palette.text);
       text(`${formatTemp(entry.startTemp)} / ${formatTemp(entry.targetTemp)} / ${formatPct(entry.deviationPct)}`, margin + 328, y - 7, 8, 'F1', palette.muted);
       y -= 22;
