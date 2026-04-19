@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { Activity, BarChart3, Calendar, Download, Flame, Thermometer, TrendingUp } from '../../icons';
+import { BarChart3, Download, Flame, TrendingUp } from '../../icons';
 
 const PERIOD_OPTIONS = [14, 7, 3, 1];
 const STOP_TOKENS = new Set([
@@ -200,6 +200,17 @@ const isTargetReached = (startTemp, targetTemp, toleranceC = 0) => {
   return start >= (target - Math.max(0, Number(toleranceC) || 0));
 };
 
+const computeScoreFromTargetSamples = (samples) => {
+  const targetSamples = Array.isArray(samples)
+    ? samples.filter((entry) => entry.targetTemp !== null && entry.deviationPct !== null)
+    : [];
+  if (!targetSamples.length) return null;
+  const avgDeviation = roundToOne(
+    targetSamples.reduce((sum, entry) => sum + (entry.deviationPct ?? 0), 0) / targetSamples.length
+  );
+  return calcScoreFromDeviationPct(avgDeviation);
+};
+
 const formatTemp = (value) => {
   const num = toNum(value);
   return num === null ? '--' : `${num.toFixed(1)}\u00B0`;
@@ -235,13 +246,6 @@ const getScoreToneClass = (score) => {
   if (Number(score) > 90) return 'text-emerald-300';
   if (Number(score) >= 70) return 'text-amber-300';
   return 'text-rose-300';
-};
-
-const getScoreBand = (score) => {
-  if (!Number.isFinite(Number(score))) return 'unknown';
-  if (Number(score) > 90) return 'good';
-  if (Number(score) >= 70) return 'watch';
-  return 'attention';
 };
 
 const buildSourceCards = ({ cardSettings, entities, customNames, tr }) => {
@@ -378,7 +382,7 @@ const analyzeRecord = (record, periodDays) => {
   const avgDeviationPct = healthTargetSamples.length
     ? roundToOne(healthTargetSamples.reduce((sum, entry) => sum + (entry.deviationPct ?? 0), 0) / healthTargetSamples.length)
     : null;
-  const healthScore = avgDeviationPct !== null ? calcScoreFromDeviationPct(avgDeviationPct) : null;
+  const healthScore = computeScoreFromTargetSamples(healthSamples);
 
   const bookingSamples = (record.bookingSource?.bookingSamples || [])
     .filter((entry) => entry.timestampMs >= windowStart && entry.bookingType !== 'service');
@@ -394,6 +398,12 @@ const analyzeRecord = (record, periodDays) => {
   const latestBooking = bookingSamples.length ? bookingSamples[bookingSamples.length - 1] : null;
   const bookingHours = bookingSamples.length;
   const sessions = countSessions(bookingSamples);
+  const midpoint = windowStart + ((Date.now() - windowStart) / 2);
+  const firstHalfScore = computeScoreFromTargetSamples(healthSamples.filter((entry) => entry.timestampMs < midpoint));
+  const secondHalfScore = computeScoreFromTargetSamples(healthSamples.filter((entry) => entry.timestampMs >= midpoint));
+  const scoreDelta = firstHalfScore !== null && secondHalfScore !== null
+    ? roundToOne(secondHalfScore - firstHalfScore)
+    : null;
 
   return {
     ...record,
@@ -412,6 +422,9 @@ const analyzeRecord = (record, periodDays) => {
     latestBooking,
     bookingHours,
     sessions,
+    firstHalfScore,
+    secondHalfScore,
+    scoreDelta,
   };
 };
 
@@ -459,6 +472,21 @@ const buildSummary = (records, periodDays, tr) => {
   const best = scoreRecords.slice().sort((a, b) => b.healthScore - a.healthScore)[0] || null;
   const weakest = scoreRecords.slice().sort((a, b) => a.healthScore - b.healthScore)[0] || null;
   const trend = buildDailyTrend(records, periodDays);
+  const deltas = records
+    .map((record) => record.scoreDelta)
+    .filter((value) => Number.isFinite(Number(value)));
+  const avgScoreDelta = deltas.length
+    ? roundToOne(deltas.reduce((sum, value) => sum + value, 0) / deltas.length)
+    : null;
+  const improving = records
+    .filter((record) => Number.isFinite(Number(record.scoreDelta)) && record.scoreDelta > 0)
+    .sort((a, b) => b.scoreDelta - a.scoreDelta)[0] || null;
+  const declining = records
+    .filter((record) => Number.isFinite(Number(record.scoreDelta)) && record.scoreDelta < 0)
+    .sort((a, b) => a.scoreDelta - b.scoreDelta)[0] || null;
+  const maxBookingHours = records.reduce((max, record) => Math.max(max, record.bookingHours), 0);
+  const totalHealthSamples = allHealthTargetSamples.length;
+  const totalBookingSamples = records.reduce((sum, record) => sum + record.bookingSamples.length, 0);
 
   const textBlocks = [
     {
@@ -498,6 +526,12 @@ const buildSummary = (records, periodDays, tr) => {
     best,
     weakest,
     trend,
+    avgScoreDelta,
+    improving,
+    declining,
+    maxBookingHours,
+    totalHealthSamples,
+    totalBookingSamples,
     textBlocks,
   };
 };
@@ -546,6 +580,25 @@ const wrapText = (text, maxWidth, fontSize) => {
   });
   if (current) lines.push(current);
   return lines.length ? lines : [''];
+};
+
+const truncateText = (value, maxChars) => {
+  const str = String(value ?? '').trim();
+  if (str.length <= maxChars) return str;
+  return `${str.slice(0, Math.max(0, maxChars - 1))}\u2026`;
+};
+
+const getScoreHex = (score) => {
+  if (!Number.isFinite(Number(score))) return '#94a3b8';
+  if (Number(score) > 90) return '#10b981';
+  if (Number(score) >= 70) return '#f59e0b';
+  return '#ef4444';
+};
+
+const getDeltaText = (value) => {
+  if (!Number.isFinite(Number(value))) return '--';
+  const num = Number(value);
+  return `${num > 0 ? '+' : ''}${num.toFixed(1)}`;
 };
 
 const createPdfBlob = ({ report, title, subtitle, tr }) => {
@@ -603,6 +656,75 @@ const createPdfBlob = ({ report, title, subtitle, tr }) => {
     line(margin, y + 7, pageWidth - margin, y + 7, '#e5e7eb');
   };
 
+  const valueBarChart = ({ title: chartTitle, entries, valueAccessor, labelAccessor, maxValue = 100, valueFormatter = formatNumber, colorAccessor = () => '#2563eb', height = 118 }) => {
+    ensureSpace(height + 44);
+    text(chartTitle, margin, y, 11, 'F2', '#111827');
+    y -= 18;
+    const chartX = margin;
+    const chartY = y - height;
+    const chartW = pageWidth - (margin * 2);
+    const chartH = height;
+    rect(chartX, chartY, chartW, chartH, '#f8fafc');
+    line(chartX, chartY + 24, chartX + chartW, chartY + 24, '#e5e7eb');
+    line(chartX, chartY + chartH - 24, chartX + chartW, chartY + chartH - 24, '#e5e7eb');
+    const safeEntries = Array.isArray(entries) ? entries : [];
+    const gap = safeEntries.length > 12 ? 3 : 6;
+    const barW = safeEntries.length
+      ? Math.max(6, (chartW - 24 - (gap * (safeEntries.length - 1))) / safeEntries.length)
+      : 0;
+    safeEntries.forEach((entry, index) => {
+      const value = Number(valueAccessor(entry));
+      const x = chartX + 12 + (index * (barW + gap));
+      const normalized = Number.isFinite(value) ? Math.max(0, Math.min(1, value / Math.max(1, maxValue))) : 0;
+      const barH = Math.max(Number.isFinite(value) ? 5 : 2, normalized * (chartH - 42));
+      const barY = chartY + 20;
+      rect(x, barY, barW, barH, Number.isFinite(value) ? colorAccessor(entry) : '#cbd5e1');
+      if (safeEntries.length <= 14) {
+        text(labelAccessor(entry), x - 1, chartY + 7, 6.5, 'F1', '#6b7280');
+      }
+    });
+    const latest = safeEntries.slice().reverse().find((entry) => Number.isFinite(Number(valueAccessor(entry))));
+    if (latest) {
+      text(`${tr('reports.latest', 'Latest')}: ${valueFormatter(valueAccessor(latest))}`, chartX + chartW - 118, chartY + chartH - 14, 8, 'F2', '#374151');
+    }
+    y = chartY - 18;
+  };
+
+  const horizontalBars = ({ title: chartTitle, entries, valueAccessor, labelAccessor, maxValue = 100, valueFormatter = formatNumber, colorAccessor = () => '#2563eb' }) => {
+    const safeEntries = Array.isArray(entries) ? entries : [];
+    const rowH = 19;
+    const labelW = 128;
+    const barW = pageWidth - (margin * 2) - labelW - 64;
+
+    const renderHeader = () => {
+      ensureSpace(34);
+      text(chartTitle, margin, y, 11, 'F2', '#111827');
+      y -= 18;
+    };
+
+    renderHeader();
+    if (!safeEntries.length) {
+      text('--', margin, y, 8.5, 'F1', '#6b7280');
+      y -= rowH;
+      return;
+    }
+
+    safeEntries.forEach((entry) => {
+      if (y - rowH < margin) {
+        newPage();
+        renderHeader();
+      }
+      const value = Number(valueAccessor(entry));
+      text(truncateText(labelAccessor(entry), 25), margin, y, 8.5, 'F2', '#111827');
+      rect(margin + labelW, y - 6, barW, 8, '#e5e7eb');
+      const normalized = Number.isFinite(value) ? Math.max(0, Math.min(1, value / Math.max(1, maxValue))) : 0;
+      rect(margin + labelW, y - 6, Math.max(2, barW * normalized), 8, Number.isFinite(value) ? colorAccessor(entry) : '#cbd5e1');
+      text(valueFormatter(value), margin + labelW + barW + 10, y - 1, 8, 'F2', '#374151');
+      y -= rowH;
+    });
+    y -= 8;
+  };
+
   text(title, margin, y, 22, 'F2', '#111827');
   y -= 25;
   text(subtitle, margin, y, 10, 'F1', '#4b5563');
@@ -633,16 +755,64 @@ const createPdfBlob = ({ report, title, subtitle, tr }) => {
     pageWidth - (margin * 2),
     10,
   );
+  paragraph(
+    `${tr('reports.avgTrend', 'Average trend')}: ${getDeltaText(report.avgScoreDelta)}. ${report.improving ? `${tr('reports.trendImproving', 'Improving')}: ${report.improving.name} (${getDeltaText(report.improving.scoreDelta)}).` : ''} ${report.declining ? `${tr('reports.trendDeclining', 'Declining')}: ${report.declining.name} (${getDeltaText(report.declining.scoreDelta)}).` : ''}`,
+    margin,
+    pageWidth - (margin * 2),
+    10,
+  );
+
+  sectionTitle(tr('reports.trendDevelopment', 'Trend development'));
+  valueBarChart({
+    title: tr('reports.scoreDevelopment', 'Score development'),
+    entries: report.trend,
+    valueAccessor: (entry) => entry.score,
+    labelAccessor: (entry) => entry.label,
+    maxValue: 100,
+    valueFormatter: formatScore,
+    colorAccessor: (entry) => getScoreHex(entry.score),
+  });
+  valueBarChart({
+    title: tr('reports.bookingDevelopment', 'Booking development'),
+    entries: report.trend,
+    valueAccessor: (entry) => entry.bookingHours,
+    labelAccessor: (entry) => entry.label,
+    maxValue: Math.max(1, ...report.trend.map((entry) => entry.bookingHours)),
+    valueFormatter: (value) => `${formatNumber(value)}h`,
+    colorAccessor: () => '#2563eb',
+    height: 88,
+  });
+
+  sectionTitle(tr('reports.comparison', 'Comparison'));
+  horizontalBars({
+    title: tr('reports.scoreBySauna', 'Score by sauna'),
+    entries: report.records.slice().sort((a, b) => (b.healthScore ?? -1) - (a.healthScore ?? -1)),
+    valueAccessor: (record) => record.healthScore,
+    labelAccessor: (record) => record.name,
+    maxValue: 100,
+    valueFormatter: formatScore,
+    colorAccessor: (record) => getScoreHex(record.healthScore),
+  });
+  horizontalBars({
+    title: tr('reports.bookingHoursBySauna', 'Booking hours by sauna'),
+    entries: report.records.slice().sort((a, b) => b.bookingHours - a.bookingHours),
+    valueAccessor: (record) => record.bookingHours,
+    labelAccessor: (record) => record.name,
+    maxValue: Math.max(1, report.maxBookingHours),
+    valueFormatter: (value) => `${formatNumber(value)}h`,
+    colorAccessor: () => '#0f766e',
+  });
 
   sectionTitle(tr('reports.saunaPerformance', 'Sauna performance'));
   const columns = [
-    [tr('sauna.name', 'Sauna'), 128],
+    [tr('sauna.name', 'Sauna'), 116],
     [tr('reports.score', 'Score'), 48],
-    [tr('reports.bookingHours', 'Hours'), 50],
-    [tr('reports.estimatedSessions', 'Sessions'), 56],
+    [tr('reports.trend', 'Trend'), 52],
+    [tr('reports.bookingHours', 'Hours'), 42],
+    [tr('reports.estimatedSessions', 'Sessions'), 52],
     [tr('reports.hitRate', 'Hit rate'), 52],
     [tr('reports.avgTemp', 'Avg temp'), 58],
-    [tr('reports.avgDeviation', 'Avg deviation'), 75],
+    [tr('reports.avgDeviation', 'Avg deviation'), 70],
   ];
   const tableWidth = columns.reduce((sum, [, width]) => sum + width, 0);
   ensureSpace(26);
@@ -659,8 +829,9 @@ const createPdfBlob = ({ report, title, subtitle, tr }) => {
     if (index % 2 === 0) rect(margin, y - 13, tableWidth, 18, '#f9fafb');
     cursor = margin + 6;
     [
-      record.name,
+      truncateText(record.name, 24),
       formatScore(record.healthScore),
+      getDeltaText(record.scoreDelta),
       formatNumber(record.bookingHours),
       formatNumber(record.sessions),
       record.hitRate !== null ? `${record.hitRate}%` : '--',
@@ -806,8 +977,6 @@ export default function SaunaReportsCard({
     );
   };
 
-  const maxTrendScore = Math.max(100, ...report.trend.map((entry) => Number(entry.score) || 0));
-
   return (
     <div
       {...dragProps}
@@ -902,98 +1071,67 @@ export default function SaunaReportsCard({
             </div>
           </div>
         ) : (
-          <>
-            <div className="grid grid-cols-2 xl:grid-cols-4 gap-2">
-              <MetricTile label={tr('reports.avgScore', 'Average score')} value={formatScore(report.avgScore)} tone={getScoreToneClass(report.avgScore)} subLabel={report.best ? `${tr('reports.bestSauna', 'Best sauna')}: ${report.best.name}` : undefined} />
-              <MetricTile label={tr('reports.bookingHours', 'Booking hours')} value={formatNumber(report.bookingHours)} subLabel={`${formatNumber(report.sessions)} ${tr('reports.estimatedSessions', 'estimated sessions')}`} />
-              <MetricTile label={tr('reports.hitRate', 'Hit rate')} value={report.hitRate !== null ? `${report.hitRate}%` : '--'} subLabel={tr('reports.targetReached', 'Target reached')} />
-              <MetricTile label={tr('reports.avgDeviation', 'Average deviation')} value={formatPct(report.avgDeviationPct)} subLabel={tr('reports.healthScoreBasis', 'Health score basis')} />
-            </div>
-
-            <div className="grid grid-cols-1 xl:grid-cols-[1.1fr_0.9fr] gap-3 min-h-0">
-              <div className="rounded-2xl border border-[var(--glass-border)] bg-[var(--glass-bg-hover)] p-3 min-h-0">
-                <div className="flex items-center justify-between gap-3 mb-3">
-                  <div className="text-[11px] uppercase tracking-widest font-bold text-[var(--text-secondary)]">
-                    {tr('reports.saunaPerformance', 'Sauna performance')}
-                  </div>
-                  <div className="text-[10px] uppercase tracking-widest text-[var(--text-muted)]">
-                    {activeRecords.length} {tr('reports.selectedSaunas', 'selected saunas')}
-                  </div>
+          <div className="grid grid-cols-1 xl:grid-cols-[1fr_0.72fr] gap-3 flex-1 min-h-0">
+            <div className="rounded-2xl border border-[var(--glass-border)] bg-[var(--glass-bg-hover)] p-4 flex flex-col justify-between gap-4">
+              <div>
+                <div className="text-[10px] uppercase tracking-widest font-bold text-[var(--text-secondary)]">
+                  {tr('reports.reportReady', 'Report ready')}
                 </div>
-                <div className="space-y-2 max-h-64 overflow-y-auto custom-scrollbar pr-1">
-                  {activeRecords.map((record) => (
-                    <div key={record.id} className="rounded-xl border border-[var(--glass-border)] bg-[var(--glass-bg)] p-3">
-                      <div className="flex items-start justify-between gap-3">
-                        <div className="min-w-0">
-                          <div className="text-sm font-semibold text-[var(--text-primary)] truncate">{record.name}</div>
-                          <div className="mt-1 flex flex-wrap gap-2 text-[10px] uppercase tracking-widest text-[var(--text-secondary)]">
-                            <span className="inline-flex items-center gap-1"><Thermometer className="w-3 h-3" />{formatTemp(record.currentTemp)}</span>
-                            <span className="inline-flex items-center gap-1"><Calendar className="w-3 h-3" />{formatNumber(record.bookingHours)}h</span>
-                            <span className="inline-flex items-center gap-1"><Activity className="w-3 h-3" />{record.hitRate !== null ? `${record.hitRate}%` : '--'}</span>
-                          </div>
-                        </div>
-                        <div className={`text-2xl font-semibold tabular-nums ${getScoreToneClass(record.healthScore)}`}>
-                          {formatScore(record.healthScore)}
-                        </div>
-                      </div>
-                      <div className="mt-3 grid grid-cols-3 gap-2 text-xs">
-                        <div>
-                          <div className="text-[10px] uppercase tracking-widest text-[var(--text-muted)]">{tr('reports.avgTemp', 'Avg temp')}</div>
-                          <div className="font-semibold text-[var(--text-primary)]">{formatTemp(record.avgBookingTemp)}</div>
-                        </div>
-                        <div>
-                          <div className="text-[10px] uppercase tracking-widest text-[var(--text-muted)]">{tr('reports.avgDeviation', 'Avg deviation')}</div>
-                          <div className="font-semibold text-[var(--text-primary)]">{formatPct(record.avgDeviationPct ?? record.avgBookingDeviationPct)}</div>
-                        </div>
-                        <div>
-                          <div className="text-[10px] uppercase tracking-widest text-[var(--text-muted)]">{tr('reports.latestTemp', 'Latest temperature')}</div>
-                          <div className="font-semibold text-[var(--text-primary)]">{record.latestBooking ? formatTemp(record.latestBooking.startTemp) : formatTemp(record.currentTemp)}</div>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
+                <p className="mt-2 text-sm leading-relaxed text-[var(--text-primary)]">
+                  {tr('reports.reportReadyHint', 'The card keeps the workspace clean. The downloaded PDF contains the full analysis with charts, trends and sauna comparisons.')}
+                </p>
               </div>
 
-              <div className="rounded-2xl border border-[var(--glass-border)] bg-[var(--glass-bg-hover)] p-3">
-                <div className="flex items-center justify-between gap-3 mb-3">
-                  <div className="text-[11px] uppercase tracking-widest font-bold text-[var(--text-secondary)]">
-                    {tr('reports.scoreTrend', 'Score trend')}
-                  </div>
-                  <TrendingUp className="w-4 h-4 text-[var(--text-secondary)]" />
+              <div className="grid grid-cols-3 gap-2">
+                <div>
+                  <div className="text-[10px] uppercase tracking-widest text-[var(--text-muted)]">{tr('reports.avgScore', 'Average score')}</div>
+                  <div className={`mt-1 text-2xl font-semibold tabular-nums ${getScoreToneClass(report.avgScore)}`}>{formatScore(report.avgScore)}</div>
                 </div>
-                <div className="h-40 flex items-end gap-1.5 border-b border-[var(--glass-border)] pb-2">
-                  {report.trend.map((entry) => {
-                    const heightPct = entry.score === null ? 4 : Math.max(8, (entry.score / maxTrendScore) * 100);
-                    return (
-                      <div key={entry.key} className="flex-1 h-full flex flex-col justify-end gap-1 min-w-0">
-                        <div
-                          className={`rounded-t-sm ${
-                            getScoreBand(entry.score) === 'good'
-                              ? 'bg-emerald-400/75'
-                              : (getScoreBand(entry.score) === 'watch' ? 'bg-amber-400/75' : 'bg-rose-400/70')
-                          }`}
-                          style={{ height: `${heightPct}%` }}
-                          title={`${entry.label}: ${formatScore(entry.score)}`}
-                        />
-                        <div className="text-[9px] text-[var(--text-muted)] truncate text-center">{entry.label}</div>
-                      </div>
-                    );
-                  })}
+                <div>
+                  <div className="text-[10px] uppercase tracking-widest text-[var(--text-muted)]">{tr('reports.bookingHours', 'Booking hours')}</div>
+                  <div className="mt-1 text-2xl font-semibold tabular-nums text-[var(--text-primary)]">{formatNumber(report.bookingHours)}</div>
                 </div>
-                <div className="mt-3 rounded-xl border border-[var(--glass-border)] bg-[var(--glass-bg)] p-3">
-                  <div className="text-[10px] uppercase tracking-widest font-bold text-[var(--text-secondary)] mb-2">
-                    {tr('reports.executiveSummary', 'Executive summary')}
+                <div>
+                  <div className="text-[10px] uppercase tracking-widest text-[var(--text-muted)]">{tr('reports.trend', 'Trend')}</div>
+                  <div className={`mt-1 text-2xl font-semibold tabular-nums ${
+                    Number(report.avgScoreDelta) > 0
+                      ? 'text-emerald-300'
+                      : (Number(report.avgScoreDelta) < 0 ? 'text-amber-300' : 'text-[var(--text-primary)]')
+                  }`}>
+                    {getDeltaText(report.avgScoreDelta)}
                   </div>
-                  <p className="text-sm text-[var(--text-primary)] leading-relaxed">
-                    {report.best && report.weakest
-                      ? `${tr('reports.bestSauna', 'Best sauna')}: ${report.best.name} (${formatScore(report.best.healthScore)}). ${tr('reports.needsAttention', 'Needs attention')}: ${report.weakest.name} (${formatScore(report.weakest.healthScore)}).`
-                      : tr('reports.noTrend', 'No trend data in selected range')}
-                  </p>
                 </div>
               </div>
             </div>
-          </>
+
+            <div className="rounded-2xl border border-[var(--glass-border)] bg-[var(--glass-bg-hover)] p-4">
+              <div className="flex items-center gap-2 text-[10px] uppercase tracking-widest font-bold text-[var(--text-secondary)]">
+                <TrendingUp className="w-3.5 h-3.5" />
+                {tr('reports.pdfContains', 'PDF contains')}
+              </div>
+              <div className="mt-3 space-y-2">
+                {[
+                  tr('reports.scoreDevelopment', 'Score development'),
+                  tr('reports.bookingDevelopment', 'Booking development'),
+                  tr('reports.comparison', 'Comparison'),
+                  tr('reports.saunaPerformance', 'Sauna performance'),
+                  tr('reports.recentBookings', 'Recent booking samples'),
+                ].map((label) => (
+                  <div key={label} className="flex items-center justify-between gap-3 rounded-lg border border-[var(--glass-border)] bg-[var(--glass-bg)] px-3 py-2">
+                    <span className="text-xs font-semibold text-[var(--text-primary)] truncate">{label}</span>
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-300 shrink-0" />
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="xl:col-span-2 grid grid-cols-2 md:grid-cols-4 gap-2">
+              <MetricTile label={tr('reports.selectedSaunas', 'selected saunas')} value={formatNumber(activeRecords.length)} />
+              <MetricTile label={tr('reports.healthSamples', 'Health samples')} value={formatNumber(report.totalHealthSamples)} />
+              <MetricTile label={tr('reports.bookingSamples', 'Booking samples')} value={formatNumber(report.totalBookingSamples)} />
+              <MetricTile label={tr('reports.hitRate', 'Hit rate')} value={report.hitRate !== null ? `${report.hitRate}%` : '--'} />
+            </div>
+          </div>
         )}
       </div>
     </div>
