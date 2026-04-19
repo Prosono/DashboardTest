@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { BarChart3, Download, Flame, TrendingUp } from '../../icons';
+import { BarChart3, Download, Flame } from '../../icons';
 
 const PERIOD_OPTIONS = [14, 7, 3, 1];
 const STOP_TOKENS = new Set([
@@ -27,6 +27,8 @@ const roundToOne = (value) => Math.round(Number(value) * 10) / 10;
 const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
 const cleanDisplayText = (value) => String(value ?? '').replace(/\s+/g, ' ').trim();
 const firstDisplayText = (...values) => values.map(cleanDisplayText).find(Boolean) || '';
+const SCORE_MISS_PENALTY = 10;
+const SCORE_HITRATE_WEIGHT = 0.25;
 
 const makeTr = (t) => (key, fallback) => {
   const out = typeof t === 'function' ? t(key) : undefined;
@@ -144,10 +146,13 @@ const calcDeviationPct = (temp, target) => {
   return roundToOne(((tempNum - targetNum) / targetNum) * 100);
 };
 
-const calcScoreFromDeviationPct = (deviationPct) => {
+const calcScoreFromDeviationPct = (deviationPct, options = {}) => {
+  const { hit = null, missPenalty = SCORE_MISS_PENALTY } = options;
   const parsed = toNum(deviationPct);
   if (parsed === null) return null;
-  return clamp(Math.round(100 - Math.abs(parsed)), 0, 100);
+  const baseScore = clamp(Math.round(100 - Math.abs(parsed)), 0, 100);
+  if (hit === false) return clamp(baseScore - Math.max(0, Number(missPenalty) || 0), 0, 100);
+  return baseScore;
 };
 
 const normalizeHealthSamples = (rawValue) => {
@@ -214,6 +219,30 @@ const computeScoreFromTargetSamples = (samples) => {
   );
   return calcScoreFromDeviationPct(avgDeviation);
 };
+
+const computeBookingScoreFromSamples = (samples, fallbackToleranceC = 0) => {
+  const targetSamples = Array.isArray(samples)
+    ? samples.filter((entry) => entry.targetTemp !== null && entry.deviationPct !== null)
+    : [];
+  if (!targetSamples.length) return null;
+  const scored = targetSamples
+    .map((entry) => calcScoreFromDeviationPct(entry.deviationPct, {
+      hit: isTargetReached(entry.startTemp, entry.targetTemp, entry.targetToleranceC ?? fallbackToleranceC),
+    }))
+    .filter((score) => Number.isFinite(Number(score)));
+  if (!scored.length) return null;
+  const avgScore = scored.reduce((sum, score) => sum + score, 0) / scored.length;
+  const reached = targetSamples
+    .filter((entry) => isTargetReached(entry.startTemp, entry.targetTemp, entry.targetToleranceC ?? fallbackToleranceC)).length;
+  const hitRate = Math.round((reached / targetSamples.length) * 100);
+  return clamp(Math.round((avgScore * (1 - SCORE_HITRATE_WEIGHT)) + (hitRate * SCORE_HITRATE_WEIGHT)), 0, 100);
+};
+
+const getScoreFromSamples = (samples, fallbackToleranceC = 0, source = 'health') => (
+  source === 'booking'
+    ? computeBookingScoreFromSamples(samples, fallbackToleranceC)
+    : computeScoreFromTargetSamples(samples)
+);
 
 const formatTemp = (value) => {
   const num = toNum(value);
@@ -391,12 +420,15 @@ const analyzeRecord = (record, periodDays) => {
   const avgDeviationPct = healthTargetSamples.length
     ? roundToOne(healthTargetSamples.reduce((sum, entry) => sum + (entry.deviationPct ?? 0), 0) / healthTargetSamples.length)
     : null;
-  const healthScore = computeScoreFromTargetSamples(healthSamples);
 
   const bookingSamples = (record.bookingSource?.bookingSamples || [])
     .filter((entry) => entry.timestampMs >= windowStart && entry.bookingType !== 'service');
   const bookingTargetSamples = bookingSamples.filter((entry) => entry.targetTemp !== null);
   const bookingTargetSamplesWithPct = bookingTargetSamples.filter((entry) => entry.deviationPct !== null);
+  const bookingScoreSamples = bookingTargetSamplesWithPct.map((entry) => ({
+    ...entry,
+    targetToleranceC: record.targetToleranceC,
+  }));
   const reachedCount = bookingTargetSamples.filter((entry) => isTargetReached(entry.startTemp, entry.targetTemp, record.targetToleranceC)).length;
   const hitRate = bookingTargetSamples.length ? Math.round((reachedCount / bookingTargetSamples.length) * 100) : null;
   const avgBookingDeviationPct = bookingTargetSamplesWithPct.length
@@ -408,8 +440,13 @@ const analyzeRecord = (record, periodDays) => {
   const bookingHours = bookingSamples.length;
   const sessions = countSessions(bookingSamples);
   const midpoint = windowStart + ((Date.now() - windowStart) / 2);
-  const firstHalfScore = computeScoreFromTargetSamples(healthSamples.filter((entry) => entry.timestampMs < midpoint));
-  const secondHalfScore = computeScoreFromTargetSamples(healthSamples.filter((entry) => entry.timestampMs >= midpoint));
+  const healthScore = computeScoreFromTargetSamples(healthSamples);
+  const bookingScore = computeBookingScoreFromSamples(bookingScoreSamples, record.targetToleranceC);
+  const scoreSource = healthScore !== null ? 'health' : (bookingScore !== null ? 'booking' : null);
+  const scoreSamples = scoreSource === 'health' ? healthTargetSamples : (scoreSource === 'booking' ? bookingScoreSamples : []);
+  const score = healthScore ?? bookingScore;
+  const firstHalfScore = getScoreFromSamples(scoreSamples.filter((entry) => entry.timestampMs < midpoint), record.targetToleranceC, scoreSource);
+  const secondHalfScore = getScoreFromSamples(scoreSamples.filter((entry) => entry.timestampMs >= midpoint), record.targetToleranceC, scoreSource);
   const scoreDelta = firstHalfScore !== null && secondHalfScore !== null
     ? roundToOne(secondHalfScore - firstHalfScore)
     : null;
@@ -419,7 +456,10 @@ const analyzeRecord = (record, periodDays) => {
     windowStart,
     healthSamples,
     healthTargetSamples,
-    healthScore,
+    healthScore: score,
+    scoreSource,
+    scoreSamples,
+    bookingScore,
     avgDeviationPct,
     bookingSamples,
     bookingTargetSamples,
@@ -446,15 +486,17 @@ const buildDailyTrend = (records, periodDays) => {
     day.setHours(0, 0, 0, 0);
     const start = day.getTime();
     const end = start + (24 * 60 * 60 * 1000);
-    const samples = records.flatMap((record) => record.healthTargetSamples
+    const healthSamples = records.flatMap((record) => record.healthTargetSamples
       .filter((entry) => entry.timestampMs >= start && entry.timestampMs < end));
-    const avgDeviation = samples.length
-      ? roundToOne(samples.reduce((sum, entry) => sum + (entry.deviationPct ?? 0), 0) / samples.length)
-      : null;
+    const bookingSamples = records.flatMap((record) => record.bookingTargetSamplesWithPct
+      .filter((entry) => entry.timestampMs >= start && entry.timestampMs < end)
+      .map((entry) => ({ ...entry, targetToleranceC: record.targetToleranceC })));
     days.push({
       key: day.toISOString().slice(0, 10),
       label: day.toLocaleDateString([], { day: '2-digit', month: '2-digit' }),
-      score: avgDeviation !== null ? calcScoreFromDeviationPct(avgDeviation) : null,
+      score: healthSamples.length
+        ? computeScoreFromTargetSamples(healthSamples)
+        : computeBookingScoreFromSamples(bookingSamples),
       bookingHours: records.reduce((sum, record) => sum + record.bookingSamples
         .filter((entry) => entry.timestampMs >= start && entry.timestampMs < end).length, 0),
     });
@@ -473,8 +515,9 @@ const buildSummary = (records, periodDays, tr) => {
     ? Math.round((reachedCount / allBookingTargetSamples.length) * 100)
     : null;
   const allHealthTargetSamples = records.flatMap((record) => record.healthTargetSamples);
-  const avgDeviationPct = allHealthTargetSamples.length
-    ? roundToOne(allHealthTargetSamples.reduce((sum, entry) => sum + (entry.deviationPct ?? 0), 0) / allHealthTargetSamples.length)
+  const allScoreSamples = records.flatMap((record) => record.scoreSamples || []);
+  const avgDeviationPct = allScoreSamples.length
+    ? roundToOne(allScoreSamples.reduce((sum, entry) => sum + (entry.deviationPct ?? 0), 0) / allScoreSamples.length)
     : null;
   const bookingHours = records.reduce((sum, record) => sum + record.bookingHours, 0);
   const sessions = records.reduce((sum, record) => sum + record.sessions, 0);
@@ -495,6 +538,7 @@ const buildSummary = (records, periodDays, tr) => {
     .sort((a, b) => a.scoreDelta - b.scoreDelta)[0] || null;
   const maxBookingHours = records.reduce((max, record) => Math.max(max, record.bookingHours), 0);
   const totalHealthSamples = allHealthTargetSamples.length;
+  const totalScoreSamples = allScoreSamples.length;
   const totalBookingSamples = records.reduce((sum, record) => sum + record.bookingSamples.length, 0);
 
   const textBlocks = [
@@ -540,6 +584,7 @@ const buildSummary = (records, periodDays, tr) => {
     declining,
     maxBookingHours,
     totalHealthSamples,
+    totalScoreSamples,
     totalBookingSamples,
     textBlocks,
   };
@@ -559,18 +604,36 @@ const downloadBlob = (content, fileName, mimeType) => {
   URL.revokeObjectURL(url);
 };
 
-const toPdfHex = (value) => {
-  const codes = [];
-  for (const char of String(value ?? '')) {
-    const point = char.codePointAt(0);
-    if (point > 0xffff) {
-      const adjusted = point - 0x10000;
-      codes.push(0xd800 + (adjusted >> 10), 0xdc00 + (adjusted & 0x3ff));
+const WIN_ANSI_MAP = new Map([
+  [0x20ac, 0x80],
+  [0x2018, 0x91],
+  [0x2019, 0x92],
+  [0x201c, 0x93],
+  [0x201d, 0x94],
+  [0x2022, 0x95],
+  [0x2013, 0x96],
+  [0x2014, 0x97],
+  [0x2122, 0x99],
+  [0x2026, 0x85],
+]);
+
+const toPdfString = (value) => {
+  const bytes = [];
+  for (const char of String(value ?? '').normalize('NFC')) {
+    const code = char.codePointAt(0);
+    if (WIN_ANSI_MAP.has(code)) {
+      bytes.push(WIN_ANSI_MAP.get(code));
+    } else if (code <= 0xff) {
+      bytes.push(code);
     } else {
-      codes.push(point);
+      bytes.push(0x3f);
     }
   }
-  return `<FEFF${codes.map((code) => code.toString(16).padStart(4, '0')).join('').toUpperCase()}>`;
+  return `(${bytes.map((byte) => {
+    if (byte === 0x28 || byte === 0x29 || byte === 0x5c) return `\\${String.fromCharCode(byte)}`;
+    if (byte < 0x20 || byte > 0x7e) return `\\${byte.toString(8).padStart(3, '0')}`;
+    return String.fromCharCode(byte);
+  }).join('')})`;
 };
 
 const wrapText = (text, maxWidth, fontSize) => {
@@ -643,11 +706,31 @@ const createPdfBlob = ({ report, title, subtitle, tr }) => {
   };
 
   const text = (value, x, yy, size = 10, font = 'F1', hex = palette.text) => {
-    ops.push(`BT /${font} ${size} Tf ${color(hex)} rg 1 0 0 1 ${x.toFixed(2)} ${yy.toFixed(2)} Tm ${toPdfHex(value)} Tj ET`);
+    ops.push(`BT /${font} ${size} Tf ${color(hex)} rg 1 0 0 1 ${x.toFixed(2)} ${yy.toFixed(2)} Tm ${toPdfString(value)} Tj ET`);
   };
 
   const rect = (x, yy, w, h, fill = palette.panel) => {
     ops.push(`${color(fill)} rg ${x.toFixed(2)} ${yy.toFixed(2)} ${w.toFixed(2)} ${h.toFixed(2)} re f`);
+  };
+
+  const roundRect = (x, yy, w, h, radius = 8, fill = palette.panel, stroke = palette.borderSoft) => {
+    const r = Math.max(0, Math.min(radius, w / 2, h / 2));
+    const k = 0.5522847498;
+    const x0 = x;
+    const y0 = yy;
+    const x1 = x + w;
+    const y1 = yy + h;
+    ops.push(`${color(fill)} rg ${color(stroke)} RG 0.75 w ${[
+      `${(x0 + r).toFixed(2)} ${y0.toFixed(2)} m`,
+      `${(x1 - r).toFixed(2)} ${y0.toFixed(2)} l`,
+      `${(x1 - r + (k * r)).toFixed(2)} ${y0.toFixed(2)} ${(x1).toFixed(2)} ${(y0 + r - (k * r)).toFixed(2)} ${x1.toFixed(2)} ${(y0 + r).toFixed(2)} c`,
+      `${x1.toFixed(2)} ${(y1 - r).toFixed(2)} l`,
+      `${x1.toFixed(2)} ${(y1 - r + (k * r)).toFixed(2)} ${(x1 - r + (k * r)).toFixed(2)} ${y1.toFixed(2)} ${(x1 - r).toFixed(2)} ${y1.toFixed(2)} c`,
+      `${(x0 + r).toFixed(2)} ${y1.toFixed(2)} l`,
+      `${(x0 + r - (k * r)).toFixed(2)} ${y1.toFixed(2)} ${x0.toFixed(2)} ${(y1 - r + (k * r)).toFixed(2)} ${x0.toFixed(2)} ${(y1 - r).toFixed(2)} c`,
+      `${x0.toFixed(2)} ${(y0 + r).toFixed(2)} l`,
+      `${x0.toFixed(2)} ${(y0 + r - (k * r)).toFixed(2)} ${(x0 + r - (k * r)).toFixed(2)} ${y0.toFixed(2)} ${(x0 + r).toFixed(2)} ${y0.toFixed(2)} c`,
+    ].join(' ')} h B`);
   };
 
   const line = (x1, y1, x2, y2, stroke = palette.borderSoft) => {
@@ -662,8 +745,7 @@ const createPdfBlob = ({ report, title, subtitle, tr }) => {
   };
 
   const panel = (x, yy, w, h, fill = palette.panel, stroke = palette.borderSoft) => {
-    rect(x, yy, w, h, fill);
-    strokeRect(x, yy, w, h, stroke);
+    roundRect(x, yy, w, h, 9, fill, stroke);
   };
 
   const paintPage = () => {
@@ -674,7 +756,7 @@ const createPdfBlob = ({ report, title, subtitle, tr }) => {
 
   const drawFooter = () => {
     line(margin, 28, pageWidth - margin, 28, palette.borderSoft);
-    text(`Tunet / ${tr('reports.saunaReportTitle', 'Sauna operations report')}`, margin, 16, 7, 'F1', palette.subtle);
+    text(`Smart Sauna Systems / ${tr('reports.saunaReportTitle', 'Sauna operations report')}`, margin, 16, 7, 'F1', palette.subtle);
     text(`${tr('reports.page', 'Page')} ${pages.length + 1}`, pageWidth - margin - 34, 16, 7, 'F1', palette.subtle);
   };
 
@@ -712,9 +794,17 @@ const createPdfBlob = ({ report, title, subtitle, tr }) => {
   };
 
   const pill = (value, x, yy, w, fill = palette.panelRaised, textColor = palette.text) => {
-    rect(x, yy, w, 18, fill);
-    strokeRect(x, yy, w, 18, palette.borderSoft);
+    roundRect(x, yy, w, 18, 9, fill, palette.borderSoft);
     text(value, x + 8, yy + 6, 7, 'F2', textColor);
+  };
+
+  const logoMark = (x, yy, size = 28) => {
+    roundRect(x, yy, size, size, 8, '#edf5ff', '#edf5ff');
+    const cx = x + (size / 2);
+    rect(cx - 2, yy + 6, 4, 4, palette.page);
+    line(cx - 8, yy + 14, cx + 8, yy + 14, palette.page);
+    line(cx - 5, yy + 19, cx + 5, yy + 19, palette.page);
+    ops.push(`${color(palette.page)} rg ${(x + 8).toFixed(2)} ${(yy + 8).toFixed(2)} m ${(x + 5).toFixed(2)} ${(yy + 19).toFixed(2)} ${(x + 13).toFixed(2)} ${(yy + 24).toFixed(2)} ${(x + 12).toFixed(2)} ${(yy + 11).toFixed(2)} c ${(x + 17).toFixed(2)} ${(yy + 18).toFixed(2)} ${(x + 25).toFixed(2)} ${(yy + 16).toFixed(2)} ${(x + 19).toFixed(2)} ${(yy + 7).toFixed(2)} c h f`);
   };
 
   const metricBox = ({ label, value, x, yy, w, tone = palette.text }) => {
@@ -826,8 +916,9 @@ const createPdfBlob = ({ report, title, subtitle, tr }) => {
   paintPage();
 
   panel(margin, y - 64, contentWidth, 64, '#0a1a2a', palette.border);
-  text('TUNET', margin + 16, y - 22, 10, 'F2', palette.text);
-  text(tr('reports.analysisReport', 'ANALYSIS REPORT'), margin + 16, y - 42, 8, 'F2', palette.muted);
+  logoMark(margin + 16, y - 48, 28);
+  text('Smart Sauna Systems', margin + 54, y - 22, 11, 'F2', palette.text);
+  text(tr('reports.analysisReport', 'ANALYSIS REPORT'), margin + 54, y - 42, 8, 'F2', palette.muted);
   text(`${tr('reports.generated', 'Generated')}: ${formatDateTime(Date.now())}`, pageWidth - margin - 178, y - 22, 8, 'F1', palette.muted);
   text(subtitle, pageWidth - margin - 178, y - 42, 7.5, 'F1', palette.subtle);
   y -= 82;
@@ -840,16 +931,18 @@ const createPdfBlob = ({ report, title, subtitle, tr }) => {
   });
   const healthBasis = report.totalHealthSamples > 0
     ? `${formatNumber(report.totalHealthSamples)} ${tr('reports.healthSamples', 'Health samples').toLowerCase()}`
-    : tr('reports.healthDataMissing', 'Health data missing');
+    : (report.totalScoreSamples > 0
+      ? `${formatNumber(report.totalScoreSamples)} ${tr('reports.scoreFromBookings', 'score points from bookings')}`
+      : tr('reports.healthDataMissing', 'Health data missing'));
   pill(`${report.periodDays} ${tr('reports.days', 'days')}`, margin + 16, y - 101, 62, '#183450', palette.text);
   pill(`${formatNumber(report.records.length)} ${tr('reports.selectedSaunas', 'selected saunas')}`, margin + 84, y - 101, 118, '#183029', palette.text);
-  pill(healthBasis, margin + 208, y - 101, 150, report.totalHealthSamples > 0 ? '#183029' : '#3d2b17', report.totalHealthSamples > 0 ? palette.text : palette.amber);
+  pill(healthBasis, margin + 208, y - 101, 162, report.totalScoreSamples > 0 ? '#183029' : '#3d2b17', report.totalScoreSamples > 0 ? palette.text : palette.amber);
   y -= heroH + 22;
 
   const metricY = y - 56;
   const metricWidth = (contentWidth - 18) / 4;
   [
-    [tr('reports.avgScore', 'Average score'), report.totalHealthSamples > 0 ? formatScore(report.avgScore) : '--', report.totalHealthSamples > 0 ? getScoreHex(report.avgScore) : palette.subtle],
+    [tr('reports.avgScore', 'Average score'), report.totalScoreSamples > 0 ? formatScore(report.avgScore) : '--', report.totalScoreSamples > 0 ? getScoreHex(report.avgScore) : palette.subtle],
     [tr('reports.bookingHours', 'Booking hours'), formatNumber(report.bookingHours), palette.text],
     [tr('reports.estimatedSessions', 'Estimated sessions'), formatNumber(report.sessions), palette.text],
     [tr('reports.hitRate', 'Hit rate'), report.hitRate !== null ? `${report.hitRate}%` : '--', palette.accent],
@@ -866,7 +959,7 @@ const createPdfBlob = ({ report, title, subtitle, tr }) => {
   callout({
     title: tr('reports.executiveSummary', 'Executive summary'),
     body: summaryText,
-    tone: report.totalHealthSamples > 0 ? palette.accent : palette.amber,
+    tone: report.totalScoreSamples > 0 ? palette.accent : palette.amber,
   });
 
   const basisY = y - 48;
@@ -904,7 +997,10 @@ const createPdfBlob = ({ report, title, subtitle, tr }) => {
   sectionTitle(tr('reports.comparison', 'Comparison'));
   horizontalBars({
     title: tr('reports.scoreBySauna', 'Score by sauna'),
-    entries: report.records.slice().sort((a, b) => (b.healthScore ?? -1) - (a.healthScore ?? -1)),
+    entries: report.records
+      .filter((record) => record.healthScore !== null)
+      .slice()
+      .sort((a, b) => (b.healthScore ?? -1) - (a.healthScore ?? -1)),
     valueAccessor: (record) => record.healthScore,
     labelAccessor: (record) => record.name,
     maxValue: 100,
@@ -913,7 +1009,10 @@ const createPdfBlob = ({ report, title, subtitle, tr }) => {
   });
   horizontalBars({
     title: tr('reports.bookingHoursBySauna', 'Booking hours by sauna'),
-    entries: report.records.slice().sort((a, b) => b.bookingHours - a.bookingHours),
+    entries: report.records
+      .filter((record) => record.bookingHours > 0)
+      .slice()
+      .sort((a, b) => b.bookingHours - a.bookingHours),
     valueAccessor: (record) => record.bookingHours,
     labelAccessor: (record) => record.name,
     maxValue: Math.max(1, report.maxBookingHours),
@@ -922,6 +1021,8 @@ const createPdfBlob = ({ report, title, subtitle, tr }) => {
   });
 
   sectionTitle(tr('reports.saunaPerformance', 'Sauna performance'));
+  const performanceRecords = report.records
+    .filter((record) => record.healthScore !== null || record.bookingHours > 0 || record.avgBookingTemp !== null);
   const columns = [
     [tr('sauna.name', 'Sauna'), 116],
     [tr('reports.score', 'Score'), 48],
@@ -933,31 +1034,35 @@ const createPdfBlob = ({ report, title, subtitle, tr }) => {
     [tr('reports.avgDeviation', 'Avg deviation'), 70],
   ];
   const tableWidth = columns.reduce((sum, [, width]) => sum + width, 0);
-  renderTableHeader(columns, tableWidth);
+  if (!performanceRecords.length) {
+    paragraph(tr('reports.noSaunaData', 'No sauna health data found'), margin, contentWidth, 10);
+  } else {
+    renderTableHeader(columns, tableWidth);
 
-  report.records.forEach((record, index) => {
-    if (y - 22 < margin + 30) {
-      newPage();
-      sectionTitle(tr('reports.saunaPerformance', 'Sauna performance'));
-      renderTableHeader(columns, tableWidth);
-    }
-    rect(margin, y - 14, tableWidth, 18, index % 2 === 0 ? '#0a1724' : '#0f2031');
-    let cursor = margin + 8;
-    [
-      truncateText(record.name, 24),
-      formatScore(record.healthScore),
-      getDeltaText(record.scoreDelta),
-      formatNumber(record.bookingHours),
-      formatNumber(record.sessions),
-      record.hitRate !== null ? `${record.hitRate}%` : '--',
-      formatTemp(record.avgBookingTemp),
-      formatPct(record.avgDeviationPct ?? record.avgBookingDeviationPct),
-    ].forEach((value, colIndex) => {
-      text(value, cursor, y - 6, colIndex === 0 ? 8 : 7.5, colIndex === 0 ? 'F2' : 'F1', colIndex === 1 ? getScoreHex(record.healthScore) : palette.text);
-      cursor += columns[colIndex][1];
+    performanceRecords.forEach((record, index) => {
+      if (y - 22 < margin + 30) {
+        newPage();
+        sectionTitle(tr('reports.saunaPerformance', 'Sauna performance'));
+        renderTableHeader(columns, tableWidth);
+      }
+      rect(margin, y - 14, tableWidth, 18, index % 2 === 0 ? '#0a1724' : '#0f2031');
+      let cursor = margin + 8;
+      [
+        truncateText(record.name, 24),
+        formatScore(record.healthScore),
+        getDeltaText(record.scoreDelta),
+        formatNumber(record.bookingHours),
+        formatNumber(record.sessions),
+        record.hitRate !== null ? `${record.hitRate}%` : '--',
+        formatTemp(record.avgBookingTemp),
+        formatPct(record.avgDeviationPct ?? record.avgBookingDeviationPct),
+      ].forEach((value, colIndex) => {
+        text(value, cursor, y - 6, colIndex === 0 ? 8 : 7.5, colIndex === 0 ? 'F2' : 'F1', colIndex === 1 ? getScoreHex(record.healthScore) : palette.text);
+        cursor += columns[colIndex][1];
+      });
+      y -= 18;
     });
-    y -= 18;
-  });
+  }
 
   sectionTitle(tr('reports.recentBookings', 'Recent booking samples'));
   const recentRows = report.records
@@ -983,8 +1088,8 @@ const createPdfBlob = ({ report, title, subtitle, tr }) => {
   const font1Id = 3;
   const font2Id = 4;
   objects[1] = '<< /Type /Catalog /Pages 2 0 R >>';
-  objects[3] = '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>';
-  objects[4] = '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >>';
+  objects[3] = '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>';
+  objects[4] = '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold /Encoding /WinAnsiEncoding >>';
   const kids = [];
   pages.forEach((content, index) => {
     const pageId = 5 + (index * 2);
@@ -1071,23 +1176,11 @@ export default function SaunaReportsCard({
   const selectedLabel = selectedIds.length
     ? `${selectedIds.length} ${tr('reports.selectedSaunas', 'selected saunas')}`
     : tr('reports.allSaunas', 'All saunas');
-  const scoreValue = report.totalHealthSamples > 0 ? formatScore(report.avgScore) : '--';
-  const scoreTone = report.totalHealthSamples > 0 ? getScoreToneClass(report.avgScore) : 'text-[var(--text-muted)]';
+  const scoreValue = report.totalScoreSamples > 0 ? formatScore(report.avgScore) : '--';
+  const scoreTone = report.totalScoreSamples > 0 ? getScoreToneClass(report.avgScore) : 'text-[var(--text-muted)]';
   const trendTone = Number(report.avgScoreDelta) > 0
     ? 'text-emerald-300'
     : (Number(report.avgScoreDelta) < 0 ? 'text-amber-300' : 'text-[var(--text-primary)]');
-  const healthBasis = report.totalHealthSamples > 0
-    ? `${formatNumber(report.totalHealthSamples)} ${tr('reports.healthSamples', 'Health samples').toLowerCase()}`
-    : tr('reports.healthDataMissing', 'Health data missing');
-  const pdfSections = [
-    tr('reports.executiveSummary', 'Executive summary'),
-    tr('reports.scoreDevelopment', 'Score development'),
-    tr('reports.bookingDevelopment', 'Booking development'),
-    tr('reports.comparison', 'Comparison'),
-    tr('reports.saunaPerformance', 'Sauna performance'),
-    tr('reports.recentBookings', 'Recent booking samples'),
-  ];
-
   const toggleRecord = (recordId) => {
     setSelectedIds((prev) => {
       if (!prev.length) return [recordId];
@@ -1205,64 +1298,43 @@ export default function SaunaReportsCard({
             </div>
           </div>
         ) : (
-          <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1.05fr)_minmax(280px,0.95fr)] gap-3 auto-rows-min">
+          <div className="grid grid-cols-1 gap-3 auto-rows-min">
             <div className="rounded-2xl border border-[var(--glass-border)] bg-[var(--glass-bg-hover)] p-4 md:p-5">
-              <div className="flex items-start justify-between gap-5">
+              <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-5">
                 <div className="min-w-0">
                   <div className="text-[10px] uppercase tracking-widest font-bold text-[var(--text-secondary)]">
                     {tr('reports.reportReady', 'Report ready')}
                   </div>
-                  <p className="mt-2 max-w-2xl text-sm leading-relaxed text-[var(--text-primary)]">
+                  <p className="mt-2 max-w-3xl text-sm leading-relaxed text-[var(--text-primary)]">
                     {tr('reports.reportReadyHint', 'The card keeps the workspace clean. The downloaded PDF contains the full analysis with charts, trends and sauna comparisons.')}
                   </p>
-                </div>
-                <div className="shrink-0 rounded-lg border border-[var(--glass-border)] bg-[var(--glass-bg)] px-3 py-2 text-right">
-                  <div className="text-[9px] uppercase tracking-widest text-[var(--text-muted)]">{tr('reports.avgScore', 'Average score')}</div>
-                  <div className={`mt-1 text-3xl font-semibold tabular-nums ${scoreTone}`}>{scoreValue}</div>
-                </div>
-              </div>
-
-              <div className="mt-5 grid grid-cols-1 sm:grid-cols-3 gap-2">
-                <div className="rounded-lg border border-[var(--glass-border)] bg-[var(--glass-bg)] px-3 py-3">
-                  <div className="text-[10px] uppercase tracking-widest text-[var(--text-muted)]">{tr('reports.bookingHours', 'Booking hours')}</div>
-                  <div className="mt-1 text-2xl font-semibold tabular-nums text-[var(--text-primary)]">{formatNumber(report.bookingHours)}</div>
-                  <div className="mt-1 text-[10px] text-[var(--text-muted)]">{formatNumber(report.sessions)} {tr('reports.estimatedSessions', 'estimated sessions')}</div>
-                </div>
-                <div className="rounded-lg border border-[var(--glass-border)] bg-[var(--glass-bg)] px-3 py-3">
-                  <div className="text-[10px] uppercase tracking-widest text-[var(--text-muted)]">{tr('reports.dataFoundation', 'Data foundation')}</div>
-                  <div className="mt-1 text-sm font-semibold text-[var(--text-primary)] truncate">{healthBasis}</div>
-                  <div className="mt-1 text-[10px] text-[var(--text-muted)]">{formatNumber(report.totalBookingSamples)} {tr('reports.bookingSamples', 'booking samples').toLowerCase()}</div>
-                </div>
-                <div className="rounded-lg border border-[var(--glass-border)] bg-[var(--glass-bg)] px-3 py-3">
-                  <div className="text-[10px] uppercase tracking-widest text-[var(--text-muted)]">{tr('reports.trend', 'Trend')}</div>
-                  <div className={`mt-1 text-2xl font-semibold tabular-nums ${trendTone}`}>
-                    {getDeltaText(report.avgScoreDelta)}
+                  <div className="mt-3 flex flex-wrap gap-2 text-[10px] uppercase tracking-widest font-bold text-[var(--text-secondary)]">
+                    <span className="rounded-lg border border-[var(--glass-border)] bg-[var(--glass-bg)] px-2.5 py-1.5">{tr('reports.scoreDevelopment', 'Score development')}</span>
+                    <span className="rounded-lg border border-[var(--glass-border)] bg-[var(--glass-bg)] px-2.5 py-1.5">{tr('reports.comparison', 'Comparison')}</span>
+                    <span className="rounded-lg border border-[var(--glass-border)] bg-[var(--glass-bg)] px-2.5 py-1.5">{tr('reports.saunaPerformance', 'Sauna performance')}</span>
                   </div>
-                  <div className="mt-1 text-[10px] text-[var(--text-muted)]">{rangeLabel}</div>
+                </div>
+
+                <div className="grid grid-cols-3 gap-2 w-full xl:w-[390px] shrink-0">
+                  <div className="rounded-lg border border-[var(--glass-border)] bg-[var(--glass-bg)] px-3 py-3">
+                    <div className="text-[9px] uppercase tracking-widest text-[var(--text-muted)]">{tr('reports.avgScore', 'Average score')}</div>
+                    <div className={`mt-1 text-3xl font-semibold tabular-nums ${scoreTone}`}>{scoreValue}</div>
+                  </div>
+                  <div className="rounded-lg border border-[var(--glass-border)] bg-[var(--glass-bg)] px-3 py-3">
+                    <div className="text-[9px] uppercase tracking-widest text-[var(--text-muted)]">{tr('reports.bookingHours', 'Booking hours')}</div>
+                    <div className="mt-1 text-3xl font-semibold tabular-nums text-[var(--text-primary)]">{formatNumber(report.bookingHours)}</div>
+                  </div>
+                  <div className="rounded-lg border border-[var(--glass-border)] bg-[var(--glass-bg)] px-3 py-3">
+                    <div className="text-[9px] uppercase tracking-widest text-[var(--text-muted)]">{tr('reports.trend', 'Trend')}</div>
+                    <div className={`mt-1 text-3xl font-semibold tabular-nums ${trendTone}`}>{getDeltaText(report.avgScoreDelta)}</div>
+                  </div>
                 </div>
               </div>
             </div>
 
-            <div className="rounded-2xl border border-[var(--glass-border)] bg-[var(--glass-bg-hover)] p-4 md:p-5">
-              <div className="flex items-center gap-2 text-[10px] uppercase tracking-widest font-bold text-[var(--text-secondary)]">
-                <TrendingUp className="w-3.5 h-3.5" />
-                {tr('reports.pdfContains', 'PDF contains')}
-              </div>
-              <div className="mt-4 space-y-3">
-                {pdfSections.map((label, index) => (
-                  <div key={label} className="grid grid-cols-[28px_minmax(0,1fr)] items-center gap-3">
-                    <span className="grid h-7 w-7 place-items-center rounded-lg border border-[var(--glass-border)] bg-[var(--glass-bg)] text-[10px] font-bold tabular-nums text-[var(--text-secondary)]">
-                      {index + 1}
-                    </span>
-                    <span className="text-xs font-semibold text-[var(--text-primary)] truncate">{label}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            <div className="xl:col-span-2 grid grid-cols-2 md:grid-cols-4 gap-2">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
               <MetricTile label={tr('reports.selectedSaunas', 'selected saunas')} value={formatNumber(activeRecords.length)} />
-              <MetricTile label={tr('reports.healthSamples', 'Health samples')} value={formatNumber(report.totalHealthSamples)} subLabel={report.totalHealthSamples > 0 ? tr('reports.healthDataReady', 'Health data ready') : tr('reports.healthDataMissing', 'Health data missing')} />
+              <MetricTile label={tr('reports.scoreBasis', 'Score basis')} value={formatNumber(report.totalScoreSamples)} subLabel={report.totalHealthSamples > 0 ? tr('reports.healthDataReady', 'Health data ready') : tr('reports.scoreFromBookings', 'score points from bookings')} />
               <MetricTile label={tr('reports.bookingSamples', 'Booking samples')} value={formatNumber(report.totalBookingSamples)} />
               <MetricTile label={tr('reports.hitRate', 'Hit rate')} value={report.hitRate !== null ? `${report.hitRate}%` : '--'} />
             </div>
