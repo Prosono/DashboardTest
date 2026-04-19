@@ -27,6 +27,25 @@ const NORWAY_CENTER = [60.472, 8.4689];
 const SCORE_MISS_PENALTY = 10;
 const SCORE_HITRATE_WEIGHT = 0.25;
 const BOOKING_TYPES = ['felles', 'aufguss', 'private', 'service'];
+const GENERIC_BOOKING_STATES = new Set([
+  'ja',
+  'yes',
+  'on',
+  'true',
+  '1',
+  'nei',
+  'no',
+  'off',
+  'false',
+  '0',
+  'active',
+  'aktiv',
+  'booked',
+  'occupied',
+  'heat',
+  'heating',
+]);
+const POSITIVE_SERVICE_STATES = new Set(['ja', 'yes', 'on', 'true', '1', 'service']);
 
 const toNum = (value) => {
   const parsed = Number.parseFloat(value);
@@ -170,8 +189,24 @@ const normalizeBookingType = (value, fallback = 'felles') => {
 const getSnapshotBookingType = (entry) => {
   const explicitType = entry?.bookingType ?? entry?.booking_type ?? entry?.type;
   if (String(explicitType ?? '').trim()) return normalizeBookingType(explicitType);
-  if (String(entry?.serviceRaw ?? '').trim()) return normalizeBookingType(entry.serviceRaw);
+  const serviceRaw = normalizeState(entry?.serviceRaw);
+  const serviceType = normalizeBookingStateType(serviceRaw);
+  if (serviceType) return serviceType;
+  if (POSITIVE_SERVICE_STATES.has(serviceRaw)) return 'service';
+  const activeType = normalizeBookingStateType(entry?.activeRaw);
+  if (activeType) return activeType;
   return 'felles';
+};
+
+const normalizeBookingStateType = (value) => {
+  const normalized = String(value ?? '')
+    .trim()
+    .toLowerCase()
+    .normalize('NFKD')
+    .replace(/[\u0300-\u036f]/g, '');
+  if (!normalized || GENERIC_BOOKING_STATES.has(normalized)) return null;
+  const bookingType = normalizeBookingType(normalized, '');
+  return BOOKING_TYPES.includes(bookingType) ? bookingType : null;
 };
 
 const normalizeSamples = (rawValue) => {
@@ -282,10 +317,32 @@ const computeBookingScore = (settings) => {
   return clamp(Math.round((avgScore * (1 - SCORE_HITRATE_WEIGHT)) + (hitRate * SCORE_HITRATE_WEIGHT)), 0, 100);
 };
 
-const computeScoreFromSettings = (settings) => {
+const getTargetTempFromSettings = (settings, entities) => {
+  const fixedTarget = toNum(settings?.targetTempValue ?? settings?.targetTemp ?? settings?.targetTemperature);
+  if (fixedTarget !== null) return fixedTarget;
+  const targetEntityId = settings?.targetTempEntityId || settings?.targetEntityId || '';
+  return targetEntityId ? toNum(entities?.[targetEntityId]?.state) : null;
+};
+
+const computeLiveScore = (settings, entities) => {
+  const currentTemp = toNum(entities?.[settings?.tempEntityId]?.state);
+  const targetTemp = getTargetTempFromSettings(settings, entities);
+  const deviationPct = calcDeviationPct(currentTemp, targetTemp);
+  return calcScoreFromDeviationPct(deviationPct);
+};
+
+const pickBestScore = (...scores) => {
+  const validScores = scores.filter((score) => Number.isFinite(Number(score)));
+  if (!validScores.length) return null;
+  const nonZeroScore = validScores.find((score) => Number(score) > 0);
+  return nonZeroScore ?? validScores[0];
+};
+
+const computeScoreFromSettings = (settings, entities) => {
   const healthScore = computeHealthScore(settings);
-  if (healthScore !== null) return healthScore;
-  return computeBookingScore(settings);
+  const bookingScore = computeBookingScore(settings);
+  const liveScore = computeLiveScore(settings, entities);
+  return pickBestScore(healthScore, bookingScore, liveScore);
 };
 
 const getScoreTone = (score) => {
@@ -392,11 +449,16 @@ const buildSourceCards = ({ cardSettings, entities, customNames, tr, getEntityIm
     if (!value || typeof value !== 'object' || Array.isArray(value)) return;
     const cardId = extractCardId(settingsKey);
     const existing = byCardId.get(cardId);
+    const isScopedKey = String(settingsKey || '').includes('::');
+    const existingIsScoped = String(existing?.settingsKey || '').includes('::');
+    const settings = isScopedKey || !existingIsScoped
+      ? { ...(existing?.settings || {}), ...value }
+      : { ...value, ...(existing?.settings || {}) };
     byCardId.set(cardId, {
       cardId,
-      settingsKey: existing?.settingsKey || settingsKey,
-      pageId: existing?.pageId || getSettingsPageId(settingsKey),
-      settings: { ...(existing?.settings || {}), ...value },
+      settingsKey: isScopedKey ? settingsKey : (existing?.settingsKey || settingsKey),
+      pageId: isScopedKey ? getSettingsPageId(settingsKey) : (existing?.pageId || getSettingsPageId(settingsKey)),
+      settings,
     });
   });
 
@@ -432,7 +494,7 @@ const buildSourceCards = ({ cardSettings, entities, customNames, tr, getEntityIm
         zoneEntityId: settings?.zoneEntityId || settings?.locationZoneEntityId || '',
         tempEntityId,
         currentTemp: toNum(tempEntity?.state),
-        healthScore: kind === 'health' || kind === 'booking' ? computeScoreFromSettings(settings) : null,
+        healthScore: kind === 'health' || kind === 'booking' ? computeScoreFromSettings(settings, entities) : null,
         peopleNow: kind === 'sauna' ? (peopleNowEntity?.state ?? '0') : null,
         active: activeEntity ? isActiveState(activeEntity.state, activeStates) : false,
         service: serviceEntity ? isServiceState(serviceEntity.state, serviceStates) : false,
@@ -565,7 +627,7 @@ export default function SaunaMapCard({
         const tempFallback = chooseTemperatureEntity(zone, temperatureEntities);
         const tempSource = saunaSource || healthSource || bookingSource;
         const currentTemp = tempSource?.currentTemp ?? tempFallback?.currentTemp ?? null;
-        const healthScore = healthSource?.healthScore ?? bookingSource?.healthScore ?? null;
+        const healthScore = pickBestScore(healthSource?.healthScore, bookingSource?.healthScore);
         const active = Boolean(saunaSource?.active || healthSource?.active || bookingSource?.active);
         const service = Boolean(saunaSource?.service || healthSource?.service || bookingSource?.service);
         const matchedName = saunaSource?.name || healthSource?.name || bookingSource?.name || tempFallback?.entityId || '';

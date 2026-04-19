@@ -31,6 +31,25 @@ const SCORE_MISS_PENALTY = 10;
 const SCORE_HITRATE_WEIGHT = 0.25;
 const SCORE_TREND_WINDOW = 3;
 const BOOKING_TYPES = ['felles', 'aufguss', 'private', 'service'];
+const GENERIC_BOOKING_STATES = new Set([
+  'ja',
+  'yes',
+  'on',
+  'true',
+  '1',
+  'nei',
+  'no',
+  'off',
+  'false',
+  '0',
+  'active',
+  'aktiv',
+  'booked',
+  'occupied',
+  'heat',
+  'heating',
+]);
+const POSITIVE_SERVICE_STATES = new Set(['ja', 'yes', 'on', 'true', '1', 'service']);
 
 const normalizeBookingType = (value, fallback = 'felles') => {
   const normalized = String(value ?? '')
@@ -51,8 +70,24 @@ const normalizeBookingType = (value, fallback = 'felles') => {
 const getSnapshotBookingType = (entry) => {
   const explicitType = entry?.bookingType ?? entry?.booking_type ?? entry?.type;
   if (String(explicitType ?? '').trim()) return normalizeBookingType(explicitType);
-  if (String(entry?.serviceRaw ?? '').trim()) return normalizeBookingType(entry.serviceRaw);
+  const serviceRaw = String(entry?.serviceRaw ?? '').trim();
+  const serviceType = normalizeBookingStateType(serviceRaw);
+  if (serviceType) return serviceType;
+  if (POSITIVE_SERVICE_STATES.has(normalizeState(serviceRaw))) return 'service';
+  const activeType = normalizeBookingStateType(entry?.activeRaw);
+  if (activeType) return activeType;
   return 'felles';
+};
+
+const normalizeBookingStateType = (value) => {
+  const normalized = String(value ?? '')
+    .trim()
+    .toLowerCase()
+    .normalize('NFKD')
+    .replace(/[\u0300-\u036f]/g, '');
+  if (!normalized || GENERIC_BOOKING_STATES.has(normalized)) return null;
+  const bookingType = normalizeBookingType(normalized, '');
+  return BOOKING_TYPES.includes(bookingType) ? bookingType : null;
 };
 
 const getBookingTypeColor = (type) => {

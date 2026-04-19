@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { BarChart3, Download, Flame } from '../../icons';
+import { Activity, BarChart3, Calendar, Clock, Download, Flame, Shield, Thermometer, TrendingUp } from '../../icons';
 
 const PERIOD_OPTIONS = [14, 7, 3, 1];
 const STOP_TOKENS = new Set([
@@ -30,6 +30,31 @@ const firstDisplayText = (...values) => values.map(cleanDisplayText).find(Boolea
 const SCORE_MISS_PENALTY = 10;
 const SCORE_HITRATE_WEIGHT = 0.25;
 const BOOKING_TYPES = ['felles', 'aufguss', 'private', 'service'];
+const GENERIC_BOOKING_STATES = new Set([
+  'ja',
+  'yes',
+  'on',
+  'true',
+  '1',
+  'nei',
+  'no',
+  'off',
+  'false',
+  '0',
+  'active',
+  'aktiv',
+  'booked',
+  'occupied',
+  'heat',
+  'heating',
+]);
+const POSITIVE_SERVICE_STATES = new Set(['ja', 'yes', 'on', 'true', '1', 'service']);
+
+const normalizeBookingStateValue = (value) => String(value ?? '')
+  .trim()
+  .toLowerCase()
+  .normalize('NFKD')
+  .replace(/[\u0300-\u036f]/g, '');
 
 const normalizeBookingType = (value, fallback = 'felles') => {
   const normalized = String(value ?? '')
@@ -50,8 +75,20 @@ const normalizeBookingType = (value, fallback = 'felles') => {
 const getSnapshotBookingType = (entry) => {
   const explicitType = entry?.bookingType ?? entry?.booking_type ?? entry?.type;
   if (String(explicitType ?? '').trim()) return normalizeBookingType(explicitType);
-  if (String(entry?.serviceRaw ?? '').trim()) return normalizeBookingType(entry.serviceRaw);
+  const serviceRaw = normalizeBookingStateValue(entry?.serviceRaw);
+  const serviceType = normalizeBookingStateType(serviceRaw);
+  if (serviceType) return serviceType;
+  if (POSITIVE_SERVICE_STATES.has(serviceRaw)) return 'service';
+  const activeType = normalizeBookingStateType(entry?.activeRaw);
+  if (activeType) return activeType;
   return 'felles';
+};
+
+const normalizeBookingStateType = (value) => {
+  const normalized = normalizeBookingStateValue(value);
+  if (!normalized || GENERIC_BOOKING_STATES.has(normalized)) return null;
+  const bookingType = normalizeBookingType(normalized, '');
+  return BOOKING_TYPES.includes(bookingType) ? bookingType : null;
 };
 
 const makeTr = (t) => (key, fallback) => {
@@ -207,7 +244,7 @@ const normalizeBookingSamples = (rawValue) => {
   return rawValue
     .map((entry, index) => {
       const timestamp = String(entry?.timestamp || entry?.time || '').trim();
-      const timestampMs = Date.parse(timestamp);
+      const timestampMs = Number.isFinite(Date.parse(timestamp)) ? Date.parse(timestamp) : parseTimestampMs(entry);
       const startTemp = toNum(entry?.startTemp ?? entry?.temperature ?? entry?.temp);
       if (!Number.isFinite(timestampMs) || startTemp === null) return null;
       const targetTemp = toNum(entry?.targetTemp);
@@ -311,11 +348,16 @@ const buildSourceCards = ({ cardSettings, entities, customNames, tr }) => {
     if (!value || typeof value !== 'object' || Array.isArray(value)) return;
     const cardId = extractCardId(settingsKey);
     const existing = byCardId.get(cardId);
+    const isScopedKey = String(settingsKey || '').includes('::');
+    const existingIsScoped = String(existing?.settingsKey || '').includes('::');
+    const settings = isScopedKey || !existingIsScoped
+      ? { ...(existing?.settings || {}), ...value }
+      : { ...value, ...(existing?.settings || {}) };
     byCardId.set(cardId, {
       cardId,
-      settingsKey: existing?.settingsKey || settingsKey,
-      pageId: existing?.pageId || getSettingsPageId(settingsKey),
-      settings: { ...(existing?.settings || {}), ...value },
+      settingsKey: isScopedKey ? settingsKey : (existing?.settingsKey || settingsKey),
+      pageId: isScopedKey ? getSettingsPageId(settingsKey) : (existing?.pageId || getSettingsPageId(settingsKey)),
+      settings,
     });
   });
 
@@ -578,6 +620,10 @@ const buildSummary = (records, periodDays, tr) => {
     .filter((record) => Number.isFinite(Number(record.scoreDelta)) && record.scoreDelta < 0)
     .sort((a, b) => a.scoreDelta - b.scoreDelta)[0] || null;
   const maxBookingHours = records.reduce((max, record) => Math.max(max, record.bookingHours), 0);
+  const bookingTypeTotals = BOOKING_TYPES.reduce((acc, type) => {
+    acc[type] = records.reduce((sum, record) => sum + (record.bookingTypeCounts?.[type] || 0), 0);
+    return acc;
+  }, {});
   const totalHealthSamples = allHealthTargetSamples.length;
   const totalScoreSamples = allScoreSamples.length;
   const totalBookingSamples = records.reduce((sum, record) => sum + record.bookingSamples.length, 0);
@@ -624,6 +670,7 @@ const buildSummary = (records, periodDays, tr) => {
     improving,
     declining,
     maxBookingHours,
+    bookingTypeTotals,
     totalHealthSamples,
     totalScoreSamples,
     totalBookingSamples,
@@ -794,6 +841,19 @@ const createPdfBlob = ({ report, title, subtitle, tr }) => {
     ops.push(`${color(stroke)} RG 0.75 w ${x1.toFixed(2)} ${y1.toFixed(2)} m ${x2.toFixed(2)} ${y2.toFixed(2)} l S`);
   };
 
+  const circle = (cx, cy, r, stroke = palette.borderSoft, fill = null, width = 0.75) => {
+    const k = 0.5522847498;
+    const path = [
+      `${(cx + r).toFixed(2)} ${cy.toFixed(2)} m`,
+      `${(cx + r).toFixed(2)} ${(cy + (k * r)).toFixed(2)} ${(cx + (k * r)).toFixed(2)} ${(cy + r).toFixed(2)} ${cx.toFixed(2)} ${(cy + r).toFixed(2)} c`,
+      `${(cx - (k * r)).toFixed(2)} ${(cy + r).toFixed(2)} ${(cx - r).toFixed(2)} ${(cy + (k * r)).toFixed(2)} ${(cx - r).toFixed(2)} ${cy.toFixed(2)} c`,
+      `${(cx - r).toFixed(2)} ${(cy - (k * r)).toFixed(2)} ${(cx - (k * r)).toFixed(2)} ${(cy - r).toFixed(2)} ${cx.toFixed(2)} ${(cy - r).toFixed(2)} c`,
+      `${(cx + (k * r)).toFixed(2)} ${(cy - r).toFixed(2)} ${(cx + r).toFixed(2)} ${(cy - (k * r)).toFixed(2)} ${(cx + r).toFixed(2)} ${cy.toFixed(2)} c`,
+    ].join(' ');
+    const paint = fill ? (stroke ? 'B' : 'f') : 'S';
+    ops.push(`${fill ? `${color(fill)} rg ` : ''}${stroke ? `${color(stroke)} RG ${width} w ` : ''}${path} h ${paint}`);
+  };
+
   const strokeRect = (x, yy, w, h, stroke = palette.border) => {
     line(x, yy, x + w, yy, stroke);
     line(x + w, yy, x + w, yy + h, stroke);
@@ -867,8 +927,36 @@ const createPdfBlob = ({ report, title, subtitle, tr }) => {
     rect(px(13.1), py(20), 1.8 * sx, 1.8 * sx, palette.page);
   };
 
-  const metricBox = ({ label, value, x, yy, w, tone = palette.text }) => {
+  const metricIcon = (icon, x, yy, tone = palette.accent) => {
+    roundRect(x, yy, 18, 18, 6, '#0f2031', palette.borderSoft);
+    if (icon === 'score') {
+      rect(x + 4, yy + 4, 2.2, 6, tone);
+      rect(x + 8, yy + 4, 2.2, 9, tone);
+      rect(x + 12, yy + 4, 2.2, 4, tone);
+      return;
+    }
+    if (icon === 'booking') {
+      strokeRect(x + 4, yy + 4, 10, 10, tone);
+      line(x + 4, yy + 10.5, x + 14, yy + 10.5, tone);
+      line(x + 6.5, yy + 14.5, x + 6.5, yy + 12.5, tone);
+      line(x + 11.5, yy + 14.5, x + 11.5, yy + 12.5, tone);
+      return;
+    }
+    if (icon === 'sessions') {
+      circle(x + 9, yy + 9, 5.2, tone);
+      line(x + 9, yy + 9, x + 9, yy + 12.5, tone);
+      line(x + 9, yy + 9, x + 12, yy + 7.5, tone);
+      return;
+    }
+    circle(x + 9, yy + 9, 5.8, tone);
+    circle(x + 9, yy + 9, 2.6, tone);
+    line(x + 9, yy + 2.5, x + 9, yy + 15.5, tone);
+    line(x + 2.5, yy + 9, x + 15.5, yy + 9, tone);
+  };
+
+  const metricBox = ({ label, value, x, yy, w, tone = palette.text, icon = null }) => {
     panel(x, yy, w, 56, palette.panelAlt, palette.borderSoft);
+    if (icon) metricIcon(icon, x + w - 28, yy + 29, tone);
     text(label, x + 10, yy + 36, 7, 'F2', palette.muted);
     const valueText = String(value ?? '');
     const valueLines = wrapText(valueText, w - 20, valueText.length > 12 ? 10 : 17).slice(0, 2);
@@ -942,7 +1030,7 @@ const createPdfBlob = ({ report, title, subtitle, tr }) => {
     y = chartY - 16;
   };
 
-  const stackedBarChart = ({ title: chartTitle, entries, segments, labelAccessor, maxValue = 1, height = 102, scaleLabel = '' }) => {
+  const stackedBarChart = ({ title: chartTitle, entries, segments, labelAccessor, maxValue = 1, height = 102, scaleLabel = '', valueFormatter = (value) => `${formatNumber(value)}h` }) => {
     const containerH = height + 72;
     ensureSpace(containerH + 12);
     const chartX = margin;
@@ -951,14 +1039,16 @@ const createPdfBlob = ({ report, title, subtitle, tr }) => {
     panel(chartX, chartY, chartW, containerH, palette.panelAlt, palette.border);
     text(chartTitle, chartX + 14, y - 22, 10, 'F2', palette.text);
     if (scaleLabel) text(scaleLabel, chartX + 14, y - 36, 7.5, 'F1', palette.subtle);
+    const safeEntries = Array.isArray(entries) ? entries : [];
     let legendX = chartX + 14;
     segments.forEach((segment) => {
+      const segmentTotal = safeEntries.reduce((sum, entry) => sum + Math.max(0, Number(segment.valueAccessor(entry)) || 0), 0);
       rect(legendX, y - 53, 8, 8, segment.color);
-      text(segment.label, legendX + 12, y - 52, 7, 'F1', palette.muted);
-      legendX += Math.max(64, segment.label.length * 4.6 + 22);
+      const legendLabel = `${segment.label} ${valueFormatter(segmentTotal)}`;
+      text(legendLabel, legendX + 12, y - 52, 7, 'F1', palette.muted);
+      legendX += Math.max(76, legendLabel.length * 4.35 + 22);
     });
 
-    const safeEntries = Array.isArray(entries) ? entries : [];
     const hasValues = safeEntries.some((entry) => segments.some((segment) => Number(segment.valueAccessor(entry)) > 0));
     const plotX = chartX + 34;
     const plotY = chartY + 34;
@@ -988,6 +1078,9 @@ const createPdfBlob = ({ report, title, subtitle, tr }) => {
         if (!value) return;
         const segmentH = Math.max(2, (value / Math.max(1, maxValue)) * (plotH - 38));
         rect(x, stackedY, barW, segmentH, segment.color);
+        if (safeEntries.length <= 14 && segmentH >= 10 && barW >= 12) {
+          text(formatNumber(value), x + 2, stackedY + Math.max(4, (segmentH / 2) - 2), 5.5, 'F2', palette.page);
+        }
         stackedY += segmentH;
       });
       if (safeEntries.length <= 14) {
@@ -1056,9 +1149,11 @@ const createPdfBlob = ({ report, title, subtitle, tr }) => {
 
       let legendX = margin + 14;
       segments.forEach((segment) => {
+        const segmentTotal = safeEntries.reduce((sum, entry) => sum + Math.max(0, Number(segment.valueAccessor(entry)) || 0), 0);
         rect(legendX, y - 40, 8, 8, segment.color);
-        text(segment.label, legendX + 12, y - 39, 7, 'F1', palette.muted);
-        legendX += Math.max(62, segment.label.length * 4.5 + 20);
+        const legendLabel = `${segment.label} ${valueFormatter(segmentTotal)}`;
+        text(legendLabel, legendX + 12, y - 39, 7, 'F1', palette.muted);
+        legendX += Math.max(74, legendLabel.length * 4.35 + 20);
       });
 
       rows.forEach((entry, index) => {
@@ -1073,6 +1168,9 @@ const createPdfBlob = ({ report, title, subtitle, tr }) => {
           if (!value) return;
           const segmentW = Math.max(2, (value / Math.max(1, maxValue)) * barW);
           rect(cursor, rowY - 2, segmentW, 8, segment.color);
+          if (segmentW >= 24) {
+            text(`${formatNumber(value)}h`, cursor + 3, rowY, 6, 'F2', palette.page);
+          }
           cursor += segmentW;
         });
 
@@ -1123,13 +1221,13 @@ const createPdfBlob = ({ report, title, subtitle, tr }) => {
   const metricY = y - 56;
   const metricWidth = (contentWidth - 18) / 4;
   [
-    [tr('reports.avgScore', 'Average score'), report.totalScoreSamples > 0 ? formatScore(report.avgScore) : '--', report.totalScoreSamples > 0 ? getScoreHex(report.avgScore) : palette.subtle],
-    [tr('reports.bookingHours', 'Booking hours'), formatNumber(report.bookingHours), palette.text],
-    [tr('reports.estimatedSessions', 'Estimated sessions'), formatNumber(report.sessions), palette.text],
-    [tr('reports.hitRate', 'Hit rate'), report.hitRate !== null ? `${report.hitRate}%` : '--', palette.accent],
-  ].forEach(([label, value, tone], index) => {
+    [tr('reports.avgScore', 'Average score'), report.totalScoreSamples > 0 ? formatScore(report.avgScore) : '--', report.totalScoreSamples > 0 ? getScoreHex(report.avgScore) : palette.subtle, 'score'],
+    [tr('reports.bookingHours', 'Booking hours'), formatNumber(report.bookingHours), palette.text, 'booking'],
+    [tr('reports.estimatedSessions', 'Estimated sessions'), formatNumber(report.sessions), palette.text, 'sessions'],
+    [tr('reports.hitRate', 'Hit rate'), report.hitRate !== null ? `${report.hitRate}%` : '--', palette.accent, 'target'],
+  ].forEach(([label, value, tone, icon], index) => {
     const x = margin + (index * (metricWidth + 6));
-    metricBox({ label, value, x, yy: metricY, w: metricWidth, tone });
+    metricBox({ label, value, x, yy: metricY, w: metricWidth, tone, icon });
   });
   y = metricY - 26;
 
@@ -1286,25 +1384,6 @@ const createPdfBlob = ({ report, title, subtitle, tr }) => {
     });
   }
 
-  sectionTitle(tr('reports.recentBookings', 'Recent booking samples'));
-  const recentRows = report.records
-    .flatMap((record) => record.bookingSamples.slice(-4).map((entry) => ({ record, entry })))
-    .sort((a, b) => b.entry.timestampMs - a.entry.timestampMs)
-    .slice(0, 24);
-  if (!recentRows.length) {
-    paragraph(tr('reports.noBookingData', 'No booking data in selected period'), margin, contentWidth, 10);
-  } else {
-    recentRows.forEach(({ record, entry }) => {
-      ensureSpace(24);
-      rect(margin, y - 15, contentWidth, 19, palette.panelAlt);
-      strokeRect(margin, y - 15, contentWidth, 19, palette.borderSoft);
-      rect(margin, y - 15, 4, 19, getBookingTypeHex(entry.bookingType));
-      text(`${formatDateTime(entry.timestampMs)} / ${getBookingTypeLabel(entry.bookingType, tr)} / ${truncateText(record.name, 22)}`, margin + 10, y - 7, 8, 'F2', palette.text);
-      text(`${formatTemp(entry.startTemp)} / ${formatTemp(entry.targetTemp)} / ${formatPct(entry.deviationPct)}`, margin + 328, y - 7, 8, 'F1', palette.muted);
-      y -= 22;
-    });
-  }
-
   if (ops.length) finishPage();
 
   const objects = [];
@@ -1352,9 +1431,12 @@ const byteLength = (value) => {
   return String(value || '').length;
 };
 
-const MetricTile = ({ label, value, subLabel, tone = '' }) => (
+const MetricTile = ({ label, value, subLabel, tone = '', Icon = null }) => (
   <div className="min-h-[76px] rounded-lg border border-[var(--glass-border)] bg-[var(--glass-bg-hover)] px-3 py-3">
-    <div className="text-[10px] uppercase tracking-widest font-bold text-[var(--text-secondary)]">{label}</div>
+    <div className="flex items-center justify-between gap-2">
+      <div className="min-w-0 text-[10px] uppercase tracking-widest font-bold text-[var(--text-secondary)] truncate">{label}</div>
+      {Icon && <Icon className="w-3.5 h-3.5 shrink-0 text-[var(--text-muted)]" />}
+    </div>
     <div className={`mt-1 text-2xl font-semibold tabular-nums ${tone || 'text-[var(--text-primary)]'}`}>{value}</div>
     {subLabel && <div className="mt-1 text-[10px] text-[var(--text-muted)] truncate">{subLabel}</div>}
   </div>
@@ -1540,15 +1622,24 @@ export default function SaunaReportsCard({
 
                 <div className="grid grid-cols-3 gap-2 w-full xl:w-[390px] shrink-0">
                   <div className="rounded-lg border border-[var(--glass-border)] bg-[var(--glass-bg)] px-3 py-3">
-                    <div className="text-[9px] uppercase tracking-widest text-[var(--text-muted)]">{tr('reports.avgScore', 'Average score')}</div>
+                    <div className="flex items-center justify-between gap-2 text-[9px] uppercase tracking-widest text-[var(--text-muted)]">
+                      <span className="truncate">{tr('reports.avgScore', 'Average score')}</span>
+                      <Shield className="w-3.5 h-3.5 shrink-0" />
+                    </div>
                     <div className={`mt-1 text-3xl font-semibold tabular-nums ${scoreTone}`}>{scoreValue}</div>
                   </div>
                   <div className="rounded-lg border border-[var(--glass-border)] bg-[var(--glass-bg)] px-3 py-3">
-                    <div className="text-[9px] uppercase tracking-widest text-[var(--text-muted)]">{tr('reports.bookingHours', 'Booking hours')}</div>
+                    <div className="flex items-center justify-between gap-2 text-[9px] uppercase tracking-widest text-[var(--text-muted)]">
+                      <span className="truncate">{tr('reports.bookingHours', 'Booking hours')}</span>
+                      <Calendar className="w-3.5 h-3.5 shrink-0" />
+                    </div>
                     <div className="mt-1 text-3xl font-semibold tabular-nums text-[var(--text-primary)]">{formatNumber(report.bookingHours)}</div>
                   </div>
                   <div className="rounded-lg border border-[var(--glass-border)] bg-[var(--glass-bg)] px-3 py-3">
-                    <div className="text-[9px] uppercase tracking-widest text-[var(--text-muted)]">{tr('reports.trend', 'Trend')}</div>
+                    <div className="flex items-center justify-between gap-2 text-[9px] uppercase tracking-widest text-[var(--text-muted)]">
+                      <span className="truncate">{tr('reports.trend', 'Trend')}</span>
+                      <TrendingUp className="w-3.5 h-3.5 shrink-0" />
+                    </div>
                     <div className={`mt-1 text-3xl font-semibold tabular-nums ${trendTone}`}>{getDeltaText(report.avgScoreDelta)}</div>
                   </div>
                 </div>
@@ -1556,10 +1647,10 @@ export default function SaunaReportsCard({
             </div>
 
             <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-              <MetricTile label={tr('reports.selectedSaunas', 'selected saunas')} value={formatNumber(activeRecords.length)} />
-              <MetricTile label={tr('reports.scoreBasis', 'Score basis')} value={formatNumber(report.totalScoreSamples)} subLabel={report.totalHealthSamples > 0 ? tr('reports.healthDataReady', 'Health data ready') : tr('reports.scoreFromBookings', 'score points from bookings')} />
-              <MetricTile label={tr('reports.bookingSamples', 'Booking samples')} value={formatNumber(report.totalBookingSamples)} />
-              <MetricTile label={tr('reports.hitRate', 'Hit rate')} value={report.hitRate !== null ? `${report.hitRate}%` : '--'} />
+              <MetricTile Icon={Activity} label={tr('reports.selectedSaunas', 'selected saunas')} value={formatNumber(activeRecords.length)} />
+              <MetricTile Icon={Shield} label={tr('reports.scoreBasis', 'Score basis')} value={formatNumber(report.totalScoreSamples)} subLabel={report.totalHealthSamples > 0 ? tr('reports.healthDataReady', 'Health data ready') : tr('reports.scoreFromBookings', 'score points from bookings')} />
+              <MetricTile Icon={Clock} label={tr('reports.bookingSamples', 'Booking samples')} value={formatNumber(report.totalBookingSamples)} />
+              <MetricTile Icon={Thermometer} label={tr('reports.hitRate', 'Hit rate')} value={report.hitRate !== null ? `${report.hitRate}%` : '--'} />
             </div>
           </div>
         )}
