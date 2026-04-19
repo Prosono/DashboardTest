@@ -1,5 +1,6 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Activity, BarChart3, Calendar, Clock, Download, Flame, Shield, Thermometer, TrendingUp } from '../../icons';
+import { getCalendarEvents } from '../../services/haClient';
 
 const PERIOD_OPTIONS = [14, 7, 3, 1];
 const STOP_TOKENS = new Set([
@@ -17,6 +18,12 @@ const STOP_TOKENS = new Set([
   'kort',
   'card',
 ]);
+const BOOKING_TYPE_PATTERNS = {
+  service: ['service', 'vedlikehold', 'maintenance'],
+  aufguss: ['aufguss', 'aufgus', 'augfuss', 'auygfuss', 'badstugus', 'badstu gus', 'saunagus', 'sauna gus'],
+  private: ['privat', 'private', 'lukket'],
+  felles: ['felles', 'drop-in', 'drop in', 'public', 'apen', 'open'],
+};
 
 const toNum = (value) => {
   const parsed = Number.parseFloat(value);
@@ -123,6 +130,98 @@ const getSettingsPageId = (settingsKey) => {
   return parts.length > 1 ? parts[0] : '';
 };
 
+const getDateValue = (value) => {
+  if (!value) return null;
+  if (typeof value === 'string' || typeof value === 'number') return value;
+  return value.dateTime || value.date_time || value.date || null;
+};
+
+const parseEventTimestampMs = (value) => {
+  const raw = getDateValue(value);
+  const parsed = Date.parse(String(raw || '').trim());
+  return Number.isFinite(parsed) ? parsed : null;
+};
+
+const getCalendarBookingType = (event) => {
+  const normalizeText = (value) => String(value || '')
+    .toLowerCase()
+    .normalize('NFKD')
+    .replace(/[\u0300-\u036f]/g, '');
+
+  const summary = normalizeText(event?.summary || event?.title || event?.name);
+  const description = normalizeText(event?.description);
+  const location = normalizeText(event?.location);
+  const category = normalizeText(event?.category || event?.categories || event?.type || event?.bookingType || event?.booking_type);
+  const haystack = `${summary} ${description} ${location} ${category}`.trim();
+
+  const hasServiceFlagTrue = /\bservice\s*[:=]\s*(ja|yes|true|1)\b/.test(haystack);
+  const hasServiceFlagFalse = /\bservice\s*[:=]\s*(nei|no|false|0)\b/.test(haystack);
+  const hasServiceInTitle = BOOKING_TYPE_PATTERNS.service.some((pattern) =>
+    summary.includes(pattern) || location.includes(pattern),
+  );
+
+  if (BOOKING_TYPE_PATTERNS.aufguss.some((pattern) => haystack.includes(pattern))) return 'aufguss';
+  if (hasServiceFlagTrue || (!hasServiceFlagFalse && hasServiceInTitle)) return 'service';
+  if (BOOKING_TYPE_PATTERNS.private.some((pattern) => haystack.includes(pattern))) return 'private';
+  if (BOOKING_TYPE_PATTERNS.felles.some((pattern) => haystack.includes(pattern))) return 'felles';
+  return 'felles';
+};
+
+const normalizeCalendarEventsResult = (result) => {
+  const rows = [];
+  const addEvents = (calendarEntityId, events) => {
+    if (!Array.isArray(events)) return;
+    events.forEach((event, index) => {
+      const startMs = parseEventTimestampMs(event?.start);
+      const endMs = parseEventTimestampMs(event?.end);
+      if (!Number.isFinite(startMs)) return;
+      const durationHours = Number.isFinite(endMs) && endMs > startMs
+        ? Math.max(0.25, roundToOne((endMs - startMs) / (60 * 60 * 1000)))
+        : 1;
+      rows.push({
+        id: String(event?.uid || event?.id || `${calendarEntityId}_${startMs}_${index}`),
+        calendarEntityId,
+        startMs,
+        endMs: Number.isFinite(endMs) ? endMs : startMs + (durationHours * 60 * 60 * 1000),
+        durationHours,
+        bookingType: getCalendarBookingType(event),
+        summary: event?.summary || event?.title || event?.name || '',
+        description: event?.description || '',
+        location: event?.location || '',
+        matchTexts: [
+          event?.summary,
+          event?.title,
+          event?.name,
+          event?.description,
+          event?.location,
+          event?.category,
+          event?.categories,
+          event?.type,
+          event?.bookingType,
+          event?.booking_type,
+        ].filter(Boolean),
+      });
+    });
+  };
+
+  const walk = (value, key = '') => {
+    if (!value) return;
+    if (Array.isArray(value)) {
+      addEvents(key, value);
+      return;
+    }
+    if (typeof value !== 'object') return;
+    if (Array.isArray(value.events)) {
+      addEvents(key, value.events);
+      return;
+    }
+    Object.entries(value).forEach(([childKey, childValue]) => walk(childValue, childKey));
+  };
+
+  walk(result);
+  return rows.sort((a, b) => a.startMs - b.startMs);
+};
+
 const getEntityName = (entities, entityId) => {
   if (!entityId) return '';
   return entities?.[entityId]?.attributes?.friendly_name || entityId;
@@ -142,12 +241,15 @@ const getCardName = ({ cardId, settings, entities, customNames, fallback }) => {
 };
 
 const getSourceKind = (cardId, settings) => {
-  if (settings?.type === 'sauna') return 'sauna';
-  if (settings?.type === 'sauna_health_score') return 'health';
-  if (settings?.type === 'sauna_booking_temp') return 'booking';
+  const type = String(settings?.type || '').toLowerCase();
+  if (type === 'sauna') return 'sauna';
+  if (type === 'sauna_health_score' || (type.includes('sauna') && type.includes('health'))) return 'health';
+  if (type === 'sauna_booking_temp' || (type.includes('sauna') && type.includes('booking'))) return 'booking';
+  if (type === 'calendar_booking') return 'calendar';
   if (cardId.startsWith('sauna_card_')) return 'sauna';
-  if (cardId.startsWith('sauna_health_score_card_')) return 'health';
-  if (cardId.startsWith('sauna_booking_temp_card_')) return 'booking';
+  if (cardId.startsWith('sauna_health_score_card_') || cardId.includes('sauna_health')) return 'health';
+  if (cardId.startsWith('sauna_booking_temp_card_') || cardId.includes('sauna_booking')) return 'booking';
+  if (cardId.startsWith('calendar_booking_card_')) return 'calendar';
   return null;
 };
 
@@ -368,6 +470,7 @@ const buildSourceCards = ({ cardSettings, entities, customNames, tr }) => {
       const tempEntityId = settings?.tempEntityId || '';
       const peopleNowEntityId = settings?.peopleNowEntityId || '';
       const activeEntityId = settings?.saunaActiveBooleanEntityId || settings?.bookingActiveEntityId || '';
+      const calendarEntityId = settings?.calendarEntityId || '';
       const name = getCardName({
         cardId,
         settings,
@@ -384,6 +487,7 @@ const buildSourceCards = ({ cardSettings, entities, customNames, tr }) => {
         name,
         zoneEntityId: settings?.zoneEntityId || settings?.locationZoneEntityId || '',
         tempEntityId,
+        calendarEntityId,
         currentTemp: toNum(entities?.[tempEntityId]?.state),
         peopleNow: peopleNowEntityId ? entities?.[peopleNowEntityId]?.state : null,
         healthSamples: normalizeHealthSamples(settings?.healthSnapshots),
@@ -395,6 +499,7 @@ const buildSourceCards = ({ cardSettings, entities, customNames, tr }) => {
           settings?.heading,
           settings?.name,
           getEntityName(entities, tempEntityId),
+          getEntityName(entities, calendarEntityId),
           getEntityName(entities, activeEntityId),
           getEntityName(entities, peopleNowEntityId),
         ].filter(Boolean),
@@ -408,21 +513,26 @@ const buildSaunaRecords = ({ cardSettings, entities, customNames, tr }) => {
   const saunaSources = sources.filter((source) => source.kind === 'sauna');
   const healthSources = sources.filter((source) => source.kind === 'health');
   const bookingSources = sources.filter((source) => source.kind === 'booking');
+  const calendarSources = sources.filter((source) => source.kind === 'calendar' && source.calendarEntityId);
   const usedHealth = new Set();
   const usedBooking = new Set();
+  const usedCalendar = new Set();
   const records = [];
 
   saunaSources.forEach((saunaSource) => {
     const healthSource = chooseBestSource(saunaSource, healthSources, usedHealth);
     const bookingSource = chooseBestSource(saunaSource, bookingSources, usedBooking);
+    const calendarSource = chooseBestSource(saunaSource, calendarSources, usedCalendar);
     if (healthSource) usedHealth.add(healthSource.cardId);
     if (bookingSource) usedBooking.add(bookingSource.cardId);
+    if (calendarSource) usedCalendar.add(calendarSource.cardId);
     records.push({
       id: saunaSource.cardId,
       name: saunaSource.name,
       saunaSource,
       healthSource,
       bookingSource,
+      calendarSource,
       currentTemp: saunaSource.currentTemp ?? healthSource?.currentTemp ?? bookingSource?.currentTemp ?? null,
       peopleNow: saunaSource.peopleNow,
       targetToleranceC: healthSource?.targetToleranceC ?? bookingSource?.targetToleranceC ?? 0,
@@ -432,13 +542,16 @@ const buildSaunaRecords = ({ cardSettings, entities, customNames, tr }) => {
   healthSources.forEach((healthSource) => {
     if (usedHealth.has(healthSource.cardId)) return;
     const bookingSource = chooseBestSource(healthSource, bookingSources, usedBooking);
+    const calendarSource = chooseBestSource(healthSource, calendarSources, usedCalendar);
     if (bookingSource) usedBooking.add(bookingSource.cardId);
+    if (calendarSource) usedCalendar.add(calendarSource.cardId);
     records.push({
       id: healthSource.cardId,
       name: healthSource.name,
       saunaSource: null,
       healthSource,
       bookingSource,
+      calendarSource,
       currentTemp: healthSource.currentTemp ?? bookingSource?.currentTemp ?? null,
       peopleNow: null,
       targetToleranceC: healthSource.targetToleranceC ?? bookingSource?.targetToleranceC ?? 0,
@@ -447,12 +560,15 @@ const buildSaunaRecords = ({ cardSettings, entities, customNames, tr }) => {
 
   bookingSources.forEach((bookingSource) => {
     if (usedBooking.has(bookingSource.cardId)) return;
+    const calendarSource = chooseBestSource(bookingSource, calendarSources, usedCalendar);
+    if (calendarSource) usedCalendar.add(calendarSource.cardId);
     records.push({
       id: bookingSource.cardId,
       name: bookingSource.name,
       saunaSource: null,
       healthSource: null,
       bookingSource,
+      calendarSource,
       currentTemp: bookingSource.currentTemp ?? null,
       peopleNow: null,
       targetToleranceC: bookingSource.targetToleranceC ?? 0,
@@ -467,6 +583,65 @@ const buildSaunaRecords = ({ cardSettings, entities, customNames, tr }) => {
     }));
 };
 
+const collectCalendarEntityIds = (cardSettings, records) => {
+  const ids = new Set(
+    records
+      .map((record) => record.calendarSource?.calendarEntityId)
+      .filter(Boolean)
+  );
+
+  Object.entries(cardSettings || {}).forEach(([settingsKey, value]) => {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return;
+    const cardId = extractCardId(settingsKey);
+    if (getSourceKind(cardId, value) !== 'calendar') return;
+    const calendarEntityIds = [
+      value.calendarEntityId,
+      ...(Array.isArray(value.calendars) ? value.calendars : []),
+    ].filter(Boolean);
+    calendarEntityIds.forEach((entityId) => ids.add(entityId));
+  });
+
+  return Array.from(ids);
+};
+
+const getRecordMatchTexts = (record) => [
+  record?.id,
+  record?.name,
+  ...(record?.saunaSource?.matchTexts || []),
+  ...(record?.healthSource?.matchTexts || []),
+  ...(record?.bookingSource?.matchTexts || []),
+  ...(record?.calendarSource?.matchTexts || []),
+].filter(Boolean);
+
+const assignCalendarEventsToRecords = (records, calendarEvents) => {
+  const assigned = new Map(records.map((record) => [record.id, []]));
+  if (!Array.isArray(calendarEvents) || !calendarEvents.length || !records.length) return assigned;
+
+  calendarEvents.forEach((event) => {
+    let bestTextMatch = null;
+    records.forEach((record) => {
+      const score = buildTextScore(getRecordMatchTexts(record), event.matchTexts || []);
+      if (score <= 0) return;
+      if (!bestTextMatch || score > bestTextMatch.score) bestTextMatch = { record, score };
+    });
+    if (bestTextMatch?.score >= 3) {
+      assigned.get(bestTextMatch.record.id)?.push(event);
+      return;
+    }
+
+    let exactCalendarMatch = null;
+    records.forEach((record) => {
+      if (record.calendarSource?.calendarEntityId !== event.calendarEntityId) return;
+      if (!exactCalendarMatch) exactCalendarMatch = record;
+    });
+    if (exactCalendarMatch) {
+      assigned.get(exactCalendarMatch.id)?.push(event);
+    }
+  });
+
+  return assigned;
+};
+
 const countSessions = (samples) => {
   const sorted = samples.slice().sort((a, b) => a.timestampMs - b.timestampMs);
   if (!sorted.length) return 0;
@@ -479,8 +654,9 @@ const countSessions = (samples) => {
   return sessions;
 };
 
-const analyzeRecord = (record, periodDays) => {
+const analyzeRecord = (record, periodDays, calendarEvents = []) => {
   const windowStart = Date.now() - (periodDays * 24 * 60 * 60 * 1000);
+  const windowEnd = Date.now();
   const healthSamples = (record.healthSource?.healthSamples || []).filter((entry) => entry.timestampMs >= windowStart);
   const healthTargetSamples = healthSamples.filter((entry) => entry.targetTemp !== null && entry.deviationPct !== null);
   const avgDeviationPct = healthTargetSamples.length
@@ -504,12 +680,22 @@ const analyzeRecord = (record, periodDays) => {
   const tempValues = bookingSamples.map((entry) => toNum(entry.startTemp)).filter((value) => value !== null);
   const avgBookingTemp = tempValues.length ? roundToOne(tempValues.reduce((sum, value) => sum + value, 0) / tempValues.length) : null;
   const latestBooking = bookingSamples.length ? bookingSamples[bookingSamples.length - 1] : null;
-  const bookingHours = bookingSamples.length;
-  const sessions = countSessions(bookingSamples);
-  const bookingTypeCounts = BOOKING_TYPES.reduce((acc, type) => {
+  const calendarBookings = (Array.isArray(calendarEvents) ? calendarEvents : [])
+    .filter((entry) => entry.startMs >= windowStart && entry.startMs <= windowEnd);
+  const snapshotTypeCounts = BOOKING_TYPES.reduce((acc, type) => {
     acc[type] = bookingSamples.filter((entry) => normalizeBookingType(entry.bookingType) === type).length;
     return acc;
   }, {});
+  const calendarTypeCounts = BOOKING_TYPES.reduce((acc, type) => {
+    acc[type] = roundToOne(calendarBookings
+      .filter((entry) => normalizeBookingType(entry.bookingType) === type)
+      .reduce((sum, entry) => sum + (Number(entry.durationHours) || 1), 0));
+    return acc;
+  }, {});
+  const hasCalendarBookings = calendarBookings.length > 0;
+  const bookingTypeCounts = hasCalendarBookings ? calendarTypeCounts : snapshotTypeCounts;
+  const bookingHours = roundToOne(BOOKING_TYPES.reduce((sum, type) => sum + (Number(bookingTypeCounts[type]) || 0), 0));
+  const sessions = hasCalendarBookings ? calendarBookings.length : countSessions(bookingSamples);
   const midpoint = windowStart + ((Date.now() - windowStart) / 2);
   const healthScore = computeScoreFromTargetSamples(healthSamples);
   const bookingScore = computeBookingScoreFromSamples(bookingScoreSamples, record.targetToleranceC);
@@ -533,6 +719,7 @@ const analyzeRecord = (record, periodDays) => {
     bookingScore,
     avgDeviationPct,
     bookingSamples,
+    calendarBookings,
     scoreBookingSamples,
     bookingTargetSamples,
     bookingTargetSamplesWithPct,
@@ -564,20 +751,30 @@ const buildDailyTrend = (records, periodDays) => {
     const bookingSamples = records.flatMap((record) => record.bookingTargetSamplesWithPct
       .filter((entry) => entry.timestampMs >= start && entry.timestampMs < end)
       .map((entry) => ({ ...entry, targetToleranceC: record.targetToleranceC })));
-    const bookingDaySamples = records.flatMap((record) => record.bookingSamples
-      .filter((entry) => entry.timestampMs >= start && entry.timestampMs < end));
+    const bookingDaySamples = records.flatMap((record) => {
+      const calendarBookings = Array.isArray(record.calendarBookings) ? record.calendarBookings : [];
+      if (calendarBookings.length) {
+        return calendarBookings
+          .filter((entry) => entry.startMs >= start && entry.startMs < end)
+          .map((entry) => ({ ...entry, bookingHours: Number(entry.durationHours) || 1 }));
+      }
+      return record.bookingSamples
+        .filter((entry) => entry.timestampMs >= start && entry.timestampMs < end)
+        .map((entry) => ({ ...entry, bookingHours: 1 }));
+    });
     const bookingBreakdown = bookingDaySamples.reduce((acc, entry) => {
       const type = normalizeBookingType(entry.bookingType);
-      acc[type] = (acc[type] || 0) + 1;
+      acc[type] = roundToOne((acc[type] || 0) + (Number(entry.bookingHours) || 1));
       return acc;
     }, { felles: 0, aufguss: 0, private: 0, service: 0 });
+    const bookingHours = roundToOne(BOOKING_TYPES.reduce((sum, type) => sum + (bookingBreakdown[type] || 0), 0));
     days.push({
       key: day.toISOString().slice(0, 10),
       label: day.toLocaleDateString([], { day: '2-digit', month: '2-digit' }),
       score: healthSamples.length
         ? computeScoreFromTargetSamples(healthSamples)
         : computeBookingScoreFromSamples(bookingSamples),
-      bookingHours: bookingDaySamples.length,
+      bookingHours,
       bookingFelles: bookingBreakdown.felles,
       bookingAufguss: bookingBreakdown.aufguss,
       bookingPrivate: bookingBreakdown.private,
@@ -626,7 +823,9 @@ const buildSummary = (records, periodDays, tr) => {
   }, {});
   const totalHealthSamples = allHealthTargetSamples.length;
   const totalScoreSamples = allScoreSamples.length;
-  const totalBookingSamples = records.reduce((sum, record) => sum + record.bookingSamples.length, 0);
+  const totalBookingSamples = records.reduce((sum, record) => (
+    sum + (record.calendarBookings?.length || record.bookingSamples.length)
+  ), 0);
 
   const textBlocks = [
     {
@@ -1445,6 +1644,7 @@ const MetricTile = ({ label, value, subLabel, tone = '', Icon = null }) => (
 export default function SaunaReportsCard({
   cardId,
   settings,
+  conn,
   cardSettings,
   entities,
   dragProps,
@@ -1459,6 +1659,7 @@ export default function SaunaReportsCard({
     PERIOD_OPTIONS.includes(Number(settings?.periodDays)) ? Number(settings.periodDays) : 14
   ));
   const [selectedIds, setSelectedIds] = useState([]);
+  const [calendarEvents, setCalendarEvents] = useState([]);
 
   const allRecords = useMemo(() => buildSaunaRecords({
     cardSettings,
@@ -1467,13 +1668,50 @@ export default function SaunaReportsCard({
     tr,
   }), [cardSettings, customNames, entities, tr]);
 
+  const calendarEntityIds = useMemo(
+    () => collectCalendarEntityIds(cardSettings, allRecords),
+    [allRecords, cardSettings]
+  );
+
+  useEffect(() => {
+    let cancelled = false;
+    const loadCalendarEvents = async () => {
+      if (!conn || !calendarEntityIds.length) {
+        setCalendarEvents([]);
+        return;
+      }
+      try {
+        const end = new Date();
+        const start = new Date(end.getTime() - (periodDays * 24 * 60 * 60 * 1000));
+        const result = await getCalendarEvents(conn, {
+          start,
+          end,
+          entityIds: calendarEntityIds,
+        });
+        if (!cancelled) setCalendarEvents(normalizeCalendarEventsResult(result));
+      } catch {
+        if (!cancelled) setCalendarEvents([]);
+      }
+    };
+
+    void loadCalendarEvents();
+    return () => {
+      cancelled = true;
+    };
+  }, [calendarEntityIds, conn, periodDays]);
+
+  const calendarAssignments = useMemo(
+    () => assignCalendarEventsToRecords(allRecords, calendarEvents),
+    [allRecords, calendarEvents]
+  );
+
   const activeRecords = useMemo(() => {
     const selectedSet = new Set(selectedIds);
     const base = selectedSet.size
       ? allRecords.filter((record) => selectedSet.has(record.id))
       : allRecords;
-    return base.map((record) => analyzeRecord(record, periodDays));
-  }, [allRecords, periodDays, selectedIds]);
+    return base.map((record) => analyzeRecord(record, periodDays, calendarAssignments.get(record.id) || []));
+  }, [allRecords, calendarAssignments, periodDays, selectedIds]);
 
   const report = useMemo(() => buildSummary(activeRecords, periodDays, tr), [activeRecords, periodDays, tr]);
   const cardName = firstDisplayText(customNames?.[cardId], settings?.name, tr('reports.saunaReportTitle', 'Sauna operations report'));

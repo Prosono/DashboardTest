@@ -317,32 +317,10 @@ const computeBookingScore = (settings) => {
   return clamp(Math.round((avgScore * (1 - SCORE_HITRATE_WEIGHT)) + (hitRate * SCORE_HITRATE_WEIGHT)), 0, 100);
 };
 
-const getTargetTempFromSettings = (settings, entities) => {
-  const fixedTarget = toNum(settings?.targetTempValue ?? settings?.targetTemp ?? settings?.targetTemperature);
-  if (fixedTarget !== null) return fixedTarget;
-  const targetEntityId = settings?.targetTempEntityId || settings?.targetEntityId || '';
-  return targetEntityId ? toNum(entities?.[targetEntityId]?.state) : null;
-};
-
-const computeLiveScore = (settings, entities) => {
-  const currentTemp = toNum(entities?.[settings?.tempEntityId]?.state);
-  const targetTemp = getTargetTempFromSettings(settings, entities);
-  const deviationPct = calcDeviationPct(currentTemp, targetTemp);
-  return calcScoreFromDeviationPct(deviationPct);
-};
-
 const pickBestScore = (...scores) => {
   const validScores = scores.filter((score) => Number.isFinite(Number(score)));
   if (!validScores.length) return null;
-  const nonZeroScore = validScores.find((score) => Number(score) > 0);
-  return nonZeroScore ?? validScores[0];
-};
-
-const computeScoreFromSettings = (settings, entities) => {
-  const healthScore = computeHealthScore(settings);
-  const bookingScore = computeBookingScore(settings);
-  const liveScore = computeLiveScore(settings, entities);
-  return pickBestScore(healthScore, bookingScore, liveScore);
+  return validScores[0];
 };
 
 const getScoreTone = (score) => {
@@ -428,13 +406,39 @@ const chooseTemperatureEntity = (zone, temperatureEntities) => {
   return best?.score >= 3 ? best : null;
 };
 
+const chooseRelatedSource = (zone, baseSource, sources, { preferScored = false } = {}) => {
+  let best = null;
+  sources.forEach((source) => {
+    let score = 0;
+    if (baseSource?.tempEntityId && source.tempEntityId && baseSource.tempEntityId === source.tempEntityId) {
+      score = 120;
+    } else if (baseSource?.zoneEntityId && source.zoneEntityId && baseSource.zoneEntityId === source.zoneEntityId) {
+      score = 115;
+    } else if (source.zoneEntityId && source.zoneEntityId === zone.zoneId) {
+      score = 110;
+    } else {
+      score = Math.max(
+        baseSource ? buildTextScore(baseSource.matchTexts, source.matchTexts) : 0,
+        buildTextScore(zone.matchTexts, source.matchTexts)
+      );
+    }
+
+    if (score <= 0) return;
+    const scoredBonus = preferScored && Number.isFinite(Number(source.healthScore)) ? 5 : 0;
+    const totalScore = score + scoredBonus;
+    if (!best || totalScore > best.score) best = { source, score: totalScore };
+  });
+  return best?.score >= 3 ? best.source : null;
+};
+
 const getSourceKind = (cardId, settings) => {
-  if (settings?.type === 'sauna') return 'sauna';
-  if (settings?.type === 'sauna_health_score') return 'health';
-  if (settings?.type === 'sauna_booking_temp') return 'booking';
+  const type = String(settings?.type || '').toLowerCase();
+  if (type === 'sauna') return 'sauna';
+  if (type === 'sauna_health_score' || (type.includes('sauna') && type.includes('health'))) return 'health';
+  if (type === 'sauna_booking_temp' || (type.includes('sauna') && type.includes('booking'))) return 'booking';
   if (cardId.startsWith('sauna_card_')) return 'sauna';
-  if (cardId.startsWith('sauna_health_score_card_')) return 'health';
-  if (cardId.startsWith('sauna_booking_temp_card_')) return 'booking';
+  if (cardId.startsWith('sauna_health_score_card_') || cardId.includes('sauna_health')) return 'health';
+  if (cardId.startsWith('sauna_booking_temp_card_') || cardId.includes('sauna_booking')) return 'booking';
   return null;
 };
 
@@ -494,7 +498,9 @@ const buildSourceCards = ({ cardSettings, entities, customNames, tr, getEntityIm
         zoneEntityId: settings?.zoneEntityId || settings?.locationZoneEntityId || '',
         tempEntityId,
         currentTemp: toNum(tempEntity?.state),
-        healthScore: kind === 'health' || kind === 'booking' ? computeScoreFromSettings(settings, entities) : null,
+        healthScore: kind === 'health'
+          ? computeHealthScore(settings)
+          : (kind === 'booking' ? computeBookingScore(settings) : null),
         peopleNow: kind === 'sauna' ? (peopleNowEntity?.state ?? '0') : null,
         active: activeEntity ? isActiveState(activeEntity.state, activeStates) : false,
         service: serviceEntity ? isServiceState(serviceEntity.state, serviceStates) : false,
@@ -616,18 +622,14 @@ export default function SaunaMapCard({
         };
 
         const saunaSource = chooseBestSource(zone, saunaSources);
-        const healthByTemp = saunaSource?.tempEntityId
-          ? healthSources.find((source) => source.tempEntityId && source.tempEntityId === saunaSource.tempEntityId)
-          : null;
-        const healthSource = healthByTemp || chooseBestSource(zone, healthSources);
-        const bookingByTemp = saunaSource?.tempEntityId
-          ? bookingSources.find((source) => source.tempEntityId && source.tempEntityId === saunaSource.tempEntityId)
-          : null;
-        const bookingSource = bookingByTemp || chooseBestSource(zone, bookingSources);
+        const healthSource = chooseRelatedSource(zone, saunaSource, healthSources, { preferScored: true });
+        const bookingSource = chooseRelatedSource(zone, saunaSource, bookingSources);
         const tempFallback = chooseTemperatureEntity(zone, temperatureEntities);
         const tempSource = saunaSource || healthSource || bookingSource;
         const currentTemp = tempSource?.currentTemp ?? tempFallback?.currentTemp ?? null;
-        const healthScore = pickBestScore(healthSource?.healthScore, bookingSource?.healthScore);
+        const healthScore = healthSources.length
+          ? pickBestScore(healthSource?.healthScore)
+          : pickBestScore(bookingSource?.healthScore);
         const active = Boolean(saunaSource?.active || healthSource?.active || bookingSource?.active);
         const service = Boolean(saunaSource?.service || healthSource?.service || bookingSource?.service);
         const matchedName = saunaSource?.name || healthSource?.name || bookingSource?.name || tempFallback?.entityId || '';
