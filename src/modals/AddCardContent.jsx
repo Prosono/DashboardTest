@@ -5,6 +5,7 @@ import {
   Camera,
   DoorOpen,
   Bot,
+  BarChart3,
   Bell,
   Calendar,
   Car,
@@ -536,6 +537,7 @@ export default function AddCardContent({
                 <TypeButton type="saunaMap" icon={MapPin} label={getLabel('addCard.type.saunaMap', 'Sauna Map')} isActive={addCardType === 'saunaMap'} onSelect={setAddCardType} />
                 <TypeButton type="notificationTimeline" icon={Bell} label={getLabel('addCard.type.notificationTimeline', 'Notification Timeline')} isActive={addCardType === 'notificationTimeline'} onSelect={setAddCardType} />
                 <TypeButton type="globalTimeline" icon={Globe} label={getLabel('addCard.type.globalTimeline', 'Global Timeline')} isActive={addCardType === 'globalTimeline'} onSelect={setAddCardType} />
+                <TypeButton type="reports" icon={BarChart3} label={getLabel('addCard.type.reports', 'Reports')} isActive={addCardType === 'reports'} onSelect={setAddCardType} />
                 <TypeButton type="popupLauncher" icon={LayoutGrid} label={getLabel('addCard.type.popupLauncher', 'Popup Launcher')} isActive={addCardType === 'popupLauncher'} onSelect={setAddCardType} />
                 <TypeButton type="divider" icon={Minus} label={getLabel('addCard.type.divider', 'Divider')} isActive={addCardType === 'divider'} onSelect={setAddCardType} />
                 <TypeButton type="empty" icon={Columns} label={getLabel('addCard.type.empty', 'Empty')} isActive={addCardType === 'empty'} onSelect={setAddCardType} />
@@ -570,6 +572,7 @@ export default function AddCardContent({
               : addCardType === 'saunaMap' ? renderSimpleAddSection(MapPin, getLabel('addCard.saunaMapDescription', 'Add a map card for sauna locations from Home Assistant zones.'), t('addCard.add'))
               : addCardType === 'notificationTimeline' ? renderSimpleAddSection(Bell, getLabel('addCard.notificationTimelineDescription', 'Add a timeline card showing notification history (newest first, max 200).'), getLabel('addCard.notificationTimelineCard', 'Add notification timeline card'))
               : addCardType === 'globalTimeline' ? renderSimpleAddSection(Globe, getLabel('addCard.globalTimelineDescription', 'Add a global timeline card for platform admin with cross-client sessions, actions and logs.'), getLabel('addCard.globalTimelineCard', 'Add global timeline card'))
+              : addCardType === 'reports' ? renderSimpleAddSection(BarChart3, getLabel('addCard.reportsDescription', 'Add a professional sauna report card with filters and PDF export.'), getLabel('addCard.reportsCard', 'Add reports card'))
               : addCardType === 'popupLauncher' ? renderSimpleAddSection(LayoutGrid, getLabel('addCard.popupLauncherDescription', 'Add a popup launcher card with a grid of buttons. Configure each button to open an existing card in a popup.'), getLabel('addCard.popupLauncherCard', 'Add popup launcher card'))
               : addCardType === 'divider' ? renderSimpleAddSection(Minus, getLabel('addCard.dividerDescription', 'Add a divider card to separate sections in the dashboard.'), t('addCard.add'))
               : addCardType === 'empty' ? renderSimpleAddSection(Columns, getLabel('addCard.emptyDescription', 'Add an empty spacer card that only takes up layout space.'), t('addCard.add'))
@@ -642,6 +645,11 @@ export default function AddCardContent({
           {addCardType === 'globalTimeline' && (
             <button onClick={onAddSelected} className="w-full py-4 rounded-2xl bg-blue-500 text-white font-bold uppercase tracking-widest hover:bg-blue-600 transition-colors shadow-lg shadow-blue-500/20 flex items-center justify-center gap-2">
               <Plus className="w-5 h-5" /> {getLabel('addCard.globalTimelineCard', 'Global timeline card')}
+            </button>
+          )}
+          {addCardType === 'reports' && (
+            <button onClick={onAddSelected} className="w-full py-4 rounded-2xl bg-blue-500 text-white font-bold uppercase tracking-widest hover:bg-blue-600 transition-colors shadow-lg shadow-blue-500/20 flex items-center justify-center gap-2">
+              <Plus className="w-5 h-5" /> {getLabel('addCard.reportsCard', 'Reports card')}
             </button>
           )}
           {addCardType === 'empty' && (

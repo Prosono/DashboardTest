@@ -36,6 +36,7 @@ import {
   SaunaBookingTempCard,
   SaunaHealthScoreCard,
   SaunaMapCard,
+  SaunaReportsCard,
   SensorCard,
   ThermostatCard,
   VacuumCard,
@@ -724,24 +725,47 @@ export function renderGlobalTimelineCard(cardId, dragProps, getControls, cardSty
 
 export function renderReportsCard(cardId, dragProps, getControls, cardStyle, settingsKey, ctx) {
   const {
-    editMode, cardSettings, customNames, language, t,
+    entities, editMode, cardSettings, customNames, customIcons, language, t,
   } = ctx;
   const rawSettings = cardSettings[settingsKey] || cardSettings[cardId] || {};
+  if (rawSettings?.reportKind === 'timeline') {
+    const settings = {
+      ...rawSettings,
+      showEvents: rawSettings?.showEvents !== false,
+    };
+    return (
+      <NotificationTimelineCard
+        key={cardId}
+        cardId={cardId}
+        settings={settings}
+        dragProps={dragProps}
+        controls={getControls(cardId)}
+        cardStyle={cardStyle}
+        editMode={editMode}
+        customNames={customNames}
+        locale={language === 'en' ? 'en-US' : 'nb-NO'}
+        t={t}
+      />
+    );
+  }
+
   const settings = {
     ...rawSettings,
-    showEvents: rawSettings?.showEvents !== false,
+    reportKind: rawSettings?.reportKind || 'sauna',
   };
   return (
-    <NotificationTimelineCard
+    <SaunaReportsCard
       key={cardId}
       cardId={cardId}
       settings={settings}
+      cardSettings={cardSettings}
+      entities={entities}
       dragProps={dragProps}
       controls={getControls(cardId)}
       cardStyle={cardStyle}
       editMode={editMode}
       customNames={customNames}
-      locale={language === 'en' ? 'en-US' : 'nb-NO'}
+      customIcons={customIcons}
       t={t}
     />
   );
