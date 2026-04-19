@@ -116,6 +116,7 @@ export default function EditCardModal({
   customIcons,
   saveCustomIcon,
   saveCardSetting,
+  cardSettings = {},
   gridColumns = 4,
 }) {
   const [mediaSearch, setMediaSearch] = React.useState('');
@@ -1661,6 +1662,90 @@ export default function EditCardModal({
               ? editSettings.zoneEntityIds.filter(Boolean)
               : [];
             const allZones = selectedZones.length === 0;
+            const bookingScoreSourceByZone = editSettings.bookingScoreSourceByZone && typeof editSettings.bookingScoreSourceByZone === 'object' && !Array.isArray(editSettings.bookingScoreSourceByZone)
+              ? editSettings.bookingScoreSourceByZone
+              : {};
+            const getScopedSettings = (pageId, cardId) => ({
+              ...(cardSettings?.[cardId] || {}),
+              ...(cardSettings?.[`${pageId}::${cardId}`] || {}),
+            });
+            const normalizeTempLogText = (value) => String(value ?? '')
+              .trim()
+              .toLowerCase()
+              .replace(/æ/g, 'ae')
+              .replace(/ø/g, 'o')
+              .replace(/å/g, 'a')
+              .replace(/[^a-z0-9]+/g, ' ');
+            const looksLikeTempLogCardText = (...values) => values.some((value) => {
+              const text = normalizeTempLogText(value);
+              const compact = text.replace(/\s+/g, '');
+              if (!text) return false;
+              if (compact.includes('badstutemplogg') || compact.includes('saunatemplog')) return true;
+              if ((text.includes('badstu') || text.includes('sauna')) && text.includes('temp') && (text.includes('logg') || text.includes('log'))) return true;
+              return text.includes('booking') && text.includes('temp');
+            });
+            const isBookingTempCard = (cardId, sourceSettings) => {
+              const type = String(sourceSettings?.type || '').toLowerCase();
+              return type === 'sauna_booking_temp'
+                || (type.includes('sauna') && type.includes('booking'))
+                || String(cardId || '').startsWith('sauna_booking_temp_card_')
+                || String(cardId || '').includes('sauna_booking')
+                || Array.isArray(sourceSettings?.bookingSnapshots)
+                || looksLikeTempLogCardText(
+                  customNames?.[cardId],
+                  sourceSettings?.name,
+                  sourceSettings?.heading,
+                  sourceSettings?.title,
+                  cardId
+                );
+            };
+            const bookingTempCardMap = new Map();
+            const addBookingTempCard = (cardId, pageId = '', sourceSettings = {}) => {
+              if (!cardId || !isBookingTempCard(cardId, sourceSettings)) return;
+              if (bookingTempCardMap.has(cardId)) return;
+              const tempEntityId = sourceSettings?.tempEntityId || '';
+              const snapshotCount = Array.isArray(sourceSettings?.bookingSnapshots)
+                ? sourceSettings.bookingSnapshots.length
+                : 0;
+              const label = customNames?.[cardId]
+                || sourceSettings?.name
+                || sourceSettings?.heading
+                || entities?.[tempEntityId]?.attributes?.friendly_name
+                || cardId;
+              const detail = [
+                tempEntityId,
+                snapshotCount ? `${snapshotCount} samples` : '',
+              ].filter(Boolean).join(' - ');
+              bookingTempCardMap.set(cardId, {
+                cardId,
+                pageId,
+                label,
+                detail,
+              });
+            };
+            const configuredPages = Array.isArray(pagesConfig?.pages) ? pagesConfig.pages : [];
+            const fallbackPages = Object.keys(pagesConfig || {}).filter((key) => Array.isArray(pagesConfig?.[key]));
+            [...configuredPages, ...fallbackPages].forEach((pageId) => {
+              const pageCards = Array.isArray(pagesConfig?.[pageId]) ? pagesConfig[pageId] : [];
+              pageCards.forEach((cardId) => addBookingTempCard(cardId, pageId, getScopedSettings(pageId, cardId)));
+            });
+            Object.entries(cardSettings || {}).forEach(([settingsKey, sourceSettings]) => {
+              const parts = String(settingsKey || '').split('::');
+              const cardId = parts[parts.length - 1];
+              const pageId = parts.length > 1 ? parts[0] : '';
+              addBookingTempCard(cardId, pageId, sourceSettings);
+            });
+            const bookingTempCards = Array.from(bookingTempCardMap.values())
+              .sort((a, b) => a.label.localeCompare(b.label));
+            const mapZones = (allZones ? zoneOptions : selectedZones)
+              .filter(Boolean)
+              .filter((zoneId, index, arr) => arr.indexOf(zoneId) === index);
+            const updateBookingScoreSource = (zoneId, bookingCardId) => {
+              const next = { ...bookingScoreSourceByZone };
+              if (bookingCardId) next[zoneId] = bookingCardId;
+              else delete next[zoneId];
+              saveCardSetting(editSettingsKey, 'bookingScoreSourceByZone', Object.keys(next).length ? next : {});
+            };
 
             return (
               <div className="space-y-4">
@@ -1724,6 +1809,56 @@ export default function EditCardModal({
                       );
                     })}
                   </div>
+                </div>
+
+                <div className="popup-surface rounded-2xl p-4 space-y-3">
+                  <div>
+                    <div className="text-xs uppercase font-bold tracking-widest text-gray-500">
+                      {translateText('saunaMap.bookingScoreSourceTitle', 'Score fra badstu temp logg')}
+                    </div>
+                    <div className="text-[11px] text-[var(--text-secondary)] leading-relaxed mt-1">
+                      {translateText('saunaMap.bookingScoreSourceHint', 'Velg hvilket temp-logg-kort hver HA-sone skal hente score-ringen fra.')}
+                    </div>
+                  </div>
+
+                  {bookingTempCards.length === 0 && (
+                    <div className="px-3 py-4 rounded-xl bg-[var(--glass-bg)] text-[11px] text-[var(--text-muted)]">
+                      {translateText('saunaMap.noBookingTempCards', 'Ingen badstu temp logg-kort funnet.')}
+                    </div>
+                  )}
+
+                  {bookingTempCards.length > 0 && (
+                    <div className="space-y-2 max-h-72 overflow-y-auto custom-scrollbar pr-1">
+                      {mapZones.map((zoneId) => {
+                        const currentSource = bookingScoreSourceByZone[zoneId] || '';
+                        return (
+                          <div
+                            key={zoneId}
+                            className="grid grid-cols-1 sm:grid-cols-[minmax(0,1fr)_minmax(12rem,1.25fr)] gap-2 sm:gap-3 items-center rounded-xl border border-[var(--glass-border)] bg-[var(--glass-bg)] px-3 py-2"
+                          >
+                            <div className="min-w-0">
+                              <div className="text-xs font-bold text-[var(--text-primary)] truncate">
+                                {entities[zoneId]?.attributes?.friendly_name || zoneId}
+                              </div>
+                              <div className="text-[10px] text-[var(--text-muted)] truncate">{zoneId}</div>
+                            </div>
+                            <select
+                              value={currentSource}
+                              onChange={(event) => updateBookingScoreSource(zoneId, event.target.value)}
+                              className="w-full px-3 py-2 rounded-xl bg-[var(--modal-bg)] border border-[var(--glass-border)] text-[var(--text-primary)] text-xs outline-none"
+                            >
+                              <option value="">{translateText('saunaMap.autoBookingScoreSource', 'Automatisk matching')}</option>
+                              {bookingTempCards.map((source) => (
+                                <option key={source.cardId} value={source.cardId}>
+                                  {source.detail ? `${source.label} - ${source.detail}` : source.label}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
                 </div>
 
               </div>

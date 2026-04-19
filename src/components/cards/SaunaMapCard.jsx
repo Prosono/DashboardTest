@@ -449,6 +449,14 @@ const looksLikeBookingTempLogText = (...values) => values.some((value) => {
   return text.includes('booking') && text.includes('temp');
 });
 
+const getManualBookingSource = (settings, zone, bookingSources) => {
+  const mappings = settings?.bookingScoreSourceByZone || settings?.bookingTempSourceByZone || {};
+  if (!mappings || typeof mappings !== 'object' || Array.isArray(mappings)) return null;
+  const sourceId = String(mappings[zone.zoneId] || '').trim();
+  if (!sourceId) return null;
+  return bookingSources.find((source) => source.cardId === sourceId || source.settingsKey === sourceId) || null;
+};
+
 const getSourceKind = (cardId, settings, customName = '') => {
   const type = String(settings?.type || '').toLowerCase();
   if (type === 'sauna') return 'sauna';
@@ -644,7 +652,8 @@ export default function SaunaMapCard({
         };
 
         const saunaSource = chooseBestSource(zone, saunaSources);
-        const bookingSource = chooseRelatedSource(zone, saunaSource, bookingSources);
+        const bookingSource = getManualBookingSource(settings, zone, bookingSources)
+          || chooseRelatedSource(zone, saunaSource, bookingSources);
         const healthSource = chooseRelatedSource(zone, saunaSource, healthSources, { preferScored: true });
         const tempFallback = chooseTemperatureEntity(zone, temperatureEntities);
         const tempSource = saunaSource || bookingSource || healthSource;
