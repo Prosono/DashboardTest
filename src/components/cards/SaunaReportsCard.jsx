@@ -896,6 +896,58 @@ const downloadBlob = (content, fileName, mimeType) => {
   URL.revokeObjectURL(url);
 };
 
+const REPORT_LOGO_URL = '/favicon.png';
+
+const dataUrlToPdfHex = (dataUrl) => {
+  const base64 = String(dataUrl || '').split(',')[1] || '';
+  if (!base64 || typeof window === 'undefined') return '';
+  const binary = window.atob(base64);
+  const chunks = [];
+  for (let index = 0; index < binary.length; index += 1) {
+    chunks.push(binary.charCodeAt(index).toString(16).padStart(2, '0'));
+  }
+  return `${chunks.join('')}>`;
+};
+
+let reportLogoImagePromise = null;
+
+const loadReportLogoImage = () => {
+  if (reportLogoImagePromise) return reportLogoImagePromise;
+  reportLogoImagePromise = new Promise((resolve) => {
+    if (typeof window === 'undefined' || typeof document === 'undefined') {
+      resolve(null);
+      return;
+    }
+
+    const image = new window.Image();
+    image.crossOrigin = 'anonymous';
+    image.onload = () => {
+      try {
+        const size = 128;
+        const canvas = document.createElement('canvas');
+        canvas.width = size;
+        canvas.height = size;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) {
+          resolve(null);
+          return;
+        }
+        ctx.fillStyle = '#f8fbff';
+        ctx.fillRect(0, 0, size, size);
+        ctx.drawImage(image, 0, 0, size, size);
+        const dataUrl = canvas.toDataURL('image/jpeg', 0.88);
+        const dataHex = dataUrlToPdfHex(dataUrl);
+        resolve(dataHex ? { width: size, height: size, dataHex } : null);
+      } catch {
+        resolve(null);
+      }
+    };
+    image.onerror = () => resolve(null);
+    image.src = REPORT_LOGO_URL;
+  });
+  return reportLogoImagePromise;
+};
+
 const WIN_ANSI_MAP = new Map([
   [0x20ac, 0x80],
   [0x2018, 0x91],
@@ -981,11 +1033,12 @@ const getDeltaText = (value) => {
   return `${num > 0 ? '+' : ''}${num.toFixed(1)}`;
 };
 
-const createPdfBlob = ({ report, title, subtitle, tr }) => {
+const createPdfBlob = ({ report, title, subtitle, tr, logoImage = null }) => {
   const pageWidth = 595.28;
   const pageHeight = 841.89;
   const margin = 36;
   const contentWidth = pageWidth - (margin * 2);
+  const hasLogoImage = Boolean(logoImage?.dataHex && logoImage?.width && logoImage?.height);
   const palette = {
     page: '#07111d',
     panel: '#0d1b2a',
@@ -1056,6 +1109,10 @@ const createPdfBlob = ({ report, title, subtitle, tr }) => {
     ].join(' ');
     const paint = fill ? (stroke ? 'B' : 'f') : 'S';
     ops.push(`${fill ? `${color(fill)} rg ` : ''}${stroke ? `${color(stroke)} RG ${width} w ` : ''}${path} h ${paint}`);
+  };
+
+  const drawImage = (name, x, yy, w, h) => {
+    ops.push(`q ${w.toFixed(2)} 0 0 ${h.toFixed(2)} ${x.toFixed(2)} ${yy.toFixed(2)} cm /${name} Do Q`);
   };
 
   const strokeRect = (x, yy, w, h, stroke = palette.border) => {
@@ -1387,9 +1444,13 @@ const createPdfBlob = ({ report, title, subtitle, tr }) => {
   paintPage();
 
   panel(margin, y - 64, contentWidth, 64, '#0a1a2a', palette.border);
-  logoMark(margin + 16, y - 48, 28);
-  text('Smart Sauna Systems', margin + 54, y - 22, 11, 'F2', palette.text);
-  text(tr('reports.analysisReport', 'ANALYSIS REPORT'), margin + 54, y - 42, 8, 'F2', palette.muted);
+  if (hasLogoImage) {
+    drawImage('Logo', margin + 16, y - 52, 36, 36);
+  } else {
+    logoMark(margin + 16, y - 48, 28);
+  }
+  text('Smart Sauna Systems', margin + 60, y - 22, 11, 'F2', palette.text);
+  text(tr('reports.analysisReport', 'ANALYSIS REPORT'), margin + 60, y - 42, 8, 'F2', palette.muted);
   text(`${tr('reports.generated', 'Generated')}: ${formatDateTime(Date.now())}`, pageWidth - margin - 178, y - 22, 8, 'F1', palette.muted);
   text(subtitle, pageWidth - margin - 178, y - 42, 7.5, 'F1', palette.subtle);
   y -= 82;
@@ -1657,15 +1718,21 @@ const createPdfBlob = ({ report, title, subtitle, tr }) => {
   const objects = [];
   const font1Id = 3;
   const font2Id = 4;
+  const logoImageId = hasLogoImage ? 5 : null;
+  let nextObjectId = hasLogoImage ? 6 : 5;
   objects[1] = '<< /Type /Catalog /Pages 2 0 R >>';
   objects[3] = '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>';
   objects[4] = '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold /Encoding /WinAnsiEncoding >>';
+  if (hasLogoImage) {
+    objects[logoImageId] = `<< /Type /XObject /Subtype /Image /Width ${Math.round(logoImage.width)} /Height ${Math.round(logoImage.height)} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter [/ASCIIHexDecode /DCTDecode] /Length ${logoImage.dataHex.length} >>\nstream\n${logoImage.dataHex}\nendstream`;
+  }
   const kids = [];
-  pages.forEach((content, index) => {
-    const pageId = 5 + (index * 2);
+  pages.forEach((content) => {
+    const pageId = nextObjectId;
     const contentId = pageId + 1;
+    nextObjectId += 2;
     kids.push(`${pageId} 0 R`);
-    objects[pageId] = `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${pageWidth} ${pageHeight}] /Resources << /Font << /F1 ${font1Id} 0 R /F2 ${font2Id} 0 R >> >> /Contents ${contentId} 0 R >>`;
+    objects[pageId] = `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${pageWidth} ${pageHeight}] /Resources << /Font << /F1 ${font1Id} 0 R /F2 ${font2Id} 0 R >>${hasLogoImage ? ` /XObject << /Logo ${logoImageId} 0 R >>` : ''} >> /Contents ${contentId} 0 R >>`;
     objects[contentId] = `<< /Length ${byteLength(content)} >>\nstream\n${content}\nendstream`;
   });
   objects[2] = `<< /Type /Pages /Kids [${kids.join(' ')}] /Count ${pages.length} >>`;
@@ -1733,6 +1800,7 @@ export default function SaunaReportsCard({
   ));
   const [selectedIds, setSelectedIds] = useState([]);
   const [calendarEvents, setCalendarEvents] = useState([]);
+  const [isPreparingPdf, setIsPreparingPdf] = useState(false);
 
   useEffect(() => {
     setSelectedIds([]);
@@ -1820,15 +1888,22 @@ export default function SaunaReportsCard({
     });
   };
 
-  const handleDownloadPdf = () => {
-    const title = cardName;
-    const subtitle = `${selectedLabel} - ${periodDays} ${tr('reports.days', 'days')} - ${rangeLabel}`;
-    const pdf = createPdfBlob({ report, title, subtitle, tr });
-    downloadBlob(
-      pdf,
-      `badstu-rapport-${periodDays}d-${sanitizeFilePart(selectedLabel)}-${Date.now()}.pdf`,
-      'application/pdf',
-    );
+  const handleDownloadPdf = async () => {
+    if (isPreparingPdf) return;
+    setIsPreparingPdf(true);
+    try {
+      const title = cardName;
+      const subtitle = `${selectedLabel} - ${periodDays} ${tr('reports.days', 'days')} - ${rangeLabel}`;
+      const logoImage = await loadReportLogoImage();
+      const pdf = createPdfBlob({ report, title, subtitle, tr, logoImage });
+      downloadBlob(
+        pdf,
+        `badstu-rapport-${periodDays}d-${sanitizeFilePart(selectedLabel)}-${Date.now()}.pdf`,
+        'application/pdf',
+      );
+    } finally {
+      setIsPreparingPdf(false);
+    }
   };
 
   return (
@@ -1857,11 +1932,11 @@ export default function SaunaReportsCard({
           <button
             type="button"
             onClick={handleDownloadPdf}
-            disabled={!activeRecords.length}
+            disabled={!activeRecords.length || isPreparingPdf}
             className="inline-flex items-center justify-center gap-2 rounded-lg border border-emerald-400/35 bg-emerald-500/16 px-4 py-2.5 text-xs font-bold uppercase tracking-widest text-emerald-100 transition-colors hover:bg-emerald-500/24 disabled:opacity-45 disabled:cursor-not-allowed"
           >
             <Download className="w-4 h-4" />
-            {tr('reports.downloadPdf', 'Download PDF')}
+            {isPreparingPdf ? tr('reports.preparingPdf', 'Preparing PDF') : tr('reports.downloadPdf', 'Download PDF')}
           </button>
         </div>
 

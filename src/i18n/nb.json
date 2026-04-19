@@ -1448,6 +1448,7 @@
   "reports.optionalSaunaData": "Inkluderer badstue-helsemålinger når slike kort er konfigurert.",
   "reports.saunaReportTitle": "Badstu driftsrapport",
   "reports.downloadPdf": "Last ned PDF",
+  "reports.preparingPdf": "Klargjør PDF",
   "reports.generated": "Generert",
   "reports.page": "Side",
   "reports.analysisReport": "Analyserapport",

@@ -1448,6 +1448,7 @@
   "reports.optionalSaunaData": "Inkluderer badstove-helsemålingar når slike kort er konfigurerte.",
   "reports.saunaReportTitle": "Badstove driftsrapport",
   "reports.downloadPdf": "Last ned PDF",
+  "reports.preparingPdf": "Klargjer PDF",
   "reports.generated": "Generert",
   "reports.page": "Side",
   "reports.analysisReport": "Analyserapport",

@@ -1448,6 +1448,7 @@
   "reports.optionalSaunaData": "Includes sauna-health snapshots when those cards are configured.",
   "reports.saunaReportTitle": "Sauna operations report",
   "reports.downloadPdf": "Download PDF",
+  "reports.preparingPdf": "Preparing PDF",
   "reports.generated": "Generated",
   "reports.page": "Page",
   "reports.analysisReport": "Analysis report",
