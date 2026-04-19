@@ -440,14 +440,6 @@ const looksLikeHealthScoreText = (...values) => values.some((value) => {
   return text.includes('sauna') && text.includes('score');
 });
 
-const getManualHealthSource = (settings, zone, healthSources) => {
-  const mappings = settings?.healthScoreSourceByZone || settings?.healthCardByZone || {};
-  if (!mappings || typeof mappings !== 'object' || Array.isArray(mappings)) return null;
-  const sourceId = String(mappings[zone.zoneId] || '').trim();
-  if (!sourceId) return null;
-  return healthSources.find((source) => source.cardId === sourceId || source.settingsKey === sourceId) || null;
-};
-
 const getSourceKind = (cardId, settings, customName = '') => {
   const type = String(settings?.type || '').toLowerCase();
   if (type === 'sauna') return 'sauna';
@@ -543,11 +535,12 @@ const makeMarkerHtml = (location) => {
     ? clamp(Math.round(Number(location.healthScore)), 0, 100)
     : null;
   const scoreDeg = score !== null ? `${score * 3.6}deg` : '0deg';
+  const scoreLabel = formatScore(location.healthScore);
   const tempLabel = location.currentTemp !== null ? `${Math.round(location.currentTemp)}°` : '--';
   const peopleLabel = formatPeopleCount(location.peopleNow);
   const imageHtml = location.imageUrl
-    ? `<span class="sauna-map-marker__fallback">${escapeHtml(peopleLabel)}</span><img src="${escapeHtml(location.imageUrl)}" alt="" class="sauna-map-marker__image" draggable="false" />`
-    : `<span class="sauna-map-marker__fallback">${escapeHtml(peopleLabel)}</span>`;
+    ? `<span class="sauna-map-marker__fallback">${escapeHtml(scoreLabel)}</span><img src="${escapeHtml(location.imageUrl)}" alt="" class="sauna-map-marker__image" draggable="false" />`
+    : `<span class="sauna-map-marker__fallback">${escapeHtml(scoreLabel)}</span>`;
   return `
     <div class="sauna-map-marker sauna-map-marker--${tone}" title="${escapeHtml(location.name)}" style="--score-deg: ${scoreDeg}">
       <span class="sauna-map-marker__glow"></span>
@@ -558,6 +551,7 @@ const makeMarkerHtml = (location) => {
           </span>
         </span>
         <span class="sauna-map-marker__score">${escapeHtml(formatScore(location.healthScore))}</span>
+        <span class="sauna-map-marker__people">${escapeHtml(peopleLabel)}</span>
       </span>
       <span class="sauna-map-marker__temp">${escapeHtml(tempLabel)}</span>
     </div>
@@ -641,8 +635,15 @@ export default function SaunaMapCard({
         };
 
         const saunaSource = chooseBestSource(zone, saunaSources);
-        const manualHealthSource = getManualHealthSource(settings, zone, healthSources);
-        const healthSource = manualHealthSource || chooseRelatedSource(zone, saunaSource, healthSources, { preferScored: true });
+        const matchedHealthSource = chooseRelatedSource(zone, saunaSource, healthSources, { preferScored: true });
+        const healthSource = Number(matchedHealthSource?.healthScore) > 0
+          ? matchedHealthSource
+          : (chooseRelatedSource(
+            zone,
+            saunaSource,
+            healthSources.filter((source) => Number(source.healthScore) > 0),
+            { preferScored: true }
+          ) || matchedHealthSource);
         const bookingSource = chooseRelatedSource(zone, saunaSource, bookingSources);
         const tempFallback = chooseTemperatureEntity(zone, temperatureEntities);
         const tempSource = saunaSource || healthSource || bookingSource;
