@@ -30,6 +30,46 @@ const roundToOne = (value) => Math.round(Number(value) * 10) / 10;
 const SCORE_MISS_PENALTY = 10;
 const SCORE_HITRATE_WEIGHT = 0.25;
 const SCORE_TREND_WINDOW = 3;
+const BOOKING_TYPES = ['felles', 'aufguss', 'private', 'service'];
+
+const normalizeBookingType = (value, fallback = 'felles') => {
+  const normalized = String(value ?? '')
+    .trim()
+    .toLowerCase()
+    .normalize('NFKD')
+    .replace(/[\u0300-\u036f]/g, '');
+  if (!normalized) return fallback;
+  if (normalized.includes('aufguss')) return 'aufguss';
+  if (normalized.includes('service') || normalized.includes('vedlikehold') || normalized.includes('maintenance')) return 'service';
+  if (normalized.includes('privat') || normalized.includes('private')) return 'private';
+  if (normalized.includes('felles') || normalized.includes('shared') || normalized.includes('regular') || normalized.includes('vanlig')) return 'felles';
+  if (['ja', 'yes', 'on', 'true', '1'].includes(normalized)) return 'service';
+  if (BOOKING_TYPES.includes(normalized)) return normalized;
+  return fallback;
+};
+
+const getSnapshotBookingType = (entry) => {
+  const explicitType = entry?.bookingType ?? entry?.booking_type ?? entry?.type;
+  if (String(explicitType ?? '').trim()) return normalizeBookingType(explicitType);
+  if (String(entry?.serviceRaw ?? '').trim()) return normalizeBookingType(entry.serviceRaw);
+  return 'felles';
+};
+
+const getBookingTypeColor = (type) => {
+  const normalized = normalizeBookingType(type);
+  if (normalized === 'service') return '#b49a6d';
+  if (normalized === 'aufguss') return '#8f82b4';
+  if (normalized === 'private') return '#ff5cae';
+  return '#63a4ff';
+};
+
+const getBookingTypeLabel = (type, tr) => {
+  const normalized = normalizeBookingType(type);
+  if (normalized === 'service') return tr('calendarBooking.type.service', 'Service');
+  if (normalized === 'aufguss') return tr('calendarBooking.type.aufguss', 'Aufguss');
+  if (normalized === 'private') return tr('calendarBooking.type.private', 'Private');
+  return tr('calendarBooking.type.felles', 'Felles');
+};
 
 const calcScoreFromDeviationPct = (deviationPct, options = {}) => {
   const { hit = null, missPenalty = SCORE_MISS_PENALTY } = options;
@@ -67,8 +107,14 @@ const parseStateArray = (rawValue, fallback) => {
 };
 
 const isStateActive = (value, states) => parseStateArray(states, DEFAULT_ACTIVE_STATES).includes(normalizeState(value));
-const getServiceStates = (states) => parseStateArray(states, DEFAULT_SERVICE_STATES)
-  .filter((state) => state !== 'active' && state !== 'aktiv');
+const getBookingTypeFromServiceState = (value, states) => {
+  const raw = String(value ?? '').trim();
+  if (!raw) return 'felles';
+  const serviceStates = parseStateArray(states, DEFAULT_SERVICE_STATES)
+    .filter((state) => state !== 'active' && state !== 'aktiv');
+  if (serviceStates.includes(normalizeState(raw))) return 'service';
+  return normalizeBookingType(raw, 'felles');
+};
 
 const normalizeSnapshots = (rawValue) => {
   if (!Array.isArray(rawValue)) return [];
@@ -87,9 +133,7 @@ const normalizeSnapshots = (rawValue) => {
       const deviationPct = providedDeviationPct !== null
         ? roundToOne(providedDeviationPct)
         : calcDeviationPct(startTemp, targetTemp);
-      const bookingType = String(entry?.bookingType || 'regular').toLowerCase() === 'service'
-        ? 'service'
-        : 'regular';
+      const bookingType = getSnapshotBookingType(entry);
       return {
         id: String(entry?.id || `${timestamp}_${index}`),
         timestamp,
@@ -435,11 +479,11 @@ export default function SaunaBookingTempCard({
               ? getHistoryStateAt(historyById?.[serviceEntityId], sampleMs, serviceEntity?.state ?? null)
               : null;
             const activeAtSample = isStateActive(activeStateAtSample, settings?.activeOnStates);
-            const serviceAtSample = serviceEntityId
-              ? getServiceStates(settings?.serviceOnStates).includes(normalizeState(serviceStateAtSample))
-              : false;
+            const bookingType = serviceEntityId
+              ? getBookingTypeFromServiceState(serviceStateAtSample, settings?.serviceOnStates)
+              : 'felles';
 
-            if (!activeAtSample || serviceAtSample) return null;
+            if (!activeAtSample) return null;
 
             const sampleTemp = getNumericHistoryValueAt(historyById?.[tempEntityId], sampleMs, currentTemp);
             const sampleTarget = targetTempSetting !== null
@@ -456,7 +500,7 @@ export default function SaunaBookingTempCard({
               targetTemp: sampleTarget !== null ? roundToOne(sampleTarget) : null,
               deviation: sampleTarget !== null ? roundToOne(sampleTemp - sampleTarget) : null,
               deviationPct: calcDeviationPct(sampleTemp, sampleTarget),
-              bookingType: 'regular',
+              bookingType,
               sampleMode: 'hourly',
               serviceRaw: serviceStateAtSample,
               activeRaw: activeStateAtSample,
@@ -519,11 +563,15 @@ export default function SaunaBookingTempCard({
   const windowStart = nowMs - (summaryHours * 60 * 60 * 1000);
   const recentSnapshots = snapshots.filter((entry) => entry.timestampMs >= windowStart);
   const recentRegularSnapshots = recentSnapshots.filter((entry) => entry.bookingType !== 'service');
-  const recentSorted = recentRegularSnapshots.slice().sort((a, b) => a.timestampMs - b.timestampMs);
+  const recentSorted = recentSnapshots.slice().sort((a, b) => a.timestampMs - b.timestampMs);
   const recentVisible = recentSorted.slice(-recentRows).reverse();
   const allSnapshotsDesc = snapshots
-    .filter((entry) => entry.bookingType !== 'service')
     .sort((a, b) => b.timestampMs - a.timestampMs);
+  const bookingTypeCounts = recentSnapshots.reduce((acc, entry) => {
+    const type = normalizeBookingType(entry.bookingType);
+    acc[type] = (acc[type] || 0) + 1;
+    return acc;
+  }, { felles: 0, aufguss: 0, private: 0, service: 0 });
   const trendStats = getTempStats(recentSorted);
 
   const startTemps = recentRegularSnapshots.map((entry) => entry.startTemp);
@@ -704,6 +752,18 @@ export default function SaunaBookingTempCard({
         </button>
       </div>
 
+      <div className="grid grid-cols-4 gap-1.5">
+        {BOOKING_TYPES.map((type) => (
+          <div key={type} className="rounded-lg border border-[var(--glass-border)] bg-[var(--glass-bg)] px-2 py-1.5">
+            <div className="flex items-center gap-1.5 min-w-0">
+              <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: getBookingTypeColor(type) }} />
+              <span className="text-[9px] uppercase tracking-widest text-[var(--text-muted)] truncate">{getBookingTypeLabel(type, tr)}</span>
+            </div>
+            <div className="mt-1 text-sm font-semibold tabular-nums text-[var(--text-primary)]">{bookingTypeCounts[type] || 0}</div>
+          </div>
+        ))}
+      </div>
+
       {sparkPoints.length > 1 && (
         <button
           type="button"
@@ -798,6 +858,15 @@ export default function SaunaBookingTempCard({
                   {entry.targetTemp !== null
                     ? `${tr('sauna.target', 'Target')}: ${entry.targetTemp.toFixed(1)}° (${formatDeviationPercent(entry.deviationPct)})`
                     : tr('sauna.bookingTemp.noTarget', 'No target configured')}
+                </span>
+                <span
+                  className="shrink-0 rounded-md px-1.5 py-0.5 font-bold"
+                  style={{
+                    color: getBookingTypeColor(entry.bookingType),
+                    backgroundColor: `${getBookingTypeColor(entry.bookingType)}18`,
+                  }}
+                >
+                  {getBookingTypeLabel(entry.bookingType, tr)}
                 </span>
               </div>
             </button>

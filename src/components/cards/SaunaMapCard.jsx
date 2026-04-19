@@ -24,6 +24,9 @@ const STOP_TOKENS = new Set([
 ]);
 
 const NORWAY_CENTER = [60.472, 8.4689];
+const SCORE_MISS_PENALTY = 10;
+const SCORE_HITRATE_WEIGHT = 0.25;
+const BOOKING_TYPES = ['felles', 'aufguss', 'private', 'service'];
 
 const toNum = (value) => {
   const parsed = Number.parseFloat(value);
@@ -139,10 +142,36 @@ const calcDeviationPct = (temp, target) => {
   return roundToOne(((tempNum - targetNum) / targetNum) * 100);
 };
 
-const calcScoreFromDeviationPct = (deviationPct) => {
+const calcScoreFromDeviationPct = (deviationPct, options = {}) => {
+  const { hit = null, missPenalty = SCORE_MISS_PENALTY } = options;
   const parsed = toNum(deviationPct);
   if (parsed === null) return null;
-  return clamp(Math.round(100 - Math.abs(parsed)), 0, 100);
+  const baseScore = clamp(Math.round(100 - Math.abs(parsed)), 0, 100);
+  if (hit === false) return clamp(baseScore - Math.max(0, Number(missPenalty) || 0), 0, 100);
+  return baseScore;
+};
+
+const normalizeBookingType = (value, fallback = 'felles') => {
+  const normalized = String(value ?? '')
+    .trim()
+    .toLowerCase()
+    .normalize('NFKD')
+    .replace(/[\u0300-\u036f]/g, '');
+  if (!normalized) return fallback;
+  if (normalized.includes('aufguss')) return 'aufguss';
+  if (normalized.includes('service') || normalized.includes('vedlikehold') || normalized.includes('maintenance')) return 'service';
+  if (normalized.includes('privat') || normalized.includes('private')) return 'private';
+  if (normalized.includes('felles') || normalized.includes('shared') || normalized.includes('regular') || normalized.includes('vanlig')) return 'felles';
+  if (['ja', 'yes', 'on', 'true', '1'].includes(normalized)) return 'service';
+  if (BOOKING_TYPES.includes(normalized)) return normalized;
+  return fallback;
+};
+
+const getSnapshotBookingType = (entry) => {
+  const explicitType = entry?.bookingType ?? entry?.booking_type ?? entry?.type;
+  if (String(explicitType ?? '').trim()) return normalizeBookingType(explicitType);
+  if (String(entry?.serviceRaw ?? '').trim()) return normalizeBookingType(entry.serviceRaw);
+  return 'felles';
 };
 
 const normalizeSamples = (rawValue) => {
@@ -170,6 +199,39 @@ const normalizeSamples = (rawValue) => {
     .sort((a, b) => a.timestampMs - b.timestampMs);
 };
 
+const normalizeBookingSamples = (rawValue) => {
+  if (!Array.isArray(rawValue)) return [];
+  return rawValue
+    .map((entry, index) => {
+      const timestamp = String(entry?.timestamp || entry?.time || '').trim();
+      const timestampMs = Number.isFinite(Date.parse(timestamp))
+        ? Date.parse(timestamp)
+        : parseSampleTimestamp(entry);
+      const startTemp = toNum(entry?.startTemp ?? entry?.temperature ?? entry?.temp);
+      if (!Number.isFinite(timestampMs) || startTemp === null) return null;
+      const targetTemp = toNum(entry?.targetTemp);
+      const deviationPct = toNum(entry?.deviationPct ?? entry?.deviationPercent);
+      return {
+        id: String(entry?.id || `${timestamp}_${index}`),
+        timestamp,
+        timestampMs,
+        startTemp: roundToOne(startTemp),
+        targetTemp,
+        deviationPct: deviationPct !== null ? roundToOne(deviationPct) : calcDeviationPct(startTemp, targetTemp),
+        bookingType: getSnapshotBookingType(entry),
+      };
+    })
+    .filter(Boolean)
+    .sort((a, b) => a.timestampMs - b.timestampMs);
+};
+
+const isTargetReached = (startTemp, targetTemp, toleranceC = 0) => {
+  const start = toNum(startTemp);
+  const target = toNum(targetTemp);
+  if (start === null || target === null) return null;
+  return start >= (target - Math.max(0, Number(toleranceC) || 0));
+};
+
 const computeHealthScore = (settings) => {
   const snapshots = normalizeSamples(settings?.healthSnapshots);
   if (!snapshots.length) return null;
@@ -188,6 +250,42 @@ const computeHealthScore = (settings) => {
     targetSamples.reduce((sum, entry) => sum + (entry.deviationPct ?? 0), 0) / targetSamples.length
   );
   return calcScoreFromDeviationPct(avgDeviationPct);
+};
+
+const computeBookingScore = (settings) => {
+  const snapshots = normalizeBookingSamples(settings?.bookingSnapshots);
+  if (!snapshots.length) return null;
+
+  const summaryHours = clamp(Number(settings?.summaryHours) || 48, 6, 168);
+  const targetToleranceC = Number.isFinite(Number(settings?.targetToleranceC))
+    ? Math.max(0, Number(settings.targetToleranceC))
+    : 0;
+  const windowStart = Date.now() - (summaryHours * 60 * 60 * 1000);
+  const targetSamples = snapshots
+    .filter((entry) => entry.timestampMs >= windowStart)
+    .filter((entry) => entry.bookingType !== 'service')
+    .filter((entry) => entry.targetTemp !== null && entry.deviationPct !== null);
+
+  if (!targetSamples.length) return null;
+
+  const scored = targetSamples
+    .map((entry) => calcScoreFromDeviationPct(entry.deviationPct, {
+      hit: isTargetReached(entry.startTemp, entry.targetTemp, targetToleranceC),
+    }))
+    .filter((score) => Number.isFinite(Number(score)));
+  if (!scored.length) return null;
+
+  const avgScore = scored.reduce((sum, score) => sum + score, 0) / scored.length;
+  const reachedCount = targetSamples
+    .filter((entry) => isTargetReached(entry.startTemp, entry.targetTemp, targetToleranceC)).length;
+  const hitRate = Math.round((reachedCount / targetSamples.length) * 100);
+  return clamp(Math.round((avgScore * (1 - SCORE_HITRATE_WEIGHT)) + (hitRate * SCORE_HITRATE_WEIGHT)), 0, 100);
+};
+
+const computeScoreFromSettings = (settings) => {
+  const healthScore = computeHealthScore(settings);
+  if (healthScore !== null) return healthScore;
+  return computeBookingScore(settings);
 };
 
 const getScoreTone = (score) => {
@@ -334,7 +432,7 @@ const buildSourceCards = ({ cardSettings, entities, customNames, tr, getEntityIm
         zoneEntityId: settings?.zoneEntityId || settings?.locationZoneEntityId || '',
         tempEntityId,
         currentTemp: toNum(tempEntity?.state),
-        healthScore: kind === 'health' || kind === 'booking' ? computeHealthScore(settings) : null,
+        healthScore: kind === 'health' || kind === 'booking' ? computeScoreFromSettings(settings) : null,
         peopleNow: kind === 'sauna' ? (peopleNowEntity?.state ?? '0') : null,
         active: activeEntity ? isActiveState(activeEntity.state, activeStates) : false,
         service: serviceEntity ? isServiceState(serviceEntity.state, serviceStates) : false,

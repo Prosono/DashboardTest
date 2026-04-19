@@ -29,6 +29,30 @@ const cleanDisplayText = (value) => String(value ?? '').replace(/\s+/g, ' ').tri
 const firstDisplayText = (...values) => values.map(cleanDisplayText).find(Boolean) || '';
 const SCORE_MISS_PENALTY = 10;
 const SCORE_HITRATE_WEIGHT = 0.25;
+const BOOKING_TYPES = ['felles', 'aufguss', 'private', 'service'];
+
+const normalizeBookingType = (value, fallback = 'felles') => {
+  const normalized = String(value ?? '')
+    .trim()
+    .toLowerCase()
+    .normalize('NFKD')
+    .replace(/[\u0300-\u036f]/g, '');
+  if (!normalized) return fallback;
+  if (normalized.includes('aufguss')) return 'aufguss';
+  if (normalized.includes('service') || normalized.includes('vedlikehold') || normalized.includes('maintenance')) return 'service';
+  if (normalized.includes('privat') || normalized.includes('private')) return 'private';
+  if (normalized.includes('felles') || normalized.includes('shared') || normalized.includes('regular') || normalized.includes('vanlig')) return 'felles';
+  if (['ja', 'yes', 'on', 'true', '1'].includes(normalized)) return 'service';
+  if (BOOKING_TYPES.includes(normalized)) return normalized;
+  return fallback;
+};
+
+const getSnapshotBookingType = (entry) => {
+  const explicitType = entry?.bookingType ?? entry?.booking_type ?? entry?.type;
+  if (String(explicitType ?? '').trim()) return normalizeBookingType(explicitType);
+  if (String(entry?.serviceRaw ?? '').trim()) return normalizeBookingType(entry.serviceRaw);
+  return 'felles';
+};
 
 const makeTr = (t) => (key, fallback) => {
   const out = typeof t === 'function' ? t(key) : undefined;
@@ -195,7 +219,7 @@ const normalizeBookingSamples = (rawValue) => {
         startTemp: roundToOne(startTemp),
         targetTemp,
         deviationPct: deviationPct !== null ? roundToOne(deviationPct) : calcDeviationPct(startTemp, targetTemp),
-        bookingType: String(entry?.bookingType || 'regular').toLowerCase() === 'service' ? 'service' : 'regular',
+        bookingType: getSnapshotBookingType(entry),
       };
     })
     .filter(Boolean)
@@ -207,16 +231,6 @@ const isTargetReached = (startTemp, targetTemp, toleranceC = 0) => {
   const target = toNum(targetTemp);
   if (start === null || target === null) return null;
   return start >= (target - Math.max(0, Number(toleranceC) || 0));
-};
-
-const getBookingOutcome = (entry, toleranceC = 0) => {
-  const start = toNum(entry?.startTemp);
-  const target = toNum(entry?.targetTemp);
-  if (start === null || target === null) return 'noTarget';
-  const safeTolerance = Number.isFinite(Number(toleranceC)) ? Math.max(0, Number(toleranceC)) : 0;
-  const delta = start - target;
-  if (Math.abs(delta) <= safeTolerance) return 'onTarget';
-  return delta > safeTolerance ? 'aboveTarget' : 'belowTarget';
 };
 
 const computeScoreFromTargetSamples = (samples) => {
@@ -432,8 +446,9 @@ const analyzeRecord = (record, periodDays) => {
     : null;
 
   const bookingSamples = (record.bookingSource?.bookingSamples || [])
-    .filter((entry) => entry.timestampMs >= windowStart && entry.bookingType !== 'service');
-  const bookingTargetSamples = bookingSamples.filter((entry) => entry.targetTemp !== null);
+    .filter((entry) => entry.timestampMs >= windowStart);
+  const scoreBookingSamples = bookingSamples.filter((entry) => entry.bookingType !== 'service');
+  const bookingTargetSamples = scoreBookingSamples.filter((entry) => entry.targetTemp !== null);
   const bookingTargetSamplesWithPct = bookingTargetSamples.filter((entry) => entry.deviationPct !== null);
   const bookingScoreSamples = bookingTargetSamplesWithPct.map((entry) => ({
     ...entry,
@@ -449,6 +464,10 @@ const analyzeRecord = (record, periodDays) => {
   const latestBooking = bookingSamples.length ? bookingSamples[bookingSamples.length - 1] : null;
   const bookingHours = bookingSamples.length;
   const sessions = countSessions(bookingSamples);
+  const bookingTypeCounts = BOOKING_TYPES.reduce((acc, type) => {
+    acc[type] = bookingSamples.filter((entry) => normalizeBookingType(entry.bookingType) === type).length;
+    return acc;
+  }, {});
   const midpoint = windowStart + ((Date.now() - windowStart) / 2);
   const healthScore = computeScoreFromTargetSamples(healthSamples);
   const bookingScore = computeBookingScoreFromSamples(bookingScoreSamples, record.targetToleranceC);
@@ -472,8 +491,10 @@ const analyzeRecord = (record, periodDays) => {
     bookingScore,
     avgDeviationPct,
     bookingSamples,
+    scoreBookingSamples,
     bookingTargetSamples,
     bookingTargetSamplesWithPct,
+    bookingTypeCounts,
     reachedCount,
     hitRate,
     avgBookingDeviationPct,
@@ -502,13 +523,12 @@ const buildDailyTrend = (records, periodDays) => {
       .filter((entry) => entry.timestampMs >= start && entry.timestampMs < end)
       .map((entry) => ({ ...entry, targetToleranceC: record.targetToleranceC })));
     const bookingDaySamples = records.flatMap((record) => record.bookingSamples
-      .filter((entry) => entry.timestampMs >= start && entry.timestampMs < end)
-      .map((entry) => ({ ...entry, targetToleranceC: record.targetToleranceC })));
+      .filter((entry) => entry.timestampMs >= start && entry.timestampMs < end));
     const bookingBreakdown = bookingDaySamples.reduce((acc, entry) => {
-      const outcome = getBookingOutcome(entry, entry.targetToleranceC);
-      acc[outcome] = (acc[outcome] || 0) + 1;
+      const type = normalizeBookingType(entry.bookingType);
+      acc[type] = (acc[type] || 0) + 1;
       return acc;
-    }, { onTarget: 0, aboveTarget: 0, belowTarget: 0, noTarget: 0 });
+    }, { felles: 0, aufguss: 0, private: 0, service: 0 });
     days.push({
       key: day.toISOString().slice(0, 10),
       label: day.toLocaleDateString([], { day: '2-digit', month: '2-digit' }),
@@ -516,10 +536,10 @@ const buildDailyTrend = (records, periodDays) => {
         ? computeScoreFromTargetSamples(healthSamples)
         : computeBookingScoreFromSamples(bookingSamples),
       bookingHours: bookingDaySamples.length,
-      bookingOnTarget: bookingBreakdown.onTarget,
-      bookingAboveTarget: bookingBreakdown.aboveTarget,
-      bookingBelowTarget: bookingBreakdown.belowTarget,
-      bookingNoTarget: bookingBreakdown.noTarget,
+      bookingFelles: bookingBreakdown.felles,
+      bookingAufguss: bookingBreakdown.aufguss,
+      bookingPrivate: bookingBreakdown.private,
+      bookingService: bookingBreakdown.service,
     });
   }
   return days;
@@ -688,11 +708,20 @@ const getScoreHex = (score) => {
   return '#ef4444';
 };
 
-const getBookingOutcomeHex = (outcome) => {
-  if (outcome === 'onTarget') return '#22c55e';
-  if (outcome === 'aboveTarget') return '#f59e0b';
-  if (outcome === 'belowTarget') return '#ef4444';
-  return '#60a5fa';
+const getBookingTypeHex = (type) => {
+  const normalized = normalizeBookingType(type);
+  if (normalized === 'service') return '#b49a6d';
+  if (normalized === 'aufguss') return '#8f82b4';
+  if (normalized === 'private') return '#ff5cae';
+  return '#63a4ff';
+};
+
+const getBookingTypeLabel = (type, tr) => {
+  const normalized = normalizeBookingType(type);
+  if (normalized === 'service') return tr('calendarBooking.type.service', 'Service');
+  if (normalized === 'aufguss') return tr('calendarBooking.type.aufguss', 'Aufguss');
+  if (normalized === 'private') return tr('calendarBooking.type.private', 'Private');
+  return tr('calendarBooking.type.felles', 'Felles');
 };
 
 const getDeltaText = (value) => {
@@ -1006,6 +1035,53 @@ const createPdfBlob = ({ report, title, subtitle, tr }) => {
     }
   };
 
+  const stackedHorizontalBars = ({ title: chartTitle, entries, segments, totalAccessor, labelAccessor, maxValue = 1, valueFormatter = formatNumber }) => {
+    const safeEntries = Array.isArray(entries) ? entries : [];
+    if (!safeEntries.length) {
+      callout({ title: chartTitle, body: tr('reports.noChartData', 'No chart data in selected period'), tone: palette.blue });
+      return;
+    }
+
+    const rowH = 22;
+    const rowsPerPanel = 9;
+    const labelW = 132;
+    const barW = pageWidth - (margin * 2) - labelW - 78;
+    for (let start = 0; start < safeEntries.length; start += rowsPerPanel) {
+      const rows = safeEntries.slice(start, start + rowsPerPanel);
+      const containerH = 64 + (rows.length * rowH);
+      ensureSpace(containerH + 12);
+      const boxY = y - containerH;
+      panel(margin, boxY, contentWidth, containerH, palette.panelAlt, palette.border);
+      text(start === 0 ? chartTitle : `${chartTitle} (${start + 1})`, margin + 14, y - 22, 10, 'F2', palette.text);
+
+      let legendX = margin + 14;
+      segments.forEach((segment) => {
+        rect(legendX, y - 40, 8, 8, segment.color);
+        text(segment.label, legendX + 12, y - 39, 7, 'F1', palette.muted);
+        legendX += Math.max(62, segment.label.length * 4.5 + 20);
+      });
+
+      rows.forEach((entry, index) => {
+        const rowY = y - 62 - (index * rowH);
+        const total = Number(totalAccessor(entry));
+        text(truncateText(labelAccessor(entry), 24), margin + 14, rowY + 2, 8, 'F2', palette.text);
+        rect(margin + 14 + labelW, rowY - 2, barW, 8, '#263b51');
+
+        let cursor = margin + 14 + labelW;
+        segments.forEach((segment) => {
+          const value = Math.max(0, Number(segment.valueAccessor(entry)) || 0);
+          if (!value) return;
+          const segmentW = Math.max(2, (value / Math.max(1, maxValue)) * barW);
+          rect(cursor, rowY - 2, segmentW, 8, segment.color);
+          cursor += segmentW;
+        });
+
+        text(valueFormatter(total), margin + 14 + labelW + barW + 12, rowY, 8, 'F2', palette.muted);
+      });
+      y = boxY - 16;
+    }
+  };
+
   const renderTableHeader = (columns, tableWidth) => {
     ensureSpace(28);
     rect(margin, y - 17, tableWidth, 22, palette.panelRaised);
@@ -1094,27 +1170,27 @@ const createPdfBlob = ({ report, title, subtitle, tr }) => {
     entries: report.trend,
     labelAccessor: (entry) => entry.label,
     maxValue: Math.max(1, ...report.trend.map((entry) => entry.bookingHours)),
-    scaleLabel: tr('reports.bookingScale', 'Booking hours by target outcome'),
+    scaleLabel: tr('reports.bookingScale', 'Booking hours by booking type'),
     segments: [
       {
-        label: tr('reports.bookingOnTarget', 'On target'),
-        color: getBookingOutcomeHex('onTarget'),
-        valueAccessor: (entry) => entry.bookingOnTarget,
+        label: getBookingTypeLabel('felles', tr),
+        color: getBookingTypeHex('felles'),
+        valueAccessor: (entry) => entry.bookingFelles,
       },
       {
-        label: tr('reports.bookingAboveTarget', 'Above target'),
-        color: getBookingOutcomeHex('aboveTarget'),
-        valueAccessor: (entry) => entry.bookingAboveTarget,
+        label: getBookingTypeLabel('aufguss', tr),
+        color: getBookingTypeHex('aufguss'),
+        valueAccessor: (entry) => entry.bookingAufguss,
       },
       {
-        label: tr('reports.bookingBelowTarget', 'Below target'),
-        color: getBookingOutcomeHex('belowTarget'),
-        valueAccessor: (entry) => entry.bookingBelowTarget,
+        label: getBookingTypeLabel('private', tr),
+        color: getBookingTypeHex('private'),
+        valueAccessor: (entry) => entry.bookingPrivate,
       },
       {
-        label: tr('reports.bookingNoTarget', 'No target'),
-        color: getBookingOutcomeHex('noTarget'),
-        valueAccessor: (entry) => entry.bookingNoTarget,
+        label: getBookingTypeLabel('service', tr),
+        color: getBookingTypeHex('service'),
+        valueAccessor: (entry) => entry.bookingService,
       },
     ],
   });
@@ -1132,17 +1208,38 @@ const createPdfBlob = ({ report, title, subtitle, tr }) => {
     valueFormatter: formatScore,
     colorAccessor: (record) => getScoreHex(record.healthScore),
   });
-  horizontalBars({
+  stackedHorizontalBars({
     title: tr('reports.bookingHoursBySauna', 'Booking hours by sauna'),
     entries: report.records
       .filter((record) => record.bookingHours > 0)
       .slice()
       .sort((a, b) => b.bookingHours - a.bookingHours),
-    valueAccessor: (record) => record.bookingHours,
+    segments: [
+      {
+        label: getBookingTypeLabel('felles', tr),
+        color: getBookingTypeHex('felles'),
+        valueAccessor: (record) => record.bookingTypeCounts?.felles || 0,
+      },
+      {
+        label: getBookingTypeLabel('aufguss', tr),
+        color: getBookingTypeHex('aufguss'),
+        valueAccessor: (record) => record.bookingTypeCounts?.aufguss || 0,
+      },
+      {
+        label: getBookingTypeLabel('private', tr),
+        color: getBookingTypeHex('private'),
+        valueAccessor: (record) => record.bookingTypeCounts?.private || 0,
+      },
+      {
+        label: getBookingTypeLabel('service', tr),
+        color: getBookingTypeHex('service'),
+        valueAccessor: (record) => record.bookingTypeCounts?.service || 0,
+      },
+    ],
+    totalAccessor: (record) => record.bookingHours,
     labelAccessor: (record) => record.name,
     maxValue: Math.max(1, report.maxBookingHours),
     valueFormatter: (value) => `${formatNumber(value)}h`,
-    colorAccessor: () => '#0f766e',
   });
 
   sectionTitle(tr('reports.saunaPerformance', 'Sauna performance'));
@@ -1201,8 +1298,8 @@ const createPdfBlob = ({ report, title, subtitle, tr }) => {
       ensureSpace(24);
       rect(margin, y - 15, contentWidth, 19, palette.panelAlt);
       strokeRect(margin, y - 15, contentWidth, 19, palette.borderSoft);
-      rect(margin, y - 15, 4, 19, getBookingOutcomeHex(getBookingOutcome(entry, record.targetToleranceC)));
-      text(`${formatDateTime(entry.timestampMs)} / ${truncateText(record.name, 28)}`, margin + 10, y - 7, 8, 'F2', palette.text);
+      rect(margin, y - 15, 4, 19, getBookingTypeHex(entry.bookingType));
+      text(`${formatDateTime(entry.timestampMs)} / ${getBookingTypeLabel(entry.bookingType, tr)} / ${truncateText(record.name, 22)}`, margin + 10, y - 7, 8, 'F2', palette.text);
       text(`${formatTemp(entry.startTemp)} / ${formatTemp(entry.targetTemp)} / ${formatPct(entry.deviationPct)}`, margin + 328, y - 7, 8, 'F1', palette.muted);
       y -= 22;
     });

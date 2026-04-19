@@ -2024,7 +2024,7 @@ export default function EditCardModal({
                   {translateText('sauna.bookingTemp.cardOptions', 'Sauna hourly KPI logger')}
                 </div>
                 <div className="text-[11px] text-[var(--text-secondary)] leading-relaxed">
-                  {translateText('sauna.bookingTemp.description', 'Stores sauna KPIs each hour at :02 when booking is active and service is off, and backfills missed hours in the current active stretch.')}
+                  {translateText('sauna.bookingTemp.description', 'Stores sauna KPIs each hour at :02 while booking is active, tags samples with booking type, and backfills missed hours in the current active stretch.')}
                 </div>
               </div>
 
