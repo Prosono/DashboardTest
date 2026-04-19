@@ -302,6 +302,7 @@ export const handleAddSelected = (ctx) => {
         type: 'reports',
         reportKind: 'sauna',
         periodDays: 14,
+        saunaRecordIds: [],
         gridColSpan: 4,
         gridRowSpan: 4,
       }, { openEdit: true });

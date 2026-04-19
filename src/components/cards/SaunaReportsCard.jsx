@@ -105,6 +105,11 @@ const makeTr = (t) => (key, fallback) => {
   return str;
 };
 
+const normalizeRecordIdList = (value) => {
+  if (!Array.isArray(value)) return [];
+  return Array.from(new Set(value.map((item) => String(item || '').trim()).filter(Boolean)));
+};
+
 const normalizeMatchText = (value) => String(value ?? '')
   .trim()
   .toLowerCase()
@@ -1379,18 +1384,6 @@ const createPdfBlob = ({ report, title, subtitle, tr }) => {
     }
   };
 
-  const renderTableHeader = (columns, tableWidth) => {
-    ensureSpace(28);
-    rect(margin, y - 17, tableWidth, 22, palette.panelRaised);
-    strokeRect(margin, y - 17, tableWidth, 22, palette.border);
-    let cursor = margin + 8;
-    columns.forEach(([label, width]) => {
-      text(label, cursor, y - 8, 7, 'F2', palette.muted);
-      cursor += width;
-    });
-    y -= 25;
-  };
-
   paintPage();
 
   panel(margin, y - 64, contentWidth, 64, '#0a1a2a', palette.border);
@@ -1542,44 +1535,120 @@ const createPdfBlob = ({ report, title, subtitle, tr }) => {
   sectionTitle(tr('reports.saunaPerformance', 'Sauna performance'));
   const performanceRecords = report.records
     .filter((record) => record.healthScore !== null || record.bookingHours > 0 || record.avgBookingTemp !== null);
-  const columns = [
-    [tr('sauna.name', 'Sauna'), 116],
-    [tr('reports.score', 'Score'), 48],
-    [tr('reports.trend', 'Trend'), 52],
-    [tr('reports.bookingHours', 'Hours'), 42],
-    [tr('reports.estimatedSessions', 'Sessions'), 52],
-    [tr('reports.hitRate', 'Hit rate'), 52],
-    [tr('reports.avgTemp', 'Avg temp'), 58],
-    [tr('reports.avgDeviation', 'Avg deviation'), 70],
-  ];
-  const tableWidth = columns.reduce((sum, [, width]) => sum + width, 0);
   if (!performanceRecords.length) {
     paragraph(tr('reports.noSaunaData', 'No sauna health data found'), margin, contentWidth, 10);
   } else {
-    renderTableHeader(columns, tableWidth);
-
-    performanceRecords.forEach((record, index) => {
-      if (y - 22 < margin + 30) {
-        newPage();
-        sectionTitle(tr('reports.saunaPerformance', 'Sauna performance'));
-        renderTableHeader(columns, tableWidth);
+    paragraph(
+      tr('reports.performanceHint', 'Ranked by score. Hours, hit rate and booking mix cover the selected period.'),
+      margin,
+      contentWidth,
+      8,
+      10,
+      palette.muted
+    );
+    const rowH = 58;
+    const rowGap = 8;
+    const statusForScore = (score) => {
+      if (!Number.isFinite(Number(score))) {
+        return {
+          label: tr('reports.performanceStatusMissing', 'Missing data'),
+          fill: '#1a2636',
+          textColor: palette.muted,
+        };
       }
-      rect(margin, y - 14, tableWidth, 18, index % 2 === 0 ? '#0a1724' : '#0f2031');
-      let cursor = margin + 8;
+      if (Number(score) > 90) {
+        return {
+          label: tr('reports.performanceStatusGood', 'Good'),
+          fill: '#123829',
+          textColor: palette.accent,
+        };
+      }
+      if (Number(score) >= 70) {
+        return {
+          label: tr('reports.performanceStatusWatch', 'Watch'),
+          fill: '#3c3113',
+          textColor: palette.amber,
+        };
+      }
+      return {
+        label: tr('reports.performanceStatusAction', 'Action'),
+        fill: '#3a1822',
+        textColor: palette.rose,
+      };
+    };
+    const renderPerformanceIntro = () => {
+      sectionTitle(tr('reports.saunaPerformance', 'Sauna performance'));
+      paragraph(
+        tr('reports.performanceHint', 'Ranked by score. Hours, hit rate and booking mix cover the selected period.'),
+        margin,
+        contentWidth,
+        8,
+        10,
+        palette.muted
+      );
+    };
+    performanceRecords.forEach((record, index) => {
+      if (y - (rowH + rowGap) < margin + 30) {
+        newPage();
+        renderPerformanceIntro();
+      }
+      const rowY = y - rowH;
+      const fill = index % 2 === 0 ? '#0a1724' : '#0f2031';
+      roundRect(margin, rowY, contentWidth, rowH, 8, fill, '#24384d');
+      const leftX = margin + 12;
+      const scoreX = margin + contentWidth - 58;
+      const metricX = margin + 158;
+      const metricW = Math.max(54, (scoreX - metricX - 10) / 4);
+      const status = statusForScore(record.healthScore);
+      const scoreBasis = record.scoreSource === 'health'
+        ? tr('reports.healthDataReady', 'Health data ready')
+        : (record.scoreSource === 'booking' ? tr('reports.scoreFromBookings', 'score points from bookings') : tr('reports.healthDataMissing', 'Health data missing'));
+      const deviationText = formatPct(record.avgDeviationPct ?? record.avgBookingDeviationPct);
+      const scoreText = formatScore(record.healthScore);
+
+      text(truncateText(record.name, 26), leftX, rowY + rowH - 16, 9, 'F2', palette.text);
+      text(truncateText(scoreBasis, 30), leftX, rowY + rowH - 29, 6.5, 'F1', palette.muted);
+      roundRect(leftX, rowY + 8, 62, 16, 6, status.fill, '#2b4056');
+      text(truncateText(status.label, 14), leftX + 8, rowY + 13, 6.5, 'F2', status.textColor);
+
       [
-        truncateText(record.name, 24),
-        formatScore(record.healthScore),
-        getDeltaText(record.scoreDelta),
-        formatNumber(record.bookingHours),
-        formatNumber(record.sessions),
-        record.hitRate !== null ? `${record.hitRate}%` : '--',
-        formatTemp(record.avgBookingTemp),
-        formatPct(record.avgDeviationPct ?? record.avgBookingDeviationPct),
-      ].forEach((value, colIndex) => {
-        text(value, cursor, y - 6, colIndex === 0 ? 8 : 7.5, colIndex === 0 ? 'F2' : 'F1', colIndex === 1 ? getScoreHex(record.healthScore) : palette.text);
-        cursor += columns[colIndex][1];
+        {
+          label: tr('reports.trend', 'Trend'),
+          value: getDeltaText(record.scoreDelta),
+          color: Number(record.scoreDelta) >= 0 ? palette.accent : palette.amber,
+        },
+        {
+          label: tr('reports.bookingHours', 'Booking hours'),
+          value: `${formatNumber(record.bookingHours)}h`,
+          color: palette.text,
+        },
+        {
+          label: tr('reports.hitRate', 'Hit rate'),
+          value: record.hitRate !== null ? `${record.hitRate}%` : '--',
+          color: palette.accent,
+        },
+        {
+          label: tr('reports.avgTemp', 'Avg temp'),
+          value: formatTemp(record.avgBookingTemp),
+          color: palette.text,
+        },
+      ].forEach((metric, metricIndex) => {
+        const x = metricX + (metricIndex * metricW);
+        text(truncateText(metric.label, 14), x, rowY + rowH - 17, 6.2, 'F2', palette.muted);
+        text(truncateText(metric.value, 9), x, rowY + rowH - 32, 9, 'F2', metric.color);
       });
-      y -= 18;
+
+      const mixText = BOOKING_TYPES
+        .map((type) => `${getBookingTypeLabel(type, tr)} ${formatNumber(record.bookingTypeCounts?.[type] || 0)}h`)
+        .join('   ');
+      const performanceDetail = `${tr('reports.bookingMix', 'Booking mix')}: ${mixText}${deviationText !== '--' ? ` / ${tr('reports.avgDeviation', 'Avg deviation')}: ${deviationText}` : ''}`;
+      text(truncateText(performanceDetail, 78), metricX, rowY + 10, 6.5, 'F1', palette.subtle);
+
+      roundRect(scoreX, rowY + 10, 44, 36, 8, '#0b1724', '#2b4056');
+      text(scoreText, scoreX + (scoreText.length > 2 ? 8 : 13), rowY + 27, 14, 'F2', getScoreHex(record.healthScore));
+      text(tr('reports.score', 'Score'), scoreX + 10, rowY + 16, 6, 'F2', palette.muted);
+
+      y -= rowH + rowGap;
     });
   }
 
@@ -1655,11 +1724,19 @@ export default function SaunaReportsCard({
   t,
 }) {
   const tr = useMemo(() => makeTr(t), [t]);
+  const configuredSelectedIds = useMemo(
+    () => normalizeRecordIdList(settings?.saunaRecordIds ?? settings?.selectedSaunaIds),
+    [settings?.saunaRecordIds, settings?.selectedSaunaIds]
+  );
   const [periodDays, setPeriodDays] = useState(() => (
     PERIOD_OPTIONS.includes(Number(settings?.periodDays)) ? Number(settings.periodDays) : 14
   ));
-  const [selectedIds, setSelectedIds] = useState([]);
+  const [selectedIds, setSelectedIds] = useState(() => configuredSelectedIds);
   const [calendarEvents, setCalendarEvents] = useState([]);
+
+  useEffect(() => {
+    setSelectedIds(configuredSelectedIds);
+  }, [configuredSelectedIds]);
 
   const allRecords = useMemo(() => buildSaunaRecords({
     cardSettings,
@@ -1707,9 +1784,10 @@ export default function SaunaReportsCard({
 
   const activeRecords = useMemo(() => {
     const selectedSet = new Set(selectedIds);
-    const base = selectedSet.size
+    const filtered = selectedSet.size
       ? allRecords.filter((record) => selectedSet.has(record.id))
       : allRecords;
+    const base = selectedSet.size && !filtered.length ? allRecords : filtered;
     return base.map((record) => analyzeRecord(record, periodDays, calendarAssignments.get(record.id) || []));
   }, [allRecords, calendarAssignments, periodDays, selectedIds]);
 

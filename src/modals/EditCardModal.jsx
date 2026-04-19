@@ -99,6 +99,7 @@ export default function EditCardModal({
   isEditSaunaBookingTemp,
   isEditSaunaHealthScore,
   isEditSaunaMap,
+  isEditReports,
   isEditThermostat,
   isEditAlarmo,
   isEditCamera,
@@ -1651,6 +1652,159 @@ export default function EditCardModal({
                       </div>
                     );
                   })}
+                </div>
+              </div>
+            );
+          })()}
+
+
+          {isEditReports && editSettingsKey && (() => {
+            const selectedReportSaunas = Array.isArray(editSettings?.saunaRecordIds)
+              ? editSettings.saunaRecordIds.map((id) => String(id || '').trim()).filter(Boolean)
+              : [];
+            const allReportSaunas = selectedReportSaunas.length === 0;
+            const getScopedSettings = (pageId, cardId) => ({
+              ...(cardSettings?.[cardId] || {}),
+              ...(cardSettings?.[`${pageId}::${cardId}`] || {}),
+            });
+            const getReportCandidateKind = (cardId, sourceSettings = {}) => {
+              const id = String(cardId || '');
+              const type = String(sourceSettings?.type || '').toLowerCase();
+              if (type === 'sauna' || id.startsWith('sauna_card_')) return 'sauna';
+              if (type === 'sauna_booking_temp' || id.startsWith('sauna_booking_temp_card_')) return 'booking';
+              if (type === 'sauna_health_score' || id.startsWith('sauna_health_score_card_')) return 'health';
+              return '';
+            };
+            const reportCandidateMap = new Map();
+            const addReportCandidate = (cardId, _pageId = '', sourceSettings = {}) => {
+              const id = String(cardId || '').trim();
+              const kind = getReportCandidateKind(id, sourceSettings);
+              if (!id || !kind) return;
+              const priority = kind === 'sauna' ? 0 : (kind === 'booking' ? 1 : 2);
+              const tempEntityId = sourceSettings?.tempEntityId || '';
+              const zoneEntityId = sourceSettings?.zoneEntityId || sourceSettings?.locationZoneEntityId || '';
+              const label = customNames?.[id]
+                || sourceSettings?.name
+                || sourceSettings?.heading
+                || sourceSettings?.title
+                || entities?.[tempEntityId]?.attributes?.friendly_name
+                || id;
+              const detailParts = [
+                kind === 'sauna'
+                  ? translateText('sauna.name', 'Sauna')
+                  : (kind === 'booking' ? translateText('reports.bookingSource', 'Booking source') : translateText('reports.healthSource', 'Health source')),
+                zoneEntityId ? (entities?.[zoneEntityId]?.attributes?.friendly_name || zoneEntityId) : '',
+                tempEntityId ? (entities?.[tempEntityId]?.attributes?.friendly_name || tempEntityId) : '',
+              ].filter(Boolean);
+              const existing = reportCandidateMap.get(id);
+              if (existing && existing.priority <= priority) return;
+              reportCandidateMap.set(id, {
+                id,
+                kind,
+                priority,
+                label,
+                detail: detailParts.join(' - '),
+              });
+            };
+            const configuredPages = Array.isArray(pagesConfig?.pages) ? pagesConfig.pages : [];
+            const fallbackPages = Object.keys(pagesConfig || {}).filter((key) => Array.isArray(pagesConfig?.[key]));
+            Array.from(new Set([...configuredPages, ...fallbackPages])).forEach((pageId) => {
+              const pageCards = Array.isArray(pagesConfig?.[pageId]) ? pagesConfig[pageId] : [];
+              pageCards.forEach((cardId) => addReportCandidate(cardId, pageId, getScopedSettings(pageId, cardId)));
+            });
+            Object.entries(cardSettings || {}).forEach(([settingKeyName, sourceSettings]) => {
+              const parts = String(settingKeyName || '').split('::');
+              const cardId = parts[parts.length - 1];
+              const pageId = parts.length > 1 ? parts[0] : '';
+              addReportCandidate(cardId, pageId, sourceSettings);
+            });
+            const allCandidates = Array.from(reportCandidateMap.values())
+              .sort((a, b) => (a.priority - b.priority) || a.label.localeCompare(b.label));
+            const hasSaunaCandidates = allCandidates.some((candidate) => candidate.kind === 'sauna');
+            const reportSaunaCandidates = allCandidates.filter((candidate) => (
+              hasSaunaCandidates ? candidate.kind === 'sauna' : true
+            ));
+            const toggleReportSauna = (id) => {
+              if (allReportSaunas) {
+                saveCardSetting(editSettingsKey, 'saunaRecordIds', [id]);
+                return;
+              }
+              const selected = selectedReportSaunas.includes(id);
+              const next = selected
+                ? selectedReportSaunas.filter((item) => item !== id)
+                : [...selectedReportSaunas, id];
+              saveCardSetting(editSettingsKey, 'saunaRecordIds', next);
+            };
+
+            return (
+              <div className="space-y-3">
+                <label className="text-xs uppercase font-bold text-gray-500 ml-1">
+                  {translateText('reports.settingsTitle', 'Report settings')}
+                </label>
+                <div className="rounded-2xl popup-surface p-4 space-y-4">
+                  <div>
+                    <div className="text-xs uppercase font-bold tracking-widest text-gray-500">
+                      {translateText('reports.settingsSaunaScope', 'Saunas in report')}
+                    </div>
+                    <div className="mt-1 text-[11px] text-[var(--text-secondary)] leading-relaxed">
+                      {translateText('reports.settingsSaunaScopeHint', 'Choose which saunas this report should list. Empty selection means all saunas.')}
+                    </div>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => saveCardSetting(editSettingsKey, 'saunaRecordIds', [])}
+                    className={`w-full text-left px-4 py-3 rounded-2xl border transition-colors ${
+                      allReportSaunas
+                        ? 'bg-emerald-500/15 border-emerald-500/35 text-emerald-300'
+                        : 'bg-[var(--glass-bg)] border-[var(--glass-border)] text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="min-w-0">
+                        <div className="text-xs font-bold uppercase tracking-widest">
+                          {translateText('reports.settingsAllSaunas', 'All saunas')}
+                        </div>
+                        <div className="mt-1 text-[10px] text-[var(--text-muted)]">
+                          {translateText('reports.settingsAllSaunasHint', 'The report follows every sauna card it can find.')}
+                        </div>
+                      </div>
+                      {allReportSaunas && <Check className="w-4 h-4 shrink-0" />}
+                    </div>
+                  </button>
+
+                  <div className="space-y-2 max-h-72 overflow-y-auto custom-scrollbar pr-1">
+                    {reportSaunaCandidates.length === 0 && (
+                      <div className="px-3 py-5 text-center text-xs text-[var(--text-muted)] rounded-xl bg-[var(--glass-bg)]">
+                        {translateText('reports.settingsNoSaunas', 'No sauna cards found')}
+                      </div>
+                    )}
+                    {reportSaunaCandidates.map((candidate) => {
+                      const included = allReportSaunas || selectedReportSaunas.includes(candidate.id);
+                      return (
+                        <button
+                          key={candidate.id}
+                          type="button"
+                          onClick={() => toggleReportSauna(candidate.id)}
+                          className={`w-full text-left px-3 py-2.5 rounded-xl border transition-colors ${
+                            included
+                              ? 'bg-blue-500/15 border-blue-500/35 text-blue-300'
+                              : 'border-transparent bg-[var(--glass-bg)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--glass-bg-hover)]'
+                          }`}
+                        >
+                          <div className="flex items-center justify-between gap-3">
+                            <div className="min-w-0">
+                              <div className="text-sm font-bold truncate">{candidate.label}</div>
+                              {candidate.detail && (
+                                <div className="mt-0.5 text-[10px] text-[var(--text-muted)] truncate">{candidate.detail}</div>
+                              )}
+                            </div>
+                            {included && <Check className="w-4 h-4 shrink-0" />}
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
               </div>
             );
