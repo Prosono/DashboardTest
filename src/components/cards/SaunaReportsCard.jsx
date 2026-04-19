@@ -931,6 +931,29 @@ const downloadBlob = (content, fileName, mimeType) => {
 
 const REPORT_LOGO_URL = '/favicon.png';
 
+const getAuthTokenFromRef = (authRef) => {
+  const auth = authRef?.current || authRef || null;
+  return String(
+    auth?.accessToken
+    || auth?.data?.access_token
+    || auth?.data?.accessToken
+    || auth?.token
+    || ''
+  ).trim();
+};
+
+const shouldAttachPdfImageAuth = (sourceUrl, activeUrl) => {
+  const root = String(activeUrl || '').trim();
+  if (!root) return false;
+  try {
+    const source = new URL(sourceUrl, typeof window !== 'undefined' ? window.location.href : root);
+    const active = new URL(root);
+    return source.origin === active.origin;
+  } catch {
+    return false;
+  }
+};
+
 const dataUrlToPdfHex = (dataUrl) => {
   const base64 = String(dataUrl || '').split(',')[1] || '';
   if (!base64 || typeof window === 'undefined') return '';
@@ -942,6 +965,101 @@ const dataUrlToPdfHex = (dataUrl) => {
   return `${chunks.join('')}>`;
 };
 
+const drawPdfImageSource = (sourceUrl, {
+  size,
+  fill,
+  fit,
+  quality,
+}) => new Promise((resolve) => {
+  if (typeof window === 'undefined' || typeof document === 'undefined') {
+    resolve(null);
+    return;
+  }
+
+  const image = new window.Image();
+  if (!String(sourceUrl || '').startsWith('blob:') && !String(sourceUrl || '').startsWith('data:')) {
+    image.crossOrigin = 'anonymous';
+  }
+  image.onload = () => {
+    try {
+      const canvas = document.createElement('canvas');
+      canvas.width = size;
+      canvas.height = size;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) {
+        resolve(null);
+        return;
+      }
+      ctx.fillStyle = fill;
+      ctx.fillRect(0, 0, size, size);
+      const sourceW = image.naturalWidth || image.width || size;
+      const sourceH = image.naturalHeight || image.height || size;
+      if (fit === 'contain') {
+        const scale = Math.min(size / sourceW, size / sourceH);
+        const drawW = sourceW * scale;
+        const drawH = sourceH * scale;
+        ctx.drawImage(image, (size - drawW) / 2, (size - drawH) / 2, drawW, drawH);
+      } else {
+        const scale = Math.max(size / sourceW, size / sourceH);
+        const cropW = size / scale;
+        const cropH = size / scale;
+        const cropX = Math.max(0, (sourceW - cropW) / 2);
+        const cropY = Math.max(0, (sourceH - cropH) / 2);
+        ctx.drawImage(image, cropX, cropY, cropW, cropH, 0, 0, size, size);
+      }
+      const dataUrl = canvas.toDataURL('image/jpeg', quality);
+      const dataHex = dataUrlToPdfHex(dataUrl);
+      resolve(dataHex ? { width: size, height: size, dataHex } : null);
+    } catch {
+      resolve(null);
+    }
+  };
+  image.onerror = () => resolve(null);
+  image.src = sourceUrl;
+});
+
+const fetchPdfImageObjectUrl = async (sourceUrl, { activeUrl = '', authToken = '' } = {}) => {
+  if (typeof window === 'undefined' || !sourceUrl || /^data:|^blob:/i.test(sourceUrl)) return '';
+  const headers = {};
+  if (authToken && shouldAttachPdfImageAuth(sourceUrl, activeUrl)) {
+    headers.Authorization = `Bearer ${authToken}`;
+  }
+  const response = await fetch(sourceUrl, {
+    headers,
+    credentials: 'include',
+    cache: 'no-store',
+  });
+  if (!response.ok) throw new Error(`Image fetch failed: ${response.status}`);
+  const blob = await response.blob();
+  if (!blob || !blob.size) throw new Error('Image fetch returned an empty blob');
+  return URL.createObjectURL(blob);
+};
+
+const fetchPdfImageViaProxyObjectUrl = async (sourceUrl, { activeUrl = '', authToken = '' } = {}) => {
+  if (
+    typeof window === 'undefined'
+    || !sourceUrl
+    || !activeUrl
+    || !shouldAttachPdfImageAuth(sourceUrl, activeUrl)
+  ) {
+    return '';
+  }
+  const response = await fetch('/api/image-proxy', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    credentials: 'include',
+    body: JSON.stringify({
+      url: sourceUrl,
+      activeUrl,
+      token: authToken,
+    }),
+  });
+  if (!response.ok) throw new Error(`Image proxy failed: ${response.status}`);
+  const blob = await response.blob();
+  if (!blob || !blob.size) throw new Error('Image proxy returned an empty blob');
+  return URL.createObjectURL(blob);
+};
+
 const pdfImagePromises = new Map();
 
 const loadPdfImage = (url, {
@@ -949,57 +1067,39 @@ const loadPdfImage = (url, {
   fill = '#0a1724',
   fit = 'cover',
   quality = 0.86,
+  activeUrl = '',
+  authToken = '',
 } = {}) => {
   const sourceUrl = String(url || '').trim();
   if (!sourceUrl) return Promise.resolve(null);
-  const cacheKey = `${sourceUrl}|${size}|${fill}|${fit}|${quality}`;
+  const cacheKey = `${sourceUrl}|${size}|${fill}|${fit}|${quality}|${Boolean(authToken)}`;
   if (pdfImagePromises.has(cacheKey)) return pdfImagePromises.get(cacheKey);
 
-  const promise = new Promise((resolve) => {
-    if (typeof window === 'undefined' || typeof document === 'undefined') {
-      resolve(null);
-      return;
+  const promise = (async () => {
+    let objectUrl = '';
+    try {
+      objectUrl = await fetchPdfImageObjectUrl(sourceUrl, { activeUrl, authToken });
+      const fetchedImage = await drawPdfImageSource(objectUrl, { size, fill, fit, quality });
+      if (fetchedImage) return fetchedImage;
+    } catch {
+      // Fall back to direct image loading. This still works for same-origin and CORS-enabled images.
+    } finally {
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
     }
 
-    const image = new window.Image();
-    image.crossOrigin = 'anonymous';
-    image.onload = () => {
-      try {
-        const canvas = document.createElement('canvas');
-        canvas.width = size;
-        canvas.height = size;
-        const ctx = canvas.getContext('2d');
-        if (!ctx) {
-          resolve(null);
-          return;
-        }
-        ctx.fillStyle = fill;
-        ctx.fillRect(0, 0, size, size);
-        const sourceW = image.naturalWidth || image.width || size;
-        const sourceH = image.naturalHeight || image.height || size;
-        if (fit === 'contain') {
-          const scale = Math.min(size / sourceW, size / sourceH);
-          const drawW = sourceW * scale;
-          const drawH = sourceH * scale;
-          ctx.drawImage(image, (size - drawW) / 2, (size - drawH) / 2, drawW, drawH);
-        } else {
-          const scale = Math.max(size / sourceW, size / sourceH);
-          const cropW = size / scale;
-          const cropH = size / scale;
-          const cropX = Math.max(0, (sourceW - cropW) / 2);
-          const cropY = Math.max(0, (sourceH - cropH) / 2);
-          ctx.drawImage(image, cropX, cropY, cropW, cropH, 0, 0, size, size);
-        }
-        const dataUrl = canvas.toDataURL('image/jpeg', quality);
-        const dataHex = dataUrlToPdfHex(dataUrl);
-        resolve(dataHex ? { width: size, height: size, dataHex } : null);
-      } catch {
-        resolve(null);
-      }
-    };
-    image.onerror = () => resolve(null);
-    image.src = sourceUrl;
-  });
+    objectUrl = '';
+    try {
+      objectUrl = await fetchPdfImageViaProxyObjectUrl(sourceUrl, { activeUrl, authToken });
+      const proxiedImage = await drawPdfImageSource(objectUrl, { size, fill, fit, quality });
+      if (proxiedImage) return proxiedImage;
+    } catch {
+      // Last fallback below.
+    } finally {
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    }
+
+    return drawPdfImageSource(sourceUrl, { size, fill, fit, quality });
+  })();
   pdfImagePromises.set(cacheKey, promise);
   return promise;
 };
@@ -1889,6 +1989,8 @@ export default function SaunaReportsCard({
   editMode,
   customNames,
   getEntityImageUrl,
+  activeUrl,
+  authRef,
   t,
 }) {
   const tr = useMemo(() => makeTr(t), [t]);
@@ -1996,6 +2098,7 @@ export default function SaunaReportsCard({
     try {
       const title = cardName;
       const subtitle = `${selectedLabel} - ${periodDays} ${tr('reports.days', 'days')} - ${rangeLabel}`;
+      const authToken = getAuthTokenFromRef(authRef);
       const logoImage = await loadReportLogoImage();
       const saunaImageEntries = await Promise.all(activeRecords.map(async (record) => {
         const image = await loadPdfImage(record.imageUrl, {
@@ -2003,6 +2106,8 @@ export default function SaunaReportsCard({
           fill: '#0a1724',
           fit: 'cover',
           quality: 0.82,
+          activeUrl,
+          authToken,
         });
         return [record.id, image];
       }));

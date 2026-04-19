@@ -725,7 +725,7 @@ export function renderGlobalTimelineCard(cardId, dragProps, getControls, cardSty
 
 export function renderReportsCard(cardId, dragProps, getControls, cardStyle, settingsKey, ctx) {
   const {
-    entities, editMode, conn, cardSettings, customNames, customIcons, getEntityImageUrl, language, t,
+    entities, editMode, conn, cardSettings, customNames, customIcons, getEntityImageUrl, activeUrl, authRef, language, t,
   } = ctx;
   const rawSettings = cardSettings[settingsKey] || cardSettings[cardId] || {};
   if (rawSettings?.reportKind === 'timeline') {
@@ -768,6 +768,8 @@ export function renderReportsCard(cardId, dragProps, getControls, cardStyle, set
       customNames={customNames}
       customIcons={customIcons}
       getEntityImageUrl={getEntityImageUrl}
+      activeUrl={activeUrl}
+      authRef={authRef}
       t={t}
     />
   );
