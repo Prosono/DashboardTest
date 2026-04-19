@@ -437,26 +437,6 @@
   box-shadow: 0 8px 18px rgba(0, 0, 0, 0.4);
 }
 
-.sauna-map-marker__people {
-  position: absolute;
-  left: 1px;
-  bottom: 2px;
-  min-width: 20px;
-  height: 20px;
-  padding: 0 5px;
-  border-radius: 9999px;
-  display: grid;
-  place-items: center;
-  background: rgba(4, 10, 20, 0.92);
-  color: #f8fafc;
-  font-size: 10px;
-  font-weight: 900;
-  line-height: 1;
-  letter-spacing: 0;
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  box-shadow: 0 8px 18px rgba(0, 0, 0, 0.36);
-}
-
 .sauna-map-chip {
   display: inline-flex;
   align-items: center;

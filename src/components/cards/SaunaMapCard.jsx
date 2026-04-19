@@ -440,6 +440,15 @@ const looksLikeHealthScoreText = (...values) => values.some((value) => {
   return text.includes('sauna') && text.includes('score');
 });
 
+const looksLikeBookingTempLogText = (...values) => values.some((value) => {
+  const text = normalizeMatchText(value);
+  const compact = text.replace(/\s+/g, '');
+  if (!text) return false;
+  if (compact.includes('badstutemplogg') || compact.includes('saunatemplog')) return true;
+  if ((text.includes('badstu') || text.includes('sauna')) && text.includes('temp') && (text.includes('logg') || text.includes('log'))) return true;
+  return text.includes('booking') && text.includes('temp');
+});
+
 const getSourceKind = (cardId, settings, customName = '') => {
   const type = String(settings?.type || '').toLowerCase();
   if (type === 'sauna') return 'sauna';
@@ -448,6 +457,8 @@ const getSourceKind = (cardId, settings, customName = '') => {
   if (cardId.startsWith('sauna_card_')) return 'sauna';
   if (cardId.startsWith('sauna_health_score_card_') || cardId.includes('sauna_health')) return 'health';
   if (cardId.startsWith('sauna_booking_temp_card_') || cardId.includes('sauna_booking')) return 'booking';
+  if (Array.isArray(settings?.bookingSnapshots)) return 'booking';
+  if (looksLikeBookingTempLogText(customName, settings?.name, settings?.heading, settings?.title, cardId)) return 'booking';
   if (Array.isArray(settings?.healthSnapshots)) return 'health';
   if (looksLikeHealthScoreText(customName, settings?.name, settings?.heading, settings?.title, cardId)) return 'health';
   return null;
@@ -535,12 +546,11 @@ const makeMarkerHtml = (location) => {
     ? clamp(Math.round(Number(location.healthScore)), 0, 100)
     : null;
   const scoreDeg = score !== null ? `${score * 3.6}deg` : '0deg';
-  const scoreLabel = formatScore(location.healthScore);
   const tempLabel = location.currentTemp !== null ? `${Math.round(location.currentTemp)}°` : '--';
   const peopleLabel = formatPeopleCount(location.peopleNow);
   const imageHtml = location.imageUrl
-    ? `<span class="sauna-map-marker__fallback">${escapeHtml(scoreLabel)}</span><img src="${escapeHtml(location.imageUrl)}" alt="" class="sauna-map-marker__image" draggable="false" />`
-    : `<span class="sauna-map-marker__fallback">${escapeHtml(scoreLabel)}</span>`;
+    ? `<span class="sauna-map-marker__fallback">${escapeHtml(peopleLabel)}</span><img src="${escapeHtml(location.imageUrl)}" alt="" class="sauna-map-marker__image" draggable="false" />`
+    : `<span class="sauna-map-marker__fallback">${escapeHtml(peopleLabel)}</span>`;
   return `
     <div class="sauna-map-marker sauna-map-marker--${tone}" title="${escapeHtml(location.name)}" style="--score-deg: ${scoreDeg}">
       <span class="sauna-map-marker__glow"></span>
@@ -551,7 +561,6 @@ const makeMarkerHtml = (location) => {
           </span>
         </span>
         <span class="sauna-map-marker__score">${escapeHtml(formatScore(location.healthScore))}</span>
-        <span class="sauna-map-marker__people">${escapeHtml(peopleLabel)}</span>
       </span>
       <span class="sauna-map-marker__temp">${escapeHtml(tempLabel)}</span>
     </div>
@@ -635,24 +644,14 @@ export default function SaunaMapCard({
         };
 
         const saunaSource = chooseBestSource(zone, saunaSources);
-        const matchedHealthSource = chooseRelatedSource(zone, saunaSource, healthSources, { preferScored: true });
-        const healthSource = Number(matchedHealthSource?.healthScore) > 0
-          ? matchedHealthSource
-          : (chooseRelatedSource(
-            zone,
-            saunaSource,
-            healthSources.filter((source) => Number(source.healthScore) > 0),
-            { preferScored: true }
-          ) || matchedHealthSource);
         const bookingSource = chooseRelatedSource(zone, saunaSource, bookingSources);
+        const healthSource = chooseRelatedSource(zone, saunaSource, healthSources, { preferScored: true });
         const tempFallback = chooseTemperatureEntity(zone, temperatureEntities);
-        const tempSource = saunaSource || healthSource || bookingSource;
+        const tempSource = saunaSource || bookingSource || healthSource;
         const currentTemp = tempSource?.currentTemp ?? tempFallback?.currentTemp ?? null;
-        const healthScore = healthSources.length
-          ? pickBestScore(healthSource?.healthScore)
-          : pickBestScore(bookingSource?.healthScore);
-        const active = Boolean(saunaSource?.active || healthSource?.active || bookingSource?.active);
-        const service = Boolean(saunaSource?.service || healthSource?.service || bookingSource?.service);
+        const healthScore = pickBestScore(bookingSource?.healthScore);
+        const active = Boolean(saunaSource?.active || bookingSource?.active || healthSource?.active);
+        const service = Boolean(saunaSource?.service || bookingSource?.service || healthSource?.service);
         const matchedName = saunaSource?.name || healthSource?.name || bookingSource?.name || tempFallback?.entityId || '';
         const imageUrl = saunaSource?.imageUrl || healthSource?.imageUrl || bookingSource?.imageUrl || null;
         const targetCardId = saunaSource?.cardId || '';
