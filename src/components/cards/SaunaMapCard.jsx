@@ -431,6 +431,15 @@ const chooseRelatedSource = (zone, baseSource, sources, { preferScored = false }
   return best?.score >= 3 ? best.source : null;
 };
 
+const looksLikeHealthScoreText = (...values) => values.some((value) => {
+  const text = normalizeMatchText(value);
+  const compact = text.replace(/\s+/g, '');
+  if (!text) return false;
+  if (compact.includes('helsescore') || compact.includes('healthscore')) return true;
+  if ((text.includes('helse') || text.includes('health')) && text.includes('score')) return true;
+  return text.includes('sauna') && text.includes('score');
+});
+
 const getManualHealthSource = (settings, zone, healthSources) => {
   const mappings = settings?.healthScoreSourceByZone || settings?.healthCardByZone || {};
   if (!mappings || typeof mappings !== 'object' || Array.isArray(mappings)) return null;
@@ -439,7 +448,7 @@ const getManualHealthSource = (settings, zone, healthSources) => {
   return healthSources.find((source) => source.cardId === sourceId || source.settingsKey === sourceId) || null;
 };
 
-const getSourceKind = (cardId, settings) => {
+const getSourceKind = (cardId, settings, customName = '') => {
   const type = String(settings?.type || '').toLowerCase();
   if (type === 'sauna') return 'sauna';
   if (type === 'sauna_health_score' || (type.includes('sauna') && type.includes('health'))) return 'health';
@@ -447,6 +456,8 @@ const getSourceKind = (cardId, settings) => {
   if (cardId.startsWith('sauna_card_')) return 'sauna';
   if (cardId.startsWith('sauna_health_score_card_') || cardId.includes('sauna_health')) return 'health';
   if (cardId.startsWith('sauna_booking_temp_card_') || cardId.includes('sauna_booking')) return 'booking';
+  if (Array.isArray(settings?.healthSnapshots)) return 'health';
+  if (looksLikeHealthScoreText(customName, settings?.name, settings?.heading, settings?.title, cardId)) return 'health';
   return null;
 };
 
@@ -476,7 +487,7 @@ const buildSourceCards = ({ cardSettings, entities, customNames, tr, getEntityIm
 
   return Array.from(byCardId.values())
     .map(({ cardId, settingsKey, pageId, settings }) => {
-      const kind = getSourceKind(cardId, settings);
+      const kind = getSourceKind(cardId, settings, customNames?.[cardId]);
       if (!kind) return null;
       const tempEntityId = settings?.tempEntityId || '';
       const tempEntity = tempEntityId ? entities?.[tempEntityId] : null;

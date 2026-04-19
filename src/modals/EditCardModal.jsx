@@ -1671,11 +1671,34 @@ export default function EditCardModal({
                 ...(cardSettings?.[`${pageId}::${cardId}`] || {}),
               }
             );
+            const normalizeHealthCardText = (value) => String(value ?? '')
+              .trim()
+              .toLowerCase()
+              .replace(/æ/g, 'ae')
+              .replace(/ø/g, 'o')
+              .replace(/å/g, 'a')
+              .replace(/[^a-z0-9]+/g, ' ');
+            const looksLikeHealthScoreCardText = (...values) => values.some((value) => {
+              const text = normalizeHealthCardText(value);
+              const compact = text.replace(/\s+/g, '');
+              if (!text) return false;
+              if (compact.includes('helsescore') || compact.includes('healthscore')) return true;
+              if ((text.includes('helse') || text.includes('health')) && text.includes('score')) return true;
+              return text.includes('sauna') && text.includes('score');
+            });
             const isHealthScoreCard = (cardId, settings) => {
               const type = String(settings?.type || '').toLowerCase();
               return type === 'sauna_health_score'
                 || (type.includes('sauna') && type.includes('health'))
-                || String(cardId || '').startsWith('sauna_health_score_card_');
+                || String(cardId || '').startsWith('sauna_health_score_card_')
+                || Array.isArray(settings?.healthSnapshots)
+                || looksLikeHealthScoreCardText(
+                  customNames?.[cardId],
+                  settings?.name,
+                  settings?.heading,
+                  settings?.title,
+                  cardId
+                );
             };
             const healthScoreCardMap = new Map();
             const addHealthScoreCard = (cardId, pageId = '', settings = {}) => {
@@ -1821,7 +1844,7 @@ export default function EditCardModal({
                               <option value="">{translateText('saunaMap.autoHealthScore', 'Automatisk matching')}</option>
                               {healthScoreCards.map((source) => (
                                 <option key={source.cardId} value={source.cardId}>
-                                  {source.label}
+                                  {source.detail ? `${source.label} - ${source.detail}` : source.label}
                                 </option>
                               ))}
                             </select>
