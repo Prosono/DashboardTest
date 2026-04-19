@@ -1404,6 +1404,7 @@
   "reports.subtitle": "Driftsrapportar",
   "reports.refresh": "Oppdater",
   "reports.allSaunas": "Alle badstover",
+  "reports.allConfiguredSaunas": "Alle valde badstover",
   "reports.measurements": "Målingar",
   "reports.avgScore": "Snittscore",
   "reports.hitRate": "Treffrate",

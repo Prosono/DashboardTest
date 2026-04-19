@@ -1731,11 +1731,11 @@ export default function SaunaReportsCard({
   const [periodDays, setPeriodDays] = useState(() => (
     PERIOD_OPTIONS.includes(Number(settings?.periodDays)) ? Number(settings.periodDays) : 14
   ));
-  const [selectedIds, setSelectedIds] = useState(() => configuredSelectedIds);
+  const [selectedIds, setSelectedIds] = useState([]);
   const [calendarEvents, setCalendarEvents] = useState([]);
 
   useEffect(() => {
-    setSelectedIds(configuredSelectedIds);
+    setSelectedIds([]);
   }, [configuredSelectedIds]);
 
   const allRecords = useMemo(() => buildSaunaRecords({
@@ -1745,9 +1745,15 @@ export default function SaunaReportsCard({
     tr,
   }), [cardSettings, customNames, entities, tr]);
 
+  const scopedRecords = useMemo(() => {
+    if (!configuredSelectedIds.length) return allRecords;
+    const configuredSet = new Set(configuredSelectedIds);
+    return allRecords.filter((record) => configuredSet.has(record.id));
+  }, [allRecords, configuredSelectedIds]);
+
   const calendarEntityIds = useMemo(
-    () => collectCalendarEntityIds(cardSettings, allRecords),
-    [allRecords, cardSettings]
+    () => collectCalendarEntityIds(cardSettings, scopedRecords),
+    [cardSettings, scopedRecords]
   );
 
   useEffect(() => {
@@ -1778,25 +1784,26 @@ export default function SaunaReportsCard({
   }, [calendarEntityIds, conn, periodDays]);
 
   const calendarAssignments = useMemo(
-    () => assignCalendarEventsToRecords(allRecords, calendarEvents),
-    [allRecords, calendarEvents]
+    () => assignCalendarEventsToRecords(scopedRecords, calendarEvents),
+    [calendarEvents, scopedRecords]
   );
 
   const activeRecords = useMemo(() => {
     const selectedSet = new Set(selectedIds);
-    const filtered = selectedSet.size
-      ? allRecords.filter((record) => selectedSet.has(record.id))
-      : allRecords;
-    const base = selectedSet.size && !filtered.length ? allRecords : filtered;
+    const base = selectedSet.size
+      ? scopedRecords.filter((record) => selectedSet.has(record.id))
+      : scopedRecords;
     return base.map((record) => analyzeRecord(record, periodDays, calendarAssignments.get(record.id) || []));
-  }, [allRecords, calendarAssignments, periodDays, selectedIds]);
+  }, [calendarAssignments, periodDays, scopedRecords, selectedIds]);
 
   const report = useMemo(() => buildSummary(activeRecords, periodDays, tr), [activeRecords, periodDays, tr]);
   const cardName = firstDisplayText(customNames?.[cardId], settings?.name, tr('reports.saunaReportTitle', 'Sauna operations report'));
   const rangeLabel = `${formatDate(Date.now() - (periodDays * 24 * 60 * 60 * 1000))} - ${formatDate(Date.now())}`;
   const selectedLabel = selectedIds.length
     ? `${selectedIds.length} ${tr('reports.selectedSaunas', 'selected saunas')}`
-    : tr('reports.allSaunas', 'All saunas');
+    : (configuredSelectedIds.length
+      ? `${scopedRecords.length} ${tr('reports.selectedSaunas', 'selected saunas')}`
+      : tr('reports.allSaunas', 'All saunas'));
   const scoreValue = report.totalScoreSamples > 0 ? formatScore(report.avgScore) : '--';
   const scoreTone = report.totalScoreSamples > 0 ? getScoreToneClass(report.avgScore) : 'text-[var(--text-muted)]';
   const trendTone = Number(report.avgScoreDelta) > 0
@@ -1886,9 +1893,11 @@ export default function SaunaReportsCard({
                   : 'border-[var(--glass-border)] bg-[var(--glass-bg-hover)] text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
               }`}
             >
-              {tr('reports.allSaunas', 'All saunas')}
+              {configuredSelectedIds.length
+                ? tr('reports.allConfiguredSaunas', 'All configured saunas')
+                : tr('reports.allSaunas', 'All saunas')}
             </button>
-            {allRecords.map((record) => {
+            {scopedRecords.map((record) => {
               const active = selectedIds.length === 0 || selectedIds.includes(record.id);
               return (
                 <button

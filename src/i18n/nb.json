@@ -1404,6 +1404,7 @@
   "reports.subtitle": "Driftsrapporter",
   "reports.refresh": "Oppdater",
   "reports.allSaunas": "Alle badstuer",
+  "reports.allConfiguredSaunas": "Alle valgte badstuer",
   "reports.measurements": "Målinger",
   "reports.avgScore": "Snittscore",
   "reports.hitRate": "Treffrate",

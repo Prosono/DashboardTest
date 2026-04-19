@@ -1404,6 +1404,7 @@
   "reports.subtitle": "Operations reports",
   "reports.refresh": "Refresh",
   "reports.allSaunas": "All saunas",
+  "reports.allConfiguredSaunas": "All configured saunas",
   "reports.measurements": "Measurements",
   "reports.avgScore": "Average score",
   "reports.hitRate": "Hit rate",
