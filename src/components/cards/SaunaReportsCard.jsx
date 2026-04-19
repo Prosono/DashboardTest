@@ -25,6 +25,8 @@ const toNum = (value) => {
 
 const roundToOne = (value) => Math.round(Number(value) * 10) / 10;
 const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
+const cleanDisplayText = (value) => String(value ?? '').replace(/\s+/g, ' ').trim();
+const firstDisplayText = (...values) => values.map(cleanDisplayText).find(Boolean) || '';
 
 const makeTr = (t) => (key, fallback) => {
   const out = typeof t === 'function' ? t(key) : undefined;
@@ -65,13 +67,15 @@ const getEntityName = (entities, entityId) => {
 
 const getCardName = ({ cardId, settings, entities, customNames, fallback }) => {
   const tempName = getEntityName(entities, settings?.tempEntityId);
-  return customNames?.[cardId]
-    || settings?.name
-    || settings?.heading
-    || settings?.title
-    || tempName
-    || fallback
-    || cardId;
+  return firstDisplayText(
+    customNames?.[cardId],
+    settings?.name,
+    settings?.heading,
+    settings?.title,
+    tempName,
+    fallback,
+    cardId,
+  );
 };
 
 const getSourceKind = (cardId, settings) => {
@@ -360,7 +364,12 @@ const buildSaunaRecords = ({ cardSettings, entities, customNames, tr }) => {
     });
   });
 
-  return records.sort((a, b) => a.name.localeCompare(b.name));
+  return records
+    .sort((a, b) => a.name.localeCompare(b.name))
+    .map((record, index) => ({
+      ...record,
+      name: cleanDisplayText(record.name) || `${tr('sauna.name', 'Sauna')} ${index + 1}`,
+    }));
 };
 
 const countSessions = (samples) => {
@@ -604,20 +613,26 @@ const getDeltaText = (value) => {
 const createPdfBlob = ({ report, title, subtitle, tr }) => {
   const pageWidth = 595.28;
   const pageHeight = 841.89;
-  const margin = 42;
+  const margin = 36;
+  const contentWidth = pageWidth - (margin * 2);
+  const palette = {
+    page: '#07111d',
+    panel: '#0d1b2a',
+    panelAlt: '#102235',
+    panelRaised: '#14283d',
+    border: '#244057',
+    borderSoft: '#1c3348',
+    text: '#edf5ff',
+    muted: '#9fb1c4',
+    subtle: '#6f8298',
+    accent: '#5ee3a1',
+    blue: '#5b9cff',
+    amber: '#f7c948',
+    rose: '#fb7185',
+  };
   const pages = [];
   let ops = [];
   let y = pageHeight - margin;
-
-  const newPage = () => {
-    if (ops.length) pages.push(ops.join('\n'));
-    ops = [];
-    y = pageHeight - margin;
-  };
-
-  const ensureSpace = (height) => {
-    if (y - height < margin) newPage();
-  };
 
   const color = (hex) => {
     const clean = String(hex || '#000000').replace('#', '');
@@ -627,19 +642,59 @@ const createPdfBlob = ({ report, title, subtitle, tr }) => {
     return `${r.toFixed(3)} ${g.toFixed(3)} ${b.toFixed(3)}`;
   };
 
-  const text = (value, x, yy, size = 10, font = 'F1', hex = '#111827') => {
+  const text = (value, x, yy, size = 10, font = 'F1', hex = palette.text) => {
     ops.push(`BT /${font} ${size} Tf ${color(hex)} rg 1 0 0 1 ${x.toFixed(2)} ${yy.toFixed(2)} Tm ${toPdfHex(value)} Tj ET`);
   };
 
-  const rect = (x, yy, w, h, fill = '#ffffff') => {
+  const rect = (x, yy, w, h, fill = palette.panel) => {
     ops.push(`${color(fill)} rg ${x.toFixed(2)} ${yy.toFixed(2)} ${w.toFixed(2)} ${h.toFixed(2)} re f`);
   };
 
-  const line = (x1, y1, x2, y2, stroke = '#d1d5db') => {
+  const line = (x1, y1, x2, y2, stroke = palette.borderSoft) => {
     ops.push(`${color(stroke)} RG 0.75 w ${x1.toFixed(2)} ${y1.toFixed(2)} m ${x2.toFixed(2)} ${y2.toFixed(2)} l S`);
   };
 
-  const paragraph = (value, x, width, size = 10, gap = 13, hex = '#374151') => {
+  const strokeRect = (x, yy, w, h, stroke = palette.border) => {
+    line(x, yy, x + w, yy, stroke);
+    line(x + w, yy, x + w, yy + h, stroke);
+    line(x + w, yy + h, x, yy + h, stroke);
+    line(x, yy + h, x, yy, stroke);
+  };
+
+  const panel = (x, yy, w, h, fill = palette.panel, stroke = palette.borderSoft) => {
+    rect(x, yy, w, h, fill);
+    strokeRect(x, yy, w, h, stroke);
+  };
+
+  const paintPage = () => {
+    rect(0, 0, pageWidth, pageHeight, palette.page);
+    rect(0, pageHeight - 7, pageWidth, 7, '#0d3f35');
+    rect(0, pageHeight - 7, pageWidth * 0.28, 7, palette.blue);
+  };
+
+  const drawFooter = () => {
+    line(margin, 28, pageWidth - margin, 28, palette.borderSoft);
+    text(`Tunet / ${tr('reports.saunaReportTitle', 'Sauna operations report')}`, margin, 16, 7, 'F1', palette.subtle);
+    text(`${tr('reports.page', 'Page')} ${pages.length + 1}`, pageWidth - margin - 34, 16, 7, 'F1', palette.subtle);
+  };
+
+  const finishPage = () => {
+    drawFooter();
+    pages.push(ops.join('\n'));
+  };
+
+  const newPage = () => {
+    if (ops.length) finishPage();
+    ops = [];
+    y = pageHeight - margin;
+    paintPage();
+  };
+
+  const ensureSpace = (height) => {
+    if (y - height < margin + 30) newPage();
+  };
+
+  const paragraph = (value, x, width, size = 10, gap = 13, hex = palette.muted) => {
     const lines = wrapText(value, width, size);
     ensureSpace(lines.length * gap + 4);
     lines.forEach((entry) => {
@@ -650,117 +705,180 @@ const createPdfBlob = ({ report, title, subtitle, tr }) => {
   };
 
   const sectionTitle = (value) => {
-    ensureSpace(30);
-    text(value, margin, y, 14, 'F2', '#111827');
+    ensureSpace(34);
+    text(value, margin, y, 12, 'F2', palette.text);
     y -= 20;
-    line(margin, y + 7, pageWidth - margin, y + 7, '#e5e7eb');
+    line(margin, y + 7, pageWidth - margin, y + 7, palette.border);
+  };
+
+  const pill = (value, x, yy, w, fill = palette.panelRaised, textColor = palette.text) => {
+    rect(x, yy, w, 18, fill);
+    strokeRect(x, yy, w, 18, palette.borderSoft);
+    text(value, x + 8, yy + 6, 7, 'F2', textColor);
+  };
+
+  const metricBox = ({ label, value, x, yy, w, tone = palette.text }) => {
+    panel(x, yy, w, 56, palette.panelAlt, palette.borderSoft);
+    text(label, x + 10, yy + 36, 7, 'F2', palette.muted);
+    text(value, x + 10, yy + 14, 17, 'F2', tone);
+  };
+
+  const callout = ({ title: calloutTitle, body, tone = palette.accent }) => {
+    const lines = wrapText(body, contentWidth - 30, 9.5);
+    const height = Math.max(76, 36 + (lines.length * 13));
+    ensureSpace(height + 16);
+    const boxY = y - height;
+    panel(margin, boxY, contentWidth, height, palette.panelAlt, palette.border);
+    rect(margin, boxY, 4, height, tone);
+    text(calloutTitle, margin + 16, y - 22, 10, 'F2', palette.text);
+    lines.forEach((entry, index) => {
+      text(entry, margin + 16, y - 42 - (index * 13), 9.5, 'F1', palette.muted);
+    });
+    y = boxY - 18;
   };
 
   const valueBarChart = ({ title: chartTitle, entries, valueAccessor, labelAccessor, maxValue = 100, valueFormatter = formatNumber, colorAccessor = () => '#2563eb', height = 118 }) => {
-    ensureSpace(height + 44);
-    text(chartTitle, margin, y, 11, 'F2', '#111827');
-    y -= 18;
+    const containerH = height + 52;
+    ensureSpace(containerH + 12);
     const chartX = margin;
-    const chartY = y - height;
+    const chartY = y - containerH;
     const chartW = pageWidth - (margin * 2);
-    const chartH = height;
-    rect(chartX, chartY, chartW, chartH, '#f8fafc');
-    line(chartX, chartY + 24, chartX + chartW, chartY + 24, '#e5e7eb');
-    line(chartX, chartY + chartH - 24, chartX + chartW, chartY + chartH - 24, '#e5e7eb');
+    panel(chartX, chartY, chartW, containerH, palette.panelAlt, palette.border);
+    text(chartTitle, chartX + 14, y - 22, 10, 'F2', palette.text);
     const safeEntries = Array.isArray(entries) ? entries : [];
+    const hasValues = safeEntries.some((entry) => Number.isFinite(Number(valueAccessor(entry))));
+    const plotX = chartX + 14;
+    const plotY = chartY + 34;
+    const plotW = chartW - 28;
+    const plotH = height - 6;
+    line(plotX, plotY + 14, plotX + plotW, plotY + 14, palette.borderSoft);
+    line(plotX, plotY + plotH - 18, plotX + plotW, plotY + plotH - 18, palette.borderSoft);
+    if (!hasValues) {
+      text(tr('reports.noChartData', 'No chart data in selected period'), plotX, plotY + Math.round(plotH / 2), 9, 'F1', palette.muted);
+      y = chartY - 16;
+      return;
+    }
     const gap = safeEntries.length > 12 ? 3 : 6;
     const barW = safeEntries.length
-      ? Math.max(6, (chartW - 24 - (gap * (safeEntries.length - 1))) / safeEntries.length)
+      ? Math.max(6, (plotW - (gap * (safeEntries.length - 1))) / safeEntries.length)
       : 0;
     safeEntries.forEach((entry, index) => {
       const value = Number(valueAccessor(entry));
-      const x = chartX + 12 + (index * (barW + gap));
+      const x = plotX + (index * (barW + gap));
       const normalized = Number.isFinite(value) ? Math.max(0, Math.min(1, value / Math.max(1, maxValue))) : 0;
-      const barH = Math.max(Number.isFinite(value) ? 5 : 2, normalized * (chartH - 42));
-      const barY = chartY + 20;
-      rect(x, barY, barW, barH, Number.isFinite(value) ? colorAccessor(entry) : '#cbd5e1');
+      const barH = Math.max(Number.isFinite(value) ? 5 : 2, normalized * (plotH - 38));
+      const barY = plotY + 14;
+      rect(x, barY, barW, barH, Number.isFinite(value) ? colorAccessor(entry) : '#31465c');
       if (safeEntries.length <= 14) {
-        text(labelAccessor(entry), x - 1, chartY + 7, 6.5, 'F1', '#6b7280');
+        text(labelAccessor(entry), x - 1, chartY + 14, 6.5, 'F1', palette.subtle);
       }
     });
     const latest = safeEntries.slice().reverse().find((entry) => Number.isFinite(Number(valueAccessor(entry))));
     if (latest) {
-      text(`${tr('reports.latest', 'Latest')}: ${valueFormatter(valueAccessor(latest))}`, chartX + chartW - 118, chartY + chartH - 14, 8, 'F2', '#374151');
+      text(`${tr('reports.latest', 'Latest')}: ${valueFormatter(valueAccessor(latest))}`, chartX + chartW - 128, y - 22, 8, 'F2', palette.muted);
     }
-    y = chartY - 18;
+    y = chartY - 16;
   };
 
   const horizontalBars = ({ title: chartTitle, entries, valueAccessor, labelAccessor, maxValue = 100, valueFormatter = formatNumber, colorAccessor = () => '#2563eb' }) => {
     const safeEntries = Array.isArray(entries) ? entries : [];
-    const rowH = 19;
-    const labelW = 128;
-    const barW = pageWidth - (margin * 2) - labelW - 64;
-
-    const renderHeader = () => {
-      ensureSpace(34);
-      text(chartTitle, margin, y, 11, 'F2', '#111827');
-      y -= 18;
-    };
-
-    renderHeader();
     if (!safeEntries.length) {
-      text('--', margin, y, 8.5, 'F1', '#6b7280');
-      y -= rowH;
+      callout({ title: chartTitle, body: tr('reports.noChartData', 'No chart data in selected period'), tone: palette.blue });
       return;
     }
 
-    safeEntries.forEach((entry) => {
-      if (y - rowH < margin) {
-        newPage();
-        renderHeader();
-      }
-      const value = Number(valueAccessor(entry));
-      text(truncateText(labelAccessor(entry), 25), margin, y, 8.5, 'F2', '#111827');
-      rect(margin + labelW, y - 6, barW, 8, '#e5e7eb');
-      const normalized = Number.isFinite(value) ? Math.max(0, Math.min(1, value / Math.max(1, maxValue))) : 0;
-      rect(margin + labelW, y - 6, Math.max(2, barW * normalized), 8, Number.isFinite(value) ? colorAccessor(entry) : '#cbd5e1');
-      text(valueFormatter(value), margin + labelW + barW + 10, y - 1, 8, 'F2', '#374151');
-      y -= rowH;
-    });
-    y -= 8;
+    const rowH = 20;
+    const rowsPerPanel = 10;
+    const labelW = 132;
+    const barW = pageWidth - (margin * 2) - labelW - 78;
+    for (let start = 0; start < safeEntries.length; start += rowsPerPanel) {
+      const rows = safeEntries.slice(start, start + rowsPerPanel);
+      const containerH = 46 + (rows.length * rowH);
+      ensureSpace(containerH + 12);
+      const boxY = y - containerH;
+      panel(margin, boxY, contentWidth, containerH, palette.panelAlt, palette.border);
+      text(start === 0 ? chartTitle : `${chartTitle} (${start + 1})`, margin + 14, y - 22, 10, 'F2', palette.text);
+      rows.forEach((entry, index) => {
+        const value = Number(valueAccessor(entry));
+        const rowY = y - 46 - (index * rowH);
+        text(truncateText(labelAccessor(entry), 24), margin + 14, rowY + 2, 8, 'F2', palette.text);
+        rect(margin + 14 + labelW, rowY - 2, barW, 8, '#263b51');
+        const normalized = Number.isFinite(value) ? Math.max(0, Math.min(1, value / Math.max(1, maxValue))) : 0;
+        rect(margin + 14 + labelW, rowY - 2, Math.max(2, barW * normalized), 8, Number.isFinite(value) ? colorAccessor(entry) : '#31465c');
+        text(valueFormatter(value), margin + 14 + labelW + barW + 12, rowY, 8, 'F2', palette.muted);
+      });
+      y = boxY - 16;
+    }
   };
 
-  text(title, margin, y, 22, 'F2', '#111827');
-  y -= 25;
-  text(subtitle, margin, y, 10, 'F1', '#4b5563');
-  y -= 22;
-  paragraph(`${tr('reports.generated', 'Generated')}: ${formatDateTime(Date.now())}`, margin, pageWidth - (margin * 2), 9, 12, '#6b7280');
+  const renderTableHeader = (columns, tableWidth) => {
+    ensureSpace(28);
+    rect(margin, y - 17, tableWidth, 22, palette.panelRaised);
+    strokeRect(margin, y - 17, tableWidth, 22, palette.border);
+    let cursor = margin + 8;
+    columns.forEach(([label, width]) => {
+      text(label, cursor, y - 8, 7, 'F2', palette.muted);
+      cursor += width;
+    });
+    y -= 25;
+  };
+
+  paintPage();
+
+  panel(margin, y - 64, contentWidth, 64, '#0a1a2a', palette.border);
+  text('TUNET', margin + 16, y - 22, 10, 'F2', palette.text);
+  text(tr('reports.analysisReport', 'ANALYSIS REPORT'), margin + 16, y - 42, 8, 'F2', palette.muted);
+  text(`${tr('reports.generated', 'Generated')}: ${formatDateTime(Date.now())}`, pageWidth - margin - 178, y - 22, 8, 'F1', palette.muted);
+  text(subtitle, pageWidth - margin - 178, y - 42, 7.5, 'F1', palette.subtle);
+  y -= 82;
+
+  const heroH = 116;
+  panel(margin, y - heroH, contentWidth, heroH, palette.panel, palette.border);
+  text(tr('reports.reportScope', 'REPORT SCOPE'), margin + 16, y - 24, 8, 'F2', palette.muted);
+  wrapText(title, contentWidth - 32, 21).slice(0, 2).forEach((entry, index) => {
+    text(entry, margin + 16, y - 50 - (index * 23), 21, 'F2', palette.text);
+  });
+  const healthBasis = report.totalHealthSamples > 0
+    ? `${formatNumber(report.totalHealthSamples)} ${tr('reports.healthSamples', 'Health samples').toLowerCase()}`
+    : tr('reports.healthDataMissing', 'Health data missing');
+  pill(`${report.periodDays} ${tr('reports.days', 'days')}`, margin + 16, y - 101, 62, '#183450', palette.text);
+  pill(`${formatNumber(report.records.length)} ${tr('reports.selectedSaunas', 'selected saunas')}`, margin + 84, y - 101, 118, '#183029', palette.text);
+  pill(healthBasis, margin + 208, y - 101, 150, report.totalHealthSamples > 0 ? '#183029' : '#3d2b17', report.totalHealthSamples > 0 ? palette.text : palette.amber);
+  y -= heroH + 22;
 
   const metricY = y - 56;
-  const metricWidth = (pageWidth - (margin * 2) - 18) / 4;
+  const metricWidth = (contentWidth - 18) / 4;
   [
-    [tr('reports.avgScore', 'Average score'), formatScore(report.avgScore)],
-    [tr('reports.bookingHours', 'Booking hours'), formatNumber(report.bookingHours)],
-    [tr('reports.estimatedSessions', 'Estimated sessions'), formatNumber(report.sessions)],
-    [tr('reports.hitRate', 'Hit rate'), report.hitRate !== null ? `${report.hitRate}%` : '--'],
-  ].forEach(([label, value], index) => {
+    [tr('reports.avgScore', 'Average score'), report.totalHealthSamples > 0 ? formatScore(report.avgScore) : '--', report.totalHealthSamples > 0 ? getScoreHex(report.avgScore) : palette.subtle],
+    [tr('reports.bookingHours', 'Booking hours'), formatNumber(report.bookingHours), palette.text],
+    [tr('reports.estimatedSessions', 'Estimated sessions'), formatNumber(report.sessions), palette.text],
+    [tr('reports.hitRate', 'Hit rate'), report.hitRate !== null ? `${report.hitRate}%` : '--', palette.accent],
+  ].forEach(([label, value, tone], index) => {
     const x = margin + (index * (metricWidth + 6));
-    rect(x, metricY, metricWidth, 48, '#f3f4f6');
-    text(label, x + 9, metricY + 30, 8, 'F1', '#6b7280');
-    text(value, x + 9, metricY + 12, 16, 'F2', '#111827');
+    metricBox({ label, value, x, yy: metricY, w: metricWidth, tone });
   });
-  y = metricY - 24;
+  y = metricY - 26;
 
   sectionTitle(tr('reports.executiveSummary', 'Executive summary'));
-  paragraph(
-    report.best && report.weakest
-      ? `${tr('reports.bestSauna', 'Best sauna')}: ${report.best.name} (${formatScore(report.best.healthScore)}). ${tr('reports.needsAttention', 'Needs attention')}: ${report.weakest.name} (${formatScore(report.weakest.healthScore)}).`
-      : tr('reports.noSaunaData', 'No sauna health data found'),
-    margin,
-    pageWidth - (margin * 2),
-    10,
-  );
-  paragraph(
-    `${tr('reports.avgTrend', 'Average trend')}: ${getDeltaText(report.avgScoreDelta)}. ${report.improving ? `${tr('reports.trendImproving', 'Improving')}: ${report.improving.name} (${getDeltaText(report.improving.scoreDelta)}).` : ''} ${report.declining ? `${tr('reports.trendDeclining', 'Declining')}: ${report.declining.name} (${getDeltaText(report.declining.scoreDelta)}).` : ''}`,
-    margin,
-    pageWidth - (margin * 2),
-    10,
-  );
+  const summaryText = report.best && report.weakest
+    ? `${tr('reports.bestSauna', 'Best sauna')}: ${report.best.name} (${formatScore(report.best.healthScore)}). ${tr('reports.needsAttention', 'Needs attention')}: ${report.weakest.name} (${formatScore(report.weakest.healthScore)}). ${tr('reports.avgTrend', 'Average trend')}: ${getDeltaText(report.avgScoreDelta)}.`
+    : `${tr('reports.bookingHours', 'Booking hours')}: ${formatNumber(report.bookingHours)}. ${tr('reports.healthDataMissing', 'Health data missing')}.`;
+  callout({
+    title: tr('reports.executiveSummary', 'Executive summary'),
+    body: summaryText,
+    tone: report.totalHealthSamples > 0 ? palette.accent : palette.amber,
+  });
+
+  const basisY = y - 48;
+  const basisW = (contentWidth - 12) / 3;
+  [
+    [tr('reports.dataFoundation', 'Data foundation'), healthBasis],
+    [tr('reports.bookingSamples', 'Booking samples'), formatNumber(report.totalBookingSamples)],
+    [tr('reports.trend', 'Trend'), getDeltaText(report.avgScoreDelta)],
+  ].forEach(([label, value], index) => {
+    metricBox({ label, value, x: margin + (index * (basisW + 6)), yy: basisY, w: basisW, tone: index === 2 ? palette.accent : palette.text });
+  });
+  y = basisY - 24;
 
   sectionTitle(tr('reports.trendDevelopment', 'Trend development'));
   valueBarChart({
@@ -815,19 +933,16 @@ const createPdfBlob = ({ report, title, subtitle, tr }) => {
     [tr('reports.avgDeviation', 'Avg deviation'), 70],
   ];
   const tableWidth = columns.reduce((sum, [, width]) => sum + width, 0);
-  ensureSpace(26);
-  rect(margin, y - 16, tableWidth, 22, '#111827');
-  let cursor = margin + 6;
-  columns.forEach(([label, width]) => {
-    text(label, cursor, y - 8, 7.5, 'F2', '#ffffff');
-    cursor += width;
-  });
-  y -= 24;
+  renderTableHeader(columns, tableWidth);
 
   report.records.forEach((record, index) => {
-    ensureSpace(22);
-    if (index % 2 === 0) rect(margin, y - 13, tableWidth, 18, '#f9fafb');
-    cursor = margin + 6;
+    if (y - 22 < margin + 30) {
+      newPage();
+      sectionTitle(tr('reports.saunaPerformance', 'Sauna performance'));
+      renderTableHeader(columns, tableWidth);
+    }
+    rect(margin, y - 14, tableWidth, 18, index % 2 === 0 ? '#0a1724' : '#0f2031');
+    let cursor = margin + 8;
     [
       truncateText(record.name, 24),
       formatScore(record.healthScore),
@@ -838,7 +953,7 @@ const createPdfBlob = ({ report, title, subtitle, tr }) => {
       formatTemp(record.avgBookingTemp),
       formatPct(record.avgDeviationPct ?? record.avgBookingDeviationPct),
     ].forEach((value, colIndex) => {
-      text(value, cursor, y - 6, colIndex === 0 ? 8.5 : 8, colIndex === 0 ? 'F2' : 'F1', '#111827');
+      text(value, cursor, y - 6, colIndex === 0 ? 8 : 7.5, colIndex === 0 ? 'F2' : 'F1', colIndex === 1 ? getScoreHex(record.healthScore) : palette.text);
       cursor += columns[colIndex][1];
     });
     y -= 18;
@@ -850,17 +965,19 @@ const createPdfBlob = ({ report, title, subtitle, tr }) => {
     .sort((a, b) => b.entry.timestampMs - a.entry.timestampMs)
     .slice(0, 24);
   if (!recentRows.length) {
-    paragraph(tr('reports.noBookingData', 'No booking data in selected period'), margin, pageWidth - (margin * 2), 10);
+    paragraph(tr('reports.noBookingData', 'No booking data in selected period'), margin, contentWidth, 10);
   } else {
     recentRows.forEach(({ record, entry }) => {
-      ensureSpace(18);
-      text(`${formatDateTime(entry.timestampMs)} - ${record.name}`, margin, y, 8.5, 'F2', '#111827');
-      text(`${formatTemp(entry.startTemp)} / ${formatTemp(entry.targetTemp)} - ${formatPct(entry.deviationPct)}`, margin + 280, y, 8.5, 'F1', '#374151');
-      y -= 14;
+      ensureSpace(24);
+      rect(margin, y - 15, contentWidth, 19, palette.panelAlt);
+      strokeRect(margin, y - 15, contentWidth, 19, palette.borderSoft);
+      text(`${formatDateTime(entry.timestampMs)} / ${truncateText(record.name, 28)}`, margin + 10, y - 7, 8, 'F2', palette.text);
+      text(`${formatTemp(entry.startTemp)} / ${formatTemp(entry.targetTemp)} / ${formatPct(entry.deviationPct)}`, margin + 328, y - 7, 8, 'F1', palette.muted);
+      y -= 22;
     });
   }
 
-  if (ops.length) pages.push(ops.join('\n'));
+  if (ops.length) finishPage();
 
   const objects = [];
   const font1Id = 3;
@@ -908,7 +1025,7 @@ const byteLength = (value) => {
 };
 
 const MetricTile = ({ label, value, subLabel, tone = '' }) => (
-  <div className="rounded-xl border border-[var(--glass-border)] bg-[var(--glass-bg-hover)] px-3 py-3">
+  <div className="min-h-[76px] rounded-lg border border-[var(--glass-border)] bg-[var(--glass-bg-hover)] px-3 py-3">
     <div className="text-[10px] uppercase tracking-widest font-bold text-[var(--text-secondary)]">{label}</div>
     <div className={`mt-1 text-2xl font-semibold tabular-nums ${tone || 'text-[var(--text-primary)]'}`}>{value}</div>
     {subLabel && <div className="mt-1 text-[10px] text-[var(--text-muted)] truncate">{subLabel}</div>}
@@ -949,11 +1066,27 @@ export default function SaunaReportsCard({
   }, [allRecords, periodDays, selectedIds]);
 
   const report = useMemo(() => buildSummary(activeRecords, periodDays, tr), [activeRecords, periodDays, tr]);
-  const cardName = customNames?.[cardId] || settings?.name || tr('reports.saunaReportTitle', 'Sauna operations report');
+  const cardName = firstDisplayText(customNames?.[cardId], settings?.name, tr('reports.saunaReportTitle', 'Sauna operations report'));
   const rangeLabel = `${formatDate(Date.now() - (periodDays * 24 * 60 * 60 * 1000))} - ${formatDate(Date.now())}`;
   const selectedLabel = selectedIds.length
     ? `${selectedIds.length} ${tr('reports.selectedSaunas', 'selected saunas')}`
     : tr('reports.allSaunas', 'All saunas');
+  const scoreValue = report.totalHealthSamples > 0 ? formatScore(report.avgScore) : '--';
+  const scoreTone = report.totalHealthSamples > 0 ? getScoreToneClass(report.avgScore) : 'text-[var(--text-muted)]';
+  const trendTone = Number(report.avgScoreDelta) > 0
+    ? 'text-emerald-300'
+    : (Number(report.avgScoreDelta) < 0 ? 'text-amber-300' : 'text-[var(--text-primary)]');
+  const healthBasis = report.totalHealthSamples > 0
+    ? `${formatNumber(report.totalHealthSamples)} ${tr('reports.healthSamples', 'Health samples').toLowerCase()}`
+    : tr('reports.healthDataMissing', 'Health data missing');
+  const pdfSections = [
+    tr('reports.executiveSummary', 'Executive summary'),
+    tr('reports.scoreDevelopment', 'Score development'),
+    tr('reports.bookingDevelopment', 'Booking development'),
+    tr('reports.comparison', 'Comparison'),
+    tr('reports.saunaPerformance', 'Sauna performance'),
+    tr('reports.recentBookings', 'Recent booking samples'),
+  ];
 
   const toggleRecord = (recordId) => {
     setSelectedIds((prev) => {
@@ -980,14 +1113,15 @@ export default function SaunaReportsCard({
   return (
     <div
       {...dragProps}
-      className={`touch-feedback relative h-full min-h-[420px] rounded-[2.2rem] border bg-[var(--glass-bg)] border-[var(--glass-border)] overflow-hidden transition-all duration-300 ${
+      className={`touch-feedback relative h-full min-h-[390px] rounded-[1.75rem] border bg-[var(--glass-bg)] border-[var(--glass-border)] overflow-hidden transition-all duration-300 ${
         editMode ? 'cursor-move' : 'cursor-default'
       }`}
       style={cardStyle}
     >
       {controls}
+      <div className="absolute inset-x-0 top-0 h-1 bg-[linear-gradient(90deg,#5ee3a1,#5b9cff)]" />
       <div className="relative z-10 h-full flex flex-col gap-4 p-4 md:p-5">
-        <div className="flex flex-col lg:flex-row lg:items-start justify-between gap-4">
+        <div className="flex flex-col xl:flex-row xl:items-start justify-between gap-4">
           <div className="min-w-0">
             <div className="flex items-center gap-2 text-[10px] uppercase tracking-widest font-bold text-[var(--text-secondary)]">
               <BarChart3 className="w-3.5 h-3.5" />
@@ -1010,8 +1144,8 @@ export default function SaunaReportsCard({
           </button>
         </div>
 
-        <div className="flex flex-col gap-3">
-          <div className="flex flex-wrap gap-2">
+        <div className="grid grid-cols-1 xl:grid-cols-[auto_minmax(0,1fr)] gap-3">
+          <div className="flex flex-wrap gap-2 content-start">
             {PERIOD_OPTIONS.map((days) => (
               <button
                 key={days}
@@ -1028,7 +1162,7 @@ export default function SaunaReportsCard({
             ))}
           </div>
 
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-wrap gap-2 content-start max-h-24 overflow-y-auto custom-scrollbar pr-1">
             <button
               type="button"
               onClick={() => setSelectedIds([])}
@@ -1061,7 +1195,7 @@ export default function SaunaReportsCard({
         </div>
 
         {activeRecords.length === 0 ? (
-          <div className="flex-1 rounded-2xl border border-[var(--glass-border)] bg-[var(--glass-bg-hover)] grid place-items-center p-6 text-center">
+          <div className="rounded-2xl border border-[var(--glass-border)] bg-[var(--glass-bg-hover)] grid place-items-center p-6 text-center">
             <div>
               <Flame className="w-9 h-9 mx-auto text-[var(--text-secondary)] mb-3" />
               <div className="text-sm font-semibold text-[var(--text-primary)]">{tr('reports.noSaunaData', 'No sauna health data found')}</div>
@@ -1071,55 +1205,56 @@ export default function SaunaReportsCard({
             </div>
           </div>
         ) : (
-          <div className="grid grid-cols-1 xl:grid-cols-[1fr_0.72fr] gap-3 flex-1 min-h-0">
-            <div className="rounded-2xl border border-[var(--glass-border)] bg-[var(--glass-bg-hover)] p-4 flex flex-col justify-between gap-4">
-              <div>
-                <div className="text-[10px] uppercase tracking-widest font-bold text-[var(--text-secondary)]">
-                  {tr('reports.reportReady', 'Report ready')}
+          <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1.05fr)_minmax(280px,0.95fr)] gap-3 auto-rows-min">
+            <div className="rounded-2xl border border-[var(--glass-border)] bg-[var(--glass-bg-hover)] p-4 md:p-5">
+              <div className="flex items-start justify-between gap-5">
+                <div className="min-w-0">
+                  <div className="text-[10px] uppercase tracking-widest font-bold text-[var(--text-secondary)]">
+                    {tr('reports.reportReady', 'Report ready')}
+                  </div>
+                  <p className="mt-2 max-w-2xl text-sm leading-relaxed text-[var(--text-primary)]">
+                    {tr('reports.reportReadyHint', 'The card keeps the workspace clean. The downloaded PDF contains the full analysis with charts, trends and sauna comparisons.')}
+                  </p>
                 </div>
-                <p className="mt-2 text-sm leading-relaxed text-[var(--text-primary)]">
-                  {tr('reports.reportReadyHint', 'The card keeps the workspace clean. The downloaded PDF contains the full analysis with charts, trends and sauna comparisons.')}
-                </p>
+                <div className="shrink-0 rounded-lg border border-[var(--glass-border)] bg-[var(--glass-bg)] px-3 py-2 text-right">
+                  <div className="text-[9px] uppercase tracking-widest text-[var(--text-muted)]">{tr('reports.avgScore', 'Average score')}</div>
+                  <div className={`mt-1 text-3xl font-semibold tabular-nums ${scoreTone}`}>{scoreValue}</div>
+                </div>
               </div>
 
-              <div className="grid grid-cols-3 gap-2">
-                <div>
-                  <div className="text-[10px] uppercase tracking-widest text-[var(--text-muted)]">{tr('reports.avgScore', 'Average score')}</div>
-                  <div className={`mt-1 text-2xl font-semibold tabular-nums ${getScoreToneClass(report.avgScore)}`}>{formatScore(report.avgScore)}</div>
-                </div>
-                <div>
+              <div className="mt-5 grid grid-cols-1 sm:grid-cols-3 gap-2">
+                <div className="rounded-lg border border-[var(--glass-border)] bg-[var(--glass-bg)] px-3 py-3">
                   <div className="text-[10px] uppercase tracking-widest text-[var(--text-muted)]">{tr('reports.bookingHours', 'Booking hours')}</div>
                   <div className="mt-1 text-2xl font-semibold tabular-nums text-[var(--text-primary)]">{formatNumber(report.bookingHours)}</div>
+                  <div className="mt-1 text-[10px] text-[var(--text-muted)]">{formatNumber(report.sessions)} {tr('reports.estimatedSessions', 'estimated sessions')}</div>
                 </div>
-                <div>
+                <div className="rounded-lg border border-[var(--glass-border)] bg-[var(--glass-bg)] px-3 py-3">
+                  <div className="text-[10px] uppercase tracking-widest text-[var(--text-muted)]">{tr('reports.dataFoundation', 'Data foundation')}</div>
+                  <div className="mt-1 text-sm font-semibold text-[var(--text-primary)] truncate">{healthBasis}</div>
+                  <div className="mt-1 text-[10px] text-[var(--text-muted)]">{formatNumber(report.totalBookingSamples)} {tr('reports.bookingSamples', 'booking samples').toLowerCase()}</div>
+                </div>
+                <div className="rounded-lg border border-[var(--glass-border)] bg-[var(--glass-bg)] px-3 py-3">
                   <div className="text-[10px] uppercase tracking-widest text-[var(--text-muted)]">{tr('reports.trend', 'Trend')}</div>
-                  <div className={`mt-1 text-2xl font-semibold tabular-nums ${
-                    Number(report.avgScoreDelta) > 0
-                      ? 'text-emerald-300'
-                      : (Number(report.avgScoreDelta) < 0 ? 'text-amber-300' : 'text-[var(--text-primary)]')
-                  }`}>
+                  <div className={`mt-1 text-2xl font-semibold tabular-nums ${trendTone}`}>
                     {getDeltaText(report.avgScoreDelta)}
                   </div>
+                  <div className="mt-1 text-[10px] text-[var(--text-muted)]">{rangeLabel}</div>
                 </div>
               </div>
             </div>
 
-            <div className="rounded-2xl border border-[var(--glass-border)] bg-[var(--glass-bg-hover)] p-4">
+            <div className="rounded-2xl border border-[var(--glass-border)] bg-[var(--glass-bg-hover)] p-4 md:p-5">
               <div className="flex items-center gap-2 text-[10px] uppercase tracking-widest font-bold text-[var(--text-secondary)]">
                 <TrendingUp className="w-3.5 h-3.5" />
                 {tr('reports.pdfContains', 'PDF contains')}
               </div>
-              <div className="mt-3 space-y-2">
-                {[
-                  tr('reports.scoreDevelopment', 'Score development'),
-                  tr('reports.bookingDevelopment', 'Booking development'),
-                  tr('reports.comparison', 'Comparison'),
-                  tr('reports.saunaPerformance', 'Sauna performance'),
-                  tr('reports.recentBookings', 'Recent booking samples'),
-                ].map((label) => (
-                  <div key={label} className="flex items-center justify-between gap-3 rounded-lg border border-[var(--glass-border)] bg-[var(--glass-bg)] px-3 py-2">
+              <div className="mt-4 space-y-3">
+                {pdfSections.map((label, index) => (
+                  <div key={label} className="grid grid-cols-[28px_minmax(0,1fr)] items-center gap-3">
+                    <span className="grid h-7 w-7 place-items-center rounded-lg border border-[var(--glass-border)] bg-[var(--glass-bg)] text-[10px] font-bold tabular-nums text-[var(--text-secondary)]">
+                      {index + 1}
+                    </span>
                     <span className="text-xs font-semibold text-[var(--text-primary)] truncate">{label}</span>
-                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-300 shrink-0" />
                   </div>
                 ))}
               </div>
@@ -1127,7 +1262,7 @@ export default function SaunaReportsCard({
 
             <div className="xl:col-span-2 grid grid-cols-2 md:grid-cols-4 gap-2">
               <MetricTile label={tr('reports.selectedSaunas', 'selected saunas')} value={formatNumber(activeRecords.length)} />
-              <MetricTile label={tr('reports.healthSamples', 'Health samples')} value={formatNumber(report.totalHealthSamples)} />
+              <MetricTile label={tr('reports.healthSamples', 'Health samples')} value={formatNumber(report.totalHealthSamples)} subLabel={report.totalHealthSamples > 0 ? tr('reports.healthDataReady', 'Health data ready') : tr('reports.healthDataMissing', 'Health data missing')} />
               <MetricTile label={tr('reports.bookingSamples', 'Booking samples')} value={formatNumber(report.totalBookingSamples)} />
               <MetricTile label={tr('reports.hitRate', 'Hit rate')} value={report.hitRate !== null ? `${report.hitRate}%` : '--'} />
             </div>
