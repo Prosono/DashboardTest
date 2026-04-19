@@ -265,6 +265,7 @@ export const handleAddSelected = (ctx) => {
       commitSingleCard(cardId, {
         type: 'sauna_map',
         zoneEntityIds: [],
+        healthScoreSourceByZone: {},
         gridColSpan: 4,
         gridRowSpan: 3,
       }, { openEdit: true });

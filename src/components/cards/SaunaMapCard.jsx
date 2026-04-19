@@ -431,6 +431,14 @@ const chooseRelatedSource = (zone, baseSource, sources, { preferScored = false }
   return best?.score >= 3 ? best.source : null;
 };
 
+const getManualHealthSource = (settings, zone, healthSources) => {
+  const mappings = settings?.healthScoreSourceByZone || settings?.healthCardByZone || {};
+  if (!mappings || typeof mappings !== 'object' || Array.isArray(mappings)) return null;
+  const sourceId = String(mappings[zone.zoneId] || '').trim();
+  if (!sourceId) return null;
+  return healthSources.find((source) => source.cardId === sourceId || source.settingsKey === sourceId) || null;
+};
+
 const getSourceKind = (cardId, settings) => {
   const type = String(settings?.type || '').toLowerCase();
   if (type === 'sauna') return 'sauna';
@@ -622,7 +630,8 @@ export default function SaunaMapCard({
         };
 
         const saunaSource = chooseBestSource(zone, saunaSources);
-        const healthSource = chooseRelatedSource(zone, saunaSource, healthSources, { preferScored: true });
+        const manualHealthSource = getManualHealthSource(settings, zone, healthSources);
+        const healthSource = manualHealthSource || chooseRelatedSource(zone, saunaSource, healthSources, { preferScored: true });
         const bookingSource = chooseRelatedSource(zone, saunaSource, bookingSources);
         const tempFallback = chooseTemperatureEntity(zone, temperatureEntities);
         const tempSource = saunaSource || healthSource || bookingSource;
@@ -654,7 +663,7 @@ export default function SaunaMapCard({
       })
       .filter(Boolean)
       .sort((a, b) => a.name.localeCompare(b.name));
-  }, [bookingSources, entities, healthSources, saunaSources, settings?.zoneEntityIds, temperatureEntities]);
+  }, [bookingSources, entities, healthSources, saunaSources, settings, temperatureEntities]);
 
   const locationBoundsKey = useMemo(() => locations
     .map((location) => `${location.zoneId}:${location.lat.toFixed(5)},${location.lng.toFixed(5)}`)

@@ -116,6 +116,7 @@ export default function EditCardModal({
   customIcons,
   saveCustomIcon,
   saveCardSetting,
+  cardSettings = {},
   gridColumns = 4,
 }) {
   const [mediaSearch, setMediaSearch] = React.useState('');
@@ -1661,6 +1662,61 @@ export default function EditCardModal({
               ? editSettings.zoneEntityIds.filter(Boolean)
               : [];
             const allZones = selectedZones.length === 0;
+            const healthScoreSourceByZone = editSettings.healthScoreSourceByZone && typeof editSettings.healthScoreSourceByZone === 'object' && !Array.isArray(editSettings.healthScoreSourceByZone)
+              ? editSettings.healthScoreSourceByZone
+              : {};
+            const getScopedSettings = (pageId, cardId) => (
+              {
+                ...(cardSettings?.[cardId] || {}),
+                ...(cardSettings?.[`${pageId}::${cardId}`] || {}),
+              }
+            );
+            const isHealthScoreCard = (cardId, settings) => {
+              const type = String(settings?.type || '').toLowerCase();
+              return type === 'sauna_health_score'
+                || (type.includes('sauna') && type.includes('health'))
+                || String(cardId || '').startsWith('sauna_health_score_card_');
+            };
+            const healthScoreCardMap = new Map();
+            const addHealthScoreCard = (cardId, pageId = '', settings = {}) => {
+              if (!cardId || !isHealthScoreCard(cardId, settings)) return;
+              if (healthScoreCardMap.has(cardId)) return;
+              const tempEntityId = settings?.tempEntityId || '';
+              const label = customNames?.[cardId]
+                || settings?.name
+                || settings?.heading
+                || entities?.[tempEntityId]?.attributes?.friendly_name
+                || cardId;
+              healthScoreCardMap.set(cardId, {
+                cardId,
+                pageId,
+                label,
+                detail: tempEntityId || cardId,
+              });
+            };
+            const configuredPages = Array.isArray(pagesConfig?.pages) ? pagesConfig.pages : [];
+            const fallbackPages = Object.keys(pagesConfig || {}).filter((key) => Array.isArray(pagesConfig?.[key]));
+            [...configuredPages, ...fallbackPages].forEach((pageId) => {
+              const pageCards = Array.isArray(pagesConfig?.[pageId]) ? pagesConfig[pageId] : [];
+              pageCards.forEach((cardId) => addHealthScoreCard(cardId, pageId, getScopedSettings(pageId, cardId)));
+            });
+            Object.entries(cardSettings || {}).forEach(([settingsKey, settings]) => {
+              const parts = String(settingsKey || '').split('::');
+              const cardId = parts[parts.length - 1];
+              const pageId = parts.length > 1 ? parts[0] : '';
+              addHealthScoreCard(cardId, pageId, settings);
+            });
+            const healthScoreCards = Array.from(healthScoreCardMap.values())
+              .sort((a, b) => a.label.localeCompare(b.label));
+            const mapZones = (allZones ? zoneOptions : selectedZones)
+              .filter(Boolean)
+              .filter((zoneId, index, arr) => arr.indexOf(zoneId) === index);
+            const updateHealthScoreSource = (zoneId, healthCardId) => {
+              const next = { ...healthScoreSourceByZone };
+              if (healthCardId) next[zoneId] = healthCardId;
+              else delete next[zoneId];
+              saveCardSetting(editSettingsKey, 'healthScoreSourceByZone', Object.keys(next).length ? next : {});
+            };
 
             return (
               <div className="space-y-4">
@@ -1724,6 +1780,56 @@ export default function EditCardModal({
                       );
                     })}
                   </div>
+                </div>
+
+                <div className="popup-surface rounded-2xl p-4 space-y-3">
+                  <div>
+                    <div className="text-xs uppercase font-bold tracking-widest text-gray-500">
+                      {translateText('saunaMap.manualHealthTitle', 'Manuell helsescore-kobling')}
+                    </div>
+                    <div className="text-[11px] text-[var(--text-secondary)] leading-relaxed mt-1">
+                      {translateText('saunaMap.manualHealthHint', 'Velg hvilket helsescorekort hver HA-sone skal bruke. Dette overstyrer automatisk matching i kartet.')}
+                    </div>
+                  </div>
+
+                  {healthScoreCards.length === 0 && (
+                    <div className="px-3 py-4 rounded-xl bg-[var(--glass-bg)] text-[11px] text-[var(--text-muted)]">
+                      {translateText('saunaMap.noHealthScoreCards', 'Ingen helsescorekort funnet. Legg til et Sauna health score-kort først.')}
+                    </div>
+                  )}
+
+                  {healthScoreCards.length > 0 && (
+                    <div className="space-y-2 max-h-72 overflow-y-auto custom-scrollbar pr-1">
+                      {mapZones.map((zoneId) => {
+                        const currentSource = healthScoreSourceByZone[zoneId] || '';
+                        return (
+                          <div
+                            key={zoneId}
+                            className="grid grid-cols-1 sm:grid-cols-[minmax(0,1fr)_minmax(12rem,1.2fr)] gap-2 sm:gap-3 items-center rounded-xl border border-[var(--glass-border)] bg-[var(--glass-bg)] px-3 py-2"
+                          >
+                            <div className="min-w-0">
+                              <div className="text-xs font-bold text-[var(--text-primary)] truncate">
+                                {entities[zoneId]?.attributes?.friendly_name || zoneId}
+                              </div>
+                              <div className="text-[10px] text-[var(--text-muted)] truncate">{zoneId}</div>
+                            </div>
+                            <select
+                              value={currentSource}
+                              onChange={(event) => updateHealthScoreSource(zoneId, event.target.value)}
+                              className="w-full px-3 py-2 rounded-xl bg-[var(--modal-bg)] border border-[var(--glass-border)] text-[var(--text-primary)] text-xs outline-none"
+                            >
+                              <option value="">{translateText('saunaMap.autoHealthScore', 'Automatisk matching')}</option>
+                              {healthScoreCards.map((source) => (
+                                <option key={source.cardId} value={source.cardId}>
+                                  {source.label}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
                 </div>
               </div>
             );
