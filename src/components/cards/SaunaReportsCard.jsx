@@ -110,6 +110,35 @@ const normalizeRecordIdList = (value) => {
   return Array.from(new Set(value.map((item) => String(item || '').trim()).filter(Boolean)));
 };
 
+const isAbsoluteReportImageUrl = (value) => /^(https?:|data:|blob:)/i.test(String(value || '').trim());
+
+const shouldResolveReportImageWithHaBase = (value) => /^\/(?:api|local|media)\//i.test(String(value || '').trim());
+
+const resolveReportImageValue = (value, getEntityImageUrl, { forceHaBase = false } = {}) => {
+  const raw = String(value ?? '').trim();
+  if (!raw) return '';
+  if (isAbsoluteReportImageUrl(raw)) return raw;
+  if (typeof getEntityImageUrl === 'function' && (forceHaBase || shouldResolveReportImageWithHaBase(raw))) {
+    return getEntityImageUrl(raw);
+  }
+  return raw;
+};
+
+const resolveReportImageUrl = (settings, entities, getEntityImageUrl) => {
+  const raw = String(settings?.imageUrl ?? '').trim();
+  if (raw) return resolveReportImageValue(raw, getEntityImageUrl);
+  if (settings?.imageEntityId) {
+    const ent = entities?.[settings.imageEntityId];
+    const pic = ent?.attributes?.entity_picture;
+    if (pic) return resolveReportImageValue(pic, getEntityImageUrl, { forceHaBase: true });
+    const state = String(ent?.state ?? '').trim();
+    if (state && (isAbsoluteReportImageUrl(state) || state.startsWith('/'))) {
+      return resolveReportImageValue(state, getEntityImageUrl, { forceHaBase: state.startsWith('/') });
+    }
+  }
+  return '';
+};
+
 const normalizeMatchText = (value) => String(value ?? '')
   .trim()
   .toLowerCase()
@@ -449,7 +478,7 @@ const getScoreToneClass = (score) => {
   return 'text-rose-300';
 };
 
-const buildSourceCards = ({ cardSettings, entities, customNames, tr }) => {
+const buildSourceCards = ({ cardSettings, entities, customNames, getEntityImageUrl, tr }) => {
   const byCardId = new Map();
   Object.entries(cardSettings || {}).forEach(([settingsKey, value]) => {
     if (!value || typeof value !== 'object' || Array.isArray(value)) return;
@@ -493,6 +522,7 @@ const buildSourceCards = ({ cardSettings, entities, customNames, tr }) => {
         zoneEntityId: settings?.zoneEntityId || settings?.locationZoneEntityId || '',
         tempEntityId,
         calendarEntityId,
+        imageUrl: resolveReportImageUrl(settings, entities, getEntityImageUrl),
         currentTemp: toNum(entities?.[tempEntityId]?.state),
         peopleNow: peopleNowEntityId ? entities?.[peopleNowEntityId]?.state : null,
         healthSamples: normalizeHealthSamples(settings?.healthSnapshots),
@@ -513,8 +543,8 @@ const buildSourceCards = ({ cardSettings, entities, customNames, tr }) => {
     .filter(Boolean);
 };
 
-const buildSaunaRecords = ({ cardSettings, entities, customNames, tr }) => {
-  const sources = buildSourceCards({ cardSettings, entities, customNames, tr });
+const buildSaunaRecords = ({ cardSettings, entities, customNames, getEntityImageUrl, tr }) => {
+  const sources = buildSourceCards({ cardSettings, entities, customNames, getEntityImageUrl, tr });
   const saunaSources = sources.filter((source) => source.kind === 'sauna');
   const healthSources = sources.filter((source) => source.kind === 'health');
   const bookingSources = sources.filter((source) => source.kind === 'booking');
@@ -538,6 +568,7 @@ const buildSaunaRecords = ({ cardSettings, entities, customNames, tr }) => {
       healthSource,
       bookingSource,
       calendarSource,
+      imageUrl: saunaSource.imageUrl || healthSource?.imageUrl || bookingSource?.imageUrl || '',
       currentTemp: saunaSource.currentTemp ?? healthSource?.currentTemp ?? bookingSource?.currentTemp ?? null,
       peopleNow: saunaSource.peopleNow,
       targetToleranceC: healthSource?.targetToleranceC ?? bookingSource?.targetToleranceC ?? 0,
@@ -557,6 +588,7 @@ const buildSaunaRecords = ({ cardSettings, entities, customNames, tr }) => {
       healthSource,
       bookingSource,
       calendarSource,
+      imageUrl: healthSource.imageUrl || bookingSource?.imageUrl || '',
       currentTemp: healthSource.currentTemp ?? bookingSource?.currentTemp ?? null,
       peopleNow: null,
       targetToleranceC: healthSource.targetToleranceC ?? bookingSource?.targetToleranceC ?? 0,
@@ -574,6 +606,7 @@ const buildSaunaRecords = ({ cardSettings, entities, customNames, tr }) => {
       healthSource: null,
       bookingSource,
       calendarSource,
+      imageUrl: bookingSource.imageUrl || '',
       currentTemp: bookingSource.currentTemp ?? null,
       peopleNow: null,
       targetToleranceC: bookingSource.targetToleranceC ?? 0,
@@ -909,11 +942,20 @@ const dataUrlToPdfHex = (dataUrl) => {
   return `${chunks.join('')}>`;
 };
 
-let reportLogoImagePromise = null;
+const pdfImagePromises = new Map();
 
-const loadReportLogoImage = () => {
-  if (reportLogoImagePromise) return reportLogoImagePromise;
-  reportLogoImagePromise = new Promise((resolve) => {
+const loadPdfImage = (url, {
+  size = 128,
+  fill = '#0a1724',
+  fit = 'cover',
+  quality = 0.86,
+} = {}) => {
+  const sourceUrl = String(url || '').trim();
+  if (!sourceUrl) return Promise.resolve(null);
+  const cacheKey = `${sourceUrl}|${size}|${fill}|${fit}|${quality}`;
+  if (pdfImagePromises.has(cacheKey)) return pdfImagePromises.get(cacheKey);
+
+  const promise = new Promise((resolve) => {
     if (typeof window === 'undefined' || typeof document === 'undefined') {
       resolve(null);
       return;
@@ -923,7 +965,6 @@ const loadReportLogoImage = () => {
     image.crossOrigin = 'anonymous';
     image.onload = () => {
       try {
-        const size = 128;
         const canvas = document.createElement('canvas');
         canvas.width = size;
         canvas.height = size;
@@ -932,10 +973,24 @@ const loadReportLogoImage = () => {
           resolve(null);
           return;
         }
-        ctx.fillStyle = '#f8fbff';
+        ctx.fillStyle = fill;
         ctx.fillRect(0, 0, size, size);
-        ctx.drawImage(image, 0, 0, size, size);
-        const dataUrl = canvas.toDataURL('image/jpeg', 0.88);
+        const sourceW = image.naturalWidth || image.width || size;
+        const sourceH = image.naturalHeight || image.height || size;
+        if (fit === 'contain') {
+          const scale = Math.min(size / sourceW, size / sourceH);
+          const drawW = sourceW * scale;
+          const drawH = sourceH * scale;
+          ctx.drawImage(image, (size - drawW) / 2, (size - drawH) / 2, drawW, drawH);
+        } else {
+          const scale = Math.max(size / sourceW, size / sourceH);
+          const cropW = size / scale;
+          const cropH = size / scale;
+          const cropX = Math.max(0, (sourceW - cropW) / 2);
+          const cropY = Math.max(0, (sourceH - cropH) / 2);
+          ctx.drawImage(image, cropX, cropY, cropW, cropH, 0, 0, size, size);
+        }
+        const dataUrl = canvas.toDataURL('image/jpeg', quality);
         const dataHex = dataUrlToPdfHex(dataUrl);
         resolve(dataHex ? { width: size, height: size, dataHex } : null);
       } catch {
@@ -943,10 +998,18 @@ const loadReportLogoImage = () => {
       }
     };
     image.onerror = () => resolve(null);
-    image.src = REPORT_LOGO_URL;
+    image.src = sourceUrl;
   });
-  return reportLogoImagePromise;
+  pdfImagePromises.set(cacheKey, promise);
+  return promise;
 };
+
+const loadReportLogoImage = () => loadPdfImage(REPORT_LOGO_URL, {
+  size: 128,
+  fill: '#f8fbff',
+  fit: 'contain',
+  quality: 0.88,
+});
 
 const WIN_ANSI_MAP = new Map([
   [0x20ac, 0x80],
@@ -1033,12 +1096,21 @@ const getDeltaText = (value) => {
   return `${num > 0 ? '+' : ''}${num.toFixed(1)}`;
 };
 
-const createPdfBlob = ({ report, title, subtitle, tr, logoImage = null }) => {
+const createPdfBlob = ({ report, title, subtitle, tr, logoImage = null, saunaImages = {} }) => {
   const pageWidth = 595.28;
   const pageHeight = 841.89;
   const margin = 36;
   const contentWidth = pageWidth - (margin * 2);
   const hasLogoImage = Boolean(logoImage?.dataHex && logoImage?.width && logoImage?.height);
+  const imageResources = [];
+  const saunaImageNames = new Map();
+  if (hasLogoImage) imageResources.push({ name: 'Logo', image: logoImage });
+  Object.entries(saunaImages || {}).forEach(([recordId, image]) => {
+    if (!image?.dataHex || !image?.width || !image?.height) return;
+    const name = `Sauna${imageResources.length + 1}`;
+    saunaImageNames.set(recordId, name);
+    imageResources.push({ name, image });
+  });
   const palette = {
     page: '#07111d',
     panel: '#0d1b2a',
@@ -1098,21 +1170,30 @@ const createPdfBlob = ({ report, title, subtitle, tr, logoImage = null }) => {
     ops.push(`${color(stroke)} RG 0.75 w ${x1.toFixed(2)} ${y1.toFixed(2)} m ${x2.toFixed(2)} ${y2.toFixed(2)} l S`);
   };
 
-  const circle = (cx, cy, r, stroke = palette.borderSoft, fill = null, width = 0.75) => {
+  const circlePath = (cx, cy, r) => {
     const k = 0.5522847498;
-    const path = [
+    return [
       `${(cx + r).toFixed(2)} ${cy.toFixed(2)} m`,
       `${(cx + r).toFixed(2)} ${(cy + (k * r)).toFixed(2)} ${(cx + (k * r)).toFixed(2)} ${(cy + r).toFixed(2)} ${cx.toFixed(2)} ${(cy + r).toFixed(2)} c`,
       `${(cx - (k * r)).toFixed(2)} ${(cy + r).toFixed(2)} ${(cx - r).toFixed(2)} ${(cy + (k * r)).toFixed(2)} ${(cx - r).toFixed(2)} ${cy.toFixed(2)} c`,
       `${(cx - r).toFixed(2)} ${(cy - (k * r)).toFixed(2)} ${(cx - (k * r)).toFixed(2)} ${(cy - r).toFixed(2)} ${cx.toFixed(2)} ${(cy - r).toFixed(2)} c`,
       `${(cx + (k * r)).toFixed(2)} ${(cy - r).toFixed(2)} ${(cx + r).toFixed(2)} ${(cy - (k * r)).toFixed(2)} ${(cx + r).toFixed(2)} ${cy.toFixed(2)} c`,
     ].join(' ');
+  };
+
+  const circle = (cx, cy, r, stroke = palette.borderSoft, fill = null, width = 0.75) => {
+    const path = circlePath(cx, cy, r);
     const paint = fill ? (stroke ? 'B' : 'f') : 'S';
     ops.push(`${fill ? `${color(fill)} rg ` : ''}${stroke ? `${color(stroke)} RG ${width} w ` : ''}${path} h ${paint}`);
   };
 
   const drawImage = (name, x, yy, w, h) => {
     ops.push(`q ${w.toFixed(2)} 0 0 ${h.toFixed(2)} ${x.toFixed(2)} ${yy.toFixed(2)} cm /${name} Do Q`);
+  };
+
+  const drawCircleImage = (name, cx, cy, radius, stroke = palette.borderSoft, strokeWidth = 1.2) => {
+    ops.push(`q ${circlePath(cx, cy, radius)} h W n ${(radius * 2).toFixed(2)} 0 0 ${(radius * 2).toFixed(2)} ${(cx - radius).toFixed(2)} ${(cy - radius).toFixed(2)} cm /${name} Do Q`);
+    circle(cx, cy, radius + 1.4, stroke, null, strokeWidth);
   };
 
   const strokeRect = (x, yy, w, h, stroke = palette.border) => {
@@ -1607,7 +1688,7 @@ const createPdfBlob = ({ report, title, subtitle, tr, logoImage = null }) => {
       10,
       palette.muted
     );
-    const rowH = 58;
+    const rowH = 68;
     const rowGap = 8;
     const statusForScore = (score) => {
       if (!Number.isFinite(Number(score))) {
@@ -1657,20 +1738,33 @@ const createPdfBlob = ({ report, title, subtitle, tr, logoImage = null }) => {
       const fill = index % 2 === 0 ? '#0a1724' : '#0f2031';
       roundRect(margin, rowY, contentWidth, rowH, 8, fill, '#24384d');
       const leftX = margin + 12;
+      const avatarCx = leftX + 21;
+      const avatarCy = rowY + rowH - 34;
+      const nameX = leftX + 54;
       const scoreX = margin + contentWidth - 58;
-      const metricX = margin + 158;
+      const metricX = margin + 184;
       const metricW = Math.max(54, (scoreX - metricX - 10) / 4);
       const status = statusForScore(record.healthScore);
+      const scoreColor = getScoreHex(record.healthScore);
+      const imageName = saunaImageNames.get(record.id);
       const scoreBasis = record.scoreSource === 'health'
         ? tr('reports.healthDataReady', 'Health data ready')
         : (record.scoreSource === 'booking' ? tr('reports.scoreFromBookings', 'score points from bookings') : tr('reports.healthDataMissing', 'Health data missing'));
       const deviationText = formatPct(record.avgDeviationPct ?? record.avgBookingDeviationPct);
       const scoreText = formatScore(record.healthScore);
 
-      text(truncateText(record.name, 26), leftX, rowY + rowH - 16, 9, 'F2', palette.text);
-      text(truncateText(scoreBasis, 30), leftX, rowY + rowH - 29, 6.5, 'F1', palette.muted);
-      roundRect(leftX, rowY + 8, 62, 16, 6, status.fill, '#2b4056');
-      text(truncateText(status.label, 14), leftX + 8, rowY + 13, 6.5, 'F2', status.textColor);
+      if (imageName) {
+        drawCircleImage(imageName, avatarCx, avatarCy, 19, scoreColor, 2.4);
+      } else {
+        circle(avatarCx, avatarCy, 19, scoreColor, '#102235', 2.4);
+        text(truncateText(record.name, 1).toUpperCase(), avatarCx - 3.5, avatarCy - 4, 12, 'F2', palette.text);
+      }
+      circle(avatarCx, avatarCy, 23, '#ffffff', null, 0.35);
+
+      text(truncateText(record.name, 22), nameX, rowY + rowH - 17, 9, 'F2', palette.text);
+      text(truncateText(scoreBasis, 24), nameX, rowY + rowH - 30, 6.5, 'F1', palette.muted);
+      roundRect(nameX, rowY + 9, 72, 16, 6, status.fill, '#2b4056');
+      text(truncateText(status.label, 15), nameX + 8, rowY + 14, 6.5, 'F2', status.textColor);
 
       [
         {
@@ -1703,10 +1797,10 @@ const createPdfBlob = ({ report, title, subtitle, tr, logoImage = null }) => {
         .map((type) => `${getBookingTypeLabel(type, tr)} ${formatNumber(record.bookingTypeCounts?.[type] || 0)}h`)
         .join('   ');
       const performanceDetail = `${tr('reports.bookingMix', 'Booking mix')}: ${mixText}${deviationText !== '--' ? ` / ${tr('reports.avgDeviation', 'Avg deviation')}: ${deviationText}` : ''}`;
-      text(truncateText(performanceDetail, 78), metricX, rowY + 10, 6.5, 'F1', palette.subtle);
+      text(truncateText(performanceDetail, 76), metricX, rowY + 11, 6.5, 'F1', palette.subtle);
 
       roundRect(scoreX, rowY + 10, 44, 36, 8, '#0b1724', '#2b4056');
-      text(scoreText, scoreX + (scoreText.length > 2 ? 8 : 13), rowY + 27, 14, 'F2', getScoreHex(record.healthScore));
+      text(scoreText, scoreX + (scoreText.length > 2 ? 8 : 13), rowY + 27, 14, 'F2', scoreColor);
       text(tr('reports.score', 'Score'), scoreX + 10, rowY + 16, 6, 'F2', palette.muted);
 
       y -= rowH + rowGap;
@@ -1718,21 +1812,27 @@ const createPdfBlob = ({ report, title, subtitle, tr, logoImage = null }) => {
   const objects = [];
   const font1Id = 3;
   const font2Id = 4;
-  const logoImageId = hasLogoImage ? 5 : null;
-  let nextObjectId = hasLogoImage ? 6 : 5;
+  let nextObjectId = 5;
+  const imageObjectIds = new Map();
   objects[1] = '<< /Type /Catalog /Pages 2 0 R >>';
   objects[3] = '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>';
   objects[4] = '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold /Encoding /WinAnsiEncoding >>';
-  if (hasLogoImage) {
-    objects[logoImageId] = `<< /Type /XObject /Subtype /Image /Width ${Math.round(logoImage.width)} /Height ${Math.round(logoImage.height)} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter [/ASCIIHexDecode /DCTDecode] /Length ${logoImage.dataHex.length} >>\nstream\n${logoImage.dataHex}\nendstream`;
-  }
+  imageResources.forEach(({ name, image }) => {
+    const imageId = nextObjectId;
+    nextObjectId += 1;
+    imageObjectIds.set(name, imageId);
+    objects[imageId] = `<< /Type /XObject /Subtype /Image /Width ${Math.round(image.width)} /Height ${Math.round(image.height)} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter [/ASCIIHexDecode /DCTDecode] /Length ${image.dataHex.length} >>\nstream\n${image.dataHex}\nendstream`;
+  });
+  const xObjectResources = imageResources.length
+    ? ` /XObject << ${imageResources.map(({ name }) => `/${name} ${imageObjectIds.get(name)} 0 R`).join(' ')} >>`
+    : '';
   const kids = [];
   pages.forEach((content) => {
     const pageId = nextObjectId;
     const contentId = pageId + 1;
     nextObjectId += 2;
     kids.push(`${pageId} 0 R`);
-    objects[pageId] = `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${pageWidth} ${pageHeight}] /Resources << /Font << /F1 ${font1Id} 0 R /F2 ${font2Id} 0 R >>${hasLogoImage ? ` /XObject << /Logo ${logoImageId} 0 R >>` : ''} >> /Contents ${contentId} 0 R >>`;
+    objects[pageId] = `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${pageWidth} ${pageHeight}] /Resources << /Font << /F1 ${font1Id} 0 R /F2 ${font2Id} 0 R >>${xObjectResources} >> /Contents ${contentId} 0 R >>`;
     objects[contentId] = `<< /Length ${byteLength(content)} >>\nstream\n${content}\nendstream`;
   });
   objects[2] = `<< /Type /Pages /Kids [${kids.join(' ')}] /Count ${pages.length} >>`;
@@ -1788,6 +1888,7 @@ export default function SaunaReportsCard({
   cardStyle,
   editMode,
   customNames,
+  getEntityImageUrl,
   t,
 }) {
   const tr = useMemo(() => makeTr(t), [t]);
@@ -1810,8 +1911,9 @@ export default function SaunaReportsCard({
     cardSettings,
     entities,
     customNames,
+    getEntityImageUrl,
     tr,
-  }), [cardSettings, customNames, entities, tr]);
+  }), [cardSettings, customNames, entities, getEntityImageUrl, tr]);
 
   const scopedRecords = useMemo(() => {
     if (!configuredSelectedIds.length) return allRecords;
@@ -1895,7 +1997,20 @@ export default function SaunaReportsCard({
       const title = cardName;
       const subtitle = `${selectedLabel} - ${periodDays} ${tr('reports.days', 'days')} - ${rangeLabel}`;
       const logoImage = await loadReportLogoImage();
-      const pdf = createPdfBlob({ report, title, subtitle, tr, logoImage });
+      const saunaImageEntries = await Promise.all(activeRecords.map(async (record) => {
+        const image = await loadPdfImage(record.imageUrl, {
+          size: 128,
+          fill: '#0a1724',
+          fit: 'cover',
+          quality: 0.82,
+        });
+        return [record.id, image];
+      }));
+      const saunaImages = saunaImageEntries.reduce((acc, [recordId, image]) => {
+        if (image) acc[recordId] = image;
+        return acc;
+      }, {});
+      const pdf = createPdfBlob({ report, title, subtitle, tr, logoImage, saunaImages });
       downloadBlob(
         pdf,
         `badstu-rapport-${periodDays}d-${sanitizeFilePart(selectedLabel)}-${Date.now()}.pdf`,
