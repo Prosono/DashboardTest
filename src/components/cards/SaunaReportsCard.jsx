@@ -1907,6 +1907,7 @@ const createPdfBlob = ({ report, title, subtitle, tr, logoImage = null, saunaIma
   });
   y = basisY - 24;
 
+  newPage();
   sectionTitle(tr('reports.trendDevelopment', 'Trend development'));
   valueBarChart({
     title: tr('reports.scoreDevelopment', 'Score development'),
@@ -1960,6 +1961,7 @@ const createPdfBlob = ({ report, title, subtitle, tr, logoImage = null, saunaIma
     });
   }
 
+  newPage();
   sectionTitle(tr('reports.comparison', 'Comparison'));
   horizontalBars({
     title: tr('reports.scoreBySauna', 'Score by sauna'),
@@ -2021,6 +2023,7 @@ const createPdfBlob = ({ report, title, subtitle, tr, logoImage = null, saunaIma
     });
   }
 
+  newPage();
   sectionTitle(tr('reports.saunaPerformance', 'Sauna performance'));
   const performanceRecords = report.records
     .filter((record) => record.healthScore !== null || record.bookingHours > 0 || record.avgBookingTemp !== null);
