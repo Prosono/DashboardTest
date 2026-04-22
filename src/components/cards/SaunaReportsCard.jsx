@@ -216,6 +216,90 @@ const getCalendarBookingType = (event) => {
   return 'felles';
 };
 
+const normalizePeopleText = (value) => String(value ?? '')
+  .toLowerCase()
+  .normalize('NFKD')
+  .replace(/[\u0300-\u036f]/g, ' ');
+
+const parsePeopleCountNumber = (value) => {
+  if (Array.isArray(value)) return value.length || null;
+  const parsed = Number.parseInt(String(value ?? '').replace(',', '.').trim(), 10);
+  if (!Number.isFinite(parsed) || parsed < 0 || parsed > 1000) return null;
+  return parsed;
+};
+
+const extractPeopleCountFromText = (value) => {
+  const text = normalizePeopleText(value);
+  if (!text.trim()) return null;
+  const patterns = [
+    /\b(\d{1,3})\s*(?:pax|personer?|pers\.?|people|guests?|gjester?|deltakere?|participants?)\b/i,
+    /\b(?:antall\s*)?(?:pax|personer?|pers\.?|people|guests?|gjester?|deltakere?|participants?)\s*[:=-]?\s*(\d{1,3})\b/i,
+    /\b(\d{1,3})\s*x\s*(?:pax|personer?|pers\.?|people|guests?|gjester?)\b/i,
+  ];
+  for (const pattern of patterns) {
+    const match = text.match(pattern);
+    const parsed = parsePeopleCountNumber(match?.[1]);
+    if (parsed !== null) return parsed;
+  }
+  return null;
+};
+
+const getPeopleCountFromEntry = (entry) => {
+  const explicitValues = [
+    entry?.peopleCount,
+    entry?.people_count,
+    entry?.people,
+    entry?.persons,
+    entry?.personer,
+    entry?.pax,
+    entry?.guestCount,
+    entry?.guest_count,
+    entry?.guests,
+    entry?.participants,
+    entry?.participantCount,
+    entry?.participant_count,
+    entry?.attendeeCount,
+    entry?.attendee_count,
+    entry?.attendees,
+    entry?.attributes?.peopleCount,
+    entry?.attributes?.people_count,
+    entry?.attributes?.people,
+    entry?.attributes?.persons,
+    entry?.attributes?.personer,
+    entry?.attributes?.pax,
+    entry?.attributes?.guestCount,
+    entry?.attributes?.guest_count,
+    entry?.attributes?.guests,
+    entry?.attributes?.participants,
+    entry?.attributes?.attendeeCount,
+    entry?.attributes?.attendee_count,
+    entry?.attributes?.attendees,
+  ];
+  for (const value of explicitValues) {
+    const parsed = parsePeopleCountNumber(value);
+    if (parsed !== null) return parsed;
+  }
+
+  const textValues = [
+    entry?.summary,
+    entry?.title,
+    entry?.name,
+    entry?.description,
+    entry?.location,
+    entry?.category,
+    entry?.categories,
+    entry?.type,
+    entry?.attributes?.summary,
+    entry?.attributes?.description,
+    entry?.attributes?.location,
+  ];
+  for (const value of textValues) {
+    const parsed = extractPeopleCountFromText(value);
+    if (parsed !== null) return parsed;
+  }
+  return null;
+};
+
 const normalizeCalendarEventsResult = (result) => {
   const rows = [];
   const addEvents = (calendarEntityId, events) => {
@@ -234,6 +318,7 @@ const normalizeCalendarEventsResult = (result) => {
         endMs: Number.isFinite(endMs) ? endMs : startMs + (durationHours * 60 * 60 * 1000),
         durationHours,
         bookingType: getCalendarBookingType(event),
+        peopleCount: getPeopleCountFromEntry(event),
         summary: event?.summary || event?.title || event?.name || '',
         description: event?.description || '',
         location: event?.location || '',
@@ -408,6 +493,7 @@ const normalizeBookingSamples = (rawValue) => {
         targetTemp,
         deviationPct: deviationPct !== null ? roundToOne(deviationPct) : calcDeviationPct(startTemp, targetTemp),
         bookingType: getSnapshotBookingType(entry),
+        peopleCount: getPeopleCountFromEntry(entry),
       };
     })
     .filter(Boolean)
@@ -486,11 +572,11 @@ const formatDateTime = (timestampMs) => {
   });
 };
 
-const getScoreToneClass = (score) => {
+const getScoreToneClass = (score, isLightTheme = false) => {
   if (!Number.isFinite(Number(score))) return 'text-[var(--text-secondary)]';
-  if (Number(score) > 90) return 'text-emerald-300';
-  if (Number(score) >= 70) return 'text-amber-300';
-  return 'text-rose-300';
+  if (Number(score) > 90) return isLightTheme ? 'text-emerald-700' : 'text-emerald-300';
+  if (Number(score) >= 70) return isLightTheme ? 'text-amber-700' : 'text-amber-300';
+  return isLightTheme ? 'text-rose-700' : 'text-rose-300';
 };
 
 const buildSourceCards = ({ cardSettings, entities, customNames, getEntityImageUrl, tr }) => {
@@ -749,6 +835,10 @@ const analyzeRecord = (record, periodDays, calendarEvents = []) => {
   const bookingTypeCounts = hasCalendarBookings ? calendarTypeCounts : snapshotTypeCounts;
   const bookingHours = roundToOne(BOOKING_TYPES.reduce((sum, type) => sum + (Number(bookingTypeCounts[type]) || 0), 0));
   const sessions = hasCalendarBookings ? calendarBookings.length : countSessions(bookingSamples);
+  const peopleSource = hasCalendarBookings ? calendarBookings : bookingSamples;
+  const peopleEntries = peopleSource.filter((entry) => Number.isFinite(Number(entry.peopleCount)));
+  const bookingPeopleTotal = peopleEntries.reduce((sum, entry) => sum + (Number(entry.peopleCount) || 0), 0);
+  const currentPeopleNow = toNum(record.peopleNow);
   const midpoint = windowStart + ((Date.now() - windowStart) / 2);
   const healthScore = computeScoreFromTargetSamples(healthSamples);
   const bookingScore = computeBookingScoreFromSamples(bookingScoreSamples, record.targetToleranceC);
@@ -784,6 +874,9 @@ const analyzeRecord = (record, periodDays, calendarEvents = []) => {
     latestBooking,
     bookingHours,
     sessions,
+    bookingPeopleTotal,
+    peopleSamples: peopleEntries.length,
+    currentPeopleNow,
     firstHalfScore,
     secondHalfScore,
     scoreDelta,
@@ -815,6 +908,9 @@ const buildDailyTrend = (records, periodDays) => {
         .filter((entry) => entry.timestampMs >= start && entry.timestampMs < end)
         .map((entry) => ({ ...entry, bookingHours: 1 }));
     });
+    const peopleCount = bookingDaySamples.reduce((sum, entry) => (
+      Number.isFinite(Number(entry.peopleCount)) ? sum + Number(entry.peopleCount) : sum
+    ), 0);
     const bookingBreakdown = bookingDaySamples.reduce((acc, entry) => {
       const type = normalizeBookingType(entry.bookingType);
       acc[type] = roundToOne((acc[type] || 0) + (Number(entry.bookingHours) || 1));
@@ -832,6 +928,7 @@ const buildDailyTrend = (records, periodDays) => {
       bookingAufguss: bookingBreakdown.aufguss,
       bookingPrivate: bookingBreakdown.private,
       bookingService: bookingBreakdown.service,
+      peopleCount,
     });
   }
   return days;
@@ -854,6 +951,9 @@ const buildSummary = (records, periodDays, tr) => {
     : null;
   const bookingHours = records.reduce((sum, record) => sum + record.bookingHours, 0);
   const sessions = records.reduce((sum, record) => sum + record.sessions, 0);
+  const totalBookingPeople = records.reduce((sum, record) => sum + (Number(record.bookingPeopleTotal) || 0), 0);
+  const totalPeopleSamples = records.reduce((sum, record) => sum + (Number(record.peopleSamples) || 0), 0);
+  const currentPeopleNow = records.reduce((sum, record) => sum + (Number(record.currentPeopleNow) || 0), 0);
   const best = scoreRecords.slice().sort((a, b) => b.healthScore - a.healthScore)[0] || null;
   const weakest = scoreRecords.slice().sort((a, b) => a.healthScore - b.healthScore)[0] || null;
   const trend = buildDailyTrend(records, periodDays);
@@ -870,6 +970,7 @@ const buildSummary = (records, periodDays, tr) => {
     .filter((record) => Number.isFinite(Number(record.scoreDelta)) && record.scoreDelta < 0)
     .sort((a, b) => a.scoreDelta - b.scoreDelta)[0] || null;
   const maxBookingHours = records.reduce((max, record) => Math.max(max, record.bookingHours), 0);
+  const maxBookingPeople = records.reduce((max, record) => Math.max(max, record.bookingPeopleTotal || 0), 0);
   const bookingTypeTotals = BOOKING_TYPES.reduce((acc, type) => {
     acc[type] = records.reduce((sum, record) => sum + (record.bookingTypeCounts?.[type] || 0), 0);
     return acc;
@@ -892,6 +993,7 @@ const buildSummary = (records, periodDays, tr) => {
         { label: tr('reports.avgScore', 'Average score'), value: formatScore(avgScore) },
         { label: tr('reports.bookingHours', 'Booking hours'), value: formatNumber(bookingHours) },
         { label: tr('reports.estimatedSessions', 'Estimated sessions'), value: formatNumber(sessions) },
+        { label: tr('reports.peopleCount', 'People'), value: totalPeopleSamples > 0 ? formatNumber(totalBookingPeople) : '--' },
         { label: tr('reports.hitRate', 'Hit rate'), value: hitRate !== null ? `${hitRate}%` : '--' },
       ],
     },
@@ -915,6 +1017,9 @@ const buildSummary = (records, periodDays, tr) => {
     avgDeviationPct,
     bookingHours,
     sessions,
+    totalBookingPeople,
+    totalPeopleSamples,
+    currentPeopleNow,
     best,
     weakest,
     trend,
@@ -922,6 +1027,7 @@ const buildSummary = (records, periodDays, tr) => {
     improving,
     declining,
     maxBookingHours,
+    maxBookingPeople,
     bookingTypeTotals,
     totalHealthSamples,
     totalScoreSamples,
@@ -1492,6 +1598,14 @@ const createPdfBlob = ({ report, title, subtitle, tr, logoImage = null, saunaIma
       line(x + 9, yy + 9, x + 12, yy + 7.5, tone);
       return;
     }
+    if (icon === 'people') {
+      circle(x + 7.2, yy + 10.5, 3, tone);
+      circle(x + 11.6, yy + 10.5, 3, tone);
+      line(x + 4, yy + 4.5, x + 14.8, yy + 4.5, tone);
+      line(x + 4, yy + 4.5, x + 2.8, yy + 8.2, tone);
+      line(x + 14.8, yy + 4.5, x + 16, yy + 8.2, tone);
+      return;
+    }
     circle(x + 9, yy + 9, 5.8, tone);
     circle(x + 9, yy + 9, 2.6, tone);
     line(x + 9, yy + 2.5, x + 9, yy + 15.5, tone);
@@ -1755,11 +1869,12 @@ const createPdfBlob = ({ report, title, subtitle, tr, logoImage = null, saunaIma
   y -= heroH + 22;
 
   const metricY = y - 56;
-  const metricWidth = (contentWidth - 18) / 4;
+  const metricWidth = (contentWidth - 24) / 5;
   [
     [tr('reports.avgScore', 'Average score'), report.totalScoreSamples > 0 ? formatScore(report.avgScore) : '--', report.totalScoreSamples > 0 ? getScoreHex(report.avgScore) : palette.subtle, 'score'],
     [tr('reports.bookingHours', 'Booking hours'), formatNumber(report.bookingHours), palette.text, 'booking'],
     [tr('reports.estimatedSessions', 'Estimated sessions'), formatNumber(report.sessions), palette.text, 'sessions'],
+    [tr('reports.peopleCount', 'People'), report.totalPeopleSamples > 0 ? formatNumber(report.totalBookingPeople) : '--', report.totalPeopleSamples > 0 ? palette.accent : palette.subtle, 'people'],
     [tr('reports.hitRate', 'Hit rate'), report.hitRate !== null ? `${report.hitRate}%` : '--', palette.accent, 'target'],
   ].forEach(([label, value, tone, icon], index) => {
     const x = margin + (index * (metricWidth + 6));
@@ -1768,9 +1883,12 @@ const createPdfBlob = ({ report, title, subtitle, tr, logoImage = null, saunaIma
   y = metricY - 26;
 
   sectionTitle(tr('reports.executiveSummary', 'Executive summary'));
+  const peopleSummaryText = report.totalPeopleSamples > 0
+    ? ` ${tr('reports.peopleCount', 'People')}: ${formatNumber(report.totalBookingPeople)}.`
+    : '';
   const summaryText = report.best && report.weakest
-    ? `${tr('reports.bestSauna', 'Best sauna')}: ${report.best.name} (${formatScore(report.best.healthScore)}). ${tr('reports.needsAttention', 'Needs attention')}: ${report.weakest.name} (${formatScore(report.weakest.healthScore)}). ${tr('reports.avgTrend', 'Average trend')}: ${getDeltaText(report.avgScoreDelta)}.`
-    : `${tr('reports.bookingHours', 'Booking hours')}: ${formatNumber(report.bookingHours)}. ${tr('reports.healthDataMissing', 'Health data missing')}.`;
+    ? `${tr('reports.bestSauna', 'Best sauna')}: ${report.best.name} (${formatScore(report.best.healthScore)}). ${tr('reports.needsAttention', 'Needs attention')}: ${report.weakest.name} (${formatScore(report.weakest.healthScore)}). ${tr('reports.avgTrend', 'Average trend')}: ${getDeltaText(report.avgScoreDelta)}.${peopleSummaryText}`
+    : `${tr('reports.bookingHours', 'Booking hours')}: ${formatNumber(report.bookingHours)}.${peopleSummaryText} ${tr('reports.healthDataMissing', 'Health data missing')}.`;
   callout({
     title: tr('reports.executiveSummary', 'Executive summary'),
     body: summaryText,
@@ -1778,10 +1896,11 @@ const createPdfBlob = ({ report, title, subtitle, tr, logoImage = null, saunaIma
   });
 
   const basisY = y - 48;
-  const basisW = (contentWidth - 12) / 3;
+  const basisW = (contentWidth - 18) / 4;
   [
     [tr('reports.dataFoundation', 'Data foundation'), healthBasis],
     [tr('reports.bookingSamples', 'Booking samples'), formatNumber(report.totalBookingSamples)],
+    [tr('reports.peopleSamples', 'People samples'), report.totalPeopleSamples > 0 ? formatNumber(report.totalPeopleSamples) : '--'],
     [tr('reports.trend', 'Trend'), getDeltaText(report.avgScoreDelta)],
   ].forEach(([label, value], index) => {
     metricBox({ label, value, x: margin + (index * (basisW + 6)), yy: basisY, w: basisW, tone: index === 2 ? palette.accent : palette.text });
@@ -1828,6 +1947,18 @@ const createPdfBlob = ({ report, title, subtitle, tr, logoImage = null, saunaIma
       },
     ],
   });
+  if (report.totalPeopleSamples > 0) {
+    valueBarChart({
+      title: tr('reports.peopleDevelopment', 'People development'),
+      entries: report.trend,
+      valueAccessor: (entry) => entry.peopleCount,
+      labelAccessor: (entry) => entry.label,
+      maxValue: Math.max(1, ...report.trend.map((entry) => entry.peopleCount || 0)),
+      valueFormatter: formatNumber,
+      colorAccessor: () => palette.accent,
+      scaleLabel: tr('reports.peopleScale', 'People from bookings'),
+    });
+  }
 
   sectionTitle(tr('reports.comparison', 'Comparison'));
   horizontalBars({
@@ -1875,6 +2006,20 @@ const createPdfBlob = ({ report, title, subtitle, tr, logoImage = null, saunaIma
     maxValue: Math.max(1, report.maxBookingHours),
     valueFormatter: (value) => `${formatNumber(value)}h`,
   });
+  if (report.totalPeopleSamples > 0) {
+    horizontalBars({
+      title: tr('reports.peopleBySauna', 'People by sauna'),
+      entries: report.records
+        .filter((record) => record.bookingPeopleTotal > 0)
+        .slice()
+        .sort((a, b) => b.bookingPeopleTotal - a.bookingPeopleTotal),
+      valueAccessor: (record) => record.bookingPeopleTotal,
+      labelAccessor: (record) => record.name,
+      maxValue: Math.max(1, report.maxBookingPeople),
+      valueFormatter: formatNumber,
+      colorAccessor: () => palette.accent,
+    });
+  }
 
   sectionTitle(tr('reports.saunaPerformance', 'Sauna performance'));
   const performanceRecords = report.records
@@ -1945,7 +2090,6 @@ const createPdfBlob = ({ report, title, subtitle, tr, logoImage = null, saunaIma
       const nameX = leftX + 54;
       const scoreX = margin + contentWidth - 58;
       const metricX = margin + 184;
-      const metricW = Math.max(54, (scoreX - metricX - 10) / 4);
       const status = statusForScore(record.healthScore);
       const scoreColor = getScoreHex(record.healthScore);
       const imageName = saunaImageNames.get(record.id);
@@ -1968,7 +2112,7 @@ const createPdfBlob = ({ report, title, subtitle, tr, logoImage = null, saunaIma
       roundRect(nameX, rowY + 9, 72, 16, 6, status.fill, '#2b4056');
       text(truncateText(status.label, 15), nameX + 8, rowY + 14, 6.5, 'F2', status.textColor);
 
-      [
+      const performanceMetrics = [
         {
           label: tr('reports.trend', 'Trend'),
           value: getDeltaText(record.scoreDelta),
@@ -1980,6 +2124,11 @@ const createPdfBlob = ({ report, title, subtitle, tr, logoImage = null, saunaIma
           color: palette.text,
         },
         {
+          label: tr('reports.peopleCount', 'People'),
+          value: record.peopleSamples > 0 ? formatNumber(record.bookingPeopleTotal) : '--',
+          color: record.peopleSamples > 0 ? palette.accent : palette.subtle,
+        },
+        {
           label: tr('reports.hitRate', 'Hit rate'),
           value: record.hitRate !== null ? `${record.hitRate}%` : '--',
           color: palette.accent,
@@ -1989,9 +2138,11 @@ const createPdfBlob = ({ report, title, subtitle, tr, logoImage = null, saunaIma
           value: formatTemp(record.avgBookingTemp),
           color: palette.text,
         },
-      ].forEach((metric, metricIndex) => {
+      ];
+      const metricW = Math.max(44, (scoreX - metricX - 10) / performanceMetrics.length);
+      performanceMetrics.forEach((metric, metricIndex) => {
         const x = metricX + (metricIndex * metricW);
-        text(truncateText(metric.label, 14), x, rowY + rowH - 17, 6.2, 'F2', palette.muted);
+        text(truncateText(metric.label, 12), x, rowY + rowH - 17, 6.2, 'F2', palette.muted);
         text(truncateText(metric.value, 9), x, rowY + rowH - 32, 9, 'F2', metric.color);
       });
 
@@ -2087,7 +2238,7 @@ const FilterPanel = ({ Icon, label, summary, children, scroll = false }) => (
         <span className="truncate">{label}</span>
       </div>
       {summary && (
-        <span className="shrink-0 rounded-md border border-white/10 bg-white/5 px-2 py-1 text-[10px] font-bold tabular-nums text-[var(--text-muted)]">
+        <span className="shrink-0 rounded-md border border-[var(--glass-border)] bg-[var(--glass-bg)] px-2 py-1 text-[10px] font-bold tabular-nums text-[var(--text-secondary)]">
           {summary}
         </span>
       )}
@@ -2100,7 +2251,7 @@ const FilterPanel = ({ Icon, label, summary, children, scroll = false }) => (
 
 const ReportFeaturePill = ({ Icon, label, tone = 'text-emerald-200' }) => (
   <div className="flex min-w-0 items-center gap-2 rounded-lg border border-[var(--glass-border)] bg-[var(--glass-bg)] px-2.5 py-2">
-    <span className={`grid h-6 w-6 shrink-0 place-items-center rounded-md bg-white/5 ${tone}`}>
+    <span className={`grid h-6 w-6 shrink-0 place-items-center rounded-md bg-[var(--glass-bg-hover)] ${tone}`}>
       {Icon && <Icon className="h-3.5 w-3.5" />}
     </span>
     <span className="truncate text-[10px] font-bold uppercase tracking-widest text-[var(--text-secondary)]">{label}</span>
@@ -2135,6 +2286,7 @@ export default function SaunaReportsCard({
   t,
 }) {
   const tr = useMemo(() => makeTr(t), [t]);
+  const isLightTheme = typeof document !== 'undefined' && document.documentElement?.dataset?.theme === 'light';
   const configuredSelectedIds = useMemo(
     () => normalizeRecordIdList(settings?.saunaRecordIds ?? settings?.selectedSaunaIds),
     [settings?.saunaRecordIds, settings?.selectedSaunaIds]
@@ -2220,10 +2372,30 @@ export default function SaunaReportsCard({
       : tr('reports.allSaunas', 'All saunas'));
   const activeScopeLabel = `${formatNumber(activeRecords.length)}/${formatNumber(scopedRecords.length)}`;
   const scoreValue = report.totalScoreSamples > 0 ? formatScore(report.avgScore) : '--';
-  const scoreTone = report.totalScoreSamples > 0 ? getScoreToneClass(report.avgScore) : 'text-[var(--text-muted)]';
+  const peopleValue = report.totalPeopleSamples > 0 ? formatNumber(report.totalBookingPeople) : '--';
+  const scoreTone = report.totalScoreSamples > 0 ? getScoreToneClass(report.avgScore, isLightTheme) : 'text-[var(--text-muted)]';
   const trendTone = Number(report.avgScoreDelta) > 0
-    ? 'text-emerald-300'
-    : (Number(report.avgScoreDelta) < 0 ? 'text-amber-300' : 'text-[var(--text-primary)]');
+    ? (isLightTheme ? 'text-emerald-700' : 'text-emerald-300')
+    : (Number(report.avgScoreDelta) < 0
+      ? (isLightTheme ? 'text-amber-700' : 'text-amber-300')
+      : 'text-[var(--text-primary)]');
+  const downloadButtonClass = isLightTheme
+    ? 'border-emerald-600/30 bg-emerald-50 text-emerald-800 hover:bg-emerald-100'
+    : 'border-emerald-400/35 bg-emerald-500/16 text-emerald-100 hover:bg-emerald-500/24';
+  const periodActiveClass = isLightTheme
+    ? 'border-blue-300 bg-blue-50 text-blue-800'
+    : 'border-blue-400/50 bg-blue-500/18 text-blue-100';
+  const allSaunasActiveClass = isLightTheme
+    ? 'border-emerald-300 bg-emerald-50 text-emerald-800'
+    : 'border-emerald-400/45 bg-emerald-500/16 text-emerald-100';
+  const recordActiveClass = isLightTheme
+    ? 'border-slate-300 bg-white text-slate-900 shadow-sm'
+    : 'border-white/18 bg-white/10 text-[var(--text-primary)]';
+  const featureTone = {
+    score: isLightTheme ? 'text-emerald-700' : 'text-emerald-200',
+    comparison: isLightTheme ? 'text-blue-700' : 'text-blue-200',
+    performance: isLightTheme ? 'text-amber-700' : 'text-amber-200',
+  };
   const toggleRecord = (recordId) => {
     setSelectedIds((prev) => {
       if (!prev.length) return [recordId];
@@ -2303,7 +2475,7 @@ export default function SaunaReportsCard({
               type="button"
               onClick={handleDownloadPdf}
               disabled={!activeRecords.length || isPreparingPdf}
-              className="inline-flex items-center justify-center gap-2 rounded-lg border border-emerald-400/35 bg-emerald-500/16 px-4 py-2.5 text-xs font-bold uppercase tracking-widest text-emerald-100 transition-colors hover:bg-emerald-500/24 disabled:opacity-45 disabled:cursor-not-allowed"
+              className={`inline-flex items-center justify-center gap-2 rounded-lg border px-4 py-2.5 text-xs font-bold uppercase tracking-widest transition-colors disabled:opacity-45 disabled:cursor-not-allowed ${downloadButtonClass}`}
             >
               <Download className="w-4 h-4" />
               {isPreparingPdf ? tr('reports.preparingPdf', 'Preparing PDF') : tr('reports.downloadPdf', 'Download PDF')}
@@ -2325,7 +2497,7 @@ export default function SaunaReportsCard({
                 onClick={() => setPeriodDays(days)}
                 className={`rounded-lg border px-3 py-2 text-[11px] font-bold uppercase tracking-widest transition-colors ${
                   periodDays === days
-                    ? 'border-blue-400/50 bg-blue-500/18 text-blue-100'
+                    ? periodActiveClass
                     : 'border-[var(--glass-border)] bg-[var(--glass-bg-hover)] text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
                 }`}
               >
@@ -2345,7 +2517,7 @@ export default function SaunaReportsCard({
               onClick={() => setSelectedIds([])}
               className={`rounded-lg border px-3 py-2 text-[11px] font-bold uppercase tracking-widest transition-colors ${
                 selectedIds.length === 0
-                  ? 'border-emerald-400/45 bg-emerald-500/16 text-emerald-100'
+                  ? allSaunasActiveClass
                   : 'border-[var(--glass-border)] bg-[var(--glass-bg-hover)] text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
               }`}
             >
@@ -2362,7 +2534,7 @@ export default function SaunaReportsCard({
                   onClick={() => toggleRecord(record.id)}
                   className={`rounded-lg border px-3 py-2 text-[11px] font-bold uppercase tracking-widest transition-colors ${
                     active
-                      ? 'border-white/18 bg-white/10 text-[var(--text-primary)]'
+                      ? recordActiveClass
                       : 'border-[var(--glass-border)] bg-transparent text-[var(--text-muted)] hover:text-[var(--text-secondary)]'
                   }`}
                 >
@@ -2407,9 +2579,9 @@ export default function SaunaReportsCard({
                     {tr('reports.pdfContains', 'PDF contains')}
                   </div>
                   <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
-                    <ReportFeaturePill Icon={TrendingUp} label={tr('reports.scoreDevelopment', 'Score development')} tone="text-emerald-200" />
-                    <ReportFeaturePill Icon={BarChart3} label={tr('reports.comparison', 'Comparison')} tone="text-blue-200" />
-                    <ReportFeaturePill Icon={Award} label={tr('reports.saunaPerformance', 'Sauna performance')} tone="text-amber-200" />
+                    <ReportFeaturePill Icon={TrendingUp} label={tr('reports.scoreDevelopment', 'Score development')} tone={featureTone.score} />
+                    <ReportFeaturePill Icon={BarChart3} label={tr('reports.comparison', 'Comparison')} tone={featureTone.comparison} />
+                    <ReportFeaturePill Icon={Award} label={tr('reports.saunaPerformance', 'Sauna performance')} tone={featureTone.performance} />
                   </div>
                 </div>
               </div>
@@ -2419,7 +2591,7 @@ export default function SaunaReportsCard({
                   <Award className="h-3.5 w-3.5" />
                   {tr('reports.keyNumbers', 'Key numbers')}
                 </div>
-                <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 2xl:grid-cols-4">
                   <KeyFigure
                     Icon={Shield}
                     label={tr('reports.avgScore', 'Average score')}
@@ -2434,6 +2606,13 @@ export default function SaunaReportsCard({
                     subLabel={tr('reports.bookingMix', 'Booking mix')}
                   />
                   <KeyFigure
+                    Icon={User}
+                    label={tr('reports.peopleCount', 'People')}
+                    value={peopleValue}
+                    tone={report.totalPeopleSamples > 0 ? (isLightTheme ? 'text-emerald-700' : 'text-emerald-300') : 'text-[var(--text-muted)]'}
+                    subLabel={tr('reports.bookingPeople', 'People in bookings')}
+                  />
+                  <KeyFigure
                     Icon={TrendingUp}
                     label={tr('reports.trend', 'Trend')}
                     value={getDeltaText(report.avgScoreDelta)}
@@ -2444,10 +2623,11 @@ export default function SaunaReportsCard({
               </div>
             </div>
 
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+            <div className="grid grid-cols-2 md:grid-cols-5 gap-2">
               <MetricTile Icon={Activity} label={tr('reports.selectedSaunas', 'selected saunas')} value={formatNumber(activeRecords.length)} />
               <MetricTile Icon={Shield} label={tr('reports.scoreBasis', 'Score basis')} value={formatNumber(report.totalScoreSamples)} subLabel={report.totalHealthSamples > 0 ? tr('reports.healthDataReady', 'Health data ready') : tr('reports.scoreFromBookings', 'score points from bookings')} />
               <MetricTile Icon={Clock} label={tr('reports.bookingSamples', 'Booking samples')} value={formatNumber(report.totalBookingSamples)} />
+              <MetricTile Icon={User} label={tr('reports.peopleCount', 'People')} value={peopleValue} subLabel={tr('reports.peopleSamples', 'People samples')} />
               <MetricTile Icon={Thermometer} label={tr('reports.hitRate', 'Hit rate')} value={report.hitRate !== null ? `${report.hitRate}%` : '--'} />
             </div>
           </div>
