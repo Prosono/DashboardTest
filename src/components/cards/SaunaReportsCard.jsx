@@ -1,14 +1,11 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
   Activity,
-  Award,
   BarChart3,
-  BookOpen,
   Calendar,
   Clock,
   Download,
   Flame,
-  ListChecks,
   Shield,
   Thermometer,
   TrendingUp,
@@ -2335,25 +2332,622 @@ const FilterPanel = ({ Icon, label, summary, children, scroll = false }) => (
   </div>
 );
 
-const ReportFeaturePill = ({ Icon, label, tone = 'text-emerald-200' }) => (
-  <div className="flex min-w-0 items-center gap-2 rounded-lg border border-[var(--glass-border)] bg-[var(--glass-bg)] px-2.5 py-2">
-    <span className={`grid h-6 w-6 shrink-0 place-items-center rounded-md bg-[var(--glass-bg-hover)] ${tone}`}>
-      {Icon && <Icon className="h-3.5 w-3.5" />}
+const getReportHealthBasis = (report, tr) => {
+  if (report.totalHealthSamples > 0) {
+    return `${formatNumber(report.totalHealthSamples)} ${tr('reports.healthSamples', 'Health samples').toLowerCase()}`;
+  }
+  if (report.totalScoreSamples > 0) {
+    return `${formatNumber(report.totalScoreSamples)} ${tr('reports.scoreFromBookings', 'score points from bookings')}`;
+  }
+  return tr('reports.healthDataMissing', 'Health data missing');
+};
+
+const getExecutiveSummaryText = (report, tr) => {
+  const peopleSummaryText = report.totalPeopleSamples > 0
+    ? ` ${tr('reports.peopleCount', 'People')}: ${formatNumber(report.totalBookingPeople)}.`
+    : '';
+  if (report.best && report.weakest) {
+    return `${tr('reports.bestSauna', 'Best sauna')}: ${report.best.name} (${formatScore(report.best.healthScore)}). ${tr('reports.needsAttention', 'Needs attention')}: ${report.weakest.name} (${formatScore(report.weakest.healthScore)}). ${tr('reports.avgTrend', 'Average trend')}: ${getDeltaText(report.avgScoreDelta)}.${peopleSummaryText}`;
+  }
+  return `${tr('reports.bookingHours', 'Booking hours')}: ${formatNumber(report.bookingHours)}.${peopleSummaryText} ${tr('reports.healthDataMissing', 'Health data missing')}.`;
+};
+
+const getPerformanceStatusMeta = (score, tr) => {
+  if (!Number.isFinite(Number(score))) {
+    return {
+      label: tr('reports.performanceStatusMissing', 'Missing data'),
+      className: 'border-slate-500/30 bg-slate-500/12 text-slate-300',
+    };
+  }
+  if (Number(score) > 90) {
+    return {
+      label: tr('reports.performanceStatusGood', 'Good'),
+      className: 'border-emerald-400/30 bg-emerald-400/12 text-emerald-200',
+    };
+  }
+  if (Number(score) >= 70) {
+    return {
+      label: tr('reports.performanceStatusWatch', 'Watch'),
+      className: 'border-amber-400/30 bg-amber-400/12 text-amber-200',
+    };
+  }
+  return {
+    label: tr('reports.performanceStatusAction', 'Action'),
+    className: 'border-rose-400/30 bg-rose-400/12 text-rose-200',
+  };
+};
+
+const ReportPreviewPage = ({ title, eyebrow, children, pageNumber }) => (
+  <section className="relative overflow-hidden rounded-xl border border-[#244057] bg-[#07111d] p-4 text-[#edf5ff] shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] md:p-5">
+    <div className="absolute inset-x-0 top-0 h-1 bg-[linear-gradient(90deg,#5ee3a1,#5b9cff)]" />
+    <div className="mb-4 flex items-start justify-between gap-4">
+      <div className="min-w-0">
+        {eyebrow && (
+          <div className="text-[10px] font-bold uppercase tracking-widest text-[#9fb1c4]">
+            {eyebrow}
+          </div>
+        )}
+        <h4 className="mt-1 truncate text-base font-semibold text-[#edf5ff] md:text-lg">{title}</h4>
+      </div>
+      <div className="shrink-0 rounded-md border border-[#244057] bg-[#0d1b2a] px-2 py-1 text-[10px] font-bold tabular-nums text-[#6f8298]">
+        {pageNumber}
+      </div>
+    </div>
+    {children}
+  </section>
+);
+
+const PreviewPill = ({ children, tone = 'default' }) => {
+  const toneClass = tone === 'green'
+    ? 'border-emerald-400/25 bg-emerald-400/10 text-emerald-100'
+    : (tone === 'amber'
+      ? 'border-amber-400/25 bg-amber-400/10 text-amber-100'
+      : 'border-[#244057] bg-[#102235] text-[#edf5ff]');
+  return (
+    <span className={`inline-flex min-w-0 items-center rounded-lg border px-2.5 py-1.5 text-[10px] font-bold uppercase tracking-widest ${toneClass}`}>
+      <span className="truncate">{children}</span>
     </span>
-    <span className="truncate text-[10px] font-bold uppercase tracking-widest text-[var(--text-secondary)]">{label}</span>
+  );
+};
+
+const PreviewMetric = ({ Icon, label, value, subLabel, tone = '#edf5ff' }) => (
+  <div className="min-h-[88px] rounded-lg border border-[#244057] bg-[#102235] p-3">
+    <div className="flex items-center justify-between gap-2">
+      <div className="min-w-0 truncate text-[10px] font-bold uppercase tracking-widest text-[#9fb1c4]">
+        {label}
+      </div>
+      {Icon && <Icon className="h-3.5 w-3.5 shrink-0 text-[#6f8298]" />}
+    </div>
+    <div className="mt-2 truncate text-3xl font-semibold tabular-nums" style={{ color: tone }}>
+      {value}
+    </div>
+    {subLabel && <div className="mt-1 truncate text-[10px] text-[#6f8298]">{subLabel}</div>}
   </div>
 );
 
-const KeyFigure = ({ Icon, label, value, tone = 'text-[var(--text-primary)]', subLabel }) => (
-  <div className="min-h-[88px] rounded-lg border border-[var(--glass-border)] bg-[var(--glass-bg)] px-3 py-3">
-    <div className="flex items-center justify-between gap-2 text-[9px] uppercase tracking-widest text-[var(--text-muted)]">
-      <span className="truncate">{label}</span>
-      {Icon && <Icon className="h-3.5 w-3.5 shrink-0" />}
+const PreviewPanel = ({ title, subtitle, children }) => (
+  <div className="rounded-lg border border-[#244057] bg-[#0d1b2a] p-3 md:p-4">
+    <div className="mb-3 flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
+      <div className="min-w-0">
+        <h5 className="truncate text-sm font-semibold text-[#edf5ff]">{title}</h5>
+        {subtitle && <div className="mt-1 truncate text-[10px] uppercase tracking-widest text-[#6f8298]">{subtitle}</div>}
+      </div>
     </div>
-    <div className={`mt-2 text-3xl font-semibold tabular-nums ${tone}`}>{value}</div>
-    {subLabel && <div className="mt-1 truncate text-[10px] text-[var(--text-muted)]">{subLabel}</div>}
+    {children}
   </div>
 );
+
+const PreviewNoData = ({ tr }) => (
+  <div className="grid min-h-28 place-items-center rounded-lg border border-dashed border-[#244057] bg-[#0a1724] px-4 py-6 text-center text-xs font-semibold text-[#9fb1c4]">
+    {tr('reports.noChartData', 'No chart data in selected period')}
+  </div>
+);
+
+const PreviewBarChart = ({
+  title,
+  subtitle,
+  entries,
+  valueAccessor,
+  labelAccessor,
+  maxValue = 100,
+  valueFormatter = formatNumber,
+  colorAccessor = () => '#5b9cff',
+  tr,
+}) => {
+  const safeEntries = Array.isArray(entries) ? entries : [];
+  const hasValues = safeEntries.some((entry) => Number.isFinite(Number(valueAccessor(entry))));
+  const safeMax = Math.max(1, Number(maxValue) || 1);
+
+  return (
+    <PreviewPanel title={title} subtitle={subtitle}>
+      {!hasValues ? (
+        <PreviewNoData tr={tr} />
+      ) : (
+        <>
+          <div className="h-44 rounded-lg border border-[#1c3348] bg-[#0a1724] p-2">
+            <div className="flex h-full items-end gap-1">
+              {safeEntries.map((entry) => {
+                const value = Number(valueAccessor(entry));
+                const finite = Number.isFinite(value);
+                const heightPct = finite ? clamp((value / safeMax) * 100, 3, 100) : 2;
+                return (
+                  <div key={entry.key || labelAccessor(entry)} className="flex h-full min-w-0 flex-1 flex-col items-center justify-end gap-1">
+                    <div className="hidden max-w-full truncate text-[9px] font-bold tabular-nums text-[#9fb1c4] sm:block">
+                      {finite ? valueFormatter(value) : '--'}
+                    </div>
+                    <div
+                      className="w-full rounded-t-md"
+                      style={{
+                        height: `${heightPct}%`,
+                        backgroundColor: finite ? colorAccessor(entry) : '#31465c',
+                      }}
+                    />
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+          <div
+            className="mt-2 grid gap-1 text-center text-[9px] font-semibold text-[#6f8298]"
+            style={{ gridTemplateColumns: `repeat(${Math.max(1, safeEntries.length)}, minmax(0, 1fr))` }}
+          >
+            {safeEntries.map((entry) => (
+              <div key={`${entry.key || labelAccessor(entry)}-label`} className="truncate">{labelAccessor(entry)}</div>
+            ))}
+          </div>
+        </>
+      )}
+    </PreviewPanel>
+  );
+};
+
+const PreviewLegend = ({ segments, entries, valueFormatter = formatNumber }) => (
+  <div className="mb-3 flex flex-wrap gap-2">
+    {segments.map((segment) => {
+      const total = entries.reduce((sum, entry) => sum + Math.max(0, Number(segment.valueAccessor(entry)) || 0), 0);
+      return (
+        <div key={segment.key} className="inline-flex min-w-0 items-center gap-2 rounded-md border border-[#244057] bg-[#102235] px-2 py-1 text-[10px] font-semibold text-[#9fb1c4]">
+          <span className="h-2 w-2 shrink-0 rounded-sm" style={{ backgroundColor: segment.color }} />
+          <span className="truncate">{segment.label}</span>
+          <span className="shrink-0 tabular-nums text-[#edf5ff]">{valueFormatter(total)}</span>
+        </div>
+      );
+    })}
+  </div>
+);
+
+const PreviewStackedBars = ({
+  title,
+  subtitle,
+  entries,
+  segments,
+  labelAccessor,
+  maxValue = 1,
+  tr,
+}) => {
+  const safeEntries = Array.isArray(entries) ? entries : [];
+  const safeMax = Math.max(1, Number(maxValue) || 1);
+  const hasValues = safeEntries.some((entry) => segments.some((segment) => Number(segment.valueAccessor(entry)) > 0));
+
+  return (
+    <PreviewPanel title={title} subtitle={subtitle}>
+      <PreviewLegend segments={segments} entries={safeEntries} valueFormatter={(value) => `${formatNumber(value)}h`} />
+      {!hasValues ? (
+        <PreviewNoData tr={tr} />
+      ) : (
+        <>
+          <div className="h-44 rounded-lg border border-[#1c3348] bg-[#0a1724] p-2">
+            <div className="flex h-full items-end gap-1">
+              {safeEntries.map((entry) => {
+                const total = segments.reduce((sum, segment) => sum + Math.max(0, Number(segment.valueAccessor(entry)) || 0), 0);
+                const barHeight = total > 0 ? clamp((total / safeMax) * 100, 4, 100) : 2;
+                return (
+                  <div key={entry.key || labelAccessor(entry)} className="flex h-full min-w-0 flex-1 items-end">
+                    <div className="flex w-full flex-col-reverse overflow-hidden rounded-t-md" style={{ height: `${barHeight}%` }}>
+                      {segments.map((segment) => {
+                        const value = Math.max(0, Number(segment.valueAccessor(entry)) || 0);
+                        if (!value || !total) return null;
+                        return (
+                          <div
+                            key={segment.key}
+                            style={{
+                              height: `${(value / total) * 100}%`,
+                              backgroundColor: segment.color,
+                            }}
+                          />
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+          <div
+            className="mt-2 grid gap-1 text-center text-[9px] font-semibold text-[#6f8298]"
+            style={{ gridTemplateColumns: `repeat(${Math.max(1, safeEntries.length)}, minmax(0, 1fr))` }}
+          >
+            {safeEntries.map((entry) => (
+              <div key={`${entry.key || labelAccessor(entry)}-label`} className="truncate">{labelAccessor(entry)}</div>
+            ))}
+          </div>
+        </>
+      )}
+    </PreviewPanel>
+  );
+};
+
+const PreviewHorizontalBars = ({
+  title,
+  subtitle,
+  entries,
+  valueAccessor,
+  labelAccessor,
+  maxValue = 100,
+  valueFormatter = formatNumber,
+  colorAccessor = () => '#5b9cff',
+  tr,
+}) => {
+  const safeEntries = Array.isArray(entries) ? entries : [];
+  const safeMax = Math.max(1, Number(maxValue) || 1);
+  return (
+    <PreviewPanel title={title} subtitle={subtitle}>
+      {!safeEntries.length ? (
+        <PreviewNoData tr={tr} />
+      ) : (
+        <div className="space-y-2">
+          {safeEntries.map((entry) => {
+            const value = Number(valueAccessor(entry));
+            const finite = Number.isFinite(value);
+            const widthPct = finite ? clamp((value / safeMax) * 100, 2, 100) : 0;
+            return (
+              <div key={entry.id || labelAccessor(entry)} className="grid grid-cols-[minmax(80px,0.8fr)_minmax(0,1.7fr)_52px] items-center gap-2 text-xs">
+                <div className="truncate font-semibold text-[#edf5ff]">{labelAccessor(entry)}</div>
+                <div className="h-2.5 overflow-hidden rounded-full bg-[#263b51]">
+                  <div
+                    className="h-full rounded-full"
+                    style={{
+                      width: `${widthPct}%`,
+                      backgroundColor: finite ? colorAccessor(entry) : '#31465c',
+                    }}
+                  />
+                </div>
+                <div className="text-right font-bold tabular-nums text-[#9fb1c4]">{finite ? valueFormatter(value) : '--'}</div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </PreviewPanel>
+  );
+};
+
+const PreviewStackedHorizontalBars = ({
+  title,
+  subtitle,
+  entries,
+  segments,
+  totalAccessor,
+  labelAccessor,
+  maxValue = 1,
+  valueFormatter = (value) => `${formatNumber(value)}h`,
+  tr,
+}) => {
+  const safeEntries = Array.isArray(entries) ? entries : [];
+  const safeMax = Math.max(1, Number(maxValue) || 1);
+  return (
+    <PreviewPanel title={title} subtitle={subtitle}>
+      <PreviewLegend segments={segments} entries={safeEntries} valueFormatter={(value) => `${formatNumber(value)}h`} />
+      {!safeEntries.length ? (
+        <PreviewNoData tr={tr} />
+      ) : (
+        <div className="space-y-2">
+          {safeEntries.map((entry) => {
+            const total = Math.max(0, Number(totalAccessor(entry)) || 0);
+            return (
+              <div key={entry.id || labelAccessor(entry)} className="grid grid-cols-[minmax(80px,0.8fr)_minmax(0,1.7fr)_56px] items-center gap-2 text-xs">
+                <div className="truncate font-semibold text-[#edf5ff]">{labelAccessor(entry)}</div>
+                <div className="h-3 overflow-hidden rounded-full bg-[#263b51]">
+                  <div className="flex h-full" style={{ width: `${clamp((total / safeMax) * 100, total > 0 ? 2 : 0, 100)}%` }}>
+                    {segments.map((segment) => {
+                      const value = Math.max(0, Number(segment.valueAccessor(entry)) || 0);
+                      if (!value || !total) return null;
+                      return (
+                        <div
+                          key={segment.key}
+                          style={{
+                            width: `${(value / total) * 100}%`,
+                            backgroundColor: segment.color,
+                          }}
+                        />
+                      );
+                    })}
+                  </div>
+                </div>
+                <div className="text-right font-bold tabular-nums text-[#9fb1c4]">{valueFormatter(total)}</div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </PreviewPanel>
+  );
+};
+
+const PreviewBookingMix = ({ record, segments }) => {
+  const total = Math.max(0, Number(record.bookingHours) || 0);
+  if (!total) return (
+    <div className="h-2 overflow-hidden rounded-full bg-[#263b51]" />
+  );
+  return (
+    <div className="h-2 overflow-hidden rounded-full bg-[#263b51]">
+      <div className="flex h-full">
+        {segments.map((segment) => {
+          const value = Math.max(0, Number(segment.valueAccessor(record)) || 0);
+          if (!value) return null;
+          return (
+            <div
+              key={segment.key}
+              style={{
+                width: `${(value / total) * 100}%`,
+                backgroundColor: segment.color,
+              }}
+            />
+          );
+        })}
+      </div>
+    </div>
+  );
+};
+
+const PreviewPerformanceRow = ({ record, tr, segments }) => {
+  const scoreColor = getScoreHex(record.healthScore);
+  const status = getPerformanceStatusMeta(record.healthScore, tr);
+  const scoreBasis = record.scoreSource === 'health'
+    ? tr('reports.healthDataReady', 'Health data ready')
+    : (record.scoreSource === 'booking' ? tr('reports.scoreFromBookings', 'score points from bookings') : tr('reports.healthDataMissing', 'Health data missing'));
+  const peopleText = record.peopleSamples > 0 ? formatNumber(record.bookingPeopleTotal) : '--';
+
+  return (
+    <div className="rounded-lg border border-[#244057] bg-[#0a1724] p-3">
+      <div className="grid gap-3 lg:grid-cols-[minmax(190px,1fr)_minmax(0,1.8fr)_70px] lg:items-center">
+        <div className="flex min-w-0 items-center gap-3">
+          <div className="relative h-14 w-14 shrink-0 overflow-hidden rounded-full border-2 bg-[#102235]" style={{ borderColor: scoreColor }}>
+            {record.imageUrl ? (
+              <img src={record.imageUrl} alt="" className="h-full w-full object-cover" />
+            ) : (
+              <div className="grid h-full w-full place-items-center text-lg font-bold text-[#edf5ff]">
+                {truncateText(record.name, 1).toUpperCase()}
+              </div>
+            )}
+          </div>
+          <div className="min-w-0">
+            <div className="truncate text-sm font-semibold text-[#edf5ff]">{record.name}</div>
+            <div className="mt-1 truncate text-[10px] uppercase tracking-widest text-[#6f8298]">{scoreBasis}</div>
+            <div className={`mt-2 inline-flex max-w-full rounded-md border px-2 py-1 text-[10px] font-bold uppercase tracking-widest ${status.className}`}>
+              <span className="truncate">{status.label}</span>
+            </div>
+          </div>
+        </div>
+
+        <div className="min-w-0">
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
+            {[
+              [tr('reports.trend', 'Trend'), getDeltaText(record.scoreDelta)],
+              [tr('reports.bookingHours', 'Booking hours'), `${formatNumber(record.bookingHours)}h`],
+              [tr('reports.peopleCount', 'People'), peopleText],
+              [tr('reports.hitRate', 'Hit rate'), record.hitRate !== null ? `${record.hitRate}%` : '--'],
+              [tr('reports.avgTemp', 'Avg temp'), formatTemp(record.avgBookingTemp)],
+            ].map(([label, value]) => (
+              <div key={label} className="min-w-0 rounded-md border border-[#1c3348] bg-[#102235] px-2 py-2">
+                <div className="truncate text-[9px] font-bold uppercase tracking-widest text-[#6f8298]">{label}</div>
+                <div className="mt-1 truncate text-sm font-semibold tabular-nums text-[#edf5ff]">{value}</div>
+              </div>
+            ))}
+          </div>
+          <div className="mt-3">
+            <div className="mb-1 flex items-center justify-between gap-2 text-[10px] uppercase tracking-widest text-[#6f8298]">
+              <span className="truncate font-bold">{tr('reports.bookingMix', 'Booking mix')}</span>
+              <span className="shrink-0 tabular-nums">{formatPct(record.avgDeviationPct ?? record.avgBookingDeviationPct)}</span>
+            </div>
+            <PreviewBookingMix record={record} segments={segments} />
+          </div>
+        </div>
+
+        <div className="rounded-lg border border-[#244057] bg-[#102235] p-3 text-center">
+          <div className="text-2xl font-semibold tabular-nums" style={{ color: scoreColor }}>
+            {formatScore(record.healthScore)}
+          </div>
+          <div className="text-[9px] font-bold uppercase tracking-widest text-[#6f8298]">{tr('reports.score', 'Score')}</div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+const SaunaReportPreview = ({ report, title, selectedLabel, rangeLabel, tr }) => {
+  const healthBasis = getReportHealthBasis(report, tr);
+  const summaryText = getExecutiveSummaryText(report, tr);
+  const bookingSegments = BOOKING_TYPES.map((type) => ({
+    key: type,
+    label: getBookingTypeLabel(type, tr),
+    color: getBookingTypeHex(type),
+    valueAccessor: (entry) => {
+      if (type === 'felles') return entry.bookingFelles ?? entry.bookingTypeCounts?.felles ?? 0;
+      if (type === 'aufguss') return entry.bookingAufguss ?? entry.bookingTypeCounts?.aufguss ?? 0;
+      if (type === 'private') return entry.bookingPrivate ?? entry.bookingTypeCounts?.private ?? 0;
+      return entry.bookingService ?? entry.bookingTypeCounts?.service ?? 0;
+    },
+  }));
+  const scoreRecords = report.records
+    .filter((record) => record.healthScore !== null)
+    .slice()
+    .sort((a, b) => (b.healthScore ?? -1) - (a.healthScore ?? -1));
+  const bookingRecords = report.records
+    .filter((record) => record.bookingHours > 0)
+    .slice()
+    .sort((a, b) => b.bookingHours - a.bookingHours);
+  const peopleRecords = report.records
+    .filter((record) => record.bookingPeopleTotal > 0)
+    .slice()
+    .sort((a, b) => b.bookingPeopleTotal - a.bookingPeopleTotal);
+  const performanceRecords = report.records
+    .filter((record) => record.healthScore !== null || record.bookingHours > 0 || record.avgBookingTemp !== null)
+    .slice()
+    .sort((a, b) => (b.healthScore ?? -1) - (a.healthScore ?? -1));
+  const bookingTrendMax = Math.max(1, ...report.trend.map((entry) => entry.bookingHours || 0));
+  const peopleTrendMax = Math.max(1, ...report.trend.map((entry) => entry.peopleCount || 0));
+
+  return (
+    <div className="space-y-4">
+      <ReportPreviewPage
+        eyebrow={tr('reports.analysisReport', 'Analysis report')}
+        title={title}
+        pageNumber="01"
+      >
+        <div className="rounded-lg border border-[#244057] bg-[#0a1a2a] p-4">
+          <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+            <div className="flex min-w-0 items-center gap-3">
+              <div className="grid h-12 w-12 shrink-0 place-items-center rounded-lg border border-[#244057] bg-[#f8fbff] p-1.5">
+                <img src={REPORT_LOGO_URL} alt="" className="max-h-full max-w-full object-contain" />
+              </div>
+              <div className="min-w-0">
+                <div className="truncate text-lg font-semibold text-[#edf5ff]">Smart Sauna Systems</div>
+                <div className="mt-1 truncate text-[10px] font-bold uppercase tracking-widest text-[#9fb1c4]">
+                  {selectedLabel} {'\u00B7'} {rangeLabel}
+                </div>
+              </div>
+            </div>
+            <div className="text-left md:text-right">
+              <div className="text-[10px] font-bold uppercase tracking-widest text-[#6f8298]">{tr('reports.generated', 'Generated')}</div>
+              <div className="mt-1 text-sm font-semibold text-[#edf5ff]">{formatDateTime(Date.now())}</div>
+            </div>
+          </div>
+        </div>
+
+        <div className="mt-4 flex flex-wrap gap-2">
+          <PreviewPill>{report.periodDays} {tr('reports.days', 'days')}</PreviewPill>
+          <PreviewPill tone="green">{formatNumber(report.records.length)} {tr('reports.selectedSaunas', 'selected saunas')}</PreviewPill>
+          <PreviewPill tone={report.totalScoreSamples > 0 ? 'green' : 'amber'}>{healthBasis}</PreviewPill>
+        </div>
+
+        <div className="mt-4 grid grid-cols-2 gap-2 lg:grid-cols-5">
+          <PreviewMetric Icon={Shield} label={tr('reports.avgScore', 'Average score')} value={report.totalScoreSamples > 0 ? formatScore(report.avgScore) : '--'} tone={report.totalScoreSamples > 0 ? getScoreHex(report.avgScore) : '#6f8298'} />
+          <PreviewMetric Icon={Calendar} label={tr('reports.bookingHours', 'Booking hours')} value={formatNumber(report.bookingHours)} subLabel={tr('reports.bookingMix', 'Booking mix')} />
+          <PreviewMetric Icon={Clock} label={tr('reports.estimatedSessions', 'Estimated sessions')} value={formatNumber(report.sessions)} />
+          <PreviewMetric Icon={User} label={tr('reports.peopleCount', 'People')} value={report.hasPeopleData ? formatNumber(report.peopleDisplayTotal) : '--'} tone={report.hasPeopleData ? '#5ee3a1' : '#6f8298'} subLabel={report.totalPeopleSamples > 0 ? tr('reports.bookingPeople', 'People in bookings') : tr('reports.currentPeopleNow', 'People now')} />
+          <PreviewMetric Icon={Thermometer} label={tr('reports.hitRate', 'Hit rate')} value={report.hitRate !== null ? `${report.hitRate}%` : '--'} tone={report.hitRate !== null ? '#5ee3a1' : '#6f8298'} />
+        </div>
+
+        <div className="mt-4 rounded-lg border border-[#244057] bg-[#0d1b2a] p-4">
+          <div className="text-[10px] font-bold uppercase tracking-widest text-[#9fb1c4]">{tr('reports.executiveSummary', 'Executive summary')}</div>
+          <p className="mt-2 text-sm leading-relaxed text-[#edf5ff]">{summaryText}</p>
+        </div>
+      </ReportPreviewPage>
+
+      <ReportPreviewPage
+        eyebrow={tr('reports.trendDevelopment', 'Trend development')}
+        title={tr('reports.scoreTrend', 'Score trend')}
+        pageNumber="02"
+      >
+        <div className="grid gap-3 xl:grid-cols-2">
+          <PreviewBarChart
+            title={tr('reports.scoreDevelopment', 'Score development')}
+            subtitle={tr('reports.scoreScale', 'Score scale 0-100')}
+            entries={report.trend}
+            valueAccessor={(entry) => entry.score}
+            labelAccessor={(entry) => entry.label}
+            maxValue={100}
+            valueFormatter={formatScore}
+            colorAccessor={(entry) => getScoreHex(entry.score)}
+            tr={tr}
+          />
+          <PreviewStackedBars
+            title={tr('reports.bookingDevelopment', 'Booking development')}
+            subtitle={tr('reports.bookingScale', 'Booking hours by booking type')}
+            entries={report.trend}
+            segments={bookingSegments}
+            labelAccessor={(entry) => entry.label}
+            maxValue={bookingTrendMax}
+            tr={tr}
+          />
+          {report.totalPeopleSamples > 0 && (
+            <PreviewBarChart
+              title={tr('reports.peopleDevelopment', 'People development')}
+              subtitle={tr('reports.peopleScale', 'People from bookings')}
+              entries={report.trend}
+              valueAccessor={(entry) => entry.peopleCount}
+              labelAccessor={(entry) => entry.label}
+              maxValue={peopleTrendMax}
+              valueFormatter={formatNumber}
+              colorAccessor={() => '#5ee3a1'}
+              tr={tr}
+            />
+          )}
+        </div>
+      </ReportPreviewPage>
+
+      <ReportPreviewPage
+        eyebrow={tr('reports.comparison', 'Comparison')}
+        title={tr('reports.reportScope', 'Report scope')}
+        pageNumber="03"
+      >
+        <div className="grid gap-3 xl:grid-cols-2">
+          <PreviewHorizontalBars
+            title={tr('reports.scoreBySauna', 'Score by sauna')}
+            subtitle={healthBasis}
+            entries={scoreRecords}
+            valueAccessor={(record) => record.healthScore}
+            labelAccessor={(record) => record.name}
+            maxValue={100}
+            valueFormatter={formatScore}
+            colorAccessor={(record) => getScoreHex(record.healthScore)}
+            tr={tr}
+          />
+          <PreviewStackedHorizontalBars
+            title={tr('reports.bookingHoursBySauna', 'Booking hours by sauna')}
+            subtitle={tr('reports.bookingScale', 'Booking hours by booking type')}
+            entries={bookingRecords}
+            segments={bookingSegments}
+            totalAccessor={(record) => record.bookingHours}
+            labelAccessor={(record) => record.name}
+            maxValue={Math.max(1, report.maxBookingHours)}
+            tr={tr}
+          />
+          {report.totalPeopleSamples > 0 && (
+            <PreviewHorizontalBars
+              title={tr('reports.peopleBySauna', 'People by sauna')}
+              subtitle={tr('reports.peopleScale', 'People from bookings')}
+              entries={peopleRecords}
+              valueAccessor={(record) => record.bookingPeopleTotal}
+              labelAccessor={(record) => record.name}
+              maxValue={Math.max(1, report.maxBookingPeople)}
+              valueFormatter={formatNumber}
+              colorAccessor={() => '#5ee3a1'}
+              tr={tr}
+            />
+          )}
+        </div>
+      </ReportPreviewPage>
+
+      <ReportPreviewPage
+        eyebrow={tr('reports.saunaPerformance', 'Sauna performance')}
+        title={tr('reports.performanceHint', 'Ranked by score. Hours, hit rate and booking mix cover the selected period.')}
+        pageNumber="04"
+      >
+        {!performanceRecords.length ? (
+          <PreviewNoData tr={tr} />
+        ) : (
+          <div className="space-y-2">
+            {performanceRecords.map((record) => (
+              <PreviewPerformanceRow key={record.id} record={record} tr={tr} segments={bookingSegments} />
+            ))}
+          </div>
+        )}
+      </ReportPreviewPage>
+    </div>
+  );
+};
 
 export default function SaunaReportsCard({
   cardId,
@@ -2517,11 +3111,6 @@ export default function SaunaReportsCard({
   const recordActiveClass = isLightTheme
     ? 'border-slate-300 bg-white text-slate-900 shadow-sm'
     : 'border-white/18 bg-white/10 text-[var(--text-primary)]';
-  const featureTone = {
-    score: isLightTheme ? 'text-emerald-700' : 'text-emerald-200',
-    comparison: isLightTheme ? 'text-blue-700' : 'text-blue-200',
-    performance: isLightTheme ? 'text-amber-700' : 'text-amber-200',
-  };
   const toggleRecord = (recordId) => {
     setSelectedIds((prev) => {
       if (!prev.length) return [recordId];
@@ -2682,79 +3271,46 @@ export default function SaunaReportsCard({
             </div>
           </div>
         ) : (
-          <div className="grid grid-cols-1 gap-3 auto-rows-min">
-            <div className="grid grid-cols-1 gap-3 xl:grid-cols-[minmax(0,1.1fr)_minmax(360px,0.9fr)]">
-              <div className="rounded-lg border border-[var(--glass-border)] bg-[var(--glass-bg-hover)] p-4">
-                <div className="flex items-start gap-3">
-                  <div className="grid h-11 w-11 shrink-0 place-items-center rounded-lg border border-emerald-300/20 bg-emerald-400/10 text-emerald-200">
-                    <BookOpen className="h-5 w-5" />
-                  </div>
-                  <div className="min-w-0">
-                    <div className="text-[10px] uppercase tracking-widest font-bold text-[var(--text-secondary)]">
-                      {tr('reports.reportReady', 'Report ready')}
-                    </div>
-                    <p className="mt-2 max-w-3xl text-sm leading-relaxed text-[var(--text-primary)]">
-                      {tr('reports.reportReadyHint', 'Choose period and saunas. The PDF contains charts, trends and sauna comparisons.')}
-                    </p>
-                  </div>
-                </div>
-
-                <div className="mt-4">
-                  <div className="mb-2 flex items-center gap-2 text-[10px] uppercase tracking-widest font-bold text-[var(--text-secondary)]">
-                    <ListChecks className="h-3.5 w-3.5" />
-                    {tr('reports.pdfContains', 'PDF contains')}
-                  </div>
-                  <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
-                    <ReportFeaturePill Icon={TrendingUp} label={tr('reports.scoreDevelopment', 'Score development')} tone={featureTone.score} />
-                    <ReportFeaturePill Icon={BarChart3} label={tr('reports.comparison', 'Comparison')} tone={featureTone.comparison} />
-                    <ReportFeaturePill Icon={Award} label={tr('reports.saunaPerformance', 'Sauna performance')} tone={featureTone.performance} />
-                  </div>
-                </div>
-              </div>
-
-              <div className="rounded-lg border border-[var(--glass-border)] bg-[var(--glass-bg-hover)] p-3">
-                <div className="mb-2 flex items-center gap-2 text-[10px] uppercase tracking-widest font-bold text-[var(--text-secondary)]">
-                  <Award className="h-3.5 w-3.5" />
-                  {tr('reports.keyNumbers', 'Key numbers')}
-                </div>
-                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 2xl:grid-cols-4">
-                  <KeyFigure
-                    Icon={Shield}
-                    label={tr('reports.avgScore', 'Average score')}
-                    value={scoreValue}
-                    tone={scoreTone}
-                    subLabel={tr('reports.scoreBasis', 'Score basis')}
-                  />
-                  <KeyFigure
-                    Icon={Calendar}
-                    label={tr('reports.bookingHours', 'Booking hours')}
-                    value={formatNumber(report.bookingHours)}
-                    subLabel={tr('reports.bookingMix', 'Booking mix')}
-                  />
-                  <KeyFigure
-                    Icon={User}
-                    label={tr('reports.peopleCount', 'People')}
-                    value={peopleValue}
-                    tone={report.hasPeopleData ? (isLightTheme ? 'text-emerald-700' : 'text-emerald-300') : 'text-[var(--text-muted)]'}
-                    subLabel={report.totalPeopleSamples > 0 ? tr('reports.bookingPeople', 'People in bookings') : tr('reports.currentPeopleNow', 'People now')}
-                  />
-                  <KeyFigure
-                    Icon={TrendingUp}
-                    label={tr('reports.trend', 'Trend')}
-                    value={getDeltaText(report.avgScoreDelta)}
-                    tone={trendTone}
-                    subLabel={rangeLabel}
-                  />
-                </div>
-              </div>
+          <div className="min-h-0 flex flex-1 flex-col gap-3 overflow-hidden">
+            <div className="grid grid-cols-2 gap-2 md:grid-cols-3 2xl:grid-cols-6">
+              <MetricTile Icon={Activity} label={tr('reports.selectedSaunas', 'selected saunas')} value={formatNumber(activeRecords.length)} subLabel={selectedLabel} />
+              <MetricTile Icon={Shield} label={tr('reports.avgScore', 'Average score')} value={scoreValue} tone={scoreTone} subLabel={tr('reports.scoreBasis', 'Score basis')} />
+              <MetricTile Icon={Calendar} label={tr('reports.bookingHours', 'Booking hours')} value={formatNumber(report.bookingHours)} subLabel={tr('reports.bookingMix', 'Booking mix')} />
+              <MetricTile Icon={Clock} label={tr('reports.estimatedSessions', 'Estimated sessions')} value={formatNumber(report.sessions)} subLabel={tr('reports.bookingSamples', 'Booking samples')} />
+              <MetricTile Icon={User} label={tr('reports.peopleCount', 'People')} value={peopleValue} subLabel={report.totalPeopleSamples > 0 ? tr('reports.peopleSamples', 'People samples') : tr('reports.currentPeopleNow', 'People now')} />
+              <MetricTile Icon={TrendingUp} label={tr('reports.trend', 'Trend')} value={getDeltaText(report.avgScoreDelta)} tone={trendTone} subLabel={report.hitRate !== null ? `${tr('reports.hitRate', 'Hit rate')} ${report.hitRate}%` : tr('reports.noTrend', 'No trend data in selected range')} />
             </div>
 
-            <div className="grid grid-cols-2 md:grid-cols-5 gap-2">
-              <MetricTile Icon={Activity} label={tr('reports.selectedSaunas', 'selected saunas')} value={formatNumber(activeRecords.length)} />
-              <MetricTile Icon={Shield} label={tr('reports.scoreBasis', 'Score basis')} value={formatNumber(report.totalScoreSamples)} subLabel={report.totalHealthSamples > 0 ? tr('reports.healthDataReady', 'Health data ready') : tr('reports.scoreFromBookings', 'score points from bookings')} />
-              <MetricTile Icon={Clock} label={tr('reports.bookingSamples', 'Booking samples')} value={formatNumber(report.totalBookingSamples)} />
-              <MetricTile Icon={User} label={tr('reports.peopleCount', 'People')} value={peopleValue} subLabel={report.totalPeopleSamples > 0 ? tr('reports.peopleSamples', 'People samples') : tr('reports.currentPeopleNow', 'People now')} />
-              <MetricTile Icon={Thermometer} label={tr('reports.hitRate', 'Hit rate')} value={report.hitRate !== null ? `${report.hitRate}%` : '--'} />
+            <div className="min-h-0 flex flex-1 flex-col rounded-xl border border-[var(--glass-border)] bg-[var(--glass-bg-hover)] p-2 md:p-3">
+              <div className="flex flex-col gap-2 px-1 md:flex-row md:items-center md:justify-between">
+                <div className="flex min-w-0 items-center gap-2">
+                  <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg border border-[var(--glass-border)] bg-[var(--glass-bg)] text-[var(--text-secondary)]">
+                    <BarChart3 className="h-4 w-4" />
+                  </span>
+                  <div className="min-w-0">
+                    <div className="truncate text-[10px] font-bold uppercase tracking-widest text-[var(--text-secondary)]">
+                      {tr('reports.reportReady', 'Report ready')}
+                    </div>
+                    <div className="truncate text-xs text-[var(--text-muted)]">
+                      {tr('reports.reportReadyHint', 'Choose period and saunas. The PDF includes charts, trends, booking mix and comparison.')}
+                    </div>
+                  </div>
+                </div>
+                <div className="flex shrink-0 flex-wrap gap-2 text-[10px] font-bold uppercase tracking-widest text-[var(--text-secondary)]">
+                  <span className="rounded-md border border-[var(--glass-border)] bg-[var(--glass-bg)] px-2 py-1">{periodDays} {tr('reports.days', 'days')}</span>
+                  <span className="rounded-md border border-[var(--glass-border)] bg-[var(--glass-bg)] px-2 py-1">{activeScopeLabel}</span>
+                </div>
+              </div>
+
+              <div className="mt-3 min-h-[280px] max-h-[min(780px,68vh)] flex-1 overflow-y-auto pr-1 custom-scrollbar">
+                <SaunaReportPreview
+                  report={report}
+                  title={cardName}
+                  selectedLabel={selectedLabel}
+                  rangeLabel={rangeLabel}
+                  tr={tr}
+                />
+              </div>
             </div>
           </div>
         )}
