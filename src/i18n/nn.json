@@ -1470,6 +1470,7 @@
   "reports.peopleCount": "Personar",
   "reports.bookingPeople": "Folk i bookingar",
   "reports.peopleSamples": "Bookingar med persontal",
+  "reports.currentPeopleNow": "Folk akkurat no",
   "reports.estimatedSessions": "Estimerte økter",
   "reports.targetReached": "Måltemperatur nådd",
   "reports.healthScoreBasis": "Basert på helsescore",

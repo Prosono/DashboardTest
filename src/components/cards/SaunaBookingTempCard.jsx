@@ -162,6 +162,7 @@ const normalizeSnapshots = (rawValue) => {
       const targetTemp = toNum(entry?.targetTemp);
       const providedDeviation = toNum(entry?.deviation);
       const providedDeviationPct = toNum(entry?.deviationPct ?? entry?.deviationPercent);
+      const peopleCount = toNum(entry?.peopleCount ?? entry?.people ?? entry?.pax);
       const deviation = providedDeviation !== null
         ? roundToOne(providedDeviation)
         : (targetTemp !== null ? roundToOne(startTemp - targetTemp) : null);
@@ -182,6 +183,7 @@ const normalizeSnapshots = (rawValue) => {
         sampleMode: String(entry?.sampleMode || 'hourly'),
         serviceRaw: entry?.serviceRaw ?? null,
         activeRaw: entry?.activeRaw ?? null,
+        peopleCount: peopleCount !== null ? Math.max(0, Math.round(peopleCount)) : null,
       };
     })
     .filter(Boolean)
@@ -207,6 +209,7 @@ const serializeSnapshots = (snapshots) => snapshots.map((entry) => ({
   sampleMode: entry.sampleMode,
   serviceRaw: entry.serviceRaw,
   activeRaw: entry.activeRaw,
+  peopleCount: entry.peopleCount ?? null,
 }));
 
 const parseHistoryEntryMs = (entry) => parseTimestampMs(
@@ -394,14 +397,17 @@ export default function SaunaBookingTempCard({
   const tempEntityId = settings?.tempEntityId || '';
   const activeEntityId = settings?.bookingActiveEntityId || '';
   const serviceEntityId = settings?.serviceEntityId || '';
+  const peopleNowEntityId = settings?.peopleNowEntityId || '';
   const targetTempEntityId = settings?.targetTempEntityId || '';
 
   const tempEntity = tempEntityId ? entities?.[tempEntityId] : null;
   const activeEntity = activeEntityId ? entities?.[activeEntityId] : null;
   const serviceEntity = serviceEntityId ? entities?.[serviceEntityId] : null;
+  const peopleNowEntity = peopleNowEntityId ? entities?.[peopleNowEntityId] : null;
   const targetEntity = targetTempEntityId ? entities?.[targetTempEntityId] : null;
 
   const currentTemp = toNum(tempEntity?.state);
+  const currentPeopleNow = toNum(peopleNowEntity?.state);
   const targetTempSetting = toNum(settings?.targetTempValue);
   const targetTemp = targetTempSetting !== null ? targetTempSetting : toNum(targetEntity?.state);
 
@@ -488,6 +494,7 @@ export default function SaunaBookingTempCard({
           tempEntityId,
           activeEntityId,
           ...(serviceEntityId ? [serviceEntityId] : []),
+          ...(peopleNowEntityId ? [peopleNowEntityId] : []),
           ...(targetTempEntityId && targetTempSetting === null ? [targetTempEntityId] : []),
         ]));
 
@@ -524,6 +531,9 @@ export default function SaunaBookingTempCard({
             const sampleTarget = targetTempSetting !== null
               ? targetTempSetting
               : getNumericHistoryValueAt(historyById?.[targetTempEntityId], sampleMs, targetTemp);
+            const samplePeopleCount = peopleNowEntityId
+              ? getNumericHistoryValueAt(historyById?.[peopleNowEntityId], sampleMs, currentPeopleNow)
+              : null;
 
             if (sampleTemp === null) return null;
 
@@ -539,6 +549,7 @@ export default function SaunaBookingTempCard({
               sampleMode: 'hourly',
               serviceRaw: serviceStateAtSample,
               activeRaw: activeStateAtSample,
+              peopleCount: samplePeopleCount !== null ? Math.max(0, Math.round(samplePeopleCount)) : null,
             };
           })
           .filter(Boolean);
@@ -583,6 +594,8 @@ export default function SaunaBookingTempCard({
     serviceEntityId,
     serviceEntity,
     serviceEntity?.state,
+    peopleNowEntityId,
+    currentPeopleNow,
     activeEntity,
     activeEntity?.state,
     settings?.bookingSnapshots,

@@ -2349,6 +2349,16 @@ export default function EditCardModal({
               />
 
               <SearchableSelect
+                label={translateText('sauna.peopleNowEntity', 'Antall folk nå - sensor')}
+                value={editSettings.peopleNowEntityId || null}
+                options={Object.keys(entities || {}).filter((id) => id.startsWith('input_number.') || id.startsWith('number.') || id.startsWith('sensor.'))}
+                onChange={(value) => saveCardSetting(editSettingsKey, 'peopleNowEntityId', value)}
+                placeholder={translateText('dropdown.noneSelected', 'None selected')}
+                entities={entities}
+                t={t}
+              />
+
+              <SearchableSelect
                 label={translateText('sauna.bookingTemp.serviceEntity', 'Service type sensor (optional)')}
                 value={editSettings.serviceEntityId || null}
                 options={saunaServiceOptions}

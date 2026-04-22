@@ -1470,6 +1470,7 @@
   "reports.peopleCount": "People",
   "reports.bookingPeople": "People in bookings",
   "reports.peopleSamples": "Bookings with people count",
+  "reports.currentPeopleNow": "People right now",
   "reports.estimatedSessions": "Estimated sessions",
   "reports.targetReached": "Target reached",
   "reports.healthScoreBasis": "Health score basis",

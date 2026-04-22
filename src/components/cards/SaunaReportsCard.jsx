@@ -14,7 +14,7 @@ import {
   TrendingUp,
   User,
 } from '../../icons';
-import { getCalendarEvents } from '../../services/haClient';
+import { getCalendarEvents, getHistoryBatch } from '../../services/haClient';
 
 const PERIOD_OPTIONS = [14, 7, 3, 1];
 const STOP_TOKENS = new Set([
@@ -219,10 +219,19 @@ const getCalendarBookingType = (event) => {
 const normalizePeopleText = (value) => String(value ?? '')
   .toLowerCase()
   .normalize('NFKD')
-  .replace(/[\u0300-\u036f]/g, ' ');
+  .replace(/[\u0300-\u036f]/g, '')
+  .replace(/[_|/]+/g, ' ');
 
 const parsePeopleCountNumber = (value) => {
   if (Array.isArray(value)) return value.length || null;
+  if (value && typeof value === 'object') {
+    const candidates = ['count', 'total', 'value', 'state', 'people', 'persons', 'pax'];
+    for (const key of candidates) {
+      const parsed = parsePeopleCountNumber(value[key]);
+      if (parsed !== null) return parsed;
+    }
+    return null;
+  }
   const parsed = Number.parseInt(String(value ?? '').replace(',', '.').trim(), 10);
   if (!Number.isFinite(parsed) || parsed < 0 || parsed > 1000) return null;
   return parsed;
@@ -231,10 +240,11 @@ const parsePeopleCountNumber = (value) => {
 const extractPeopleCountFromText = (value) => {
   const text = normalizePeopleText(value);
   if (!text.trim()) return null;
+  const peopleWord = '(?:pax|person(?:er|ar)?|pers\\.?|people|guests?|gjester?|deltak(?:ere|arar|er)?|participants?|attendees?|kunder?|plasser?)';
   const patterns = [
-    /\b(\d{1,3})\s*(?:pax|personer?|pers\.?|people|guests?|gjester?|deltakere?|participants?)\b/i,
-    /\b(?:antall\s*)?(?:pax|personer?|pers\.?|people|guests?|gjester?|deltakere?|participants?)\s*[:=-]?\s*(\d{1,3})\b/i,
-    /\b(\d{1,3})\s*x\s*(?:pax|personer?|pers\.?|people|guests?|gjester?)\b/i,
+    new RegExp(`\\b(\\d{1,3})\\s*(?:x\\s*)?${peopleWord}\\b`, 'i'),
+    new RegExp(`\\b(?:antall\\s*)?${peopleWord}\\s*[:=\\-]?\\s*(\\d{1,3})\\b`, 'i'),
+    new RegExp(`\\b${peopleWord}\\D{0,8}(\\d{1,3})\\b`, 'i'),
   ];
   for (const pattern of patterns) {
     const match = text.match(pattern);
@@ -242,6 +252,61 @@ const extractPeopleCountFromText = (value) => {
     if (parsed !== null) return parsed;
   }
   return null;
+};
+
+const parseHistoryEntryMs = (entry) => parseEventTimestampMs(
+  entry?.last_changed
+  || entry?.last_updated
+  || entry?.last_reported
+  || entry?.time
+  || entry?.timestamp
+  || entry?.lc
+  || entry?.lu
+  || entry?.lr
+);
+
+const parseHistoryPeopleState = (entry) => parsePeopleCountNumber(entry?.state ?? entry?.s);
+
+const getHistoryPeopleAt = (rawHistory, timestampMs) => {
+  const history = Array.isArray(rawHistory) ? rawHistory : [];
+  let value = null;
+
+  history
+    .map((entry) => ({
+      ms: parseHistoryEntryMs(entry),
+      value: parseHistoryPeopleState(entry),
+    }))
+    .filter((entry) => Number.isFinite(entry.ms) && entry.value !== null)
+    .sort((a, b) => a.ms - b.ms)
+    .forEach((entry) => {
+      if (entry.ms <= timestampMs) value = entry.value;
+    });
+
+  return value;
+};
+
+const getHistoryPeopleBetween = (rawHistory, startMs, endMs) => (
+  (Array.isArray(rawHistory) ? rawHistory : [])
+    .map((entry) => ({
+      ms: parseHistoryEntryMs(entry),
+      value: parseHistoryPeopleState(entry),
+    }))
+    .filter((entry) => (
+      Number.isFinite(entry.ms)
+      && entry.ms >= startMs
+      && entry.ms <= endMs
+      && entry.value !== null
+    ))
+    .map((entry) => entry.value)
+);
+
+const deriveCalendarPeopleCount = (event, peopleHistory) => {
+  const explicit = parsePeopleCountNumber(event?.peopleCount);
+  if (explicit !== null) return explicit;
+  if (!Array.isArray(peopleHistory) || !peopleHistory.length) return null;
+  const inWindowValues = getHistoryPeopleBetween(peopleHistory, event.startMs, event.endMs);
+  if (inWindowValues.length) return Math.max(...inWindowValues);
+  return getHistoryPeopleAt(peopleHistory, event.startMs);
 };
 
 const getPeopleCountFromEntry = (entry) => {
@@ -622,6 +687,7 @@ const buildSourceCards = ({ cardSettings, entities, customNames, getEntityImageU
         name,
         zoneEntityId: settings?.zoneEntityId || settings?.locationZoneEntityId || '',
         tempEntityId,
+        peopleNowEntityId,
         calendarEntityId,
         imageUrl: resolveReportImageUrl(settings, entities, getEntityImageUrl),
         currentTemp: toNum(entities?.[tempEntityId]?.state),
@@ -672,6 +738,7 @@ const buildSaunaRecords = ({ cardSettings, entities, customNames, getEntityImage
       imageUrl: saunaSource.imageUrl || healthSource?.imageUrl || bookingSource?.imageUrl || '',
       currentTemp: saunaSource.currentTemp ?? healthSource?.currentTemp ?? bookingSource?.currentTemp ?? null,
       peopleNow: saunaSource.peopleNow,
+      peopleNowEntityId: saunaSource.peopleNowEntityId || healthSource?.peopleNowEntityId || bookingSource?.peopleNowEntityId || '',
       targetToleranceC: healthSource?.targetToleranceC ?? bookingSource?.targetToleranceC ?? 0,
     });
   });
@@ -692,6 +759,7 @@ const buildSaunaRecords = ({ cardSettings, entities, customNames, getEntityImage
       imageUrl: healthSource.imageUrl || bookingSource?.imageUrl || '',
       currentTemp: healthSource.currentTemp ?? bookingSource?.currentTemp ?? null,
       peopleNow: null,
+      peopleNowEntityId: healthSource.peopleNowEntityId || bookingSource?.peopleNowEntityId || '',
       targetToleranceC: healthSource.targetToleranceC ?? bookingSource?.targetToleranceC ?? 0,
     });
   });
@@ -710,6 +778,7 @@ const buildSaunaRecords = ({ cardSettings, entities, customNames, getEntityImage
       imageUrl: bookingSource.imageUrl || '',
       currentTemp: bookingSource.currentTemp ?? null,
       peopleNow: null,
+      peopleNowEntityId: bookingSource.peopleNowEntityId || '',
       targetToleranceC: bookingSource.targetToleranceC ?? 0,
     });
   });
@@ -793,7 +862,7 @@ const countSessions = (samples) => {
   return sessions;
 };
 
-const analyzeRecord = (record, periodDays, calendarEvents = []) => {
+const analyzeRecord = (record, periodDays, calendarEvents = [], peopleHistory = []) => {
   const windowStart = Date.now() - (periodDays * 24 * 60 * 60 * 1000);
   const windowEnd = Date.now();
   const healthSamples = (record.healthSource?.healthSamples || []).filter((entry) => entry.timestampMs >= windowStart);
@@ -802,8 +871,14 @@ const analyzeRecord = (record, periodDays, calendarEvents = []) => {
     ? roundToOne(healthTargetSamples.reduce((sum, entry) => sum + (entry.deviationPct ?? 0), 0) / healthTargetSamples.length)
     : null;
 
+  const hasPeopleHistory = Array.isArray(peopleHistory) && peopleHistory.length > 0;
   const bookingSamples = (record.bookingSource?.bookingSamples || [])
-    .filter((entry) => entry.timestampMs >= windowStart);
+    .filter((entry) => entry.timestampMs >= windowStart)
+    .map((entry) => {
+      if (Number.isFinite(Number(entry.peopleCount)) || !hasPeopleHistory) return entry;
+      const historyPeopleCount = getHistoryPeopleAt(peopleHistory, entry.timestampMs);
+      return historyPeopleCount !== null ? { ...entry, peopleCount: historyPeopleCount } : entry;
+    });
   const scoreBookingSamples = bookingSamples.filter((entry) => entry.bookingType !== 'service');
   const bookingTargetSamples = scoreBookingSamples.filter((entry) => entry.targetTemp !== null);
   const bookingTargetSamplesWithPct = bookingTargetSamples.filter((entry) => entry.deviationPct !== null);
@@ -820,7 +895,11 @@ const analyzeRecord = (record, periodDays, calendarEvents = []) => {
   const avgBookingTemp = tempValues.length ? roundToOne(tempValues.reduce((sum, value) => sum + value, 0) / tempValues.length) : null;
   const latestBooking = bookingSamples.length ? bookingSamples[bookingSamples.length - 1] : null;
   const calendarBookings = (Array.isArray(calendarEvents) ? calendarEvents : [])
-    .filter((entry) => entry.startMs >= windowStart && entry.startMs <= windowEnd);
+    .filter((entry) => entry.startMs >= windowStart && entry.startMs <= windowEnd)
+    .map((entry) => ({
+      ...entry,
+      peopleCount: deriveCalendarPeopleCount(entry, peopleHistory),
+    }));
   const snapshotTypeCounts = BOOKING_TYPES.reduce((acc, type) => {
     acc[type] = bookingSamples.filter((entry) => normalizeBookingType(entry.bookingType) === type).length;
     return acc;
@@ -954,6 +1033,8 @@ const buildSummary = (records, periodDays, tr) => {
   const totalBookingPeople = records.reduce((sum, record) => sum + (Number(record.bookingPeopleTotal) || 0), 0);
   const totalPeopleSamples = records.reduce((sum, record) => sum + (Number(record.peopleSamples) || 0), 0);
   const currentPeopleNow = records.reduce((sum, record) => sum + (Number(record.currentPeopleNow) || 0), 0);
+  const hasPeopleData = totalPeopleSamples > 0 || currentPeopleNow > 0;
+  const peopleDisplayTotal = totalPeopleSamples > 0 ? totalBookingPeople : currentPeopleNow;
   const best = scoreRecords.slice().sort((a, b) => b.healthScore - a.healthScore)[0] || null;
   const weakest = scoreRecords.slice().sort((a, b) => a.healthScore - b.healthScore)[0] || null;
   const trend = buildDailyTrend(records, periodDays);
@@ -993,7 +1074,7 @@ const buildSummary = (records, periodDays, tr) => {
         { label: tr('reports.avgScore', 'Average score'), value: formatScore(avgScore) },
         { label: tr('reports.bookingHours', 'Booking hours'), value: formatNumber(bookingHours) },
         { label: tr('reports.estimatedSessions', 'Estimated sessions'), value: formatNumber(sessions) },
-        { label: tr('reports.peopleCount', 'People'), value: totalPeopleSamples > 0 ? formatNumber(totalBookingPeople) : '--' },
+        { label: tr('reports.peopleCount', 'People'), value: hasPeopleData ? formatNumber(peopleDisplayTotal) : '--' },
         { label: tr('reports.hitRate', 'Hit rate'), value: hitRate !== null ? `${hitRate}%` : '--' },
       ],
     },
@@ -1020,6 +1101,8 @@ const buildSummary = (records, periodDays, tr) => {
     totalBookingPeople,
     totalPeopleSamples,
     currentPeopleNow,
+    hasPeopleData,
+    peopleDisplayTotal,
     best,
     weakest,
     trend,
@@ -1874,7 +1957,7 @@ const createPdfBlob = ({ report, title, subtitle, tr, logoImage = null, saunaIma
     [tr('reports.avgScore', 'Average score'), report.totalScoreSamples > 0 ? formatScore(report.avgScore) : '--', report.totalScoreSamples > 0 ? getScoreHex(report.avgScore) : palette.subtle, 'score'],
     [tr('reports.bookingHours', 'Booking hours'), formatNumber(report.bookingHours), palette.text, 'booking'],
     [tr('reports.estimatedSessions', 'Estimated sessions'), formatNumber(report.sessions), palette.text, 'sessions'],
-    [tr('reports.peopleCount', 'People'), report.totalPeopleSamples > 0 ? formatNumber(report.totalBookingPeople) : '--', report.totalPeopleSamples > 0 ? palette.accent : palette.subtle, 'people'],
+    [tr('reports.peopleCount', 'People'), report.hasPeopleData ? formatNumber(report.peopleDisplayTotal) : '--', report.hasPeopleData ? palette.accent : palette.subtle, 'people'],
     [tr('reports.hitRate', 'Hit rate'), report.hitRate !== null ? `${report.hitRate}%` : '--', palette.accent, 'target'],
   ].forEach(([label, value, tone, icon], index) => {
     const x = margin + (index * (metricWidth + 6));
@@ -2299,6 +2382,7 @@ export default function SaunaReportsCard({
   ));
   const [selectedIds, setSelectedIds] = useState([]);
   const [calendarEvents, setCalendarEvents] = useState([]);
+  const [peopleHistoryById, setPeopleHistoryById] = useState({});
   const [isPreparingPdf, setIsPreparingPdf] = useState(false);
   const [pdfError, setPdfError] = useState('');
 
@@ -2324,6 +2408,11 @@ export default function SaunaReportsCard({
     () => collectCalendarEntityIds(cardSettings, scopedRecords),
     [cardSettings, scopedRecords]
   );
+  const peopleHistoryEntityIds = useMemo(() => Array.from(new Set(
+    scopedRecords
+      .map((record) => record.peopleNowEntityId)
+      .filter(Boolean)
+  )), [scopedRecords]);
 
   useEffect(() => {
     let cancelled = false;
@@ -2352,6 +2441,35 @@ export default function SaunaReportsCard({
     };
   }, [calendarEntityIds, conn, periodDays]);
 
+  useEffect(() => {
+    let cancelled = false;
+    const loadPeopleHistory = async () => {
+      if (!conn || !peopleHistoryEntityIds.length) {
+        setPeopleHistoryById({});
+        return;
+      }
+      try {
+        const end = new Date();
+        const start = new Date(end.getTime() - (periodDays * 24 * 60 * 60 * 1000));
+        const result = await getHistoryBatch(conn, {
+          start,
+          end,
+          entityIds: peopleHistoryEntityIds,
+          minimal_response: false,
+          no_attributes: true,
+        });
+        if (!cancelled) setPeopleHistoryById(result || {});
+      } catch {
+        if (!cancelled) setPeopleHistoryById({});
+      }
+    };
+
+    void loadPeopleHistory();
+    return () => {
+      cancelled = true;
+    };
+  }, [conn, peopleHistoryEntityIds, periodDays]);
+
   const calendarAssignments = useMemo(
     () => assignCalendarEventsToRecords(scopedRecords, calendarEvents),
     [calendarEvents, scopedRecords]
@@ -2362,8 +2480,13 @@ export default function SaunaReportsCard({
     const base = selectedSet.size
       ? scopedRecords.filter((record) => selectedSet.has(record.id))
       : scopedRecords;
-    return base.map((record) => analyzeRecord(record, periodDays, calendarAssignments.get(record.id) || []));
-  }, [calendarAssignments, periodDays, scopedRecords, selectedIds]);
+    return base.map((record) => analyzeRecord(
+      record,
+      periodDays,
+      calendarAssignments.get(record.id) || [],
+      record.peopleNowEntityId ? peopleHistoryById[record.peopleNowEntityId] : []
+    ));
+  }, [calendarAssignments, peopleHistoryById, periodDays, scopedRecords, selectedIds]);
 
   const report = useMemo(() => buildSummary(activeRecords, periodDays, tr), [activeRecords, periodDays, tr]);
   const cardName = firstDisplayText(customNames?.[cardId], settings?.name, tr('reports.saunaReportTitle', 'Sauna operations report'));
@@ -2375,7 +2498,7 @@ export default function SaunaReportsCard({
       : tr('reports.allSaunas', 'All saunas'));
   const activeScopeLabel = `${formatNumber(activeRecords.length)}/${formatNumber(scopedRecords.length)}`;
   const scoreValue = report.totalScoreSamples > 0 ? formatScore(report.avgScore) : '--';
-  const peopleValue = report.totalPeopleSamples > 0 ? formatNumber(report.totalBookingPeople) : '--';
+  const peopleValue = report.hasPeopleData ? formatNumber(report.peopleDisplayTotal) : '--';
   const scoreTone = report.totalScoreSamples > 0 ? getScoreToneClass(report.avgScore, isLightTheme) : 'text-[var(--text-muted)]';
   const trendTone = Number(report.avgScoreDelta) > 0
     ? (isLightTheme ? 'text-emerald-700' : 'text-emerald-300')
@@ -2612,8 +2735,8 @@ export default function SaunaReportsCard({
                     Icon={User}
                     label={tr('reports.peopleCount', 'People')}
                     value={peopleValue}
-                    tone={report.totalPeopleSamples > 0 ? (isLightTheme ? 'text-emerald-700' : 'text-emerald-300') : 'text-[var(--text-muted)]'}
-                    subLabel={tr('reports.bookingPeople', 'People in bookings')}
+                    tone={report.hasPeopleData ? (isLightTheme ? 'text-emerald-700' : 'text-emerald-300') : 'text-[var(--text-muted)]'}
+                    subLabel={report.totalPeopleSamples > 0 ? tr('reports.bookingPeople', 'People in bookings') : tr('reports.currentPeopleNow', 'People now')}
                   />
                   <KeyFigure
                     Icon={TrendingUp}
@@ -2630,7 +2753,7 @@ export default function SaunaReportsCard({
               <MetricTile Icon={Activity} label={tr('reports.selectedSaunas', 'selected saunas')} value={formatNumber(activeRecords.length)} />
               <MetricTile Icon={Shield} label={tr('reports.scoreBasis', 'Score basis')} value={formatNumber(report.totalScoreSamples)} subLabel={report.totalHealthSamples > 0 ? tr('reports.healthDataReady', 'Health data ready') : tr('reports.scoreFromBookings', 'score points from bookings')} />
               <MetricTile Icon={Clock} label={tr('reports.bookingSamples', 'Booking samples')} value={formatNumber(report.totalBookingSamples)} />
-              <MetricTile Icon={User} label={tr('reports.peopleCount', 'People')} value={peopleValue} subLabel={tr('reports.peopleSamples', 'People samples')} />
+              <MetricTile Icon={User} label={tr('reports.peopleCount', 'People')} value={peopleValue} subLabel={report.totalPeopleSamples > 0 ? tr('reports.peopleSamples', 'People samples') : tr('reports.currentPeopleNow', 'People now')} />
               <MetricTile Icon={Thermometer} label={tr('reports.hitRate', 'Hit rate')} value={report.hitRate !== null ? `${report.hitRate}%` : '--'} />
             </div>
           </div>
