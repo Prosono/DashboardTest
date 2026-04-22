@@ -1,5 +1,19 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Activity, BarChart3, Calendar, Clock, Download, Flame, Shield, Thermometer, TrendingUp } from '../../icons';
+import {
+  Activity,
+  Award,
+  BarChart3,
+  BookOpen,
+  Calendar,
+  Clock,
+  Download,
+  Flame,
+  ListChecks,
+  Shield,
+  Thermometer,
+  TrendingUp,
+  User,
+} from '../../icons';
 import { getCalendarEvents } from '../../services/haClient';
 
 const PERIOD_OPTIONS = [14, 7, 3, 1];
@@ -101,7 +115,8 @@ const normalizeBookingStateType = (value) => {
 const makeTr = (t) => (key, fallback) => {
   const out = typeof t === 'function' ? t(key) : undefined;
   const str = String(out ?? '').trim();
-  if (!str || str === key || str.toLowerCase() === key.toLowerCase() || str.includes('.')) return fallback;
+  if (!str || str === key || str.toLowerCase() === key.toLowerCase()) return fallback;
+  if (/^[a-z0-9_-]+(?:\.[a-z0-9_-]+)+$/i.test(str)) return fallback;
   return str;
 };
 
@@ -915,18 +930,105 @@ const buildSummary = (records, periodDays, tr) => {
   };
 };
 
-const downloadBlob = (content, fileName, mimeType) => {
-  const blob = typeof window !== 'undefined' && content instanceof window.Blob
+const isNativeMobileRuntime = () => {
+  if (typeof window === 'undefined') return false;
+  const capacitor = window.Capacitor;
+  const platform = String(capacitor?.getPlatform?.() || '').toLowerCase();
+  return Boolean(capacitor?.isNativePlatform?.()) || platform === 'ios' || platform === 'android';
+};
+
+const isAppleMobileRuntime = () => {
+  if (typeof window === 'undefined') return false;
+  const platform = String(window.Capacitor?.getPlatform?.() || '').toLowerCase();
+  const ua = String(window.navigator?.userAgent || '');
+  return platform === 'ios' || /iPad|iPhone|iPod/i.test(ua);
+};
+
+const tryShareBlob = async (blob, fileName, mimeType) => {
+  if (typeof window === 'undefined' || typeof window.File !== 'function') return false;
+  const nav = window.navigator;
+  if (typeof nav?.share !== 'function') return false;
+  const file = new window.File([blob], fileName, { type: mimeType });
+  try {
+    const canShare = typeof nav.canShare !== 'function' || nav.canShare({ files: [file] });
+    if (!canShare) return false;
+    await nav.share({ files: [file], title: fileName });
+    return true;
+  } catch (error) {
+    return error?.name === 'AbortError';
+  }
+};
+
+const openMobilePdfPreviewWindow = (message) => {
+  if (typeof window === 'undefined' || (!isAppleMobileRuntime() && !isNativeMobileRuntime())) return null;
+  const popup = window.open('', '_blank');
+  if (!popup) return null;
+  try {
+    popup.opener = null;
+    popup.document.title = message;
+    popup.document.body.style.margin = '0';
+    popup.document.body.style.background = '#07111d';
+    popup.document.body.style.color = '#edf5ff';
+    popup.document.body.style.fontFamily = '-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
+    popup.document.body.style.display = 'grid';
+    popup.document.body.style.minHeight = '100vh';
+    popup.document.body.style.placeItems = 'center';
+    const status = popup.document.createElement('div');
+    status.textContent = message;
+    status.style.fontSize = '16px';
+    status.style.fontWeight = '700';
+    status.style.letterSpacing = '0.08em';
+    status.style.textTransform = 'uppercase';
+    popup.document.body.appendChild(status);
+  } catch {
+    // The window is still useful even if the loading text cannot be written.
+  }
+  return popup;
+};
+
+const downloadBlob = async (content, fileName, mimeType, { targetWindow = null } = {}) => {
+  if (typeof window === 'undefined' || typeof document === 'undefined') return;
+  const blob = content instanceof window.Blob
     ? content
     : new window.Blob([content], { type: mimeType });
+
+  if (targetWindow && !targetWindow.closed) {
+    const targetUrl = URL.createObjectURL(blob);
+    try {
+      targetWindow.location.href = targetUrl;
+      window.setTimeout(() => URL.revokeObjectURL(targetUrl), 60 * 1000);
+      return;
+    } catch {
+      URL.revokeObjectURL(targetUrl);
+      try {
+        targetWindow.close();
+      } catch {
+        // Continue to the standard share/download fallbacks.
+      }
+    }
+  }
+
+  if (await tryShareBlob(blob, fileName, mimeType)) return;
+
   const url = URL.createObjectURL(blob);
+  const revokeLater = () => window.setTimeout(() => URL.revokeObjectURL(url), 60 * 1000);
+
+  if ((isAppleMobileRuntime() || isNativeMobileRuntime()) && typeof window.open === 'function') {
+    const opened = window.open(url, '_blank', 'noopener,noreferrer');
+    if (opened) {
+      revokeLater();
+      return;
+    }
+  }
+
   const anchor = document.createElement('a');
   anchor.href = url;
   anchor.download = fileName;
+  anchor.rel = 'noopener';
   document.body.appendChild(anchor);
   anchor.click();
   anchor.remove();
-  URL.revokeObjectURL(url);
+  revokeLater();
 };
 
 const REPORT_LOGO_URL = '/favicon.png';
@@ -1977,6 +2079,45 @@ const MetricTile = ({ label, value, subLabel, tone = '', Icon = null }) => (
   </div>
 );
 
+const FilterPanel = ({ Icon, label, summary, children, scroll = false }) => (
+  <div className="rounded-lg border border-[var(--glass-border)] bg-[var(--glass-bg-hover)] p-3">
+    <div className="mb-2 flex items-center justify-between gap-2">
+      <div className="flex min-w-0 items-center gap-2 text-[10px] uppercase tracking-widest font-bold text-[var(--text-secondary)]">
+        {Icon && <Icon className="h-3.5 w-3.5 shrink-0" />}
+        <span className="truncate">{label}</span>
+      </div>
+      {summary && (
+        <span className="shrink-0 rounded-md border border-white/10 bg-white/5 px-2 py-1 text-[10px] font-bold tabular-nums text-[var(--text-muted)]">
+          {summary}
+        </span>
+      )}
+    </div>
+    <div className={`flex flex-wrap gap-2 ${scroll ? 'max-h-24 overflow-y-auto custom-scrollbar pr-1' : ''}`}>
+      {children}
+    </div>
+  </div>
+);
+
+const ReportFeaturePill = ({ Icon, label, tone = 'text-emerald-200' }) => (
+  <div className="flex min-w-0 items-center gap-2 rounded-lg border border-[var(--glass-border)] bg-[var(--glass-bg)] px-2.5 py-2">
+    <span className={`grid h-6 w-6 shrink-0 place-items-center rounded-md bg-white/5 ${tone}`}>
+      {Icon && <Icon className="h-3.5 w-3.5" />}
+    </span>
+    <span className="truncate text-[10px] font-bold uppercase tracking-widest text-[var(--text-secondary)]">{label}</span>
+  </div>
+);
+
+const KeyFigure = ({ Icon, label, value, tone = 'text-[var(--text-primary)]', subLabel }) => (
+  <div className="min-h-[88px] rounded-lg border border-[var(--glass-border)] bg-[var(--glass-bg)] px-3 py-3">
+    <div className="flex items-center justify-between gap-2 text-[9px] uppercase tracking-widest text-[var(--text-muted)]">
+      <span className="truncate">{label}</span>
+      {Icon && <Icon className="h-3.5 w-3.5 shrink-0" />}
+    </div>
+    <div className={`mt-2 text-3xl font-semibold tabular-nums ${tone}`}>{value}</div>
+    {subLabel && <div className="mt-1 truncate text-[10px] text-[var(--text-muted)]">{subLabel}</div>}
+  </div>
+);
+
 export default function SaunaReportsCard({
   cardId,
   settings,
@@ -2004,6 +2145,7 @@ export default function SaunaReportsCard({
   const [selectedIds, setSelectedIds] = useState([]);
   const [calendarEvents, setCalendarEvents] = useState([]);
   const [isPreparingPdf, setIsPreparingPdf] = useState(false);
+  const [pdfError, setPdfError] = useState('');
 
   useEffect(() => {
     setSelectedIds([]);
@@ -2076,6 +2218,7 @@ export default function SaunaReportsCard({
     : (configuredSelectedIds.length
       ? `${scopedRecords.length} ${tr('reports.selectedSaunas', 'selected saunas')}`
       : tr('reports.allSaunas', 'All saunas'));
+  const activeScopeLabel = `${formatNumber(activeRecords.length)}/${formatNumber(scopedRecords.length)}`;
   const scoreValue = report.totalScoreSamples > 0 ? formatScore(report.avgScore) : '--';
   const scoreTone = report.totalScoreSamples > 0 ? getScoreToneClass(report.avgScore) : 'text-[var(--text-muted)]';
   const trendTone = Number(report.avgScoreDelta) > 0
@@ -2094,7 +2237,9 @@ export default function SaunaReportsCard({
 
   const handleDownloadPdf = async () => {
     if (isPreparingPdf) return;
+    const mobilePreviewWindow = openMobilePdfPreviewWindow(tr('reports.preparingPdf', 'Preparing PDF'));
     setIsPreparingPdf(true);
+    setPdfError('');
     try {
       const title = cardName;
       const subtitle = `${selectedLabel} - ${periodDays} ${tr('reports.days', 'days')} - ${rangeLabel}`;
@@ -2116,11 +2261,15 @@ export default function SaunaReportsCard({
         return acc;
       }, {});
       const pdf = createPdfBlob({ report, title, subtitle, tr, logoImage, saunaImages });
-      downloadBlob(
+      await downloadBlob(
         pdf,
         `badstu-rapport-${periodDays}d-${sanitizeFilePart(selectedLabel)}-${Date.now()}.pdf`,
         'application/pdf',
+        { targetWindow: mobilePreviewWindow },
       );
+    } catch {
+      if (mobilePreviewWindow && !mobilePreviewWindow.closed) mobilePreviewWindow.close();
+      setPdfError(tr('reports.pdfDownloadFailed', 'Could not prepare the PDF download.'));
     } finally {
       setIsPreparingPdf(false);
     }
@@ -2149,19 +2298,26 @@ export default function SaunaReportsCard({
             </div>
           </div>
 
-          <button
-            type="button"
-            onClick={handleDownloadPdf}
-            disabled={!activeRecords.length || isPreparingPdf}
-            className="inline-flex items-center justify-center gap-2 rounded-lg border border-emerald-400/35 bg-emerald-500/16 px-4 py-2.5 text-xs font-bold uppercase tracking-widest text-emerald-100 transition-colors hover:bg-emerald-500/24 disabled:opacity-45 disabled:cursor-not-allowed"
-          >
-            <Download className="w-4 h-4" />
-            {isPreparingPdf ? tr('reports.preparingPdf', 'Preparing PDF') : tr('reports.downloadPdf', 'Download PDF')}
-          </button>
+          <div className="flex flex-col items-start gap-2 xl:items-end">
+            <button
+              type="button"
+              onClick={handleDownloadPdf}
+              disabled={!activeRecords.length || isPreparingPdf}
+              className="inline-flex items-center justify-center gap-2 rounded-lg border border-emerald-400/35 bg-emerald-500/16 px-4 py-2.5 text-xs font-bold uppercase tracking-widest text-emerald-100 transition-colors hover:bg-emerald-500/24 disabled:opacity-45 disabled:cursor-not-allowed"
+            >
+              <Download className="w-4 h-4" />
+              {isPreparingPdf ? tr('reports.preparingPdf', 'Preparing PDF') : tr('reports.downloadPdf', 'Download PDF')}
+            </button>
+            {pdfError && <div className="max-w-xs text-[11px] font-semibold text-rose-300">{pdfError}</div>}
+          </div>
         </div>
 
-        <div className="grid grid-cols-1 xl:grid-cols-[auto_minmax(0,1fr)] gap-3">
-          <div className="flex flex-wrap gap-2 content-start">
+        <div className="grid grid-cols-1 gap-3 2xl:grid-cols-[minmax(280px,0.58fr)_minmax(0,1.42fr)]">
+          <FilterPanel
+            Icon={Clock}
+            label={tr('reports.periodFilter', 'Period')}
+            summary={`${periodDays} ${tr('reports.days', 'days')}`}
+          >
             {PERIOD_OPTIONS.map((days) => (
               <button
                 key={days}
@@ -2176,9 +2332,14 @@ export default function SaunaReportsCard({
                 {days} {tr('reports.days', 'days')}
               </button>
             ))}
-          </div>
+          </FilterPanel>
 
-          <div className="flex flex-wrap gap-2 content-start max-h-24 overflow-y-auto custom-scrollbar pr-1">
+          <FilterPanel
+            Icon={User}
+            label={tr('reports.saunaFilter', 'Saunas')}
+            summary={activeScopeLabel}
+            scroll
+          >
             <button
               type="button"
               onClick={() => setSelectedIds([])}
@@ -2209,7 +2370,7 @@ export default function SaunaReportsCard({
                 </button>
               );
             })}
-          </div>
+          </FilterPanel>
         </div>
 
         {activeRecords.length === 0 ? (
@@ -2224,44 +2385,61 @@ export default function SaunaReportsCard({
           </div>
         ) : (
           <div className="grid grid-cols-1 gap-3 auto-rows-min">
-            <div className="rounded-2xl border border-[var(--glass-border)] bg-[var(--glass-bg-hover)] p-4 md:p-5">
-              <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-5">
-                <div className="min-w-0">
-                  <div className="text-[10px] uppercase tracking-widest font-bold text-[var(--text-secondary)]">
-                    {tr('reports.reportReady', 'Report ready')}
+            <div className="grid grid-cols-1 gap-3 xl:grid-cols-[minmax(0,1.1fr)_minmax(360px,0.9fr)]">
+              <div className="rounded-lg border border-[var(--glass-border)] bg-[var(--glass-bg-hover)] p-4">
+                <div className="flex items-start gap-3">
+                  <div className="grid h-11 w-11 shrink-0 place-items-center rounded-lg border border-emerald-300/20 bg-emerald-400/10 text-emerald-200">
+                    <BookOpen className="h-5 w-5" />
                   </div>
-                  <p className="mt-2 max-w-3xl text-sm leading-relaxed text-[var(--text-primary)]">
-                    {tr('reports.reportReadyHint', 'The card keeps the workspace clean. The downloaded PDF contains the full analysis with charts, trends and sauna comparisons.')}
-                  </p>
-                  <div className="mt-3 flex flex-wrap gap-2 text-[10px] uppercase tracking-widest font-bold text-[var(--text-secondary)]">
-                    <span className="rounded-lg border border-[var(--glass-border)] bg-[var(--glass-bg)] px-2.5 py-1.5">{tr('reports.scoreDevelopment', 'Score development')}</span>
-                    <span className="rounded-lg border border-[var(--glass-border)] bg-[var(--glass-bg)] px-2.5 py-1.5">{tr('reports.comparison', 'Comparison')}</span>
-                    <span className="rounded-lg border border-[var(--glass-border)] bg-[var(--glass-bg)] px-2.5 py-1.5">{tr('reports.saunaPerformance', 'Sauna performance')}</span>
+                  <div className="min-w-0">
+                    <div className="text-[10px] uppercase tracking-widest font-bold text-[var(--text-secondary)]">
+                      {tr('reports.reportReady', 'Report ready')}
+                    </div>
+                    <p className="mt-2 max-w-3xl text-sm leading-relaxed text-[var(--text-primary)]">
+                      {tr('reports.reportReadyHint', 'Choose period and saunas. The PDF contains charts, trends and sauna comparisons.')}
+                    </p>
                   </div>
                 </div>
 
-                <div className="grid grid-cols-3 gap-2 w-full xl:w-[390px] shrink-0">
-                  <div className="rounded-lg border border-[var(--glass-border)] bg-[var(--glass-bg)] px-3 py-3">
-                    <div className="flex items-center justify-between gap-2 text-[9px] uppercase tracking-widest text-[var(--text-muted)]">
-                      <span className="truncate">{tr('reports.avgScore', 'Average score')}</span>
-                      <Shield className="w-3.5 h-3.5 shrink-0" />
-                    </div>
-                    <div className={`mt-1 text-3xl font-semibold tabular-nums ${scoreTone}`}>{scoreValue}</div>
+                <div className="mt-4">
+                  <div className="mb-2 flex items-center gap-2 text-[10px] uppercase tracking-widest font-bold text-[var(--text-secondary)]">
+                    <ListChecks className="h-3.5 w-3.5" />
+                    {tr('reports.pdfContains', 'PDF contains')}
                   </div>
-                  <div className="rounded-lg border border-[var(--glass-border)] bg-[var(--glass-bg)] px-3 py-3">
-                    <div className="flex items-center justify-between gap-2 text-[9px] uppercase tracking-widest text-[var(--text-muted)]">
-                      <span className="truncate">{tr('reports.bookingHours', 'Booking hours')}</span>
-                      <Calendar className="w-3.5 h-3.5 shrink-0" />
-                    </div>
-                    <div className="mt-1 text-3xl font-semibold tabular-nums text-[var(--text-primary)]">{formatNumber(report.bookingHours)}</div>
+                  <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+                    <ReportFeaturePill Icon={TrendingUp} label={tr('reports.scoreDevelopment', 'Score development')} tone="text-emerald-200" />
+                    <ReportFeaturePill Icon={BarChart3} label={tr('reports.comparison', 'Comparison')} tone="text-blue-200" />
+                    <ReportFeaturePill Icon={Award} label={tr('reports.saunaPerformance', 'Sauna performance')} tone="text-amber-200" />
                   </div>
-                  <div className="rounded-lg border border-[var(--glass-border)] bg-[var(--glass-bg)] px-3 py-3">
-                    <div className="flex items-center justify-between gap-2 text-[9px] uppercase tracking-widest text-[var(--text-muted)]">
-                      <span className="truncate">{tr('reports.trend', 'Trend')}</span>
-                      <TrendingUp className="w-3.5 h-3.5 shrink-0" />
-                    </div>
-                    <div className={`mt-1 text-3xl font-semibold tabular-nums ${trendTone}`}>{getDeltaText(report.avgScoreDelta)}</div>
-                  </div>
+                </div>
+              </div>
+
+              <div className="rounded-lg border border-[var(--glass-border)] bg-[var(--glass-bg-hover)] p-3">
+                <div className="mb-2 flex items-center gap-2 text-[10px] uppercase tracking-widest font-bold text-[var(--text-secondary)]">
+                  <Award className="h-3.5 w-3.5" />
+                  {tr('reports.keyNumbers', 'Key numbers')}
+                </div>
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+                  <KeyFigure
+                    Icon={Shield}
+                    label={tr('reports.avgScore', 'Average score')}
+                    value={scoreValue}
+                    tone={scoreTone}
+                    subLabel={tr('reports.scoreBasis', 'Score basis')}
+                  />
+                  <KeyFigure
+                    Icon={Calendar}
+                    label={tr('reports.bookingHours', 'Booking hours')}
+                    value={formatNumber(report.bookingHours)}
+                    subLabel={tr('reports.bookingMix', 'Booking mix')}
+                  />
+                  <KeyFigure
+                    Icon={TrendingUp}
+                    label={tr('reports.trend', 'Trend')}
+                    value={getDeltaText(report.avgScoreDelta)}
+                    tone={trendTone}
+                    subLabel={rangeLabel}
+                  />
                 </div>
               </div>
             </div>
