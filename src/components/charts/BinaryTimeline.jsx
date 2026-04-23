@@ -1,14 +1,15 @@
 import React, { useMemo } from 'react';
 
-export default function BinaryTimeline({ events, startTime, endTime }) {
-  if (!events || events.length === 0) return null;
+export default function BinaryTimeline({ events, startTime, endTime, formatLabel }) {
+  const safeEvents = useMemo(() => (Array.isArray(events) ? events : []), [events]);
 
   const segments = useMemo(() => {
+    if (!startTime || !endTime || safeEvents.length === 0) return [];
     const totalDuration = endTime.getTime() - startTime.getTime();
     if (totalDuration <= 0) return [];
 
     // Sort events by time ascending
-    const sortedEvents = [...events].sort((a, b) => a.time - b.time);
+    const sortedEvents = [...safeEvents].sort((a, b) => a.time - b.time);
     
     const segs = [];
 
@@ -73,7 +74,9 @@ export default function BinaryTimeline({ events, startTime, endTime }) {
     }
     
     return segs;
-  }, [events, startTime, endTime]);
+  }, [safeEvents, startTime, endTime]);
+
+  if (!startTime || !endTime || safeEvents.length === 0 || segments.length === 0) return null;
 
   const totalDuration = endTime.getTime() - startTime.getTime();
 
@@ -88,7 +91,12 @@ export default function BinaryTimeline({ events, startTime, endTime }) {
   const getLabel = (state) => {
      // Optional: Map some common states to shorter text for tooltips
      return state;
-  }
+  };
+
+  const formatTick = (value) => {
+    if (typeof formatLabel === 'function') return formatLabel(value);
+    return value.toLocaleTimeString([], { hour: '2-digit', minute:'2-digit' });
+  };
 
   return (
     <div className="w-full mb-8">
@@ -112,11 +120,11 @@ export default function BinaryTimeline({ events, startTime, endTime }) {
       
       {/* Time Axis */}
       <div className="flex justify-between text-[10px] text-[var(--text-secondary)] mt-2 font-mono uppercase opacity-50 px-1">
-        <span>{startTime.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
-        <span>{new Date(startTime.getTime() + totalDuration * 0.25).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
-        <span>{new Date(startTime.getTime() + totalDuration * 0.5).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
-        <span>{new Date(startTime.getTime() + totalDuration * 0.75).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
-        <span>{endTime.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
+        <span>{formatTick(startTime)}</span>
+        <span>{formatTick(new Date(startTime.getTime() + totalDuration * 0.25))}</span>
+        <span>{formatTick(new Date(startTime.getTime() + totalDuration * 0.5))}</span>
+        <span>{formatTick(new Date(startTime.getTime() + totalDuration * 0.75))}</span>
+        <span>{formatTick(endTime)}</span>
       </div>
     </div>
   );

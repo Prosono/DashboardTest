@@ -1,17 +1,109 @@
 import { useState, useEffect, useMemo } from 'react';
 import { X, Activity, AlertTriangle } from 'lucide-react';
 import { logger } from '../utils/logger';
-import { getHistory, getHistoryRest, getStatistics } from '../services/haClient';
+import { getHistory, getHistoryBatch, getHistoryRest, getStatistics } from '../services/haClient';
 import SensorHistoryGraph from '../components/charts/SensorHistoryGraph';
 import BinaryTimeline from '../components/charts/BinaryTimeline';
 import { formatRelativeTime } from '../utils';
 import { getIconComponent } from '../icons';
+
+const HISTORY_PRESET_OPTIONS = [1, 3, 6, 12, 24, 48, 72, 168, 336, 720];
+const OVERLAY_COLOR_PALETTE = ['#38bdf8', '#ef4444', '#a855f7', '#22c55e', '#f59e0b', '#14b8a6', '#f97316', '#e879f9'];
+
+const makeTr = (t) => (key, fallback) => {
+  const out = typeof t === 'function' ? t(key) : undefined;
+  const str = String(out ?? '').trim();
+  return !str || str === key || str.toLowerCase() === key.toLowerCase() ? fallback : str;
+};
+
+const pad2 = (value) => String(value).padStart(2, '0');
+
+const toDateTimeLocalInputValue = (value) => {
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) return '';
+  return `${date.getFullYear()}-${pad2(date.getMonth() + 1)}-${pad2(date.getDate())}T${pad2(date.getHours())}:${pad2(date.getMinutes())}`;
+};
+
+const parseDateTimeLocalInputValue = (value) => {
+  const parsed = new Date(String(value || '').trim());
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+};
+
+const buildPresetHistoryWindow = (hours) => {
+  const safeHours = Math.max(1, Number(hours) || 24);
+  const end = new Date();
+  const start = new Date(end.getTime() - (safeHours * 60 * 60 * 1000));
+  return {
+    mode: 'preset',
+    presetHours: safeHours,
+    start,
+    end,
+  };
+};
+
+const formatPresetHistoryLabel = (hours) => {
+  const safeHours = Math.max(1, Number(hours) || 1);
+  if (safeHours >= 24 && safeHours % 24 === 0) return `${safeHours / 24}D`;
+  return `${safeHours}H`;
+};
+
+const getOverlayDefaultActiveStates = (entityId, entityData) => {
+  const domain = String(entityId || '').split('.')[0] || '';
+  const deviceClass = String(entityData?.attributes?.device_class || '').toLowerCase();
+
+  if (domain === 'binary_sensor') {
+    if (['door', 'window', 'garage_door'].includes(deviceClass)) return ['on', 'open', 'opening'];
+    if (['motion', 'occupancy', 'presence'].includes(deviceClass)) return ['on', 'true', '1', 'detected', 'occupied', 'presence'];
+    if (deviceClass === 'lock') return ['on', 'unlocked'];
+    if (deviceClass === 'moisture') return ['on', 'wet'];
+    if (deviceClass === 'smoke') return ['on', 'detected'];
+  }
+
+  if (['switch', 'input_boolean', 'automation', 'fan', 'light'].includes(domain)) return ['on', 'true', '1', 'yes'];
+  if (domain === 'cover') return ['on', 'open', 'opening'];
+  if (domain === 'lock') return ['unlocked'];
+  if (domain === 'media_player') return ['playing', 'on', 'buffering'];
+  if (domain === 'climate') return ['heat', 'heating', 'cool', 'cooling', 'fan_only', 'dry', 'on'];
+
+  return ['on', 'true', '1', 'yes', 'active', 'open', 'heat', 'heating', 'playing'];
+};
+
+const buildDefaultOverlayConfig = (entityId, entityData, index = 0) => ({
+  entityId,
+  label: entityData?.attributes?.friendly_name || entityId,
+  color: OVERLAY_COLOR_PALETTE[index % OVERLAY_COLOR_PALETTE.length],
+  activeStates: getOverlayDefaultActiveStates(entityId, entityData),
+  initialState: entityData?.state ?? '',
+  source: 'manual',
+});
+
+const dedupeOverlayConfigs = (items = []) => {
+  const byId = new Map();
+  items.forEach((item, index) => {
+    const entityId = String(item?.entityId || '').trim();
+    if (!entityId) return;
+    const existing = byId.get(entityId) || {};
+    byId.set(entityId, {
+      ...existing,
+      ...item,
+      entityId,
+      label: item?.label || existing.label || entityId,
+      color: item?.color || existing.color || OVERLAY_COLOR_PALETTE[index % OVERLAY_COLOR_PALETTE.length],
+      activeStates: Array.isArray(item?.activeStates) && item.activeStates.length
+        ? item.activeStates
+        : (Array.isArray(existing.activeStates) ? existing.activeStates : undefined),
+      initialState: item?.initialState ?? existing.initialState ?? '',
+    });
+  });
+  return Array.from(byId.values());
+};
 
 export default function SensorModal({
   isOpen,
   onClose,
   entityId,
   entity,
+  entities = {},
   customName,
   overlayEntities = [],
   conn,
@@ -19,6 +111,7 @@ export default function SensorModal({
   haToken,
   t = (key) => key,
 }) {
+  const tr = useMemo(() => makeTr(t), [t]);
   const [history, setHistory] = useState([]);
   const [historyEvents, setHistoryEvents] = useState([]);
   const [overlayHistory, setOverlayHistory] = useState([]);
@@ -26,10 +119,17 @@ export default function SensorModal({
   const [loading, setLoading] = useState(false);
   const [_historyError, setHistoryError] = useState(null);
   const [_historyMeta, setHistoryMeta] = useState({ source: null, rawCount: 0 });
-  const [historyHours, setHistoryHours] = useState(24);
-
-  // Keep track of window for the timeline
-  const [timeWindow, setTimeWindow] = useState({ start: new Date(Date.now() - 24*60*60*1000), end: new Date() });
+  const [historyQuery, setHistoryQuery] = useState(() => buildPresetHistoryWindow(24));
+  const [customRangeStart, setCustomRangeStart] = useState(() => toDateTimeLocalInputValue(Date.now() - (24 * 60 * 60 * 1000)));
+  const [customRangeEnd, setCustomRangeEnd] = useState(() => toDateTimeLocalInputValue(new Date()));
+  const [rangeError, setRangeError] = useState('');
+  const [manualOverlayConfigs, setManualOverlayConfigs] = useState([]);
+  const [overlayInput, setOverlayInput] = useState('');
+  const [overlayError, setOverlayError] = useState('');
+  const timeWindow = useMemo(() => ({
+    start: historyQuery.start,
+    end: historyQuery.end,
+  }), [historyQuery.end, historyQuery.start]);
   const isSystemWarningDetails = entityId === 'sensor.system_warning_details';
   const isSystemCriticalDetails = entityId === 'sensor.system_critical_details';
   const isSystemDetailsSensor = isSystemWarningDetails || isSystemCriticalDetails;
@@ -177,15 +277,33 @@ export default function SensorModal({
     return true;
   };
 
+  useEffect(() => {
+    if (!isOpen) return;
+    const nextWindow = buildPresetHistoryWindow(24);
+    setHistoryQuery(nextWindow);
+    setCustomRangeStart(toDateTimeLocalInputValue(nextWindow.start));
+    setCustomRangeEnd(toDateTimeLocalInputValue(nextWindow.end));
+    setRangeError('');
+    setManualOverlayConfigs([]);
+    setOverlayInput('');
+    setOverlayError('');
+  }, [entityId, isOpen]);
+
+  const configuredOverlayEntities = useMemo(() => dedupeOverlayConfigs([
+    ...(Array.isArray(overlayEntities) ? overlayEntities : []),
+    ...manualOverlayConfigs,
+  ]), [manualOverlayConfigs, overlayEntities]);
+
   const overlayConfigKey = useMemo(() => JSON.stringify(
-    (Array.isArray(overlayEntities) ? overlayEntities : []).map((overlay) => ({
+    configuredOverlayEntities.map((overlay) => ({
       entityId: overlay?.entityId || '',
       label: overlay?.label || '',
       color: overlay?.color || '',
       activeStates: Array.isArray(overlay?.activeStates) ? overlay.activeStates.join('|') : '',
       initialState: overlay?.initialState ?? '',
+      source: overlay?.source || '',
     }))
-  ), [overlayEntities]);
+  ), [configuredOverlayEntities]);
 
   useEffect(() => {
     if (isOpen && entity && conn) {
@@ -200,11 +318,10 @@ export default function SensorModal({
         setHistoryError(null);
         setHistoryMeta({ source: null, rawCount: 0 });
         try {
-          const end = new Date();
-          const start = new Date(end.getTime() - historyHours * 60 * 60 * 1000);
+          const start = timeWindow.start instanceof Date ? timeWindow.start : new Date(timeWindow.start);
+          const end = timeWindow.end instanceof Date ? timeWindow.end : new Date(timeWindow.end);
           const resolvedEntityId = entity?.entity_id || entityId;
           const resolvedEntityIdSafe = String(resolvedEntityId || '');
-          setTimeWindow({ start, end });
           
           let points = [];
           let events = [];
@@ -370,7 +487,7 @@ export default function SensorModal({
              const now = new Date();
              const val = parseFloat(entity.state);
              points = [
-               { value: val, time: new Date(now.getTime() - historyHours * 60 * 60 * 1000) },
+               { value: val, time: start },
                { value: val, time: now }
              ];
           }
@@ -391,58 +508,57 @@ export default function SensorModal({
              }];
           }
 
-          const configuredOverlays = Array.isArray(overlayEntities)
-            ? overlayEntities.filter((overlay) => overlay?.entityId)
-            : [];
+          const configuredOverlays = configuredOverlayEntities.filter((overlay) => overlay?.entityId);
 
           if (configuredOverlays.length > 0) {
-            const overlaySeries = await Promise.all(
-              configuredOverlays.map(async (overlay) => {
-                const overlayEntityId = overlay.entityId;
-                let overlayEvents = [];
-                try {
-                  const overlayRaw = await getHistory(conn, {
-                    entityId: overlayEntityId,
-                    start,
-                    end,
-                    minimal_response: true,
-                    no_attributes: true,
-                  });
-                  overlayEvents = overlayRaw
-                    .map((entry) => {
-                      if (!entry) return null;
-                      const stateValue = entry.state ?? entry.s;
-                      const changed = entry.last_changed || entry.last_updated || entry.last_reported || entry.timestamp || entry.l || entry.lc || entry.lu || entry.lr;
-                      const time = parseHistoryEntryTime(entry);
-                      if (stateValue === undefined || !time) return null;
-                      return {
-                        state: stateValue,
-                        time,
-                        lastChanged: changed,
-                      };
-                    })
-                    .filter(Boolean);
-                } catch {
-                  overlayEvents = [];
-                }
+            let overlayBatch = {};
+            try {
+              overlayBatch = await getHistoryBatch(conn, {
+                start,
+                end,
+                entityIds: configuredOverlays.map((overlay) => overlay.entityId),
+                minimal_response: true,
+                no_attributes: true,
+              });
+            } catch {
+              overlayBatch = {};
+            }
 
-                if (overlayEvents.length === 0 && overlay.initialState !== undefined && overlay.initialState !== null && overlay.initialState !== '') {
-                  overlayEvents = [{
-                    state: overlay.initialState,
-                    time: start,
-                    lastChanged: start.toISOString(),
-                  }];
-                }
+            const overlaySeries = configuredOverlays.map((overlay) => {
+              const overlayEntityId = overlay.entityId;
+              const overlayRaw = Array.isArray(overlayBatch?.[overlayEntityId]) ? overlayBatch[overlayEntityId] : [];
+              let overlayEvents = overlayRaw
+                .map((entry) => {
+                  if (!entry) return null;
+                  const stateValue = entry.state ?? entry.s;
+                  const changed = entry.last_changed || entry.last_updated || entry.last_reported || entry.timestamp || entry.l || entry.lc || entry.lu || entry.lr;
+                  const time = parseHistoryEntryTime(entry);
+                  if (stateValue === undefined || !time) return null;
+                  return {
+                    state: stateValue,
+                    time,
+                    lastChanged: changed,
+                  };
+                })
+                .filter(Boolean);
 
-                return {
-                  entityId: overlayEntityId,
-                  label: overlay.label || overlayEntityId,
-                  color: overlay.color || '#60a5fa',
-                  activeStates: Array.isArray(overlay.activeStates) ? overlay.activeStates : undefined,
-                  events: overlayEvents,
-                };
-              })
-            );
+              if (overlayEvents.length === 0 && overlay.initialState !== undefined && overlay.initialState !== null && overlay.initialState !== '') {
+                overlayEvents = [{
+                  state: overlay.initialState,
+                  time: start,
+                  lastChanged: start.toISOString(),
+                }];
+              }
+
+              return {
+                entityId: overlayEntityId,
+                label: overlay.label || overlayEntityId,
+                color: overlay.color || '#60a5fa',
+                activeStates: Array.isArray(overlay.activeStates) ? overlay.activeStates : undefined,
+                source: overlay.source || '',
+                events: overlayEvents,
+              };
+            });
 
             setOverlayHistory(
               overlaySeries.filter((overlay) => Array.isArray(overlay.events) && overlay.events.length > 0)
@@ -470,7 +586,10 @@ export default function SensorModal({
       setHistoryEvents([]);
       setOverlayHistory([]);
     }
-  }, [isOpen, conn, haUrl, haToken, historyHours, isSystemDetailsSensor, overlayConfigKey, entityId]);
+  // The fetch effect is intentionally keyed off the resolved query window and overlay config,
+  // not helper function identities that are recreated during render.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen, conn, haUrl, haToken, isSystemDetailsSensor, overlayConfigKey, entityId, entity, timeWindow.end, timeWindow.start, configuredOverlayEntities]);
 
   useEffect(() => {
     if (!Array.isArray(overlayHistory) || overlayHistory.length === 0) {
@@ -488,12 +607,11 @@ export default function SensorModal({
     });
   }, [overlayHistory]);
 
-  if (!isOpen || !entity) return null;
-
-  const attrs = entity.attributes || {};
+  const entityData = entity || { state: '', attributes: {} };
+  const attrs = entityData.attributes || {};
   const name = customName || attrs.friendly_name || entityId;
   const unit = attrs.unit_of_measurement ? `${attrs.unit_of_measurement}` : '';
-  const state = entity.state;
+  const state = entityData.state;
   const domain = entityId?.split('.')?.[0];
   const isNumeric = !['script', 'scene'].includes(domain) && !isNaN(parseFloat(state)) && !String(state).match(/^unavailable|unknown$/) && !entityId.startsWith('binary_sensor.');
   const isPeopleNowHistory = isNumeric && (
@@ -511,9 +629,141 @@ export default function SensorModal({
     if (!key) return false;
     return overlayVisibility[key] !== false;
   });
+  const overlayCandidateOptions = useMemo(() => (
+    Object.entries(entities || {})
+      .filter(([candidateId]) => candidateId && candidateId !== entityId)
+      .filter(([candidateId, candidateEntity]) => {
+        const candidateDomain = candidateId.split('.')[0] || '';
+        const candidateState = String(candidateEntity?.state ?? '');
+        const isCandidateNumeric = !['script', 'scene'].includes(candidateDomain)
+          && !Number.isNaN(parseFloat(candidateState))
+          && !candidateId.startsWith('binary_sensor.')
+          && !candidateState.match(/^unavailable|unknown$/i);
+        return !isCandidateNumeric;
+      })
+      .map(([candidateId, candidateEntity]) => ({
+        entityId: candidateId,
+        label: candidateEntity?.attributes?.friendly_name || candidateId,
+        search: `${candidateId} ${candidateEntity?.attributes?.friendly_name || ''}`.toLowerCase(),
+      }))
+      .sort((a, b) => a.label.localeCompare(b.label))
+  ), [entities, entityId]);
+  const overlaySummary = configuredOverlayEntities.map((overlay, index) => ({
+    ...overlay,
+    color: overlay.color || OVERLAY_COLOR_PALETTE[index % OVERLAY_COLOR_PALETTE.length],
+    visible: overlayVisibility[overlay.entityId] !== false,
+  }));
 
-  const lastChanged = entity.last_changed ? new Date(entity.last_changed).toLocaleString() : '--';
-  const lastUpdated = entity.last_updated ? new Date(entity.last_updated).toLocaleString() : '--';
+  const historyWindowDurationMs = Math.max(60 * 1000, timeWindow.end.getTime() - timeWindow.start.getTime());
+  const formatHistoryAxisLabel = useMemo(() => {
+    if (historyWindowDurationMs >= (10 * 24 * 60 * 60 * 1000)) {
+      return (date) => date.toLocaleDateString([], { day: '2-digit', month: '2-digit' });
+    }
+    if (historyWindowDurationMs >= (36 * 60 * 60 * 1000)) {
+      return (date) => `${date.toLocaleDateString([], { day: '2-digit', month: '2-digit' })} ${date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
+    }
+    if (historyWindowDurationMs >= (24 * 60 * 60 * 1000)) {
+      return (date) => `${date.toLocaleDateString([], { day: '2-digit', month: '2-digit' })} ${date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
+    }
+    return (date) => date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  }, [historyWindowDurationMs]);
+
+  const applyPresetRange = (hours) => {
+    const nextWindow = buildPresetHistoryWindow(hours);
+    setHistoryQuery(nextWindow);
+    setCustomRangeStart(toDateTimeLocalInputValue(nextWindow.start));
+    setCustomRangeEnd(toDateTimeLocalInputValue(nextWindow.end));
+    setRangeError('');
+  };
+
+  const applyCustomRange = () => {
+    const start = parseDateTimeLocalInputValue(customRangeStart);
+    const end = parseDateTimeLocalInputValue(customRangeEnd);
+    if (!start || !end || end <= start) {
+      setRangeError(tr('history.invalidRange', 'Choose a valid start and end time.'));
+      return;
+    }
+    setHistoryQuery({
+      mode: 'custom',
+      presetHours: null,
+      start,
+      end,
+    });
+    setRangeError('');
+  };
+
+  const setCustomRangeToNow = () => {
+    const nextEnd = new Date();
+    setCustomRangeEnd(toDateTimeLocalInputValue(nextEnd));
+  };
+
+  const resolveOverlayInputToken = (token) => {
+    const normalized = String(token || '').trim().toLowerCase();
+    if (!normalized) return null;
+    return overlayCandidateOptions.find((candidate) => candidate.entityId.toLowerCase() === normalized || candidate.label.toLowerCase() === normalized)
+      || overlayCandidateOptions.find((candidate) => candidate.search.includes(normalized))
+      || null;
+  };
+
+  const addOverlayEntities = () => {
+    const tokens = String(overlayInput || '')
+      .split(/[\n,]+/g)
+      .map((token) => token.trim())
+      .filter(Boolean);
+    if (!tokens.length) {
+      setOverlayError(tr('history.overlayHelp', 'Add one or more entity IDs to show extra activity tracks.'));
+      return;
+    }
+
+    const existingIds = new Set(configuredOverlayEntities.map((overlay) => overlay.entityId));
+    const nextEntries = [];
+    const unresolved = [];
+    const skipped = [];
+
+    tokens.forEach((token) => {
+      const candidate = resolveOverlayInputToken(token);
+      if (!candidate) {
+        unresolved.push(token);
+        return;
+      }
+      if (existingIds.has(candidate.entityId) || nextEntries.some((entry) => entry.entityId === candidate.entityId)) {
+        skipped.push(candidate.entityId);
+        return;
+      }
+      nextEntries.push(buildDefaultOverlayConfig(candidate.entityId, entities?.[candidate.entityId], configuredOverlayEntities.length + nextEntries.length));
+    });
+
+    if (nextEntries.length) {
+      setManualOverlayConfigs((prev) => dedupeOverlayConfigs([...prev, ...nextEntries]));
+      setOverlayInput('');
+    }
+
+    if (unresolved.length > 0) {
+      setOverlayError(`${tr('history.overlayInvalid', 'Could not find')}: ${unresolved.join(', ')}`);
+      return;
+    }
+    if (!nextEntries.length && skipped.length > 0) {
+      setOverlayError(tr('history.overlayAlreadyAdded', 'Those overlays are already added.'));
+      return;
+    }
+    setOverlayError('');
+  };
+
+  const removeOverlayEntity = (overlayEntityId) => {
+    setManualOverlayConfigs((prev) => prev.filter((overlay) => overlay.entityId !== overlayEntityId));
+    setOverlayVisibility((prev) => {
+      const next = { ...prev };
+      delete next[overlayEntityId];
+      return next;
+    });
+  };
+
+  const activeRangeSummary = `${timeWindow.start.toLocaleString()} - ${timeWindow.end.toLocaleString()}`;
+
+  const lastChanged = entityData.last_changed ? new Date(entityData.last_changed).toLocaleString() : '--';
+  const lastUpdated = entityData.last_updated ? new Date(entityData.last_updated).toLocaleString() : '--';
+
+  if (!isOpen || !entity) return null;
 
   const attributeEntries = Object.entries(attrs)
     .filter(([key]) => !['friendly_name', 'unit_of_measurement', 'entity_picture', 'icon'].includes(key));
@@ -757,6 +1007,7 @@ export default function SensorModal({
                         noDataLabel={t('sensorInfo.noHistory')}
                         strokeColor="var(--text-primary)"
                         areaColor="var(--text-primary)"
+                        formatXLabel={formatHistoryAxisLabel}
                       />
                     </div>
                     {loading && (
@@ -777,7 +1028,7 @@ export default function SensorModal({
                      <>
                         <h4 className="text-xs font-bold uppercase tracking-widest text-[var(--text-secondary)] opacity-80 mb-4 bg-transparent">{t('history.activity')}</h4> 
                         <div className="mb-6">
-                           <BinaryTimeline events={historyEvents} startTime={timeWindow.start} endTime={timeWindow.end} />
+                           <BinaryTimeline events={historyEvents} startTime={timeWindow.start} endTime={timeWindow.end} formatLabel={formatHistoryAxisLabel} />
                         </div>
                         
                         <h4 className="text-xs font-bold uppercase tracking-widest text-[var(--text-secondary)] opacity-80 mb-4 bg-transparent shadow-sm pb-2 border-b border-[var(--glass-border)]">{t('history.log')}</h4>
@@ -845,6 +1096,7 @@ export default function SensorModal({
                           noDataLabel={t('sensorInfo.noHistory')}
                           strokeColor="var(--text-primary)"
                           areaColor="var(--text-primary)"
+                          formatXLabel={formatHistoryAxisLabel}
                         />
                      </div>
                    )}
@@ -873,21 +1125,178 @@ export default function SensorModal({
                </div>
            </div>
 
-           {/* History Range */}
-           <div>
-             <h4 className="text-xs font-bold uppercase tracking-widest text-[var(--text-secondary)] mb-4 opacity-40">{t('history.rangeHours')}</h4>
-             <div className="flex flex-wrap gap-2">
-               {[6, 12, 24, 48, 72].map((hours) => (
+           {/* History Window */}
+           <div className="space-y-4">
+             <div>
+               <h4 className="text-xs font-bold uppercase tracking-widest text-[var(--text-secondary)] mb-4 opacity-40">
+                 {tr('history.window', 'History window')}
+               </h4>
+               <div className="flex flex-wrap gap-2">
+                 {HISTORY_PRESET_OPTIONS.map((hours) => {
+                   const active = historyQuery.mode === 'preset' && historyQuery.presetHours === hours;
+                   return (
+                     <button
+                       key={hours}
+                       type="button"
+                       onClick={() => applyPresetRange(hours)}
+                       className={`px-3 py-2 rounded-full text-[10px] font-bold uppercase tracking-widest border transition-all ${
+                         active
+                           ? 'bg-[var(--glass-bg-hover)] text-[var(--text-primary)] border-[var(--glass-border)]'
+                           : 'bg-[var(--glass-bg)] text-[var(--text-secondary)] border-transparent hover:bg-[var(--glass-bg-hover)] hover:text-[var(--text-primary)]'
+                       }`}
+                     >
+                       {formatPresetHistoryLabel(hours)}
+                     </button>
+                   );
+                 })}
+               </div>
+             </div>
+
+             <div className="rounded-2xl border border-[var(--glass-border)] bg-[var(--glass-bg)] p-4">
+               <div className="flex items-center justify-between gap-3">
+                 <div className="min-w-0">
+                   <div className="text-[10px] font-bold uppercase tracking-widest text-[var(--text-secondary)] opacity-60">
+                     {tr('history.customRange', 'Custom range')}
+                   </div>
+                   <div className="mt-1 text-xs text-[var(--text-secondary)]">{activeRangeSummary}</div>
+                 </div>
                  <button
-                   key={hours}
-                   onClick={() => setHistoryHours(hours)}
-                   className={`px-3 py-2 rounded-full text-[10px] font-bold uppercase tracking-widest border transition-all ${historyHours === hours ? 'bg-[var(--glass-bg-hover)] text-[var(--text-primary)] border-[var(--glass-border)]' : 'bg-[var(--glass-bg)] text-[var(--text-secondary)] border-transparent hover:bg-[var(--glass-bg-hover)] hover:text-[var(--text-primary)]'}`}
+                   type="button"
+                   onClick={setCustomRangeToNow}
+                   className="shrink-0 rounded-full border border-[var(--glass-border)] bg-[var(--glass-bg-hover)] px-3 py-1.5 text-[10px] font-bold uppercase tracking-widest text-[var(--text-primary)]"
                  >
-                   {hours}h
+                   {tr('history.now', 'Now')}
                  </button>
-               ))}
+               </div>
+
+               <div className="mt-4 grid grid-cols-1 gap-3">
+                 <label className="min-w-0">
+                   <span className="mb-1 block text-[10px] font-bold uppercase tracking-widest text-[var(--text-secondary)] opacity-50">
+                     {tr('history.from', 'From')}
+                   </span>
+                   <input
+                     type="datetime-local"
+                     value={customRangeStart}
+                     onChange={(event) => setCustomRangeStart(event.target.value)}
+                     className="h-11 w-full rounded-2xl border border-[var(--glass-border)] bg-[var(--glass-bg-hover)] px-3 text-sm font-medium text-[var(--text-primary)] outline-none"
+                   />
+                 </label>
+                 <label className="min-w-0">
+                   <span className="mb-1 block text-[10px] font-bold uppercase tracking-widest text-[var(--text-secondary)] opacity-50">
+                     {tr('history.to', 'To')}
+                   </span>
+                   <input
+                     type="datetime-local"
+                     value={customRangeEnd}
+                     onChange={(event) => setCustomRangeEnd(event.target.value)}
+                     className="h-11 w-full rounded-2xl border border-[var(--glass-border)] bg-[var(--glass-bg-hover)] px-3 text-sm font-medium text-[var(--text-primary)] outline-none"
+                   />
+                 </label>
+               </div>
+
+               <div className="mt-3 flex flex-wrap items-center gap-2">
+                 <button
+                   type="button"
+                   onClick={applyCustomRange}
+                   className="rounded-2xl border border-[var(--glass-border)] bg-[var(--glass-bg-hover)] px-4 py-2 text-[10px] font-bold uppercase tracking-widest text-[var(--text-primary)]"
+                 >
+                   {tr('history.applyRange', 'Apply range')}
+                 </button>
+                 {historyQuery.mode === 'custom' && (
+                   <span className="rounded-full border border-emerald-400/20 bg-emerald-400/10 px-3 py-1 text-[10px] font-bold uppercase tracking-widest text-emerald-300">
+                     {tr('history.customActive', 'Custom active')}
+                   </span>
+                 )}
+               </div>
+               {rangeError && (
+                 <div className="mt-2 text-xs font-semibold text-rose-300">{rangeError}</div>
+               )}
              </div>
            </div>
+
+           {/* Overlay Sources */}
+           {isNumeric && (
+             <div className="space-y-4">
+               <div>
+                 <h4 className="text-xs font-bold uppercase tracking-widest text-[var(--text-secondary)] mb-4 opacity-40">
+                   {tr('history.overlays', 'Overlay tracks')}
+                 </h4>
+                 <div className="rounded-2xl border border-[var(--glass-border)] bg-[var(--glass-bg)] p-4">
+                   <div className="flex flex-col gap-2">
+                     <input
+                       list={`sensor-overlay-options-${entityId}`}
+                       type="text"
+                       value={overlayInput}
+                       onChange={(event) => setOverlayInput(event.target.value)}
+                       placeholder={tr('history.overlayPlaceholder', 'Add entity ID or name')}
+                       className="h-11 w-full rounded-2xl border border-[var(--glass-border)] bg-[var(--glass-bg-hover)] px-3 text-sm font-medium text-[var(--text-primary)] outline-none"
+                     />
+                     <datalist id={`sensor-overlay-options-${entityId}`}>
+                       {overlayCandidateOptions.map((candidate) => (
+                         <option key={candidate.entityId} value={candidate.entityId}>
+                           {candidate.label}
+                         </option>
+                       ))}
+                     </datalist>
+                     <button
+                       type="button"
+                       onClick={addOverlayEntities}
+                       className="rounded-2xl border border-[var(--glass-border)] bg-[var(--glass-bg-hover)] px-4 py-2 text-[10px] font-bold uppercase tracking-widest text-[var(--text-primary)]"
+                     >
+                       {tr('history.addOverlay', 'Add overlay')}
+                     </button>
+                   </div>
+                   <div className="mt-2 text-[11px] text-[var(--text-secondary)] opacity-70">
+                     {tr('history.overlayHelp', 'Add one or more entity IDs to show extra activity tracks.')}
+                   </div>
+                   {overlayError && (
+                     <div className="mt-2 text-xs font-semibold text-rose-300">{overlayError}</div>
+                   )}
+                 </div>
+               </div>
+
+               {overlaySummary.length > 0 && (
+                 <div className="space-y-2">
+                   {overlaySummary.map((overlay) => (
+                     <div key={overlay.entityId} className="rounded-2xl border border-[var(--glass-border)] bg-[var(--glass-bg)] p-3">
+                       <div className="flex items-start justify-between gap-3">
+                         <button
+                           type="button"
+                           onClick={() => setOverlayVisibility((prev) => ({ ...prev, [overlay.entityId]: !(prev[overlay.entityId] ?? true) }))}
+                           className="flex min-w-0 flex-1 items-start gap-3 text-left"
+                         >
+                           <span className="mt-1 h-2.5 w-2.5 shrink-0 rounded-full" style={{ backgroundColor: overlay.color }} />
+                           <span className="min-w-0">
+                             <span className="block truncate text-sm font-semibold text-[var(--text-primary)]">{overlay.label || overlay.entityId}</span>
+                             <span className="mt-1 block truncate font-mono text-[11px] text-[var(--text-secondary)] opacity-70">{overlay.entityId}</span>
+                           </span>
+                         </button>
+                         <div className="flex items-center gap-2">
+                           <span className={`rounded-full border px-2 py-1 text-[10px] font-bold uppercase tracking-widest ${
+                             overlay.visible
+                               ? 'border-emerald-400/20 bg-emerald-400/10 text-emerald-300'
+                               : 'border-[var(--glass-border)] bg-[var(--glass-bg-hover)] text-[var(--text-secondary)]'
+                           }`}>
+                             {overlay.visible ? tr('common.on', 'On') : tr('common.off', 'Off')}
+                           </span>
+                           {overlay.source === 'manual' && (
+                             <button
+                               type="button"
+                               onClick={() => removeOverlayEntity(overlay.entityId)}
+                               className="grid h-8 w-8 place-items-center rounded-full border border-[var(--glass-border)] bg-[var(--glass-bg-hover)] text-[var(--text-secondary)] transition-colors hover:text-[var(--text-primary)]"
+                               title={tr('history.removeOverlay', 'Remove overlay')}
+                             >
+                               <X className="h-3.5 w-3.5" />
+                             </button>
+                           )}
+                         </div>
+                       </div>
+                     </div>
+                   ))}
+                 </div>
+               )}
+             </div>
+           )}
 
            {/* Attributes */}
            {attributeEntries.length > 0 && (

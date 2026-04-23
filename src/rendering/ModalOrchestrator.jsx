@@ -1133,6 +1133,7 @@ export default function ModalOrchestrator({
             onClose={() => setShowSensorInfoModal(null)}
             entityId={sensorEntityId}
             entity={entities[sensorEntityId]}
+            entities={entities}
             customName={sensorPayload.customName || customNames[sensorEntityId]}
             overlayEntities={Array.isArray(sensorPayload.overlayEntities) ? sensorPayload.overlayEntities : []}
             conn={conn}
