@@ -920,7 +920,7 @@ export default function SensorModal({
       onClick={onClose}
     >
       <div
-        className="border w-full max-w-5xl rounded-3xl md:rounded-[3rem] overflow-hidden flex flex-col lg:grid lg:grid-cols-5 backdrop-blur-xl shadow-2xl popup-anim relative max-h-[90vh] md:h-auto md:min-h-[550px]"
+        className="border w-full max-w-5xl rounded-3xl md:rounded-[3rem] overflow-y-auto lg:overflow-hidden flex flex-col lg:grid lg:grid-cols-5 backdrop-blur-xl shadow-2xl popup-anim relative max-h-[90vh] md:h-auto md:min-h-[550px] lg:h-[90vh]"
         style={{
           background: 'linear-gradient(135deg, var(--card-bg) 0%, var(--modal-bg) 100%)',
           borderColor: 'var(--glass-border)',
@@ -936,7 +936,7 @@ export default function SensorModal({
         </div>
 
         {/* LEFT PANEL: Visuals & Graph (3 cols) */}
-        <div className="lg:col-span-3 relative p-6 md:p-10 flex flex-col overflow-hidden border-b lg:border-b-0 lg:border-r shrink-0" style={{borderColor: 'var(--glass-border)'}}>
+        <div className="lg:col-span-3 relative min-h-0 p-6 md:p-10 flex flex-col overflow-hidden border-b lg:border-b-0 lg:border-r shrink-0" style={{borderColor: 'var(--glass-border)'}}>
            
            {/* Header */}
            <div className="flex items-center gap-4 shrink-0 mb-6">
@@ -1106,7 +1106,7 @@ export default function SensorModal({
         </div>
 
         {/* RIGHT PANEL: Meta & Attributes (2 cols) */}
-        <div className="lg:col-span-2 relative bg-[var(--glass-bg)]/10 p-6 md:p-10 overflow-y-auto flex flex-col gap-10">
+        <div className="lg:col-span-2 relative min-h-0 bg-[var(--glass-bg)]/10 p-6 md:p-10 overflow-y-auto overscroll-contain flex flex-col gap-10 custom-scrollbar">
            
            {/* Timestamps */}
            <div>
