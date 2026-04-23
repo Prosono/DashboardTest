@@ -1082,11 +1082,11 @@ export default function SensorModal({
                                   : t('history.wasState').replace('{state}', stateLabel);
 
                                 return (
-                                <div key={`${event.lastChanged || idx}`} className={`flex items-center gap-4 p-3 rounded-xl transition-colors group border ${isLightTheme ? 'hover:bg-slate-900/[0.035] border-transparent hover:border-slate-300/70' : 'hover:bg-white/5 border-transparent hover:border-white/5'}`}>
+                                <div key={`${event.lastChanged || idx}`} className={`flex items-start gap-3 sm:gap-4 p-3 rounded-xl transition-colors group border ${isLightTheme ? 'hover:bg-slate-900/[0.035] border-transparent hover:border-slate-300/70' : 'hover:bg-white/5 border-transparent hover:border-white/5'}`}>
                                   <div className={`h-2 w-2 rounded-full flex-shrink-0 ${(event.state === 'on' || event.state === 'true' || event.state === 'open' || event.state === 'unlocked' || event.state === 'playing' || event.state > 0) ? 'bg-green-400 opacity-80' : isLightTheme ? 'bg-slate-400 opacity-60' : 'bg-[var(--text-secondary)] opacity-35'}`} />
-                                    <div className="flex-1 min-w-0 flex items-start justify-between gap-4">
+                                    <div className="flex-1 min-w-0 flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
                                         <div className="min-w-0">
-                                          <span className="text-sm font-medium text-[var(--text-primary)] truncate block">
+                                          <span className="block break-words text-sm font-medium text-[var(--text-primary)] sm:truncate">
                                               {logLabel}
                                           </span>
                                           {domain === 'climate' && (climateCurrent !== null || climateTarget !== null) && (
@@ -1104,7 +1104,7 @@ export default function SensorModal({
                                             </span>
                                           )}
                                         </div>
-                                        <span className={`text-xs font-mono transition-opacity whitespace-nowrap group-hover:opacity-100 ${mutedTextClass}`}>
+                                        <span className={`text-xs font-mono transition-opacity break-words sm:whitespace-nowrap group-hover:opacity-100 ${mutedTextClass}`}>
                                             {formatRelativeTime(event.time, t)}
                                         </span>
                                     </div>
@@ -1191,7 +1191,7 @@ export default function SensorModal({
              </div>
 
              <div className={`rounded-2xl border p-4 ${panelSurfaceClass}`}>
-               <div className="flex items-center justify-between gap-3">
+               <div className="flex flex-col items-start gap-3 sm:flex-row sm:items-center sm:justify-between">
                  <div className="min-w-0">
                    <div className={sectionLabelClass}>
                      {tr('history.customRange', 'Custom range')}
@@ -1216,7 +1216,7 @@ export default function SensorModal({
                      type="datetime-local"
                      value={customRangeStart}
                      onChange={(event) => setCustomRangeStart(event.target.value)}
-                     className={`h-11 w-full rounded-2xl border px-3 text-sm font-medium outline-none ${inputSurfaceClass}`}
+                     className={`h-11 w-full min-w-0 rounded-2xl border px-3 text-[13px] sm:text-sm font-medium outline-none ${inputSurfaceClass}`}
                    />
                  </label>
                  <label className="min-w-0">
@@ -1227,7 +1227,7 @@ export default function SensorModal({
                      type="datetime-local"
                      value={customRangeEnd}
                      onChange={(event) => setCustomRangeEnd(event.target.value)}
-                     className={`h-11 w-full rounded-2xl border px-3 text-sm font-medium outline-none ${inputSurfaceClass}`}
+                     className={`h-11 w-full min-w-0 rounded-2xl border px-3 text-[13px] sm:text-sm font-medium outline-none ${inputSurfaceClass}`}
                    />
                  </label>
                </div>

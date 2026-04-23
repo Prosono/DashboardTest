@@ -419,7 +419,7 @@ export default function SensorHistoryGraph({
               x={tooltipData.boxX + 10}
               y={tooltipData.boxY + 15}
               className="text-[9px] fill-current font-mono tracking-tight"
-              style={{ fill: isLightTheme ? 'rgba(226,232,240,0.92)' : 'var(--text-secondary)' }}
+              style={{ fill: 'rgba(226,232,240,0.86)' }}
             >
               {tooltipData.timeLabel}
             </text>
@@ -427,7 +427,7 @@ export default function SensorHistoryGraph({
               x={tooltipData.boxX + 10}
               y={tooltipData.boxY + 31}
               className="text-[14px] fill-current font-semibold tracking-tight"
-              style={{ fill: 'var(--text-primary)' }}
+              style={{ fill: 'rgba(248,250,252,0.98)' }}
             >
               {tooltipData.valueLabel}
             </text>
