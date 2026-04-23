@@ -70,10 +70,15 @@ export default function SensorHistoryGraph({
 }) {
   const safeData = Array.isArray(data) ? data : [];
   const [hoverIndex, setHoverIndex] = useState(null);
+  const isLightTheme = typeof document !== 'undefined' && document.documentElement?.dataset?.theme === 'light';
+  const viewportWidth = typeof window !== 'undefined' ? window.innerWidth : 1024;
 
   if (safeData.length === 0) {
     return (
-      <div className="h-[200px] flex items-center justify-center text-gray-500 text-sm">
+      <div
+        className="h-[200px] flex items-center justify-center text-sm"
+        style={{ color: isLightTheme ? 'rgba(71, 85, 105, 0.86)' : 'rgba(148, 163, 184, 0.8)' }}
+      >
         {noDataLabel}
       </div>
     );
@@ -141,20 +146,24 @@ export default function SensorHistoryGraph({
   ];
 
   const xLabels = [];
-  const labelCount = 5;
+  const labelCount = viewportWidth < 480 ? 3 : (viewportWidth < 768 ? 4 : 5);
+  const axisLabelFill = isLightTheme ? 'rgba(51,65,85,0.88)' : 'var(--text-secondary)';
+  const axisLabelOpacity = isLightTheme ? 0.92 : 0.6;
+  const gridStroke = isLightTheme ? 'rgba(100,116,139,0.16)' : 'currentColor';
+  const gridStrokeOpacity = isLightTheme ? 1 : 0.05;
   for (let i = 0; i < labelCount; i += 1) {
     const fraction = i / (labelCount - 1);
-      const x = padding.left + (fraction * graphWidth);
-      let label = '';
-      if (hasTimeScale) {
-        const ts = startMs + ((endMs - startMs) * fraction);
-        label = formatXLabel ? formatXLabel(new Date(ts)) : new Date(ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-      } else {
-        const index = Math.round(fraction * (safeData.length - 1));
-        const point = safeData[index];
-        label = point
-          ? (formatXLabel ? formatXLabel(new Date(point.time)) : new Date(point.time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }))
-          : '';
+    const x = padding.left + (fraction * graphWidth);
+    let label = '';
+    if (hasTimeScale) {
+      const ts = startMs + ((endMs - startMs) * fraction);
+      label = formatXLabel ? formatXLabel(new Date(ts)) : new Date(ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    } else {
+      const index = Math.round(fraction * (safeData.length - 1));
+      const point = safeData[index];
+      label = point
+        ? (formatXLabel ? formatXLabel(new Date(point.time)) : new Date(point.time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }))
+        : '';
     }
     const anchor = i === 0 ? 'start' : (i === labelCount - 1 ? 'end' : 'middle');
     xLabels.push({ x, label, anchor });
@@ -281,8 +290,8 @@ export default function SensorHistoryGraph({
             y1={label.y}
             x2={width - padding.right}
             y2={label.y}
-            stroke="currentColor"
-            strokeOpacity="0.05"
+            stroke={gridStroke}
+            strokeOpacity={gridStrokeOpacity}
             strokeDasharray="4 4"
           />
         ))}
@@ -410,7 +419,7 @@ export default function SensorHistoryGraph({
               x={tooltipData.boxX + 10}
               y={tooltipData.boxY + 15}
               className="text-[9px] fill-current font-mono tracking-tight"
-              style={{ fill: 'var(--text-secondary)' }}
+              style={{ fill: isLightTheme ? 'rgba(226,232,240,0.92)' : 'var(--text-secondary)' }}
             >
               {tooltipData.timeLabel}
             </text>
@@ -433,7 +442,7 @@ export default function SensorHistoryGraph({
             textAnchor="end"
             dominantBaseline="middle"
             className="text-[10px] fill-current opacity-60 font-mono tracking-tighter"
-            style={{ fill: 'var(--text-secondary)' }}
+            style={{ fill: axisLabelFill, opacity: axisLabelOpacity }}
           >
             {label.value.toFixed(1)}
           </text>
@@ -446,7 +455,7 @@ export default function SensorHistoryGraph({
             y={height - 5}
             textAnchor={label.anchor}
             className="text-[10px] fill-current opacity-60 font-mono tracking-tighter"
-            style={{ fill: 'var(--text-secondary)' }}
+            style={{ fill: axisLabelFill, opacity: axisLabelOpacity }}
           >
             {label.label}
           </text>

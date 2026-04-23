@@ -112,6 +112,7 @@ export default function SensorModal({
   t = (key) => key,
 }) {
   const tr = useMemo(() => makeTr(t), [t]);
+  const isLightTheme = typeof document !== 'undefined' && document.documentElement?.dataset?.theme === 'light';
   const [history, setHistory] = useState([]);
   const [historyEvents, setHistoryEvents] = useState([]);
   const [overlayHistory, setOverlayHistory] = useState([]);
@@ -759,6 +760,40 @@ export default function SensorModal({
   };
 
   const activeRangeSummary = `${timeWindow.start.toLocaleString()} - ${timeWindow.end.toLocaleString()}`;
+  const isCompactViewport = typeof window !== 'undefined' && window.innerWidth < 768;
+  const historyGraphHeight = isCompactViewport ? 300 : 350;
+  const modalSurfaceStyle = isLightTheme
+    ? {
+      background: 'linear-gradient(180deg, rgba(248,250,252,0.98) 0%, rgba(241,245,249,0.98) 100%)',
+      borderColor: 'rgba(148,163,184,0.45)',
+      color: 'var(--text-primary)',
+    }
+    : {
+      background: 'linear-gradient(135deg, var(--card-bg) 0%, var(--modal-bg) 100%)',
+      borderColor: 'var(--glass-border)',
+      color: 'var(--text-primary)',
+    };
+  const panelBorderStyle = { borderColor: isLightTheme ? 'rgba(148,163,184,0.35)' : 'var(--glass-border)' };
+  const rightPanelStyle = isLightTheme
+    ? { background: 'linear-gradient(180deg, rgba(255,255,255,0.72) 0%, rgba(248,250,252,0.96) 100%)' }
+    : {};
+  const sectionHeadingClass = `text-xs font-bold uppercase tracking-widest ${isLightTheme ? 'text-slate-600' : 'text-[var(--text-secondary)] opacity-40'}`;
+  const sectionLabelClass = `text-[10px] font-bold uppercase tracking-wider ${isLightTheme ? 'text-slate-500' : 'text-[var(--text-secondary)] opacity-50'}`;
+  const secondaryTextClass = isLightTheme ? 'text-slate-700' : 'text-[var(--text-secondary)]';
+  const mutedTextClass = isLightTheme ? 'text-slate-500' : 'text-[var(--text-secondary)] opacity-70';
+  const faintTextClass = isLightTheme ? 'text-slate-500/90' : 'text-[var(--text-secondary)] opacity-65';
+  const pillSurfaceClass = isLightTheme
+    ? 'bg-white/90 border-slate-300/80 text-slate-700 shadow-[0_10px_30px_rgba(148,163,184,0.12)]'
+    : 'bg-[var(--glass-bg)] border-[var(--glass-border)] text-[var(--text-secondary)]';
+  const panelSurfaceClass = isLightTheme
+    ? 'border-slate-300/80 bg-white/88 shadow-[0_18px_48px_rgba(148,163,184,0.16)]'
+    : 'border-[var(--glass-border)] bg-[var(--glass-bg)]';
+  const inputSurfaceClass = isLightTheme
+    ? 'border-slate-300/90 bg-white text-slate-900 placeholder:text-slate-400 shadow-[inset_0_1px_0_rgba(255,255,255,0.7),0_10px_24px_rgba(148,163,184,0.12)] [color-scheme:light]'
+    : 'border-[var(--glass-border)] bg-[var(--glass-bg-hover)] text-[var(--text-primary)]';
+  const actionButtonClass = isLightTheme
+    ? 'border-slate-300/90 bg-white text-slate-800 shadow-[0_10px_22px_rgba(148,163,184,0.14)] hover:bg-slate-50'
+    : 'border-[var(--glass-border)] bg-[var(--glass-bg-hover)] text-[var(--text-primary)]';
 
   const lastChanged = entityData.last_changed ? new Date(entityData.last_changed).toLocaleString() : '--';
   const lastUpdated = entityData.last_updated ? new Date(entityData.last_updated).toLocaleString() : '--';
@@ -858,17 +893,13 @@ export default function SensorModal({
       : 'border-red-500/20 bg-red-500/10';
     return (
       <div
-        className="fixed inset-0 z-[150] flex items-center justify-center p-4 md:p-6"
+        className="fixed inset-0 z-[150] flex items-center justify-center p-3 sm:p-4 md:p-6"
         style={{ backdropFilter: 'blur(20px)', backgroundColor: 'rgba(0,0,0,0.3)' }}
         onClick={onClose}
       >
         <div
           className="border w-full max-w-3xl rounded-3xl md:rounded-[2.5rem] overflow-hidden flex flex-col backdrop-blur-xl shadow-2xl popup-anim relative max-h-[88vh]"
-          style={{
-            background: 'linear-gradient(135deg, var(--card-bg) 0%, var(--modal-bg) 100%)',
-            borderColor: 'var(--glass-border)',
-            color: 'var(--text-primary)'
-          }}
+          style={modalSurfaceStyle}
           onClick={(e) => e.stopPropagation()}
         >
           <div className="absolute top-4 right-4 md:top-6 md:right-6 z-50">
@@ -877,7 +908,7 @@ export default function SensorModal({
             </button>
           </div>
 
-          <div className="p-6 md:p-8 border-b border-[var(--glass-border)]">
+          <div className="p-5 sm:p-6 md:p-8 border-b" style={panelBorderStyle}>
             <div className="flex items-center gap-3 mb-2">
               <div className="p-3 rounded-xl bg-red-500/20 text-red-400">
                 <AlertTriangle className="w-5 h-5" />
@@ -886,14 +917,14 @@ export default function SensorModal({
                 {t('warnings.title') === 'warnings.title' ? title : t('warnings.title')}
               </h2>
             </div>
-            <p className="text-xs uppercase tracking-widest font-bold text-[var(--text-secondary)]">
+            <p className={`text-xs uppercase tracking-widest font-bold ${secondaryTextClass}`}>
               {warningLines.length} varsler
             </p>
           </div>
 
           <div className="p-4 md:p-6 overflow-y-auto custom-scrollbar space-y-2">
             {warningLines.length === 0 && (
-              <div className="rounded-2xl border border-emerald-500/25 bg-emerald-500/10 px-4 py-3 text-emerald-300 text-sm font-medium">
+              <div className={`rounded-2xl border border-emerald-500/25 bg-emerald-500/10 px-4 py-3 text-sm font-medium ${isLightTheme ? 'text-emerald-700' : 'text-emerald-300'}`}>
                 {t('warnings.none') === 'warnings.none' ? 'Ingen aktive varsler.' : t('warnings.none')}
               </div>
             )}
@@ -905,7 +936,7 @@ export default function SensorModal({
             ))}
           </div>
 
-          <div className="px-6 pb-5 pt-2 text-center text-[11px] text-[var(--text-secondary)] font-mono opacity-60">
+          <div className={`px-6 pb-5 pt-2 text-center text-[11px] font-mono ${faintTextClass}`}>
             {entityId}
           </div>
         </div>
@@ -915,33 +946,29 @@ export default function SensorModal({
 
   return (
     <div
-      className="fixed inset-0 z-[150] flex items-center justify-center p-4 md:p-6"
+      className="fixed inset-0 z-[150] flex items-center justify-center p-3 sm:p-4 md:p-6"
       style={{ backdropFilter: 'blur(20px)', backgroundColor: 'rgba(0,0,0,0.3)' }}
       onClick={onClose}
     >
       <div
-        className="border w-full max-w-5xl rounded-3xl md:rounded-[3rem] overflow-y-auto lg:overflow-hidden flex flex-col lg:grid lg:grid-cols-5 backdrop-blur-xl shadow-2xl popup-anim relative max-h-[90vh] md:h-auto md:min-h-[550px] lg:h-[90vh]"
-        style={{
-          background: 'linear-gradient(135deg, var(--card-bg) 0%, var(--modal-bg) 100%)',
-          borderColor: 'var(--glass-border)',
-          color: 'var(--text-primary)'
-        }}
+        className="border w-full max-w-5xl rounded-[2rem] sm:rounded-3xl md:rounded-[3rem] overflow-y-auto lg:overflow-hidden flex flex-col lg:grid lg:grid-cols-5 backdrop-blur-xl shadow-2xl popup-anim relative max-h-[92vh] md:h-auto md:min-h-[550px] lg:h-[90vh]"
+        style={modalSurfaceStyle}
         onClick={(e) => e.stopPropagation()}
       >
         {/* Close Button */}
-        <div className="absolute top-6 right-6 md:top-10 md:right-10 z-50">
+        <div className="absolute top-4 right-4 sm:top-6 sm:right-6 md:top-10 md:right-10 z-50">
           <button onClick={onClose} className="modal-close">
             <X className="w-4 h-4" />
           </button>
         </div>
 
         {/* LEFT PANEL: Visuals & Graph (3 cols) */}
-        <div className="lg:col-span-3 relative min-h-0 p-6 md:p-10 flex flex-col overflow-hidden border-b lg:border-b-0 lg:border-r shrink-0" style={{borderColor: 'var(--glass-border)'}}>
+        <div className="lg:col-span-3 relative min-h-0 p-5 sm:p-6 md:p-10 flex flex-col overflow-hidden border-b lg:border-b-0 lg:border-r shrink-0" style={panelBorderStyle}>
            
            {/* Header */}
-           <div className="flex items-center gap-4 shrink-0 mb-6">
+           <div className="flex items-center gap-3 sm:gap-4 shrink-0 mb-5 sm:mb-6 pr-12">
              <div
-               className="p-4 rounded-2xl transition-all duration-500"
+               className="p-3 sm:p-4 rounded-2xl transition-all duration-500 shrink-0"
                style={{
                  backgroundColor: entity.state === 'unavailable' ? 'rgba(239, 68, 68, 0.2)' : 'rgba(59, 130, 246, 0.2)',
                  color: entity.state === 'unavailable' ? '#ef4444' : '#60a5fa'
@@ -953,9 +980,9 @@ export default function SensorModal({
                <h2 className="text-lg sm:text-xl md:text-2xl font-light tracking-tight text-[var(--text-primary)] uppercase italic leading-tight break-words">
                  {name}
                </h2>
-                 <div className={`mt-2 px-3 py-1 rounded-full border inline-flex items-center gap-2 ${entity.state === 'unavailable' ? 'bg-red-500/10 border-red-500/20 text-red-500' : 'bg-[var(--glass-bg)] border-[var(--glass-border)] text-[var(--text-secondary)]'}`}>
+                 <div className={`mt-2 max-w-full px-3 py-1 rounded-full border inline-flex items-center gap-2 ${entity.state === 'unavailable' ? 'bg-red-500/10 border-red-500/20 text-red-500' : pillSurfaceClass}`}>
                  <div className={`w-1.5 h-1.5 rounded-full ${entity.state === 'unavailable' ? 'bg-red-500' : 'bg-green-400 shadow-[0_0_6px_rgba(74,222,128,0.5)]'}`} />
-                 <span className="text-[10px] font-bold uppercase tracking-widest leading-none pt-[1px]">
+                 <span className="text-[10px] font-bold uppercase tracking-widest leading-none pt-[1px] truncate">
                    {String(displayState)} {unit}
                  </span>
                </div>
@@ -966,7 +993,7 @@ export default function SensorModal({
            <div className="flex-1 flex flex-col min-h-0 relative">
               {isNumeric && overlayHistory.length > 0 && (
                 <div className="mb-4 flex flex-wrap gap-2">
-                  <span className="inline-flex items-center gap-2 px-2.5 py-1 rounded-full border text-[10px] font-bold uppercase tracking-widest bg-[var(--glass-bg)] border-[var(--glass-border)] text-[var(--text-secondary)]">
+                  <span className={`inline-flex items-center gap-2 px-2.5 py-1 rounded-full border text-[10px] font-bold uppercase tracking-widest ${pillSurfaceClass}`}>
                     <span className="w-2 h-2 rounded-full bg-[var(--text-primary)] opacity-80" />
                     {t('sensorInfo.temperature') === 'sensorInfo.temperature' ? 'Temperatur' : t('sensorInfo.temperature')}
                   </span>
@@ -979,10 +1006,12 @@ export default function SensorModal({
                         if (!key) return;
                         setOverlayVisibility((prev) => ({ ...prev, [key]: !(prev[key] ?? true) }));
                       }}
-                      className={`inline-flex items-center gap-2 px-2.5 py-1 rounded-full border text-[10px] font-bold uppercase tracking-widest transition-all ${
+                      className={`inline-flex max-w-full items-center gap-2 px-2.5 py-1 rounded-full border text-[10px] font-bold uppercase tracking-widest transition-all ${
                         overlayVisibility[overlay.entityId] !== false
-                          ? 'bg-[var(--glass-bg)] border-[var(--glass-border)] text-[var(--text-secondary)]'
-                          : 'bg-transparent border-[var(--glass-border)] text-[var(--text-secondary)] opacity-45'
+                          ? pillSurfaceClass
+                          : isLightTheme
+                            ? 'bg-transparent border-slate-300/80 text-slate-500 opacity-65'
+                            : 'bg-transparent border-[var(--glass-border)] text-[var(--text-secondary)] opacity-45'
                       }`}
                       aria-pressed={overlayVisibility[overlay.entityId] !== false}
                       title={overlayVisibility[overlay.entityId] !== false ? 'Skjul' : 'Vis'}
@@ -991,19 +1020,19 @@ export default function SensorModal({
                         className="w-2 h-2 rounded-full"
                         style={{ backgroundColor: overlay.color || '#60a5fa' }}
                       />
-                      {overlay.label}
+                      <span className="truncate">{overlay.label}</span>
                     </button>
                   ))}
                 </div>
               )}
               {isNumeric && !hasActivity ? (
-                <div className="h-full w-full min-h-[250px] relative">
-                    <div className="-ml-4 -mr-4 md:mr-0 h-full">
+                <div className="h-full w-full min-h-[240px] sm:min-h-[250px] relative">
+                    <div className="-ml-3 -mr-3 sm:-ml-4 sm:-mr-4 md:mr-0 h-full">
                       <SensorHistoryGraph
                         data={history}
                         variant={historyChartVariant}
                         overlays={visibleOverlays}
-                        height={350}
+                        height={historyGraphHeight}
                         noDataLabel={t('sensorInfo.noHistory')}
                         strokeColor="var(--text-primary)"
                         areaColor="var(--text-primary)"
@@ -1026,15 +1055,15 @@ export default function SensorModal({
                    
                    {hasActivity && (
                      <>
-                        <h4 className="text-xs font-bold uppercase tracking-widest text-[var(--text-secondary)] opacity-80 mb-4 bg-transparent">{t('history.activity')}</h4> 
+                        <h4 className={`${sectionHeadingClass} mb-4 bg-transparent`}>{t('history.activity')}</h4> 
                         <div className="mb-6">
                            <BinaryTimeline events={historyEvents} startTime={timeWindow.start} endTime={timeWindow.end} formatLabel={formatHistoryAxisLabel} />
                         </div>
                         
-                        <h4 className="text-xs font-bold uppercase tracking-widest text-[var(--text-secondary)] opacity-80 mb-4 bg-transparent shadow-sm pb-2 border-b border-[var(--glass-border)]">{t('history.log')}</h4>
+                        <h4 className={`${sectionHeadingClass} mb-4 bg-transparent shadow-sm pb-2 border-b`} style={panelBorderStyle}>{t('history.log')}</h4>
                         <div className="space-y-1 max-h-64 overflow-y-auto pr-2 custom-scrollbar">
                             {recentEvents.length === 0 && (
-                                <div className="text-sm text-[var(--text-secondary)] italic opacity-60 py-8 text-center">{t('sensorInfo.noHistory')}</div>
+                                <div className={`text-sm italic py-8 text-center ${faintTextClass}`}>{t('sensorInfo.noHistory')}</div>
                             )}
                             {recentEvents.map((event, idx) => {
                                 let stateLabel = formatStateLabel(event.state, deviceClass);
@@ -1053,15 +1082,15 @@ export default function SensorModal({
                                   : t('history.wasState').replace('{state}', stateLabel);
 
                                 return (
-                                <div key={`${event.lastChanged || idx}`} className="flex items-center gap-4 p-3 rounded-xl transition-colors hover:bg-white/5 group border border-transparent hover:border-white/5">
-                                  <div className={`h-2 w-2 rounded-full flex-shrink-0 ${(event.state === 'on' || event.state === 'true' || event.state === 'open' || event.state === 'unlocked' || event.state === 'playing' || event.state > 0) ? 'bg-green-400 opacity-80' : 'bg-[var(--text-secondary)] opacity-35'}`} />
+                                <div key={`${event.lastChanged || idx}`} className={`flex items-center gap-4 p-3 rounded-xl transition-colors group border ${isLightTheme ? 'hover:bg-slate-900/[0.035] border-transparent hover:border-slate-300/70' : 'hover:bg-white/5 border-transparent hover:border-white/5'}`}>
+                                  <div className={`h-2 w-2 rounded-full flex-shrink-0 ${(event.state === 'on' || event.state === 'true' || event.state === 'open' || event.state === 'unlocked' || event.state === 'playing' || event.state > 0) ? 'bg-green-400 opacity-80' : isLightTheme ? 'bg-slate-400 opacity-60' : 'bg-[var(--text-secondary)] opacity-35'}`} />
                                     <div className="flex-1 min-w-0 flex items-start justify-between gap-4">
                                         <div className="min-w-0">
                                           <span className="text-sm font-medium text-[var(--text-primary)] truncate block">
                                               {logLabel}
                                           </span>
                                           {domain === 'climate' && (climateCurrent !== null || climateTarget !== null) && (
-                                            <span className="mt-1 text-[10px] uppercase tracking-widest text-[var(--text-secondary)] inline-flex flex-wrap gap-2">
+                                            <span className={`mt-1 text-[10px] uppercase tracking-widest inline-flex flex-wrap gap-2 ${secondaryTextClass}`}>
                                               {climateCurrent !== null && (
                                                 <span>
                                                   {(t('climate.current') === 'climate.current' ? 'Current' : t('climate.current'))}: {climateCurrent.toFixed(1)}°C
@@ -1075,7 +1104,7 @@ export default function SensorModal({
                                             </span>
                                           )}
                                         </div>
-                                        <span className="text-xs font-mono text-[var(--text-secondary)] opacity-70 group-hover:opacity-100 transition-opacity whitespace-nowrap">
+                                        <span className={`text-xs font-mono transition-opacity whitespace-nowrap group-hover:opacity-100 ${mutedTextClass}`}>
                                             {formatRelativeTime(event.time, t)}
                                         </span>
                                     </div>
@@ -1087,12 +1116,12 @@ export default function SensorModal({
                    )}
                    
                    {!loading && !hasActivity && isNumeric && (
-                     <div className="-ml-4 -mr-4 md:mr-0 h-full">
+                     <div className="-ml-3 -mr-3 sm:-ml-4 sm:-mr-4 md:mr-0 h-full">
                         <SensorHistoryGraph
                           data={history}
                           variant={historyChartVariant}
                           overlays={visibleOverlays}
-                          height={350}
+                          height={historyGraphHeight}
                           noDataLabel={t('sensorInfo.noHistory')}
                           strokeColor="var(--text-primary)"
                           areaColor="var(--text-primary)"
@@ -1106,20 +1135,20 @@ export default function SensorModal({
         </div>
 
         {/* RIGHT PANEL: Meta & Attributes (2 cols) */}
-        <div className="lg:col-span-2 relative min-h-0 bg-[var(--glass-bg)]/10 p-6 md:p-10 overflow-y-auto overscroll-contain flex flex-col gap-10 custom-scrollbar">
+        <div className="lg:col-span-2 relative min-h-0 p-5 sm:p-6 md:p-10 overflow-y-auto overscroll-contain flex flex-col gap-6 sm:gap-8 md:gap-10 custom-scrollbar" style={rightPanelStyle}>
            
            {/* Timestamps */}
            <div>
-               <h4 className="text-xs font-bold uppercase tracking-widest text-[var(--text-secondary)] mb-6 opacity-40">{t('sensorInfo.timeline')}</h4>
+               <h4 className={`${sectionHeadingClass} mb-5 sm:mb-6`}>{t('sensorInfo.timeline')}</h4>
                <div className="space-y-6">
-                  <div className="relative pl-4 border-l border-[var(--glass-border)]">
+                  <div className="relative pl-4 border-l" style={panelBorderStyle}>
                       <div className="absolute -left-[3px] top-1.5 w-1.5 h-1.5 rounded-full bg-blue-400"></div>
-                      <p className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-secondary)] opacity-50 mb-0.5">{t('sensorInfo.lastChanged')}</p>
+                      <p className={`${sectionLabelClass} mb-0.5`}>{t('sensorInfo.lastChanged')}</p>
                       <p className="text-sm font-medium text-[var(--text-primary)]">{lastChanged}</p>
                   </div>
-                  <div className="relative pl-4 border-l border-[var(--glass-border)]">
+                  <div className="relative pl-4 border-l" style={panelBorderStyle}>
                       <div className="absolute -left-[3px] top-1.5 w-1.5 h-1.5 rounded-full bg-purple-400"></div>
-                      <p className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-secondary)] opacity-50 mb-0.5">{t('sensorInfo.lastUpdated')}</p>
+                      <p className={`${sectionLabelClass} mb-0.5`}>{t('sensorInfo.lastUpdated')}</p>
                       <p className="text-sm font-medium text-[var(--text-primary)]">{lastUpdated}</p>
                   </div>
                </div>
@@ -1128,7 +1157,7 @@ export default function SensorModal({
            {/* History Window */}
            <div className="space-y-4">
              <div>
-               <h4 className="text-xs font-bold uppercase tracking-widest text-[var(--text-secondary)] mb-4 opacity-40">
+               <h4 className={`${sectionHeadingClass} mb-4`}>
                  {tr('history.window', 'History window')}
                </h4>
                <div className="-mx-1 overflow-x-auto pb-2 pl-1 pr-1 custom-scrollbar">
@@ -1142,8 +1171,12 @@ export default function SensorModal({
                          onClick={() => applyPresetRange(hours)}
                          className={`shrink-0 px-3 py-2 rounded-full text-[10px] font-bold uppercase tracking-widest border transition-all ${
                            active
-                             ? 'bg-[var(--glass-bg-hover)] text-[var(--text-primary)] border-[var(--glass-border)] shadow-[0_0_0_1px_rgba(255,255,255,0.04)]'
-                             : 'bg-[var(--glass-bg)] text-[var(--text-secondary)] border-transparent hover:bg-[var(--glass-bg-hover)] hover:text-[var(--text-primary)]'
+                             ? isLightTheme
+                               ? 'bg-slate-900 text-white border-slate-900 shadow-[0_10px_20px_rgba(15,23,42,0.16)]'
+                               : 'bg-[var(--glass-bg-hover)] text-[var(--text-primary)] border-[var(--glass-border)] shadow-[0_0_0_1px_rgba(255,255,255,0.04)]'
+                             : isLightTheme
+                               ? 'bg-white/90 text-slate-600 border-slate-300/80 hover:bg-white hover:text-slate-900'
+                               : 'bg-[var(--glass-bg)] text-[var(--text-secondary)] border-transparent hover:bg-[var(--glass-bg-hover)] hover:text-[var(--text-primary)]'
                          }`}
                        >
                          {formatPresetHistoryLabel(hours)}
@@ -1152,23 +1185,23 @@ export default function SensorModal({
                    })}
                  </div>
                </div>
-               <div className="mt-2 text-[11px] text-[var(--text-secondary)] opacity-65">
+               <div className={`mt-2 text-[11px] ${faintTextClass}`}>
                  {tr('history.presetHint', 'Tap a preset to update the chart immediately.')}
                </div>
              </div>
 
-             <div className="rounded-2xl border border-[var(--glass-border)] bg-[var(--glass-bg)] p-4">
+             <div className={`rounded-2xl border p-4 ${panelSurfaceClass}`}>
                <div className="flex items-center justify-between gap-3">
                  <div className="min-w-0">
-                   <div className="text-[10px] font-bold uppercase tracking-widest text-[var(--text-secondary)] opacity-60">
+                   <div className={sectionLabelClass}>
                      {tr('history.customRange', 'Custom range')}
                    </div>
-                   <div className="mt-1 text-xs text-[var(--text-secondary)]">{activeRangeSummary}</div>
+                   <div className={`mt-1 text-xs leading-relaxed break-words ${secondaryTextClass}`}>{activeRangeSummary}</div>
                  </div>
                  <button
                    type="button"
                    onClick={setCustomRangeToNow}
-                   className="shrink-0 rounded-full border border-[var(--glass-border)] bg-[var(--glass-bg-hover)] px-3 py-1.5 text-[10px] font-bold uppercase tracking-widest text-[var(--text-primary)]"
+                   className={`shrink-0 rounded-full border px-3 py-1.5 text-[10px] font-bold uppercase tracking-widest ${actionButtonClass}`}
                  >
                    {tr('history.now', 'Now')}
                  </button>
@@ -1176,25 +1209,25 @@ export default function SensorModal({
 
                <div className="mt-4 grid grid-cols-1 gap-3">
                  <label className="min-w-0">
-                   <span className="mb-1 block text-[10px] font-bold uppercase tracking-widest text-[var(--text-secondary)] opacity-50">
+                   <span className={`mb-1 block ${sectionLabelClass}`}>
                      {tr('history.from', 'From')}
                    </span>
                    <input
                      type="datetime-local"
                      value={customRangeStart}
                      onChange={(event) => setCustomRangeStart(event.target.value)}
-                     className="h-11 w-full rounded-2xl border border-[var(--glass-border)] bg-[var(--glass-bg-hover)] px-3 text-sm font-medium text-[var(--text-primary)] outline-none"
+                     className={`h-11 w-full rounded-2xl border px-3 text-sm font-medium outline-none ${inputSurfaceClass}`}
                    />
                  </label>
                  <label className="min-w-0">
-                   <span className="mb-1 block text-[10px] font-bold uppercase tracking-widest text-[var(--text-secondary)] opacity-50">
+                   <span className={`mb-1 block ${sectionLabelClass}`}>
                      {tr('history.to', 'To')}
                    </span>
                    <input
                      type="datetime-local"
                      value={customRangeEnd}
                      onChange={(event) => setCustomRangeEnd(event.target.value)}
-                     className="h-11 w-full rounded-2xl border border-[var(--glass-border)] bg-[var(--glass-bg-hover)] px-3 text-sm font-medium text-[var(--text-primary)] outline-none"
+                     className={`h-11 w-full rounded-2xl border px-3 text-sm font-medium outline-none ${inputSurfaceClass}`}
                    />
                  </label>
                </div>
@@ -1203,21 +1236,21 @@ export default function SensorModal({
                  <button
                    type="button"
                    onClick={applyCustomRange}
-                   className="rounded-2xl border border-[var(--glass-border)] bg-[var(--glass-bg-hover)] px-4 py-2 text-[10px] font-bold uppercase tracking-widest text-[var(--text-primary)]"
+                   className={`rounded-2xl border px-4 py-2 text-[10px] font-bold uppercase tracking-widest ${actionButtonClass}`}
                  >
                    {tr('history.applyRange', 'Apply range')}
                  </button>
                  {historyQuery.mode === 'custom' && (
-                   <span className="rounded-full border border-emerald-400/20 bg-emerald-400/10 px-3 py-1 text-[10px] font-bold uppercase tracking-widest text-emerald-300">
+                   <span className={`rounded-full border border-emerald-400/20 bg-emerald-400/10 px-3 py-1 text-[10px] font-bold uppercase tracking-widest ${isLightTheme ? 'text-emerald-700' : 'text-emerald-300'}`}>
                      {tr('history.customActive', 'Custom active')}
                    </span>
                  )}
                </div>
-               <div className="mt-2 text-[11px] text-[var(--text-secondary)] opacity-65">
+               <div className={`mt-2 text-[11px] ${faintTextClass}`}>
                  {tr('history.customHint', 'Use Apply range only after changing date or time.')}
                </div>
                {rangeError && (
-                 <div className="mt-2 text-xs font-semibold text-rose-300">{rangeError}</div>
+                 <div className={`mt-2 text-xs font-semibold ${isLightTheme ? 'text-rose-700' : 'text-rose-300'}`}>{rangeError}</div>
                )}
              </div>
            </div>
@@ -1226,10 +1259,10 @@ export default function SensorModal({
            {isNumeric && (
              <div className="space-y-4">
                <div>
-                 <h4 className="text-xs font-bold uppercase tracking-widest text-[var(--text-secondary)] mb-4 opacity-40">
+                 <h4 className={`${sectionHeadingClass} mb-4`}>
                    {tr('history.overlays', 'Overlay tracks')}
                  </h4>
-                 <div className="rounded-2xl border border-[var(--glass-border)] bg-[var(--glass-bg)] p-4">
+                 <div className={`rounded-2xl border p-4 ${panelSurfaceClass}`}>
                    <div className="flex flex-col gap-2">
                      <input
                        list={`sensor-overlay-options-${entityId}`}
@@ -1237,7 +1270,7 @@ export default function SensorModal({
                        value={overlayInput}
                        onChange={(event) => setOverlayInput(event.target.value)}
                        placeholder={tr('history.overlayPlaceholder', 'Add entity ID or name')}
-                       className="h-11 w-full rounded-2xl border border-[var(--glass-border)] bg-[var(--glass-bg-hover)] px-3 text-sm font-medium text-[var(--text-primary)] outline-none"
+                       className={`h-11 w-full rounded-2xl border px-3 text-sm font-medium outline-none ${inputSurfaceClass}`}
                      />
                      <datalist id={`sensor-overlay-options-${entityId}`}>
                        {overlayCandidateOptions.map((candidate) => (
@@ -1249,12 +1282,12 @@ export default function SensorModal({
                      <button
                        type="button"
                        onClick={addOverlayEntities}
-                       className="rounded-2xl border border-[var(--glass-border)] bg-[var(--glass-bg-hover)] px-4 py-2 text-[10px] font-bold uppercase tracking-widest text-[var(--text-primary)]"
+                       className={`rounded-2xl border px-4 py-2 text-[10px] font-bold uppercase tracking-widest ${actionButtonClass}`}
                      >
                        {tr('history.addOverlay', 'Add overlay')}
                      </button>
                    </div>
-                   <div className="mt-2 text-[11px] text-[var(--text-secondary)] opacity-70">
+                   <div className={`mt-2 text-[11px] ${mutedTextClass}`}>
                      {tr('history.overlayHelp', 'Add one or more entity IDs to show extra activity tracks.')}
                    </div>
                    {overlayError && (
@@ -1266,7 +1299,7 @@ export default function SensorModal({
                {overlaySummary.length > 0 && (
                  <div className="space-y-2">
                    {overlaySummary.map((overlay) => (
-                     <div key={overlay.entityId} className="rounded-2xl border border-[var(--glass-border)] bg-[var(--glass-bg)] p-3">
+                     <div key={overlay.entityId} className={`rounded-2xl border p-3 ${panelSurfaceClass}`}>
                        <div className="flex items-start justify-between gap-3">
                          <button
                            type="button"
@@ -1276,14 +1309,18 @@ export default function SensorModal({
                            <span className="mt-1 h-2.5 w-2.5 shrink-0 rounded-full" style={{ backgroundColor: overlay.color }} />
                            <span className="min-w-0">
                              <span className="block truncate text-sm font-semibold text-[var(--text-primary)]">{overlay.label || overlay.entityId}</span>
-                             <span className="mt-1 block truncate font-mono text-[11px] text-[var(--text-secondary)] opacity-70">{overlay.entityId}</span>
+                             <span className={`mt-1 block truncate font-mono text-[11px] ${mutedTextClass}`}>{overlay.entityId}</span>
                            </span>
                          </button>
                          <div className="flex items-center gap-2">
                            <span className={`rounded-full border px-2 py-1 text-[10px] font-bold uppercase tracking-widest ${
                              overlay.visible
-                               ? 'border-emerald-400/20 bg-emerald-400/10 text-emerald-300'
-                               : 'border-[var(--glass-border)] bg-[var(--glass-bg-hover)] text-[var(--text-secondary)]'
+                               ? isLightTheme
+                                 ? 'border-emerald-500/20 bg-emerald-500/10 text-emerald-700'
+                                 : 'border-emerald-400/20 bg-emerald-400/10 text-emerald-300'
+                               : isLightTheme
+                                 ? 'border-slate-300/80 bg-white text-slate-600'
+                                 : 'border-[var(--glass-border)] bg-[var(--glass-bg-hover)] text-[var(--text-secondary)]'
                            }`}>
                              {overlay.visible ? tr('common.on', 'On') : tr('common.off', 'Off')}
                            </span>
@@ -1291,8 +1328,8 @@ export default function SensorModal({
                              <button
                                type="button"
                                onClick={() => removeOverlayEntity(overlay.entityId)}
-                               className="grid h-8 w-8 place-items-center rounded-full border border-[var(--glass-border)] bg-[var(--glass-bg-hover)] text-[var(--text-secondary)] transition-colors hover:text-[var(--text-primary)]"
-                               title={tr('history.removeOverlay', 'Remove overlay')}
+                               className={`grid h-8 w-8 place-items-center rounded-full border transition-colors hover:text-[var(--text-primary)] ${actionButtonClass}`}
+                              title={tr('history.removeOverlay', 'Remove overlay')}
                              >
                                <X className="h-3.5 w-3.5" />
                              </button>
@@ -1310,22 +1347,22 @@ export default function SensorModal({
            {attributeEntries.length > 0 && (
                 <div className="flex-1">
                      <div className="flex items-center justify-between mb-6">
-                        <h4 className="text-xs font-bold uppercase tracking-widest text-[var(--text-secondary)] opacity-40">{t('sensorInfo.attributes')}</h4>
+                        <h4 className={sectionHeadingClass}>{t('sensorInfo.attributes')}</h4>
                      </div>
                      
                      <div className="space-y-4">
                           {attributeEntries.map(([key, value]) => (
                             <div key={key} className="flex flex-col gap-1">
-                                  <span className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-secondary)] opacity-40 capitalize">{key.replace(/_/g, ' ')}</span>
-                                  <span className="text-sm font-medium text-[var(--text-primary)] opacity-80 break-words leading-snug font-mono">{String(value)}</span>
+                                  <span className={`${sectionLabelClass} capitalize`}>{key.replace(/_/g, ' ')}</span>
+                                  <span className="text-xs sm:text-sm font-medium text-[var(--text-primary)] break-words leading-snug font-mono">{String(value)}</span>
                               </div>
                           ))}
                      </div>
                 </div>
            )}
 
-           <div className="mt-auto pt-10 opacity-30">
-              <p className="text-[10px] font-mono text-center select-all">{entityId}</p>
+           <div className={`mt-auto pt-8 sm:pt-10 ${isLightTheme ? 'opacity-55' : 'opacity-30'}`}>
+              <p className={`text-[10px] font-mono text-center select-all break-all ${secondaryTextClass}`}>{entityId}</p>
            </div>
 
         </div>
