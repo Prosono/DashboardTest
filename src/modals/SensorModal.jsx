@@ -1131,24 +1131,29 @@ export default function SensorModal({
                <h4 className="text-xs font-bold uppercase tracking-widest text-[var(--text-secondary)] mb-4 opacity-40">
                  {tr('history.window', 'History window')}
                </h4>
-               <div className="flex flex-wrap gap-2">
-                 {HISTORY_PRESET_OPTIONS.map((hours) => {
-                   const active = historyQuery.mode === 'preset' && historyQuery.presetHours === hours;
-                   return (
-                     <button
-                       key={hours}
-                       type="button"
-                       onClick={() => applyPresetRange(hours)}
-                       className={`px-3 py-2 rounded-full text-[10px] font-bold uppercase tracking-widest border transition-all ${
-                         active
-                           ? 'bg-[var(--glass-bg-hover)] text-[var(--text-primary)] border-[var(--glass-border)]'
-                           : 'bg-[var(--glass-bg)] text-[var(--text-secondary)] border-transparent hover:bg-[var(--glass-bg-hover)] hover:text-[var(--text-primary)]'
-                       }`}
-                     >
-                       {formatPresetHistoryLabel(hours)}
-                     </button>
-                   );
-                 })}
+               <div className="-mx-1 overflow-x-auto pb-2 pl-1 pr-1 custom-scrollbar">
+                 <div className="inline-flex min-w-max gap-2">
+                   {HISTORY_PRESET_OPTIONS.map((hours) => {
+                     const active = historyQuery.mode === 'preset' && historyQuery.presetHours === hours;
+                     return (
+                       <button
+                         key={hours}
+                         type="button"
+                         onClick={() => applyPresetRange(hours)}
+                         className={`shrink-0 px-3 py-2 rounded-full text-[10px] font-bold uppercase tracking-widest border transition-all ${
+                           active
+                             ? 'bg-[var(--glass-bg-hover)] text-[var(--text-primary)] border-[var(--glass-border)] shadow-[0_0_0_1px_rgba(255,255,255,0.04)]'
+                             : 'bg-[var(--glass-bg)] text-[var(--text-secondary)] border-transparent hover:bg-[var(--glass-bg-hover)] hover:text-[var(--text-primary)]'
+                         }`}
+                       >
+                         {formatPresetHistoryLabel(hours)}
+                       </button>
+                     );
+                   })}
+                 </div>
+               </div>
+               <div className="mt-2 text-[11px] text-[var(--text-secondary)] opacity-65">
+                 {tr('history.presetHint', 'Tap a preset to update the chart immediately.')}
                </div>
              </div>
 
@@ -1207,6 +1212,9 @@ export default function SensorModal({
                      {tr('history.customActive', 'Custom active')}
                    </span>
                  )}
+               </div>
+               <div className="mt-2 text-[11px] text-[var(--text-secondary)] opacity-65">
+                 {tr('history.customHint', 'Use Apply range only after changing date or time.')}
                </div>
                {rangeError && (
                  <div className="mt-2 text-xs font-semibold text-rose-300">{rangeError}</div>
