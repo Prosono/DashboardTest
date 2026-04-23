@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 
 const DEFAULT_ACTIVE_STATES = [
   'on', 'open', 'unlocked', 'detected', 'occupied', 'presence', 'active',
@@ -68,7 +68,10 @@ export default function SensorHistoryGraph({
   noDataLabel = 'No history data available',
   formatXLabel,
 }) {
-  if (!data || data.length === 0) {
+  const safeData = Array.isArray(data) ? data : [];
+  const [hoverIndex, setHoverIndex] = useState(null);
+
+  if (safeData.length === 0) {
     return (
       <div className="h-[200px] flex items-center justify-center text-gray-500 text-sm">
         {noDataLabel}
@@ -84,7 +87,7 @@ export default function SensorHistoryGraph({
   const fillColor = areaColor || lineColor;
   const chartVariant = variant === 'bars' ? 'bars' : 'line';
 
-  const values = data.map((d) => d.value);
+  const values = safeData.map((d) => d.value);
   let min = Math.min(...values);
   let max = Math.max(...values);
   if (chartVariant === 'bars') min = Math.min(0, min);
@@ -98,11 +101,11 @@ export default function SensorHistoryGraph({
   const renderMax = max + (range * 0.05);
   const renderRange = renderMax - renderMin;
 
-  const timeMs = data.map((point) => parseTimeMs(point?.time)).filter((ms) => Number.isFinite(ms));
+  const timeMs = safeData.map((point) => parseTimeMs(point?.time)).filter((ms) => Number.isFinite(ms));
   const startMs = timeMs.length ? Math.min(...timeMs) : 0;
   const endMs = timeMs.length ? Math.max(...timeMs) : 0;
   const hasTimeScale = Number.isFinite(startMs) && Number.isFinite(endMs) && endMs > startMs;
-  const indexDenominator = Math.max(1, data.length - 1);
+  const indexDenominator = Math.max(1, safeData.length - 1);
 
   const xForPoint = (point, index) => {
     if (hasTimeScale) {
@@ -121,7 +124,7 @@ export default function SensorHistoryGraph({
     return padding.left + (ratio * graphWidth);
   };
 
-  const pointsArray = data.map((point, index) => ([
+  const pointsArray = safeData.map((point, index) => ([
     xForPoint(point, index),
     padding.top + graphHeight - (((point.value - renderMin) / renderRange) * graphHeight),
   ]));
@@ -141,17 +144,17 @@ export default function SensorHistoryGraph({
   const labelCount = 5;
   for (let i = 0; i < labelCount; i += 1) {
     const fraction = i / (labelCount - 1);
-    const x = padding.left + (fraction * graphWidth);
-    let label = '';
-    if (hasTimeScale) {
-      const ts = startMs + ((endMs - startMs) * fraction);
-      label = formatXLabel ? formatXLabel(new Date(ts)) : new Date(ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    } else {
-      const index = Math.round(fraction * (data.length - 1));
-      const point = data[index];
-      label = point
-        ? (formatXLabel ? formatXLabel(new Date(point.time)) : new Date(point.time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }))
-        : '';
+      const x = padding.left + (fraction * graphWidth);
+      let label = '';
+      if (hasTimeScale) {
+        const ts = startMs + ((endMs - startMs) * fraction);
+        label = formatXLabel ? formatXLabel(new Date(ts)) : new Date(ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      } else {
+        const index = Math.round(fraction * (safeData.length - 1));
+        const point = safeData[index];
+        label = point
+          ? (formatXLabel ? formatXLabel(new Date(point.time)) : new Date(point.time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }))
+          : '';
     }
     const anchor = i === 0 ? 'start' : (i === labelCount - 1 ? 'end' : 'middle');
     xLabels.push({ x, label, anchor });
@@ -175,6 +178,78 @@ export default function SensorHistoryGraph({
   const areaGradientId = `area-gradient-${idSeed}`;
   const fadeGradientId = `fade-gradient-${idSeed}`;
   const maskId = `mask-${idSeed}`;
+
+  const formatTooltipValue = (value) => {
+    const numeric = Number(value);
+    if (!Number.isFinite(numeric)) return '--';
+    if (chartVariant === 'bars') return `${Math.round(numeric)}`;
+    if (Math.abs(numeric % 1) < 0.005) return numeric.toFixed(0);
+    if (Math.abs((numeric * 10) - Math.round(numeric * 10)) < 0.005) return numeric.toFixed(1);
+    return numeric.toFixed(2);
+  };
+
+  const formatTooltipTime = (value) => {
+    const date = value instanceof Date ? value : new Date(value);
+    if (Number.isNaN(date.getTime())) return '--';
+    return date.toLocaleString([], {
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+    });
+  };
+
+  const hoveredPoint = hoverIndex !== null && pointsArray[hoverIndex]
+    ? {
+      index: hoverIndex,
+      x: pointsArray[hoverIndex][0],
+      y: pointsArray[hoverIndex][1],
+      dataPoint: safeData[hoverIndex],
+    }
+    : null;
+
+  const tooltipData = hoveredPoint?.dataPoint
+    ? (() => {
+      const timeLabel = formatTooltipTime(hoveredPoint.dataPoint.time);
+      const valueLabel = formatTooltipValue(hoveredPoint.dataPoint.value);
+      const boxWidth = Math.max(104, Math.max(timeLabel.length * 5.6, valueLabel.length * 9) + 22);
+      const boxHeight = 42;
+      const desiredX = hoveredPoint.x > (width - 160)
+        ? hoveredPoint.x - boxWidth - 12
+        : hoveredPoint.x + 12;
+      const desiredY = hoveredPoint.y < (padding.top + 52)
+        ? hoveredPoint.y + 10
+        : hoveredPoint.y - boxHeight - 10;
+
+      return {
+        timeLabel,
+        valueLabel,
+        boxWidth,
+        boxHeight,
+        boxX: Math.max(padding.left, Math.min(width - padding.right - boxWidth, desiredX)),
+        boxY: Math.max(8, Math.min(height - padding.bottom - boxHeight, desiredY)),
+      };
+    })()
+    : null;
+
+  const handlePointerMove = (event) => {
+    const rect = event.currentTarget.getBoundingClientRect();
+    if (!rect.width) return;
+    const ratioX = (event.clientX - rect.left) / rect.width;
+    const svgX = Math.max(padding.left, Math.min(width - padding.right, ratioX * width));
+    let nextIndex = 0;
+    let minDistance = Number.POSITIVE_INFINITY;
+    pointsArray.forEach((point, index) => {
+      const distance = Math.abs(point[0] - svgX);
+      if (distance < minDistance) {
+        minDistance = distance;
+        nextIndex = index;
+      }
+    });
+    setHoverIndex((prev) => (prev === nextIndex ? prev : nextIndex));
+  };
+
+  const clearHover = () => setHoverIndex(null);
 
   return (
     <div className="w-full relative select-none">
@@ -278,9 +353,76 @@ export default function SensorHistoryGraph({
               height={Math.max(1, (height - padding.bottom) - y)}
               rx={Math.min(3, barWidth / 3)}
               fill={lineColor}
-              fillOpacity="0.72"
+              fillOpacity={hoverIndex === index ? 0.94 : 0.72}
             />
           ))
+        )}
+
+        <rect
+          x={padding.left}
+          y={padding.top}
+          width={graphWidth}
+          height={graphHeight}
+          fill="transparent"
+          pointerEvents="all"
+          onMouseMove={handlePointerMove}
+          onMouseLeave={clearHover}
+          onPointerMove={handlePointerMove}
+          onPointerLeave={clearHover}
+        />
+
+        {hoveredPoint && (
+          <>
+            <line
+              x1={hoveredPoint.x}
+              y1={padding.top}
+              x2={hoveredPoint.x}
+              y2={height - padding.bottom}
+              stroke={lineColor}
+              strokeWidth="1.1"
+              strokeDasharray="4 4"
+              strokeOpacity="0.42"
+            />
+            <circle
+              cx={hoveredPoint.x}
+              cy={hoveredPoint.y}
+              r={chartVariant === 'bars' ? Math.max(4, barWidth * 0.28) : 4.5}
+              fill="#07111d"
+              stroke={lineColor}
+              strokeWidth="2"
+            />
+          </>
+        )}
+
+        {tooltipData && (
+          <g pointerEvents="none">
+            <rect
+              x={tooltipData.boxX}
+              y={tooltipData.boxY}
+              width={tooltipData.boxWidth}
+              height={tooltipData.boxHeight}
+              rx="10"
+              fill="#0d1b2a"
+              fillOpacity="0.94"
+              stroke="rgba(255,255,255,0.12)"
+            />
+            <text
+              x={tooltipData.boxX + 10}
+              y={tooltipData.boxY + 15}
+              className="text-[9px] fill-current font-mono tracking-tight"
+              style={{ fill: 'var(--text-secondary)' }}
+            >
+              {tooltipData.timeLabel}
+            </text>
+            <text
+              x={tooltipData.boxX + 10}
+              y={tooltipData.boxY + 31}
+              className="text-[14px] fill-current font-semibold tracking-tight"
+              style={{ fill: 'var(--text-primary)' }}
+            >
+              {tooltipData.valueLabel}
+            </text>
+          </g>
         )}
 
         {yLabels.map((label, index) => (
