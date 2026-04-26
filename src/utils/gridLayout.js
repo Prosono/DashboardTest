@@ -3,6 +3,8 @@
  * Pure functions with zero React / UI dependencies.
  */
 
+export const MAX_CARD_ROW_SPAN = 20;
+
 /**
  * Determine how many grid columns a card should span.
  *
@@ -84,7 +86,7 @@ export const getCardGridSpan = (cardId, getCardSettingsKey, cardSettings, active
   return 2;
 };
 
-const clampSpan = (value, fallback, max = 8) => {
+const clampSpan = (value, fallback, max = MAX_CARD_ROW_SPAN) => {
   const parsed = Number(value);
   if (!Number.isFinite(parsed)) return fallback;
   return Math.max(1, Math.min(max, Math.round(parsed)));

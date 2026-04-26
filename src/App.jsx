@@ -105,7 +105,7 @@ import {
 } from './services/appAuth';
 
 import { isCardRemovable as _isCardRemovable, isCardHiddenByLogic as _isCardHiddenByLogic, isMediaPage as _isMediaPage } from './utils/cardUtils';
-import { getCardGridSize as _getCardGridSize, buildGridLayout as _buildGridLayout } from './utils/gridLayout';
+import { getCardGridSize as _getCardGridSize, buildGridLayout as _buildGridLayout, MAX_CARD_ROW_SPAN } from './utils/gridLayout';
 import { createDragAndDropHandlers } from './utils/dragAndDrop';
 import { dispatchCardRender } from './rendering/cardRenderers';
 import ModalOrchestrator from './rendering/ModalOrchestrator';
@@ -2079,7 +2079,7 @@ function AppContent({
     persistCardSettings((prev) => {
       const current = _getCardGridSize(cardId, getCardSettingsKey, prev, activePage, gridColCount);
       const nextCol = Math.max(1, Math.min(gridColCount, current.colSpan + deltaCol));
-      const nextRow = Math.max(1, Math.min(8, current.rowSpan + deltaRow));
+      const nextRow = Math.max(1, Math.min(MAX_CARD_ROW_SPAN, current.rowSpan + deltaRow));
       return {
         ...prev,
         [settingsKey]: {

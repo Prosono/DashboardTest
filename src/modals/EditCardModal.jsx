@@ -2,6 +2,7 @@ import React from 'react';
 import { X, Check, Plus, RefreshCw } from 'lucide-react';
 import IconPicker from '../components/ui/IconPicker';
 import { getEntitiesForArea } from '../services/haClient';
+import { MAX_CARD_ROW_SPAN } from '../utils/gridLayout';
 
 function SearchableSelect({ label, value, options, onChange, placeholder, entities, t }) {
   const [open, setOpen] = React.useState(false);
@@ -395,13 +396,13 @@ export default function EditCardModal({
                       <input
                         type="number"
                         min={1}
-                        max={8}
+                        max={MAX_CARD_ROW_SPAN}
                         step={1}
                         className="w-full px-3 py-2 text-[var(--text-primary)] rounded-xl popup-surface focus:border-blue-500/50 outline-none transition-colors"
                         value={Number(editSettings.gridRowSpan) || 1}
                         onChange={(e) => {
                           const value = Number(e.target.value);
-                          const next = Number.isFinite(value) ? Math.max(1, Math.min(8, Math.round(value))) : 1;
+                          const next = Number.isFinite(value) ? Math.max(1, Math.min(MAX_CARD_ROW_SPAN, Math.round(value))) : 1;
                           saveCardSetting(editSettingsKey, 'gridRowSpan', next);
                         }}
                       />

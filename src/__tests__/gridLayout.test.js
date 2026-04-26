@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildGridLayout, getCardGridSize } from '../utils/gridLayout';
+import { buildGridLayout, getCardGridSize, MAX_CARD_ROW_SPAN } from '../utils/gridLayout';
 
 describe('grid layout sizing', () => {
   const getKey = (id) => id;
@@ -10,6 +10,14 @@ describe('grid layout sizing', () => {
     }, 'home', 4);
 
     expect(size).toEqual({ colSpan: 4, rowSpan: 3 });
+  });
+
+  it('clamps explicit row span to the shared maximum', () => {
+    const size = getCardGridSize('sensor.tall', getKey, {
+      'sensor.tall': { gridColSpan: 2, gridRowSpan: MAX_CARD_ROW_SPAN + 7 },
+    }, 'home', 4);
+
+    expect(size).toEqual({ colSpan: 2, rowSpan: MAX_CARD_ROW_SPAN });
   });
 
 
