@@ -252,6 +252,14 @@
   filter: grayscale(0.92) invert(0.9) hue-rotate(165deg) brightness(0.58) contrast(1.08) saturate(0.62);
 }
 
+.sauna-map-card--light .leaflet-container {
+  background: #f8fafc;
+}
+
+.sauna-map-card--light .leaflet-tile {
+  filter: none;
+}
+
 .sauna-map-card .leaflet-control-attribution {
   background: rgba(4, 10, 20, 0.58);
   color: rgba(226, 232, 240, 0.74);
@@ -263,6 +271,16 @@
   color: rgba(191, 219, 254, 0.9);
 }
 
+.sauna-map-card--light .leaflet-control-attribution {
+  background: rgba(255, 255, 255, 0.88);
+  color: rgba(71, 85, 105, 0.88);
+  box-shadow: 0 10px 24px rgba(148, 163, 184, 0.18);
+}
+
+.sauna-map-card--light .leaflet-control-attribution a {
+  color: rgba(37, 99, 235, 0.92);
+}
+
 .sauna-map-card .leaflet-control-zoom {
   border: 1px solid rgba(255, 255, 255, 0.12);
   border-radius: 8px;
@@ -270,6 +288,12 @@
   background: rgba(4, 10, 20, 0.78);
   box-shadow: 0 12px 28px rgba(0, 0, 0, 0.32);
   backdrop-filter: blur(12px);
+}
+
+.sauna-map-card--light .leaflet-control-zoom {
+  border-color: rgba(148, 163, 184, 0.32);
+  background: rgba(255, 255, 255, 0.9);
+  box-shadow: 0 14px 28px rgba(148, 163, 184, 0.2);
 }
 
 .sauna-map-card .leaflet-control-zoom a {
@@ -284,6 +308,12 @@
   font-weight: 800;
 }
 
+.sauna-map-card--light .leaflet-control-zoom a {
+  background: rgba(255, 255, 255, 0.92);
+  color: rgba(15, 23, 42, 0.92);
+  border-bottom-color: rgba(148, 163, 184, 0.24);
+}
+
 .sauna-map-card .leaflet-control-zoom a:last-child {
   border-bottom: 0;
 }
@@ -293,9 +323,19 @@
   color: #ffffff;
 }
 
+.sauna-map-card--light .leaflet-control-zoom a:hover {
+  background: rgba(241, 245, 249, 0.98);
+  color: rgba(15, 23, 42, 0.98);
+}
+
 .sauna-map-card .leaflet-control-zoom a.leaflet-disabled {
   background: rgba(4, 10, 20, 0.46);
   color: rgba(148, 163, 184, 0.58);
+}
+
+.sauna-map-card--light .leaflet-control-zoom a.leaflet-disabled {
+  background: rgba(226, 232, 240, 0.86);
+  color: rgba(148, 163, 184, 0.82);
 }
 
 .sauna-map-marker-shell {
@@ -366,6 +406,13 @@
   box-shadow: 0 14px 30px rgba(0, 0, 0, 0.48), 0 0 0 1px rgba(255, 255, 255, 0.14);
 }
 
+.sauna-map-card--light .sauna-map-marker__ring {
+  background:
+    conic-gradient(var(--marker-accent) var(--score-deg), rgba(148, 163, 184, 0.22) 0deg),
+    rgba(255, 255, 255, 0.95);
+  box-shadow: 0 14px 30px rgba(148, 163, 184, 0.26), 0 0 0 1px rgba(148, 163, 184, 0.2);
+}
+
 .sauna-map-marker__inner {
   position: relative;
   width: 100%;
@@ -376,6 +423,11 @@
   place-items: center;
   background: linear-gradient(135deg, rgba(15, 23, 42, 0.94), rgba(30, 41, 59, 0.9));
   border: 2px solid rgba(4, 10, 20, 0.92);
+}
+
+.sauna-map-card--light .sauna-map-marker__inner {
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.98), rgba(241, 245, 249, 0.96));
+  border-color: rgba(226, 232, 240, 0.95);
 }
 
 .sauna-map-marker__image {
@@ -395,6 +447,10 @@
   font-weight: 900;
   line-height: 1;
   letter-spacing: 0;
+}
+
+.sauna-map-card--light .sauna-map-marker__fallback {
+  color: rgba(15, 23, 42, 0.92);
 }
 
 .sauna-map-marker__temp {
@@ -417,6 +473,13 @@
   letter-spacing: 0;
 }
 
+.sauna-map-card--light .sauna-map-marker__temp {
+  background: rgba(255, 255, 255, 0.95);
+  color: rgba(15, 23, 42, 0.94);
+  border-color: rgba(148, 163, 184, 0.28);
+  box-shadow: 0 10px 24px rgba(148, 163, 184, 0.22);
+}
+
 .sauna-map-marker__score {
   position: absolute;
   right: 2px;
@@ -437,6 +500,12 @@
   box-shadow: 0 8px 18px rgba(0, 0, 0, 0.4);
 }
 
+.sauna-map-card--light .sauna-map-marker__score {
+  color: #052e16;
+  border-color: rgba(255, 255, 255, 0.96);
+  box-shadow: 0 8px 18px rgba(148, 163, 184, 0.24);
+}
+
 .sauna-map-chip {
   display: inline-flex;
   align-items: center;
@@ -454,14 +523,31 @@
   text-transform: uppercase;
 }
 
+.sauna-map-card--light .sauna-map-chip {
+  background: rgba(255, 255, 255, 0.9);
+  color: rgba(15, 23, 42, 0.88);
+  border-color: rgba(148, 163, 184, 0.26);
+  box-shadow: 0 10px 28px rgba(148, 163, 184, 0.18);
+}
+
 .sauna-map-chip--active {
   color: #bbf7d0;
   border-color: rgba(34, 197, 94, 0.32);
 }
 
+.sauna-map-card--light .sauna-map-chip--active {
+  color: #166534;
+  border-color: rgba(34, 197, 94, 0.28);
+}
+
 .sauna-map-chip--service {
   color: #fed7aa;
   border-color: rgba(249, 115, 22, 0.34);
+}
+
+.sauna-map-card--light .sauna-map-chip--service {
+  color: #9a3412;
+  border-color: rgba(249, 115, 22, 0.3);
 }
 
 .sauna-map-score--good {
@@ -478,6 +564,18 @@
 
 .sauna-map-score--unknown {
   color: var(--text-secondary);
+}
+
+html[data-theme='light'] .sauna-map-score--good {
+  color: #15803d;
+}
+
+html[data-theme='light'] .sauna-map-score--warn {
+  color: #b45309;
+}
+
+html[data-theme='light'] .sauna-map-score--bad {
+  color: #be123c;
 }
 
 /* Keep timeline card border stable inside popup while hovering. */

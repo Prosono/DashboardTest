@@ -2342,6 +2342,23 @@ const getReportHealthBasis = (report, tr) => {
   return tr('reports.healthDataMissing', 'Health data missing');
 };
 
+const getReportPreviewThemeVars = (isLightTheme) => ({
+  '--report-preview-border': isLightTheme ? 'rgba(203, 213, 225, 0.92)' : '#244057',
+  '--report-preview-border-soft': isLightTheme ? 'rgba(203, 213, 225, 0.78)' : '#1c3348',
+  '--report-preview-border-dashed': isLightTheme ? 'rgba(148, 163, 184, 0.45)' : '#244057',
+  '--report-preview-bg': isLightTheme ? '#ffffff' : '#07111d',
+  '--report-preview-bg-alt': isLightTheme ? '#f8fafc' : '#0d1b2a',
+  '--report-preview-bg-soft': isLightTheme ? '#eef4f8' : '#102235',
+  '--report-preview-bg-muted': isLightTheme ? '#f1f5f9' : '#0a1724',
+  '--report-preview-text': isLightTheme ? '#0f172a' : '#edf5ff',
+  '--report-preview-text-secondary': isLightTheme ? '#64748b' : '#9fb1c4',
+  '--report-preview-text-muted': isLightTheme ? '#7c8aa0' : '#6f8298',
+  '--report-preview-track': isLightTheme ? '#dbe5f0' : '#263b51',
+  '--report-preview-placeholder': isLightTheme ? '#94a3b8' : '#31465c',
+  '--report-preview-logo-bg': '#f8fbff',
+  '--report-preview-fallback': isLightTheme ? '#64748b' : '#6f8298',
+});
+
 const getExecutiveSummaryText = (report, tr) => {
   const peopleSummaryText = report.totalPeopleSamples > 0
     ? ` ${tr('reports.peopleCount', 'People')}: ${formatNumber(report.totalBookingPeople)}.`
@@ -2352,44 +2369,44 @@ const getExecutiveSummaryText = (report, tr) => {
   return `${tr('reports.bookingHours', 'Booking hours')}: ${formatNumber(report.bookingHours)}.${peopleSummaryText} ${tr('reports.healthDataMissing', 'Health data missing')}.`;
 };
 
-const getPerformanceStatusMeta = (score, tr) => {
+const getPerformanceStatusMeta = (score, tr, isLightTheme = false) => {
   if (!Number.isFinite(Number(score))) {
     return {
       label: tr('reports.performanceStatusMissing', 'Missing data'),
-      className: 'border-slate-500/30 bg-slate-500/12 text-slate-300',
+      className: isLightTheme ? 'border-slate-300 bg-slate-100 text-slate-700' : 'border-slate-500/30 bg-slate-500/12 text-slate-300',
     };
   }
   if (Number(score) > 90) {
     return {
       label: tr('reports.performanceStatusGood', 'Good'),
-      className: 'border-emerald-400/30 bg-emerald-400/12 text-emerald-200',
+      className: isLightTheme ? 'border-emerald-300 bg-emerald-50 text-emerald-800' : 'border-emerald-400/30 bg-emerald-400/12 text-emerald-200',
     };
   }
   if (Number(score) >= 70) {
     return {
       label: tr('reports.performanceStatusWatch', 'Watch'),
-      className: 'border-amber-400/30 bg-amber-400/12 text-amber-200',
+      className: isLightTheme ? 'border-amber-300 bg-amber-50 text-amber-800' : 'border-amber-400/30 bg-amber-400/12 text-amber-200',
     };
   }
   return {
     label: tr('reports.performanceStatusAction', 'Action'),
-    className: 'border-rose-400/30 bg-rose-400/12 text-rose-200',
+    className: isLightTheme ? 'border-rose-300 bg-rose-50 text-rose-800' : 'border-rose-400/30 bg-rose-400/12 text-rose-200',
   };
 };
 
 const ReportPreviewPage = ({ title, eyebrow, children, pageNumber }) => (
-  <section className="relative overflow-hidden rounded-xl border border-[#244057] bg-[#07111d] p-4 text-[#edf5ff] shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] md:p-5">
+  <section className="relative overflow-hidden rounded-xl border border-[var(--report-preview-border)] bg-[var(--report-preview-bg)] p-4 text-[var(--report-preview-text)] shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] md:p-5">
     <div className="absolute inset-x-0 top-0 h-1 bg-[linear-gradient(90deg,#5ee3a1,#5b9cff)]" />
     <div className="mb-4 flex items-start justify-between gap-4">
       <div className="min-w-0">
         {eyebrow && (
-          <div className="text-[10px] font-bold uppercase tracking-widest text-[#9fb1c4]">
+          <div className="text-[10px] font-bold uppercase tracking-widest text-[var(--report-preview-text-secondary)]">
             {eyebrow}
           </div>
         )}
-        <h4 className="mt-1 truncate text-base font-semibold text-[#edf5ff] md:text-lg">{title}</h4>
+        <h4 className="mt-1 truncate text-base font-semibold text-[var(--report-preview-text)] md:text-lg">{title}</h4>
       </div>
-      <div className="shrink-0 rounded-md border border-[#244057] bg-[#0d1b2a] px-2 py-1 text-[10px] font-bold tabular-nums text-[#6f8298]">
+      <div className="shrink-0 rounded-md border border-[var(--report-preview-border)] bg-[var(--report-preview-bg-alt)] px-2 py-1 text-[10px] font-bold tabular-nums text-[var(--report-preview-text-muted)]">
         {pageNumber}
       </div>
     </div>
@@ -2397,12 +2414,12 @@ const ReportPreviewPage = ({ title, eyebrow, children, pageNumber }) => (
   </section>
 );
 
-const PreviewPill = ({ children, tone = 'default' }) => {
+const PreviewPill = ({ children, tone = 'default', isLightTheme = false }) => {
   const toneClass = tone === 'green'
-    ? 'border-emerald-400/25 bg-emerald-400/10 text-emerald-100'
+    ? (isLightTheme ? 'border-emerald-300 bg-emerald-50 text-emerald-800' : 'border-emerald-400/25 bg-emerald-400/10 text-emerald-100')
     : (tone === 'amber'
-      ? 'border-amber-400/25 bg-amber-400/10 text-amber-100'
-      : 'border-[#244057] bg-[#102235] text-[#edf5ff]');
+      ? (isLightTheme ? 'border-amber-300 bg-amber-50 text-amber-800' : 'border-amber-400/25 bg-amber-400/10 text-amber-100')
+      : 'border-[var(--report-preview-border)] bg-[var(--report-preview-bg-soft)] text-[var(--report-preview-text)]');
   return (
     <span className={`inline-flex min-w-0 items-center rounded-lg border px-2.5 py-1.5 text-[10px] font-bold uppercase tracking-widest ${toneClass}`}>
       <span className="truncate">{children}</span>
@@ -2410,27 +2427,27 @@ const PreviewPill = ({ children, tone = 'default' }) => {
   );
 };
 
-const PreviewMetric = ({ Icon, label, value, subLabel, tone = '#edf5ff' }) => (
-  <div className="min-h-[88px] rounded-lg border border-[#244057] bg-[#102235] p-3">
+const PreviewMetric = ({ Icon, label, value, subLabel, tone = 'var(--report-preview-text)' }) => (
+  <div className="min-h-[88px] rounded-lg border border-[var(--report-preview-border)] bg-[var(--report-preview-bg-soft)] p-3">
     <div className="flex items-center justify-between gap-2">
-      <div className="min-w-0 truncate text-[10px] font-bold uppercase tracking-widest text-[#9fb1c4]">
+      <div className="min-w-0 truncate text-[10px] font-bold uppercase tracking-widest text-[var(--report-preview-text-secondary)]">
         {label}
       </div>
-      {Icon && <Icon className="h-3.5 w-3.5 shrink-0 text-[#6f8298]" />}
+      {Icon && <Icon className="h-3.5 w-3.5 shrink-0 text-[var(--report-preview-text-muted)]" />}
     </div>
     <div className="mt-2 truncate text-3xl font-semibold tabular-nums" style={{ color: tone }}>
       {value}
     </div>
-    {subLabel && <div className="mt-1 truncate text-[10px] text-[#6f8298]">{subLabel}</div>}
+    {subLabel && <div className="mt-1 truncate text-[10px] text-[var(--report-preview-text-muted)]">{subLabel}</div>}
   </div>
 );
 
 const PreviewPanel = ({ title, subtitle, children }) => (
-  <div className="rounded-lg border border-[#244057] bg-[#0d1b2a] p-3 md:p-4">
+  <div className="rounded-lg border border-[var(--report-preview-border)] bg-[var(--report-preview-bg-alt)] p-3 md:p-4">
     <div className="mb-3 flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
       <div className="min-w-0">
-        <h5 className="truncate text-sm font-semibold text-[#edf5ff]">{title}</h5>
-        {subtitle && <div className="mt-1 truncate text-[10px] uppercase tracking-widest text-[#6f8298]">{subtitle}</div>}
+        <h5 className="truncate text-sm font-semibold text-[var(--report-preview-text)]">{title}</h5>
+        {subtitle && <div className="mt-1 truncate text-[10px] uppercase tracking-widest text-[var(--report-preview-text-muted)]">{subtitle}</div>}
       </div>
     </div>
     {children}
@@ -2438,7 +2455,7 @@ const PreviewPanel = ({ title, subtitle, children }) => (
 );
 
 const PreviewNoData = ({ tr }) => (
-  <div className="grid min-h-28 place-items-center rounded-lg border border-dashed border-[#244057] bg-[#0a1724] px-4 py-6 text-center text-xs font-semibold text-[#9fb1c4]">
+  <div className="grid min-h-28 place-items-center rounded-lg border border-dashed border-[var(--report-preview-border-dashed)] bg-[var(--report-preview-bg-muted)] px-4 py-6 text-center text-xs font-semibold text-[var(--report-preview-text-secondary)]">
     {tr('reports.noChartData', 'No chart data in selected period')}
   </div>
 );
@@ -2464,7 +2481,7 @@ const PreviewBarChart = ({
         <PreviewNoData tr={tr} />
       ) : (
         <>
-          <div className="h-44 rounded-lg border border-[#1c3348] bg-[#0a1724] p-2">
+          <div className="h-44 rounded-lg border border-[var(--report-preview-border-soft)] bg-[var(--report-preview-bg-muted)] p-2">
             <div className="flex h-full items-end gap-1">
               {safeEntries.map((entry) => {
                 const value = Number(valueAccessor(entry));
@@ -2472,14 +2489,14 @@ const PreviewBarChart = ({
                 const heightPct = finite ? clamp((value / safeMax) * 100, 3, 100) : 2;
                 return (
                   <div key={entry.key || labelAccessor(entry)} className="flex h-full min-w-0 flex-1 flex-col items-center justify-end gap-1">
-                    <div className="hidden max-w-full truncate text-[9px] font-bold tabular-nums text-[#9fb1c4] sm:block">
+                    <div className="hidden max-w-full truncate text-[9px] font-bold tabular-nums text-[var(--report-preview-text-secondary)] sm:block">
                       {finite ? valueFormatter(value) : '--'}
                     </div>
                     <div
                       className="w-full rounded-t-md"
                       style={{
                         height: `${heightPct}%`,
-                        backgroundColor: finite ? colorAccessor(entry) : '#31465c',
+                        backgroundColor: finite ? colorAccessor(entry) : 'var(--report-preview-placeholder)',
                       }}
                     />
                   </div>
@@ -2488,7 +2505,7 @@ const PreviewBarChart = ({
             </div>
           </div>
           <div
-            className="mt-2 grid gap-1 text-center text-[9px] font-semibold text-[#6f8298]"
+            className="mt-2 grid gap-1 text-center text-[9px] font-semibold text-[var(--report-preview-text-muted)]"
             style={{ gridTemplateColumns: `repeat(${Math.max(1, safeEntries.length)}, minmax(0, 1fr))` }}
           >
             {safeEntries.map((entry) => (
@@ -2506,10 +2523,10 @@ const PreviewLegend = ({ segments, entries, valueFormatter = formatNumber }) => 
     {segments.map((segment) => {
       const total = entries.reduce((sum, entry) => sum + Math.max(0, Number(segment.valueAccessor(entry)) || 0), 0);
       return (
-        <div key={segment.key} className="inline-flex min-w-0 items-center gap-2 rounded-md border border-[#244057] bg-[#102235] px-2 py-1 text-[10px] font-semibold text-[#9fb1c4]">
+        <div key={segment.key} className="inline-flex min-w-0 items-center gap-2 rounded-md border border-[var(--report-preview-border)] bg-[var(--report-preview-bg-soft)] px-2 py-1 text-[10px] font-semibold text-[var(--report-preview-text-secondary)]">
           <span className="h-2 w-2 shrink-0 rounded-sm" style={{ backgroundColor: segment.color }} />
           <span className="truncate">{segment.label}</span>
-          <span className="shrink-0 tabular-nums text-[#edf5ff]">{valueFormatter(total)}</span>
+          <span className="shrink-0 tabular-nums text-[var(--report-preview-text)]">{valueFormatter(total)}</span>
         </div>
       );
     })}
@@ -2536,7 +2553,7 @@ const PreviewStackedBars = ({
         <PreviewNoData tr={tr} />
       ) : (
         <>
-          <div className="h-44 rounded-lg border border-[#1c3348] bg-[#0a1724] p-2">
+          <div className="h-44 rounded-lg border border-[var(--report-preview-border-soft)] bg-[var(--report-preview-bg-muted)] p-2">
             <div className="flex h-full items-end gap-1">
               {safeEntries.map((entry) => {
                 const total = segments.reduce((sum, segment) => sum + Math.max(0, Number(segment.valueAccessor(entry)) || 0), 0);
@@ -2564,7 +2581,7 @@ const PreviewStackedBars = ({
             </div>
           </div>
           <div
-            className="mt-2 grid gap-1 text-center text-[9px] font-semibold text-[#6f8298]"
+            className="mt-2 grid gap-1 text-center text-[9px] font-semibold text-[var(--report-preview-text-muted)]"
             style={{ gridTemplateColumns: `repeat(${Math.max(1, safeEntries.length)}, minmax(0, 1fr))` }}
           >
             {safeEntries.map((entry) => (
@@ -2602,17 +2619,17 @@ const PreviewHorizontalBars = ({
             const widthPct = finite ? clamp((value / safeMax) * 100, 2, 100) : 0;
             return (
               <div key={entry.id || labelAccessor(entry)} className="grid grid-cols-[minmax(80px,0.8fr)_minmax(0,1.7fr)_52px] items-center gap-2 text-xs">
-                <div className="truncate font-semibold text-[#edf5ff]">{labelAccessor(entry)}</div>
-                <div className="h-2.5 overflow-hidden rounded-full bg-[#263b51]">
+                <div className="truncate font-semibold text-[var(--report-preview-text)]">{labelAccessor(entry)}</div>
+                <div className="h-2.5 overflow-hidden rounded-full bg-[var(--report-preview-track)]">
                   <div
                     className="h-full rounded-full"
                     style={{
                       width: `${widthPct}%`,
-                      backgroundColor: finite ? colorAccessor(entry) : '#31465c',
+                      backgroundColor: finite ? colorAccessor(entry) : 'var(--report-preview-placeholder)',
                     }}
                   />
                 </div>
-                <div className="text-right font-bold tabular-nums text-[#9fb1c4]">{finite ? valueFormatter(value) : '--'}</div>
+                <div className="text-right font-bold tabular-nums text-[var(--report-preview-text-secondary)]">{finite ? valueFormatter(value) : '--'}</div>
               </div>
             );
           })}
@@ -2646,8 +2663,8 @@ const PreviewStackedHorizontalBars = ({
             const total = Math.max(0, Number(totalAccessor(entry)) || 0);
             return (
               <div key={entry.id || labelAccessor(entry)} className="grid grid-cols-[minmax(80px,0.8fr)_minmax(0,1.7fr)_56px] items-center gap-2 text-xs">
-                <div className="truncate font-semibold text-[#edf5ff]">{labelAccessor(entry)}</div>
-                <div className="h-3 overflow-hidden rounded-full bg-[#263b51]">
+                <div className="truncate font-semibold text-[var(--report-preview-text)]">{labelAccessor(entry)}</div>
+                <div className="h-3 overflow-hidden rounded-full bg-[var(--report-preview-track)]">
                   <div className="flex h-full" style={{ width: `${clamp((total / safeMax) * 100, total > 0 ? 2 : 0, 100)}%` }}>
                     {segments.map((segment) => {
                       const value = Math.max(0, Number(segment.valueAccessor(entry)) || 0);
@@ -2664,7 +2681,7 @@ const PreviewStackedHorizontalBars = ({
                     })}
                   </div>
                 </div>
-                <div className="text-right font-bold tabular-nums text-[#9fb1c4]">{valueFormatter(total)}</div>
+                <div className="text-right font-bold tabular-nums text-[var(--report-preview-text-secondary)]">{valueFormatter(total)}</div>
               </div>
             );
           })}
@@ -2677,10 +2694,10 @@ const PreviewStackedHorizontalBars = ({
 const PreviewBookingMix = ({ record, segments }) => {
   const total = Math.max(0, Number(record.bookingHours) || 0);
   if (!total) return (
-    <div className="h-2 overflow-hidden rounded-full bg-[#263b51]" />
+    <div className="h-2 overflow-hidden rounded-full bg-[var(--report-preview-track)]" />
   );
   return (
-    <div className="h-2 overflow-hidden rounded-full bg-[#263b51]">
+    <div className="h-2 overflow-hidden rounded-full bg-[var(--report-preview-track)]">
       <div className="flex h-full">
         {segments.map((segment) => {
           const value = Math.max(0, Number(segment.valueAccessor(record)) || 0);
@@ -2700,30 +2717,30 @@ const PreviewBookingMix = ({ record, segments }) => {
   );
 };
 
-const PreviewPerformanceRow = ({ record, tr, segments }) => {
+const PreviewPerformanceRow = ({ record, tr, segments, isLightTheme = false }) => {
   const scoreColor = getScoreHex(record.healthScore);
-  const status = getPerformanceStatusMeta(record.healthScore, tr);
+  const status = getPerformanceStatusMeta(record.healthScore, tr, isLightTheme);
   const scoreBasis = record.scoreSource === 'health'
     ? tr('reports.healthDataReady', 'Health data ready')
     : (record.scoreSource === 'booking' ? tr('reports.scoreFromBookings', 'score points from bookings') : tr('reports.healthDataMissing', 'Health data missing'));
   const peopleText = record.peopleSamples > 0 ? formatNumber(record.bookingPeopleTotal) : '--';
 
   return (
-    <div className="rounded-lg border border-[#244057] bg-[#0a1724] p-3">
+    <div className="rounded-lg border border-[var(--report-preview-border)] bg-[var(--report-preview-bg-muted)] p-3">
       <div className="grid gap-3 lg:grid-cols-[minmax(190px,1fr)_minmax(0,1.8fr)_70px] lg:items-center">
         <div className="flex min-w-0 items-center gap-3">
-          <div className="relative h-14 w-14 shrink-0 overflow-hidden rounded-full border-2 bg-[#102235]" style={{ borderColor: scoreColor }}>
+          <div className="relative h-14 w-14 shrink-0 overflow-hidden rounded-full border-2 bg-[var(--report-preview-bg-soft)]" style={{ borderColor: scoreColor }}>
             {record.imageUrl ? (
               <img src={record.imageUrl} alt="" className="h-full w-full object-cover" />
             ) : (
-              <div className="grid h-full w-full place-items-center text-lg font-bold text-[#edf5ff]">
+              <div className="grid h-full w-full place-items-center text-lg font-bold text-[var(--report-preview-text)]">
                 {truncateText(record.name, 1).toUpperCase()}
               </div>
             )}
           </div>
           <div className="min-w-0">
-            <div className="truncate text-sm font-semibold text-[#edf5ff]">{record.name}</div>
-            <div className="mt-1 truncate text-[10px] uppercase tracking-widest text-[#6f8298]">{scoreBasis}</div>
+            <div className="truncate text-sm font-semibold text-[var(--report-preview-text)]">{record.name}</div>
+            <div className="mt-1 truncate text-[10px] uppercase tracking-widest text-[var(--report-preview-text-muted)]">{scoreBasis}</div>
             <div className={`mt-2 inline-flex max-w-full rounded-md border px-2 py-1 text-[10px] font-bold uppercase tracking-widest ${status.className}`}>
               <span className="truncate">{status.label}</span>
             </div>
@@ -2739,14 +2756,14 @@ const PreviewPerformanceRow = ({ record, tr, segments }) => {
               [tr('reports.hitRate', 'Hit rate'), record.hitRate !== null ? `${record.hitRate}%` : '--'],
               [tr('reports.avgTemp', 'Avg temp'), formatTemp(record.avgBookingTemp)],
             ].map(([label, value]) => (
-              <div key={label} className="min-w-0 rounded-md border border-[#1c3348] bg-[#102235] px-2 py-2">
-                <div className="truncate text-[9px] font-bold uppercase tracking-widest text-[#6f8298]">{label}</div>
-                <div className="mt-1 truncate text-sm font-semibold tabular-nums text-[#edf5ff]">{value}</div>
+              <div key={label} className="min-w-0 rounded-md border border-[var(--report-preview-border-soft)] bg-[var(--report-preview-bg-soft)] px-2 py-2">
+                <div className="truncate text-[9px] font-bold uppercase tracking-widest text-[var(--report-preview-text-muted)]">{label}</div>
+                <div className="mt-1 truncate text-sm font-semibold tabular-nums text-[var(--report-preview-text)]">{value}</div>
               </div>
             ))}
           </div>
           <div className="mt-3">
-            <div className="mb-1 flex items-center justify-between gap-2 text-[10px] uppercase tracking-widest text-[#6f8298]">
+            <div className="mb-1 flex items-center justify-between gap-2 text-[10px] uppercase tracking-widest text-[var(--report-preview-text-muted)]">
               <span className="truncate font-bold">{tr('reports.bookingMix', 'Booking mix')}</span>
               <span className="shrink-0 tabular-nums">{formatPct(record.avgDeviationPct ?? record.avgBookingDeviationPct)}</span>
             </div>
@@ -2754,18 +2771,18 @@ const PreviewPerformanceRow = ({ record, tr, segments }) => {
           </div>
         </div>
 
-        <div className="rounded-lg border border-[#244057] bg-[#102235] p-3 text-center">
+        <div className="rounded-lg border border-[var(--report-preview-border)] bg-[var(--report-preview-bg-soft)] p-3 text-center">
           <div className="text-2xl font-semibold tabular-nums" style={{ color: scoreColor }}>
             {formatScore(record.healthScore)}
           </div>
-          <div className="text-[9px] font-bold uppercase tracking-widest text-[#6f8298]">{tr('reports.score', 'Score')}</div>
+          <div className="text-[9px] font-bold uppercase tracking-widest text-[var(--report-preview-text-muted)]">{tr('reports.score', 'Score')}</div>
         </div>
       </div>
     </div>
   );
 };
 
-const SaunaReportPreview = ({ report, title, selectedLabel, rangeLabel, tr }) => {
+const SaunaReportPreview = ({ report, title, selectedLabel, rangeLabel, tr, isLightTheme = false, themeVars = {} }) => {
   const healthBasis = getReportHealthBasis(report, tr);
   const summaryText = getExecutiveSummaryText(report, tr);
   const bookingSegments = BOOKING_TYPES.map((type) => ({
@@ -2799,49 +2816,49 @@ const SaunaReportPreview = ({ report, title, selectedLabel, rangeLabel, tr }) =>
   const peopleTrendMax = Math.max(1, ...report.trend.map((entry) => entry.peopleCount || 0));
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4" style={themeVars}>
       <ReportPreviewPage
         eyebrow={tr('reports.analysisReport', 'Analysis report')}
         title={title}
         pageNumber="01"
       >
-        <div className="rounded-lg border border-[#244057] bg-[#0a1a2a] p-4">
+        <div className="rounded-lg border border-[var(--report-preview-border)] bg-[var(--report-preview-bg-muted)] p-4">
           <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
             <div className="flex min-w-0 items-center gap-3">
-              <div className="grid h-12 w-12 shrink-0 place-items-center rounded-lg border border-[#244057] bg-[#f8fbff] p-1.5">
+              <div className="grid h-12 w-12 shrink-0 place-items-center rounded-lg border border-[var(--report-preview-border)] bg-[var(--report-preview-logo-bg)] p-1.5">
                 <img src={REPORT_LOGO_URL} alt="" className="max-h-full max-w-full object-contain" />
               </div>
               <div className="min-w-0">
-                <div className="truncate text-lg font-semibold text-[#edf5ff]">Smart Sauna Systems</div>
-                <div className="mt-1 truncate text-[10px] font-bold uppercase tracking-widest text-[#9fb1c4]">
+                <div className="truncate text-lg font-semibold text-[var(--report-preview-text)]">Smart Sauna Systems</div>
+                <div className="mt-1 truncate text-[10px] font-bold uppercase tracking-widest text-[var(--report-preview-text-secondary)]">
                   {selectedLabel} {'\u00B7'} {rangeLabel}
                 </div>
               </div>
             </div>
             <div className="text-left md:text-right">
-              <div className="text-[10px] font-bold uppercase tracking-widest text-[#6f8298]">{tr('reports.generated', 'Generated')}</div>
-              <div className="mt-1 text-sm font-semibold text-[#edf5ff]">{formatDateTime(Date.now())}</div>
+              <div className="text-[10px] font-bold uppercase tracking-widest text-[var(--report-preview-text-muted)]">{tr('reports.generated', 'Generated')}</div>
+              <div className="mt-1 text-sm font-semibold text-[var(--report-preview-text)]">{formatDateTime(Date.now())}</div>
             </div>
           </div>
         </div>
 
         <div className="mt-4 flex flex-wrap gap-2">
-          <PreviewPill>{report.periodDays} {tr('reports.days', 'days')}</PreviewPill>
-          <PreviewPill tone="green">{formatNumber(report.records.length)} {tr('reports.selectedSaunas', 'selected saunas')}</PreviewPill>
-          <PreviewPill tone={report.totalScoreSamples > 0 ? 'green' : 'amber'}>{healthBasis}</PreviewPill>
+          <PreviewPill isLightTheme={isLightTheme}>{report.periodDays} {tr('reports.days', 'days')}</PreviewPill>
+          <PreviewPill tone="green" isLightTheme={isLightTheme}>{formatNumber(report.records.length)} {tr('reports.selectedSaunas', 'selected saunas')}</PreviewPill>
+          <PreviewPill tone={report.totalScoreSamples > 0 ? 'green' : 'amber'} isLightTheme={isLightTheme}>{healthBasis}</PreviewPill>
         </div>
 
         <div className="mt-4 grid grid-cols-2 gap-2 lg:grid-cols-5">
-          <PreviewMetric Icon={Shield} label={tr('reports.avgScore', 'Average score')} value={report.totalScoreSamples > 0 ? formatScore(report.avgScore) : '--'} tone={report.totalScoreSamples > 0 ? getScoreHex(report.avgScore) : '#6f8298'} />
+          <PreviewMetric Icon={Shield} label={tr('reports.avgScore', 'Average score')} value={report.totalScoreSamples > 0 ? formatScore(report.avgScore) : '--'} tone={report.totalScoreSamples > 0 ? getScoreHex(report.avgScore) : 'var(--report-preview-fallback)'} />
           <PreviewMetric Icon={Calendar} label={tr('reports.bookingHours', 'Booking hours')} value={formatNumber(report.bookingHours)} subLabel={tr('reports.bookingMix', 'Booking mix')} />
           <PreviewMetric Icon={Clock} label={tr('reports.estimatedSessions', 'Estimated sessions')} value={formatNumber(report.sessions)} />
-          <PreviewMetric Icon={User} label={tr('reports.peopleCount', 'People')} value={report.hasPeopleData ? formatNumber(report.peopleDisplayTotal) : '--'} tone={report.hasPeopleData ? '#5ee3a1' : '#6f8298'} subLabel={report.totalPeopleSamples > 0 ? tr('reports.bookingPeople', 'People in bookings') : tr('reports.currentPeopleNow', 'People now')} />
-          <PreviewMetric Icon={Thermometer} label={tr('reports.hitRate', 'Hit rate')} value={report.hitRate !== null ? `${report.hitRate}%` : '--'} tone={report.hitRate !== null ? '#5ee3a1' : '#6f8298'} />
+          <PreviewMetric Icon={User} label={tr('reports.peopleCount', 'People')} value={report.hasPeopleData ? formatNumber(report.peopleDisplayTotal) : '--'} tone={report.hasPeopleData ? '#5ee3a1' : 'var(--report-preview-fallback)'} subLabel={report.totalPeopleSamples > 0 ? tr('reports.bookingPeople', 'People in bookings') : tr('reports.currentPeopleNow', 'People now')} />
+          <PreviewMetric Icon={Thermometer} label={tr('reports.hitRate', 'Hit rate')} value={report.hitRate !== null ? `${report.hitRate}%` : '--'} tone={report.hitRate !== null ? '#5ee3a1' : 'var(--report-preview-fallback)'} />
         </div>
 
-        <div className="mt-4 rounded-lg border border-[#244057] bg-[#0d1b2a] p-4">
-          <div className="text-[10px] font-bold uppercase tracking-widest text-[#9fb1c4]">{tr('reports.executiveSummary', 'Executive summary')}</div>
-          <p className="mt-2 text-sm leading-relaxed text-[#edf5ff]">{summaryText}</p>
+        <div className="mt-4 rounded-lg border border-[var(--report-preview-border)] bg-[var(--report-preview-bg-alt)] p-4">
+          <div className="text-[10px] font-bold uppercase tracking-widest text-[var(--report-preview-text-secondary)]">{tr('reports.executiveSummary', 'Executive summary')}</div>
+          <p className="mt-2 text-sm leading-relaxed text-[var(--report-preview-text)]">{summaryText}</p>
         </div>
       </ReportPreviewPage>
 
@@ -2940,7 +2957,7 @@ const SaunaReportPreview = ({ report, title, selectedLabel, rangeLabel, tr }) =>
         ) : (
           <div className="space-y-2">
             {performanceRecords.map((record) => (
-              <PreviewPerformanceRow key={record.id} record={record} tr={tr} segments={bookingSegments} />
+              <PreviewPerformanceRow key={record.id} record={record} tr={tr} segments={bookingSegments} isLightTheme={isLightTheme} />
             ))}
           </div>
         )}
@@ -3111,6 +3128,7 @@ export default function SaunaReportsCard({
   const recordActiveClass = isLightTheme
     ? 'border-slate-300 bg-white text-slate-900 shadow-sm'
     : 'border-white/18 bg-white/10 text-[var(--text-primary)]';
+  const reportPreviewThemeVars = useMemo(() => getReportPreviewThemeVars(isLightTheme), [isLightTheme]);
   const toggleRecord = (recordId) => {
     setSelectedIds((prev) => {
       if (!prev.length) return [recordId];
@@ -3195,7 +3213,7 @@ export default function SaunaReportsCard({
               <Download className="w-4 h-4" />
               {isPreparingPdf ? tr('reports.preparingPdf', 'Preparing PDF') : tr('reports.downloadPdf', 'Download PDF')}
             </button>
-            {pdfError && <div className="max-w-xs text-[11px] font-semibold text-rose-300">{pdfError}</div>}
+            {pdfError && <div className={`max-w-xs text-[11px] font-semibold ${isLightTheme ? 'text-rose-700' : 'text-rose-300'}`}>{pdfError}</div>}
           </div>
         </div>
 
@@ -3309,6 +3327,8 @@ export default function SaunaReportsCard({
                   selectedLabel={selectedLabel}
                   rangeLabel={rangeLabel}
                   tr={tr}
+                  isLightTheme={isLightTheme}
+                  themeVars={reportPreviewThemeVars}
                 />
               </div>
             </div>

@@ -591,6 +591,7 @@ export default function SaunaMapCard({
   t,
 }) {
   const tr = useMemo(() => makeTr(t), [t]);
+  const isLightTheme = typeof document !== 'undefined' && document.documentElement?.dataset?.theme === 'light';
   const mapRef = useRef(null);
   const mapElRef = useRef(null);
   const markerLayerRef = useRef(null);
@@ -835,7 +836,7 @@ export default function SaunaMapCard({
   return (
     <div
       {...dragProps}
-      className={`sauna-map-card touch-feedback relative h-full min-h-[320px] rounded-[2.2rem] border bg-[var(--glass-bg)] border-[var(--glass-border)] overflow-hidden transition-all duration-300 ${
+      className={`sauna-map-card ${isLightTheme ? 'sauna-map-card--light' : ''} touch-feedback relative h-full min-h-[320px] rounded-[2.2rem] border bg-[var(--glass-bg)] border-[var(--glass-border)] overflow-hidden transition-all duration-300 ${
         editMode ? 'cursor-move' : 'cursor-default'
       }`}
       style={cardStyle}
@@ -879,7 +880,7 @@ export default function SaunaMapCard({
 
           <div className="absolute top-3 left-3 flex flex-wrap gap-2 pointer-events-none">
             <div className="sauna-map-chip">
-              <Flame className="w-3.5 h-3.5 text-orange-300" />
+              <Flame className={`w-3.5 h-3.5 ${isLightTheme ? 'text-orange-500' : 'text-orange-300'}`} />
               {locations.length} {tr('saunaMap.locations', 'locations')}
             </div>
             {stats.activeCount > 0 && (
@@ -897,7 +898,7 @@ export default function SaunaMapCard({
           </div>
 
           {locations.length === 0 && (
-            <div className="absolute inset-0 flex items-center justify-center p-6 text-center bg-[rgba(4,10,20,0.78)]">
+            <div className={`absolute inset-0 flex items-center justify-center p-6 text-center ${isLightTheme ? 'bg-[rgba(248,250,252,0.88)]' : 'bg-[rgba(4,10,20,0.78)]'}`}>
               <div>
                 <MapPin className="w-8 h-8 mx-auto text-[var(--text-secondary)] mb-3" />
                 <div className="text-sm font-semibold text-[var(--text-primary)]">
