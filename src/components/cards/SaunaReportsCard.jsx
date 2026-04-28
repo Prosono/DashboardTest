@@ -2816,7 +2816,7 @@ const SaunaReportPreview = ({ report, title, selectedLabel, rangeLabel, tr, isLi
   const peopleTrendMax = Math.max(1, ...report.trend.map((entry) => entry.peopleCount || 0));
 
   return (
-    <div className="space-y-4" style={themeVars}>
+    <div className="flex min-h-full flex-col gap-4" style={themeVars}>
       <ReportPreviewPage
         eyebrow={tr('reports.analysisReport', 'Analysis report')}
         title={title}
@@ -3320,7 +3320,7 @@ export default function SaunaReportsCard({
                 </div>
               </div>
 
-              <div className="mt-3 min-h-[280px] max-h-[min(780px,68vh)] flex-1 overflow-y-auto pr-1 custom-scrollbar">
+              <div className="mt-3 min-h-[280px] flex-1 overflow-y-auto pr-1 custom-scrollbar">
                 <SaunaReportPreview
                   report={report}
                   title={cardName}
