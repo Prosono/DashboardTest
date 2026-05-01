@@ -11,6 +11,7 @@ import {
   LayoutGrid,
   Settings,
   Server,
+  Wifi,
   Plus,
   Lock,
   User,
