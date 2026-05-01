@@ -31,6 +31,7 @@ import {
   PageNavigation,
   PersonStatus,
   SuperAdminBackupsPage,
+  SuperAdminNetworkPage,
   SuperAdminOverview,
 } from './components';
 
@@ -76,6 +77,11 @@ import {
   fetchPlatformOverview as fetchServerPlatformOverview,
   fetchClientBackupOverview as fetchServerClientBackupOverview,
   fetchClientBackupFiles as fetchServerClientBackupFiles,
+  fetchNetworkOverview as fetchServerNetworkOverview,
+  fetchNetworkSite as fetchServerNetworkSite,
+  saveNetworkSite as saveServerNetworkSite,
+  applyNetworkSite as applyServerNetworkSite,
+  downloadNetworkUmrConfig as downloadServerNetworkUmrConfig,
   provisionClientBackupDirectory as provisionServerClientBackupDirectory,
   deleteClientBackupFile as deleteServerClientBackupFile,
   downloadClientBackupFile as downloadServerClientBackupFile,
@@ -125,6 +131,7 @@ import { DEFAULT_NOTIFICATION_CONFIG, normalizeNotificationConfig } from './util
 
 const SUPER_ADMIN_OVERVIEW_PAGE_ID = '__super_admin_overview';
 const SUPER_ADMIN_BACKUPS_PAGE_ID = '__super_admin_backups';
+const SUPER_ADMIN_NETWORK_PAGE_ID = '__super_admin_network';
 const ADMIN_SETTINGS_PAGE_ID = '__admin_settings';
 const ADMIN_NOTIFICATIONS_PAGE_ID = '__admin_notifications';
 const ADMIN_USERS_PAGE_ID = '__admin_users';
@@ -403,6 +410,7 @@ function AppContent({
   const currentUserRole = normalizeRole(currentUser?.role);
   const isLocalClientAdmin = currentUserRole === 'admin' && !isPlatformAdmin;
   const superAdminFixedPages = useMemo(() => ([
+    SUPER_ADMIN_NETWORK_PAGE_ID,
     SUPER_ADMIN_BACKUPS_PAGE_ID,
     ADMIN_SETTINGS_PAGE_ID,
     ADMIN_NOTIFICATIONS_PAGE_ID,
@@ -1948,6 +1956,7 @@ function AppContent({
   const pageDefaults = {
     home: { label: t('page.home'), icon: LayoutGrid },
     [SUPER_ADMIN_OVERVIEW_PAGE_ID]: { label: t('superAdminOverview.pageLabel'), icon: Server },
+    [SUPER_ADMIN_NETWORK_PAGE_ID]: { label: t('superAdminNetwork.pageLabel'), icon: Wifi, locked: true },
     [SUPER_ADMIN_BACKUPS_PAGE_ID]: { label: t('superAdminBackups.pageLabel'), icon: Archive, locked: true },
     [ADMIN_SETTINGS_PAGE_ID]: { label: t('system.tabConnection'), icon: Settings, locked: true },
     [ADMIN_NOTIFICATIONS_PAGE_ID]: { label: t('system.tabNotifications'), icon: Bell, locked: true },
@@ -1969,6 +1978,7 @@ function AppContent({
   const activePageLabel = useMemo(() => {
     if (activePage === 'home') return t('page.home');
     if (activePage === SUPER_ADMIN_OVERVIEW_PAGE_ID) return t('superAdminOverview.pageLabel');
+    if (activePage === SUPER_ADMIN_NETWORK_PAGE_ID) return t('superAdminNetwork.pageLabel');
     if (activePage === SUPER_ADMIN_BACKUPS_PAGE_ID) return t('superAdminBackups.pageLabel');
     if (activePage === ADMIN_SETTINGS_PAGE_ID) return t('system.tabConnection');
     if (activePage === ADMIN_NOTIFICATIONS_PAGE_ID) return t('system.tabNotifications');
@@ -2686,6 +2696,15 @@ function AppContent({
                 isMobile={isMobile}
               />
             </div>
+          ) : activePage === SUPER_ADMIN_NETWORK_PAGE_ID && isPlatformAdmin ? (
+            <div key={activePage} className={pageTransitionClass}>
+              <SuperAdminNetworkPage
+                t={t}
+                language={language}
+                userAdminApi={userAdminApi}
+                isMobile={isMobile}
+              />
+            </div>
           ) : activePage === SUPER_ADMIN_BACKUPS_PAGE_ID && isPlatformAdmin ? (
             <div key={activePage} className={pageTransitionClass}>
               <SuperAdminBackupsPage
@@ -3321,6 +3340,11 @@ export default function App() {
     fetchClientHaConfig: fetchServerClientHaConfig,
     fetchClientBackupOverview: fetchServerClientBackupOverview,
     fetchClientBackupFiles: fetchServerClientBackupFiles,
+    fetchNetworkOverview: fetchServerNetworkOverview,
+    fetchNetworkSite: fetchServerNetworkSite,
+    saveNetworkSite: saveServerNetworkSite,
+    applyNetworkSite: applyServerNetworkSite,
+    downloadNetworkUmrConfig: downloadServerNetworkUmrConfig,
     provisionClientBackupDirectory: provisionServerClientBackupDirectory,
     deleteClientBackupFile: deleteServerClientBackupFile,
     downloadClientBackupFile: downloadServerClientBackupFile,

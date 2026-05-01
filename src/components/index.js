@@ -48,3 +48,4 @@ export { default as PageNavigation } from './pages/PageNavigation';
 export { default as MediaPage } from './pages/MediaPage';
 export { default as SuperAdminOverview } from './pages/SuperAdminOverview';
 export { default as SuperAdminBackupsPage } from './pages/SuperAdminBackupsPage';
+export { default as SuperAdminNetworkPage } from './pages/SuperAdminNetworkPage';

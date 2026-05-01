@@ -17,6 +17,14 @@ import {
   ensureClientBackupDirectory,
   listClientBackupFiles,
 } from '../backupStorage.js';
+import {
+  buildNetworkSiteArtifacts,
+  applySiteToRuntimeConfig,
+  createNetworkSiteFromInput,
+  deriveSiteRuntimeState,
+  getNetworkRuntimeConfig,
+  networkDefaults,
+} from '../networkAdmin.js';
 import { getRemoteInstanceHealthOverview } from '../remoteInstanceHealthMonitor.js';
 import { PLATFORM_ADMIN_CLIENT_ID, isPlatformAdminClientId } from '../platformAdmin.js';
 
@@ -141,6 +149,256 @@ const getClientBackupLocations = (client, parsedConfig) => {
       isPrimary: connectionId === primaryConnectionId,
     };
   });
+};
+const mapNetworkSiteRow = (row) => ({
+  clientId: String(row?.client_id || '').trim(),
+  locationId: String(row?.location_id || '').trim(),
+  displayName: String(row?.display_name || '').trim(),
+  backupLocationId: String(row?.backup_location_id || '').trim(),
+  lanSubnet: String(row?.lan_subnet || '').trim(),
+  routerIp: String(row?.router_ip || '').trim(),
+  haIp: String(row?.ha_ip || '').trim(),
+  tunnelIp: String(row?.tunnel_ip || '').trim(),
+  domainLabel: String(row?.domain_label || '').trim(),
+  domainFqdn: String(row?.domain_fqdn || '').trim(),
+  wireGuardPrivateKey: String(row?.wireguard_private_key || '').trim(),
+  wireGuardPublicKey: String(row?.wireguard_public_key || '').trim(),
+  createdAt: row?.created_at || null,
+  updatedAt: row?.updated_at || null,
+});
+const buildNetworkSiteKey = (clientId, locationId) => `${normalizeClientId(clientId)}::${normalizeLocationId(locationId)}`;
+const inferDomainFromConnection = (connection) => {
+  const domainSuffix = String(networkDefaults?.domainSuffix || '').trim().toLowerCase();
+  const suffix = domainSuffix ? `.${domainSuffix}` : '';
+  const candidateHosts = [
+    parseUrlHost(connection?.url),
+    parseUrlHost(connection?.fallbackUrl),
+  ].map((value) => String(value || '').trim().toLowerCase()).filter(Boolean);
+  const fqdn = candidateHosts.find((host) => suffix && host.endsWith(suffix)) || '';
+  const domainLabel = fqdn && suffix
+    ? fqdn.slice(0, -suffix.length).replace(/\.$/, '')
+    : '';
+  return { domainLabel, domainFqdn: fqdn };
+};
+const mergeNetworkSiteRecord = (base = {}, saved = {}) => {
+  const clientId = normalizeClientId(saved.clientId || base.clientId);
+  const locationId = normalizeLocationId(saved.locationId || base.locationId);
+  const backupLocationId = normalizeLocationId(saved.backupLocationId || base.backupLocationId || locationId) || locationId;
+  const displayName = String(saved.displayName || base.displayName || locationId || clientId || 'Location').trim();
+  const domainLabel = normalizeLocationId(saved.domainLabel || base.domainLabel || locationId);
+  const domainFqdn = String(
+    saved.domainFqdn
+    || base.domainFqdn
+    || (domainLabel && networkDefaults?.domainSuffix ? `${domainLabel}.${networkDefaults.domainSuffix}` : ''),
+  ).trim().toLowerCase();
+  return {
+    clientId,
+    locationId,
+    displayName,
+    backupLocationId,
+    lanSubnet: String(saved.lanSubnet || base.lanSubnet || '').trim(),
+    routerIp: String(saved.routerIp || base.routerIp || '').trim(),
+    haIp: String(saved.haIp || base.haIp || '').trim(),
+    tunnelIp: String(saved.tunnelIp || base.tunnelIp || '').trim(),
+    domainLabel,
+    domainFqdn,
+    wireGuardPrivateKey: String(saved.wireGuardPrivateKey || base.wireGuardPrivateKey || '').trim(),
+    wireGuardPublicKey: String(saved.wireGuardPublicKey || base.wireGuardPublicKey || '').trim(),
+    createdAt: saved.createdAt || base.createdAt || null,
+    updatedAt: saved.updatedAt || base.updatedAt || null,
+  };
+};
+const toPublicNetworkSite = (site, runtimeConfig = null) => {
+  const runtimeState = runtimeConfig ? deriveSiteRuntimeState(site, runtimeConfig) : {
+    wireGuardApplied: false,
+    caddyApplied: false,
+    matchedPeer: null,
+    matchedCaddy: null,
+  };
+  const backupRoot = String(networkDefaults?.backupRoot || '').replace(/\/$/, '');
+  const backupDirectoryPath = site.clientId && site.backupLocationId
+    ? `${backupRoot}/${site.clientId}/${site.backupLocationId}`
+    : '';
+  return {
+    clientId: site.clientId,
+    locationId: site.locationId,
+    id: site.locationId,
+    name: site.displayName || site.locationId,
+    displayName: site.displayName || site.locationId,
+    backupLocationId: site.backupLocationId || site.locationId,
+    lanSubnet: site.lanSubnet,
+    routerIp: site.routerIp,
+    haIp: site.haIp,
+    tunnelIp: site.tunnelIp,
+    domainLabel: site.domainLabel,
+    domainFqdn: site.domainFqdn,
+    backupDirectoryPath,
+    hasWireGuardKeys: Boolean(site.wireGuardPrivateKey && site.wireGuardPublicKey),
+    wireGuardPublicKey: site.wireGuardPublicKey || '',
+    createdAt: site.createdAt || null,
+    updatedAt: site.updatedAt || null,
+    runtime: {
+      wireGuardApplied: Boolean(runtimeState.wireGuardApplied),
+      caddyApplied: Boolean(runtimeState.caddyApplied),
+      matchedPeer: runtimeState.matchedPeer || null,
+      matchedCaddy: runtimeState.matchedCaddy || null,
+    },
+  };
+};
+const sanitizeRuntimeConfigForResponse = (runtimeConfig = {}) => ({
+  server: runtimeConfig?.server || {},
+  files: runtimeConfig?.files || {},
+  commands: runtimeConfig?.commands || {},
+  active: {
+    wireGuardPeers: Array.isArray(runtimeConfig?.active?.wireGuardPeers) ? runtimeConfig.active.wireGuardPeers : [],
+    caddySites: Array.isArray(runtimeConfig?.active?.caddySites) ? runtimeConfig.active.caddySites : [],
+  },
+});
+const loadNetworkOverviewData = () => {
+  const runtimeConfig = getNetworkRuntimeConfig();
+  const clients = db.prepare(`
+    SELECT
+      c.id,
+      c.name,
+      c.updated_at
+    FROM clients c
+    ORDER BY c.id ASC
+  `).all().filter((client) => !isPlatformAdminClientId(client.id));
+  const haConfigRows = db.prepare('SELECT * FROM ha_config').all();
+  const haConfigByClient = new Map(haConfigRows.map((row) => [row.client_id, row]));
+  const savedRows = db.prepare(`
+    SELECT
+      client_id,
+      location_id,
+      display_name,
+      backup_location_id,
+      lan_subnet,
+      router_ip,
+      ha_ip,
+      tunnel_ip,
+      domain_label,
+      domain_fqdn,
+      wireguard_private_key,
+      wireguard_public_key,
+      created_at,
+      updated_at
+    FROM network_sites
+    ORDER BY client_id ASC, location_id ASC
+  `).all().map(mapNetworkSiteRow);
+  const savedByKey = new Map(savedRows.map((row) => [buildNetworkSiteKey(row.clientId, row.locationId), row]));
+  const usedSavedKeys = new Set();
+
+  const clientSummaries = clients.map((client) => {
+    const parsedConfig = parseHaConfigRow(haConfigByClient.get(client.id));
+    const connections = Array.isArray(parsedConfig?.connections) ? parsedConfig.connections : [];
+    const inferredLocations = connections.map((connection, index) => {
+      const fallbackLocationId = index === 0 ? 'primary' : `connection-${index + 1}`;
+      const locationId = normalizeLocationId(connection?.id || fallbackLocationId) || fallbackLocationId;
+      const inferredDomain = inferDomainFromConnection(connection);
+      const base = {
+        clientId: client.id,
+        locationId,
+        displayName: String(connection?.name || locationId).trim() || locationId,
+        backupLocationId: normalizeLocationId(connection?.backupLocationId || locationId) || locationId,
+        domainLabel: inferredDomain.domainLabel || locationId,
+        domainFqdn: inferredDomain.domainFqdn || '',
+      };
+      const saved = savedByKey.get(buildNetworkSiteKey(client.id, locationId)) || null;
+      if (saved) usedSavedKeys.add(buildNetworkSiteKey(client.id, locationId));
+      return mergeNetworkSiteRecord(base, saved || {});
+    });
+
+    const additionalSaved = savedRows
+      .filter((row) => row.clientId === client.id && !usedSavedKeys.has(buildNetworkSiteKey(row.clientId, row.locationId)))
+      .map((row) => {
+        usedSavedKeys.add(buildNetworkSiteKey(row.clientId, row.locationId));
+        return mergeNetworkSiteRecord({
+          clientId: client.id,
+          locationId: row.locationId,
+          displayName: row.displayName || row.locationId,
+          backupLocationId: row.backupLocationId || row.locationId,
+          domainLabel: row.domainLabel || row.locationId,
+          domainFqdn: row.domainFqdn || '',
+        }, row);
+      });
+
+    const mergedLocations = [...inferredLocations, ...additionalSaved]
+      .map((site) => toPublicNetworkSite(site, runtimeConfig))
+      .sort((a, b) => String(a.displayName || a.locationId).localeCompare(String(b.displayName || b.locationId), 'nb'));
+
+    return {
+      id: client.id,
+      name: client.name,
+      updatedAt: client.updated_at,
+      locationCount: mergedLocations.length,
+      appliedWireGuardCount: mergedLocations.filter((location) => location.runtime?.wireGuardApplied).length,
+      appliedCaddyCount: mergedLocations.filter((location) => location.runtime?.caddyApplied).length,
+      locations: mergedLocations,
+    };
+  });
+
+  const clientById = new Map(clientSummaries.map((client) => [client.id, client]));
+
+  savedRows.forEach((row) => {
+    if (usedSavedKeys.has(buildNetworkSiteKey(row.clientId, row.locationId))) return;
+    const fallbackClient = clientById.get(row.clientId);
+    const location = toPublicNetworkSite(mergeNetworkSiteRecord({
+      clientId: row.clientId,
+      locationId: row.locationId,
+      displayName: row.displayName || row.locationId,
+      backupLocationId: row.backupLocationId || row.locationId,
+      domainLabel: row.domainLabel || row.locationId,
+      domainFqdn: row.domainFqdn || '',
+    }, row), runtimeConfig);
+    if (fallbackClient) {
+      fallbackClient.locations.push(location);
+      fallbackClient.locationCount = fallbackClient.locations.length;
+      fallbackClient.appliedWireGuardCount = fallbackClient.locations.filter((entry) => entry.runtime?.wireGuardApplied).length;
+      fallbackClient.appliedCaddyCount = fallbackClient.locations.filter((entry) => entry.runtime?.caddyApplied).length;
+      return;
+    }
+    clientSummaries.push({
+      id: row.clientId,
+      name: row.clientId,
+      updatedAt: row.updatedAt || null,
+      locationCount: 1,
+      appliedWireGuardCount: location.runtime?.wireGuardApplied ? 1 : 0,
+      appliedCaddyCount: location.runtime?.caddyApplied ? 1 : 0,
+      locations: [location],
+    });
+  });
+
+  clientSummaries.sort((a, b) => String(a.name || a.id).localeCompare(String(b.name || b.id), 'nb'));
+
+  return {
+    generatedAt: new Date().toISOString(),
+    runtimeConfig,
+    clients: clientSummaries,
+    totals: clientSummaries.reduce((acc, client) => ({
+      clients: acc.clients + 1,
+      locations: acc.locations + Number(client.locationCount || 0),
+      appliedWireGuard: acc.appliedWireGuard + Number(client.appliedWireGuardCount || 0),
+      appliedCaddy: acc.appliedCaddy + Number(client.appliedCaddyCount || 0),
+    }), {
+      clients: 0,
+      locations: 0,
+      appliedWireGuard: 0,
+      appliedCaddy: 0,
+    }),
+  };
+};
+const resolveNetworkSiteFromOverview = (overview, clientIdRaw, locationIdRaw) => {
+  const clientId = normalizeClientId(clientIdRaw);
+  const locationId = normalizeLocationId(locationIdRaw);
+  const client = Array.isArray(overview?.clients)
+    ? overview.clients.find((entry) => entry.id === clientId)
+    : null;
+  if (!client) return null;
+  const site = Array.isArray(client.locations)
+    ? client.locations.find((entry) => entry.locationId === locationId)
+    : null;
+  if (!site) return null;
+  return { client, site };
 };
 const resolveRequestedLocationMeta = (locations, locationIdRaw) => {
   const requestedLocationId = normalizeLocationId(locationIdRaw);
@@ -584,6 +842,279 @@ router.get('/backups/overview', async (_req, res) => {
     });
   } catch (error) {
     return res.status(500).json({ error: error?.message || 'Failed to load backup overview' });
+  }
+});
+
+router.get('/network/overview', (_req, res) => {
+  try {
+    const overview = loadNetworkOverviewData();
+    const runtime = sanitizeRuntimeConfigForResponse(overview.runtimeConfig);
+    return res.json({
+      generatedAt: overview.generatedAt,
+      totals: overview.totals,
+      server: runtime.server,
+      files: runtime.files,
+      active: runtime.active,
+      commands: runtime.commands,
+      clients: overview.clients,
+    });
+  } catch (error) {
+    return res.status(500).json({ error: error?.message || 'Failed to load network overview' });
+  }
+});
+
+router.get('/network/sites/:clientId/:locationId', (req, res) => {
+  const clientId = normalizeClientId(req.params.clientId);
+  const locationId = normalizeLocationId(req.params.locationId);
+  if (!clientId || !locationId) return res.status(400).json({ error: 'Valid clientId and locationId are required' });
+
+  try {
+    const overview = loadNetworkOverviewData();
+    const resolved = resolveNetworkSiteFromOverview(overview, clientId, locationId);
+    if (!resolved) return res.status(404).json({ error: 'Network location not found' });
+
+    const savedRow = db.prepare(`
+      SELECT
+        client_id,
+        location_id,
+        display_name,
+        backup_location_id,
+        lan_subnet,
+        router_ip,
+        ha_ip,
+        tunnel_ip,
+        domain_label,
+        domain_fqdn,
+        wireguard_private_key,
+        wireguard_public_key,
+        created_at,
+        updated_at
+      FROM network_sites
+      WHERE client_id = ? AND location_id = ?
+    `).get(clientId, locationId);
+    const mergedSite = mergeNetworkSiteRecord(resolved.site, savedRow ? mapNetworkSiteRow(savedRow) : {});
+    const artifacts = buildNetworkSiteArtifacts(mergedSite);
+    return res.json({
+      client: {
+        id: resolved.client.id,
+        name: resolved.client.name,
+      },
+      site: toPublicNetworkSite(mergedSite, overview.runtimeConfig),
+      persisted: Boolean(savedRow),
+      artifacts,
+      runtime: sanitizeRuntimeConfigForResponse(overview.runtimeConfig),
+    });
+  } catch (error) {
+    return res.status(500).json({ error: error?.message || 'Failed to load network location' });
+  }
+});
+
+router.post('/network/sites', (req, res) => {
+  const clientId = normalizeClientId(req.body?.clientId);
+  const locationId = normalizeLocationId(req.body?.locationId);
+  if (!clientId || !locationId) return res.status(400).json({ error: 'Valid clientId and locationId are required' });
+
+  const client = db.prepare('SELECT id, name FROM clients WHERE id = ?').get(clientId);
+  if (!client) return res.status(404).json({ error: 'Client not found' });
+
+  try {
+    const overview = loadNetworkOverviewData();
+    const resolved = resolveNetworkSiteFromOverview(overview, clientId, locationId);
+    const savedRow = db.prepare(`
+      SELECT
+        client_id,
+        location_id,
+        display_name,
+        backup_location_id,
+        lan_subnet,
+        router_ip,
+        ha_ip,
+        tunnel_ip,
+        domain_label,
+        domain_fqdn,
+        wireguard_private_key,
+        wireguard_public_key,
+        created_at,
+        updated_at
+      FROM network_sites
+      WHERE client_id = ? AND location_id = ?
+    `).get(clientId, locationId);
+    const fallback = mergeNetworkSiteRecord(
+      resolved?.site || {
+        clientId,
+        locationId,
+        displayName: locationId,
+        backupLocationId: locationId,
+        domainLabel: locationId,
+      },
+      savedRow ? mapNetworkSiteRow(savedRow) : {},
+    );
+    const nextSite = createNetworkSiteFromInput({
+      ...req.body,
+      clientId,
+      locationId,
+    }, fallback);
+    const now = new Date().toISOString();
+
+    db.prepare(`
+      INSERT INTO network_sites (
+        client_id,
+        location_id,
+        display_name,
+        backup_location_id,
+        lan_subnet,
+        router_ip,
+        ha_ip,
+        tunnel_ip,
+        domain_label,
+        domain_fqdn,
+        wireguard_private_key,
+        wireguard_public_key,
+        created_at,
+        updated_at
+      )
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(client_id, location_id) DO UPDATE SET
+        display_name = excluded.display_name,
+        backup_location_id = excluded.backup_location_id,
+        lan_subnet = excluded.lan_subnet,
+        router_ip = excluded.router_ip,
+        ha_ip = excluded.ha_ip,
+        tunnel_ip = excluded.tunnel_ip,
+        domain_label = excluded.domain_label,
+        domain_fqdn = excluded.domain_fqdn,
+        wireguard_private_key = excluded.wireguard_private_key,
+        wireguard_public_key = excluded.wireguard_public_key,
+        updated_at = excluded.updated_at
+    `).run(
+      nextSite.clientId,
+      nextSite.locationId,
+      nextSite.displayName,
+      nextSite.backupLocationId,
+      nextSite.lanSubnet,
+      nextSite.routerIp,
+      nextSite.haIp,
+      nextSite.tunnelIp,
+      nextSite.domainLabel,
+      nextSite.domainFqdn,
+      nextSite.wireGuardPrivateKey,
+      nextSite.wireGuardPublicKey,
+      savedRow?.created_at || now,
+      now,
+    );
+
+    const refreshedOverview = loadNetworkOverviewData();
+    const refreshedResolved = resolveNetworkSiteFromOverview(refreshedOverview, clientId, locationId);
+    const artifacts = buildNetworkSiteArtifacts(nextSite);
+    return res.json({
+      client: {
+        id: client.id,
+        name: client.name,
+      },
+      site: toPublicNetworkSite(refreshedResolved?.site || nextSite, refreshedOverview.runtimeConfig),
+      persisted: true,
+      artifacts,
+      runtime: sanitizeRuntimeConfigForResponse(refreshedOverview.runtimeConfig),
+    });
+  } catch (error) {
+    return res.status(400).json({ error: error?.message || 'Failed to save network location' });
+  }
+});
+
+router.post('/network/sites/:clientId/:locationId/apply', (req, res) => {
+  const clientId = normalizeClientId(req.params.clientId);
+  const locationId = normalizeLocationId(req.params.locationId);
+  const target = String(req.body?.target || 'all').trim().toLowerCase() || 'all';
+  if (!clientId || !locationId) return res.status(400).json({ error: 'Valid clientId and locationId are required' });
+
+  const row = db.prepare(`
+    SELECT
+      client_id,
+      location_id,
+      display_name,
+      backup_location_id,
+      lan_subnet,
+      router_ip,
+      ha_ip,
+      tunnel_ip,
+      domain_label,
+      domain_fqdn,
+      wireguard_private_key,
+      wireguard_public_key,
+      created_at,
+      updated_at
+    FROM network_sites
+    WHERE client_id = ? AND location_id = ?
+  `).get(clientId, locationId);
+  if (!row) return res.status(404).json({ error: 'Save the network site before applying it to server config' });
+
+  const site = mergeNetworkSiteRecord(mapNetworkSiteRow(row), mapNetworkSiteRow(row));
+  const shouldApplyWireGuard = target === 'all' || target === 'wireguard';
+  const shouldApplyCaddy = target === 'all' || target === 'caddy';
+  if (shouldApplyWireGuard) {
+    if (!site.tunnelIp || !site.lanSubnet || !site.wireGuardPublicKey) {
+      return res.status(400).json({ error: 'Tunnel IP, LAN subnet and WireGuard public key are required for WireGuard apply' });
+    }
+  }
+  if (shouldApplyCaddy) {
+    if (!site.domainFqdn || !site.haIp) {
+      return res.status(400).json({ error: 'Domain and HA IP are required for Caddy apply' });
+    }
+  }
+
+  try {
+    const result = applySiteToRuntimeConfig(site, target);
+    const refreshedOverview = loadNetworkOverviewData();
+    const refreshedResolved = resolveNetworkSiteFromOverview(refreshedOverview, clientId, locationId);
+    return res.json({
+      success: true,
+      site: toPublicNetworkSite(refreshedResolved?.site || site, refreshedOverview.runtimeConfig),
+      result,
+      runtime: sanitizeRuntimeConfigForResponse(refreshedOverview.runtimeConfig),
+    });
+  } catch (error) {
+    return res.status(400).json({ error: error?.message || 'Failed to apply server config' });
+  }
+});
+
+router.get('/network/sites/:clientId/:locationId/umr-config', (req, res) => {
+  const clientId = normalizeClientId(req.params.clientId);
+  const locationId = normalizeLocationId(req.params.locationId);
+  if (!clientId || !locationId) return res.status(400).json({ error: 'Valid clientId and locationId are required' });
+
+  const row = db.prepare(`
+    SELECT
+      client_id,
+      location_id,
+      display_name,
+      backup_location_id,
+      lan_subnet,
+      router_ip,
+      ha_ip,
+      tunnel_ip,
+      domain_label,
+      domain_fqdn,
+      wireguard_private_key,
+      wireguard_public_key,
+      created_at,
+      updated_at
+    FROM network_sites
+    WHERE client_id = ? AND location_id = ?
+  `).get(clientId, locationId);
+  if (!row) return res.status(404).json({ error: 'Network location not found' });
+
+  try {
+    const site = mergeNetworkSiteRecord(mapNetworkSiteRow(row), mapNetworkSiteRow(row));
+    const artifacts = buildNetworkSiteArtifacts(site);
+    if (!artifacts.umrConfig) {
+      return res.status(400).json({ error: artifacts.umrConfigError || 'Unable to generate UMR config' });
+    }
+    const fileName = `${site.clientId}-${site.locationId}-umr.conf`.replace(/[^a-z0-9._-]+/gi, '-');
+    res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
+    return res.send(artifacts.umrConfig);
+  } catch (error) {
+    return res.status(400).json({ error: error?.message || 'Failed to generate UMR config' });
   }
 });
 

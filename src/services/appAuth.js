@@ -329,6 +329,55 @@ export const downloadClientBackupFile = async (clientId, fileName, locationId = 
   };
 };
 
+export const fetchNetworkOverview = async () => {
+  const payload = await apiRequest('/api/clients/network/overview', { method: 'GET' });
+  return payload && typeof payload === 'object' ? payload : null;
+};
+
+export const fetchNetworkSite = async (clientId, locationId) => {
+  const payload = await apiRequest(
+    `/api/clients/network/sites/${encodeURIComponent(clientId)}/${encodeURIComponent(locationId)}`,
+    { method: 'GET' },
+  );
+  return payload && typeof payload === 'object' ? payload : null;
+};
+
+export const saveNetworkSite = async (site) => {
+  const payload = await apiRequest('/api/clients/network/sites', {
+    method: 'POST',
+    body: JSON.stringify(site || {}),
+  });
+  return payload && typeof payload === 'object' ? payload : null;
+};
+
+export const applyNetworkSite = async (clientId, locationId, target = 'all') => {
+  const payload = await apiRequest(
+    `/api/clients/network/sites/${encodeURIComponent(clientId)}/${encodeURIComponent(locationId)}/apply`,
+    {
+      method: 'POST',
+      body: JSON.stringify({ target }),
+    },
+  );
+  return payload && typeof payload === 'object' ? payload : null;
+};
+
+export const downloadNetworkUmrConfig = async (clientId, locationId) => {
+  const response = await apiFetch(
+    `/api/clients/network/sites/${encodeURIComponent(clientId)}/${encodeURIComponent(locationId)}/umr-config`,
+    {
+      method: 'GET',
+      headers: {
+        Accept: 'text/plain',
+      },
+    },
+  );
+  const blob = await response.blob();
+  return {
+    blob,
+    fileName: parseDownloadFileName(response.headers.get('Content-Disposition'), `${locationId || 'location'}-umr.conf`),
+  };
+};
+
 export const createClient = async (clientId, name = '') => {
   const payload = await apiRequest('/api/clients', {
     method: 'POST',

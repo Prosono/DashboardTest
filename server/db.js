@@ -404,6 +404,30 @@ const ensureSystemSettingsTable = () => {
   `);
 };
 
+const ensureNetworkSitesTable = () => {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS network_sites (
+      client_id TEXT NOT NULL,
+      location_id TEXT NOT NULL,
+      display_name TEXT NOT NULL DEFAULT '',
+      backup_location_id TEXT NOT NULL DEFAULT '',
+      lan_subnet TEXT NOT NULL DEFAULT '',
+      router_ip TEXT NOT NULL DEFAULT '',
+      ha_ip TEXT NOT NULL DEFAULT '',
+      tunnel_ip TEXT NOT NULL DEFAULT '',
+      domain_label TEXT NOT NULL DEFAULT '',
+      domain_fqdn TEXT NOT NULL DEFAULT '',
+      wireguard_private_key TEXT NOT NULL DEFAULT '',
+      wireguard_public_key TEXT NOT NULL DEFAULT '',
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      PRIMARY KEY (client_id, location_id),
+      FOREIGN KEY (client_id) REFERENCES clients(id) ON DELETE CASCADE ON UPDATE CASCADE
+    );
+    CREATE INDEX IF NOT EXISTS idx_network_sites_client ON network_sites(client_id, updated_at DESC);
+  `);
+};
+
 const ensureClientRecord = (clientId, displayName = '') => {
   const normalized = normalizeClientId(clientId);
   if (!normalized) return null;
@@ -448,6 +472,7 @@ ensureSessionsTable();
 ensureHaConfigTable();
 ensureProfilesTable();
 ensureSystemSettingsTable();
+ensureNetworkSitesTable();
 
 const distinctClients = new Set();
 for (const row of db.prepare('SELECT DISTINCT client_id FROM users WHERE client_id IS NOT NULL AND client_id != ?').all('')) {

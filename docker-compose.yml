@@ -9,9 +9,17 @@ services:
       - NODE_ENV=production
       - DATA_DIR=/app/data
       - HA_BACKUP_ROOT=/app/ha-backups
+      - NETWORK_WG_CONFIG_PATH=/app/runtime/wireguard/wg0.conf
+      - NETWORK_CADDY_CONFIG_PATH=/app/runtime/caddy/Caddyfile
+      - NETWORK_DOMAIN_SUFFIX=smarti.dev
+      - NETWORK_SERVER_PUBLIC_HOST=65.21.203.69
+      - NETWORK_WG_SERVER_PUBLIC_KEY=lrOUZtZzokAzBtsGorxA7/jgK7ROnIaemE4Y0VCbAgA=
+      - NETWORK_WG_LISTEN_PORT=51820
     volumes:
       - tunet-data:/app/data
       - /srv/ha-backups:/app/ha-backups
+      - /etc/wireguard:/app/runtime/wireguard
+      - /etc/caddy:/app/runtime/caddy
     healthcheck:
       test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:3002/api/health"]
       interval: 30s
