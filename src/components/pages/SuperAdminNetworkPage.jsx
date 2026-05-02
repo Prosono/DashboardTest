@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Check,
+  ChevronDown,
   Database,
   Download,
   Globe,
-  Key,
   Link,
   MapPin,
   Plus,
@@ -12,7 +12,6 @@ import {
   Server,
   Shield,
   Wifi,
-  AlertTriangle,
 } from '../../icons';
 
 const NEW_LOCATION_KEY = '__new__';
@@ -77,12 +76,18 @@ function SummaryCard({ icon: Icon, label, value, hint, tone = 'neutral' }) {
     : 'border-[var(--glass-border)] bg-[var(--glass-bg)] text-[var(--text-primary)]';
   return (
     <div className={`rounded-2xl border px-4 py-3 ${toneClass}`}>
-      <div className="flex items-center justify-between gap-3">
-        <span className="text-[10px] uppercase tracking-[0.18em] opacity-80">{label}</span>
-        <Icon className="w-4 h-4 opacity-80" />
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <span className="text-[10px] uppercase tracking-[0.18em] opacity-75">{label}</span>
+          <div className="mt-2 flex items-end gap-2">
+            <span className="text-[28px] leading-none font-semibold tracking-tight">{value}</span>
+          </div>
+          {hint ? <div className="mt-2 text-[11px] opacity-70">{hint}</div> : null}
+        </div>
+        <div className="rounded-2xl border border-current/10 bg-black/5 p-2">
+          <Icon className="w-4 h-4 opacity-75" />
+        </div>
       </div>
-      <div className="mt-2 text-2xl font-semibold tracking-tight">{value}</div>
-      <div className="mt-1 text-[10px] uppercase tracking-[0.12em] opacity-70">{hint}</div>
     </div>
   );
 }
@@ -132,6 +137,17 @@ function PreviewPanel({ title, subtitle, value, emptyLabel, tone = 'neutral' }) 
   );
 }
 
+function WorkflowChip({ step, label }) {
+  return (
+    <div className="inline-flex items-center gap-2 rounded-full border border-[var(--glass-border)] bg-[var(--glass-bg)] px-3 py-1.5 text-[11px] text-[var(--text-secondary)]">
+      <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-[color-mix(in_srgb,var(--accent-color)_18%,transparent)] text-[10px] font-semibold text-[var(--text-primary)]">
+        {step}
+      </span>
+      <span>{label}</span>
+    </div>
+  );
+}
+
 export default function SuperAdminNetworkPage({
   t,
   language,
@@ -149,6 +165,9 @@ export default function SuperAdminNetworkPage({
   const [saving, setSaving] = useState(false);
   const [applyingTarget, setApplyingTarget] = useState('');
   const [downloading, setDownloading] = useState(false);
+  const [showAdvancedFields, setShowAdvancedFields] = useState(false);
+  const [showInspector, setShowInspector] = useState(false);
+  const [inspectorTab, setInspectorTab] = useState('preview');
   const [error, setError] = useState('');
   const [actionMessage, setActionMessage] = useState('');
 
@@ -272,6 +291,12 @@ export default function SuperAdminNetworkPage({
     [locations, selectedLocationId],
   );
   const isNewLocation = selectedLocationId === NEW_LOCATION_KEY;
+  const selectedLocationName = isNewLocation
+    ? t('superAdminNetwork.newLocation')
+    : (detail?.site?.displayName || selectedLocationSummary?.displayName || '-');
+  const wireGuardApplied = Boolean(detail?.site?.runtime?.wireGuardApplied);
+  const caddyApplied = Boolean(detail?.site?.runtime?.caddyApplied);
+  const hasPublishedConfig = wireGuardApplied || caddyApplied;
 
   const domainSuffix = String(overview?.server?.domainSuffix || '').trim();
   const domainFqdnPreview = useMemo(() => {
@@ -310,6 +335,12 @@ AllowedIPs = ${tunnelIpPart}, ${subnetPart}`;
     if (!root || !clientId || !backupLocationId) return '-';
     return `${root}/${clientId}/${backupLocationId}`;
   }, [overview?.server?.backupRoot, formState.clientId, formState.backupLocationId, formState.locationId, selectedClientId]);
+
+  useEffect(() => {
+    setShowAdvancedFields(false);
+    setShowInspector(false);
+    setInspectorTab('preview');
+  }, [selectedClientId, selectedLocationId]);
 
   const handleRefresh = useCallback(async () => {
     const payload = await loadOverview(true);
@@ -415,6 +446,11 @@ AllowedIPs = ${tunnelIpPart}, ${subnetPart}`;
             <p className="mt-2 text-sm text-[var(--text-secondary)]">
               {t('superAdminNetwork.subtitle')}
             </p>
+            <div className="mt-4 flex flex-wrap gap-2">
+              <WorkflowChip step="1" label={t('superAdminNetwork.workflow.chooseClient')} />
+              <WorkflowChip step="2" label={t('superAdminNetwork.workflow.fillBasics')} />
+              <WorkflowChip step="3" label={t('superAdminNetwork.workflow.publish')} />
+            </div>
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
@@ -425,7 +461,7 @@ AllowedIPs = ${tunnelIpPart}, ${subnetPart}`;
               className="inline-flex items-center justify-center gap-2 px-4 py-2 rounded-xl border border-[var(--glass-border)] bg-[var(--glass-bg)] text-[var(--text-primary)] text-xs font-bold uppercase tracking-[0.18em] hover:bg-[var(--glass-bg-hover)] transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
             >
               <RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} />
-              {refreshing ? t('common.saving') : t('superAdminNetwork.refresh')}
+              {t('superAdminNetwork.refresh')}
             </button>
           </div>
         </div>
@@ -443,12 +479,26 @@ AllowedIPs = ${tunnelIpPart}, ${subnetPart}`;
         </section>
       ) : null}
 
-      <section className="grid grid-cols-2 md:grid-cols-5 gap-3">
-        <SummaryCard icon={Server} label={t('superAdminNetwork.stats.clients')} value={String(totals.clients)} hint={t('superAdminNetwork.stats.clientsHint')} />
-        <SummaryCard icon={MapPin} label={t('superAdminNetwork.stats.locations')} value={String(totals.locations)} hint={t('superAdminNetwork.stats.locationsHint')} />
-        <SummaryCard icon={Wifi} label={t('superAdminNetwork.stats.wgPeers')} value={String(totals.activePeers)} hint={t('superAdminNetwork.stats.wgPeersHint')} />
-        <SummaryCard icon={Globe} label={t('superAdminNetwork.stats.caddySites')} value={String(totals.activeSites)} hint={t('superAdminNetwork.stats.caddySitesHint')} />
-        <SummaryCard icon={Check} label={t('superAdminNetwork.stats.applied')} value={String(Math.min(totals.appliedWireGuard, totals.appliedCaddy))} hint={t('superAdminNetwork.stats.appliedHint')} tone={(totals.appliedWireGuard + totals.appliedCaddy) > 0 ? 'good' : 'neutral'} />
+      <section className="grid grid-cols-1 md:grid-cols-3 gap-3">
+        <SummaryCard
+          icon={Server}
+          label={t('superAdminNetwork.stats.clients')}
+          value={String(totals.clients)}
+          hint={t('superAdminNetwork.stats.clientsHint')}
+        />
+        <SummaryCard
+          icon={MapPin}
+          label={t('superAdminNetwork.stats.locations')}
+          value={String(totals.locations)}
+          hint={`${totals.activePeers} ${t('superAdminNetwork.stats.wgPeers')?.toLowerCase?.() || 'wg-peers'}`}
+        />
+        <SummaryCard
+          icon={Check}
+          label={t('superAdminNetwork.stats.applied')}
+          value={String(Math.min(totals.appliedWireGuard, totals.appliedCaddy))}
+          hint={`${totals.activeSites} ${t('superAdminNetwork.stats.caddySites')?.toLowerCase?.() || 'caddy-sites'}`}
+          tone={(totals.appliedWireGuard + totals.appliedCaddy) > 0 ? 'good' : 'neutral'}
+        />
       </section>
 
       {loadingOverview ? (
@@ -529,7 +579,7 @@ AllowedIPs = ${tunnelIpPart}, ${subnetPart}`;
                         {selectedClient.name || selectedClient.id}
                       </h3>
                       <p className="mt-2 text-sm text-[var(--text-secondary)]">
-                        {t('superAdminNetwork.selectedLocation')}: <span className="text-[var(--text-primary)]">{isNewLocation ? t('superAdminNetwork.newLocation') : (detail?.site?.displayName || selectedLocationSummary?.displayName || '-')}</span>
+                        {t('superAdminNetwork.selectedLocation')}: <span className="text-[var(--text-primary)]">{selectedLocationName}</span>
                       </p>
                     </div>
 
@@ -573,7 +623,7 @@ AllowedIPs = ${tunnelIpPart}, ${subnetPart}`;
                         type="button"
                         onClick={() => handleApply('all')}
                         disabled={!detail?.persisted || applyingTarget === 'all'}
-                        className="inline-flex items-center justify-center gap-2 px-3 py-2 rounded-xl border border-[var(--glass-border)] bg-[var(--glass-bg)] text-[var(--text-primary)] text-xs font-bold uppercase tracking-[0.14em] hover:bg-[var(--glass-bg-hover)] transition-colors disabled:opacity-60"
+                        className="inline-flex items-center justify-center gap-2 px-4 py-2 rounded-xl border border-[var(--glass-border)] bg-[var(--glass-bg)] text-[var(--text-primary)] text-xs font-bold uppercase tracking-[0.14em] hover:bg-[var(--glass-bg-hover)] transition-colors disabled:opacity-60"
                       >
                         {applyingTarget === 'all' ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Server className="w-4 h-4" />}
                         {t('superAdminNetwork.applyAll')}
@@ -582,7 +632,7 @@ AllowedIPs = ${tunnelIpPart}, ${subnetPart}`;
                         type="button"
                         onClick={handleDownloadUmr}
                         disabled={!detail?.persisted || downloading}
-                        className="inline-flex items-center justify-center gap-2 px-3 py-2 rounded-xl border border-[var(--glass-border)] bg-[var(--glass-bg)] text-[var(--text-primary)] text-xs font-bold uppercase tracking-[0.14em] hover:bg-[var(--glass-bg-hover)] transition-colors disabled:opacity-60"
+                        className="inline-flex items-center justify-center gap-2 px-4 py-2 rounded-xl border border-[var(--glass-border)] bg-[var(--glass-bg)] text-[var(--text-primary)] text-xs font-bold uppercase tracking-[0.14em] hover:bg-[var(--glass-bg-hover)] transition-colors disabled:opacity-60"
                       >
                         {downloading ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
                         {t('superAdminNetwork.downloadUmr')}
@@ -641,179 +691,271 @@ AllowedIPs = ${tunnelIpPart}, ${subnetPart}`;
               )}
             </section>
 
-            <section className="grid grid-cols-1 2xl:grid-cols-[1.08fr_0.92fr] gap-4 items-start">
-              <div className="popup-surface rounded-3xl p-4 md:p-5 border border-[var(--glass-border)]">
-                <div className="flex items-center justify-between gap-3 mb-4">
-                  <div>
-                    <h3 className="text-xs md:text-sm font-bold uppercase tracking-[0.2em] text-[var(--text-secondary)]">
-                      {t('superAdminNetwork.fieldsTitle')}
-                    </h3>
-                    <p className="mt-1 text-xs text-[var(--text-muted)]">
-                      {t('superAdminNetwork.fieldsSubtitle')}
-                    </p>
-                  </div>
-                  {loadingDetail ? <RefreshCw className="w-4 h-4 animate-spin text-[var(--text-muted)]" /> : <Database className="w-4 h-4 text-[var(--text-muted)]" />}
+            <section className="popup-surface rounded-3xl p-4 md:p-5 border border-[var(--glass-border)]">
+              <div className="flex items-center justify-between gap-3 mb-4">
+                <div>
+                  <h3 className="text-xs md:text-sm font-bold uppercase tracking-[0.2em] text-[var(--text-secondary)]">
+                    {t('superAdminNetwork.snapshotTitle')}
+                  </h3>
+                  <p className="mt-1 text-xs text-[var(--text-muted)]">
+                    {t('superAdminNetwork.snapshotSubtitle')}
+                  </p>
                 </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <label className="flex flex-col gap-2">
-                    <span className={fieldLabelClass}>{t('superAdminNetwork.form.clientId')}</span>
-                    <input className={textInputClass} value={formState.clientId || selectedClientId} readOnly />
-                  </label>
-                  <label className="flex flex-col gap-2">
-                    <span className={fieldLabelClass}>{t('superAdminNetwork.form.locationId')}</span>
-                    <input className={textInputClass} value={formState.locationId} onChange={(event) => updateField('locationId', event.target.value)} readOnly={!isNewLocation} />
-                  </label>
-                  <label className="flex flex-col gap-2">
-                    <span className={fieldLabelClass}>{t('superAdminNetwork.form.displayName')}</span>
-                    <input className={textInputClass} value={formState.displayName} onChange={(event) => updateField('displayName', event.target.value)} />
-                  </label>
-                  <label className="flex flex-col gap-2">
-                    <span className={fieldLabelClass}>{t('superAdminNetwork.form.backupLocationId')}</span>
-                    <input className={textInputClass} value={formState.backupLocationId} onChange={(event) => updateField('backupLocationId', event.target.value)} />
-                  </label>
-                  <label className="flex flex-col gap-2">
-                    <span className={fieldLabelClass}>{t('superAdminNetwork.form.lanSubnet')}</span>
-                    <input className={textInputClass} value={formState.lanSubnet} onChange={(event) => updateField('lanSubnet', event.target.value)} placeholder="192.168.107.0/24" />
-                  </label>
-                  <label className="flex flex-col gap-2">
-                    <span className={fieldLabelClass}>{t('superAdminNetwork.form.routerIp')}</span>
-                    <input className={textInputClass} value={formState.routerIp} onChange={(event) => updateField('routerIp', event.target.value)} placeholder="192.168.107.1" />
-                  </label>
-                  <label className="flex flex-col gap-2">
-                    <span className={fieldLabelClass}>{t('superAdminNetwork.form.haIp')}</span>
-                    <input className={textInputClass} value={formState.haIp} onChange={(event) => updateField('haIp', event.target.value)} placeholder="192.168.107.120" />
-                  </label>
-                  <label className="flex flex-col gap-2">
-                    <span className={fieldLabelClass}>{t('superAdminNetwork.form.tunnelIp')}</span>
-                    <input className={textInputClass} value={formState.tunnelIp} onChange={(event) => updateField('tunnelIp', event.target.value)} placeholder="10.88.0.5" />
-                  </label>
-                  <label className="flex flex-col gap-2">
-                    <span className={fieldLabelClass}>{t('superAdminNetwork.form.domainLabel')}</span>
-                    <input className={textInputClass} value={formState.domainLabel} onChange={(event) => updateField('domainLabel', event.target.value)} placeholder="obf1" />
-                  </label>
-                  <label className="flex flex-col gap-2">
-                    <span className={fieldLabelClass}>{t('superAdminNetwork.form.domainFqdn')}</span>
-                    <input className={textInputClass} value={formState.domainFqdn} onChange={(event) => updateField('domainFqdn', event.target.value)} placeholder={domainSuffix ? `obf1.${domainSuffix}` : 'obf1.smarti.dev'} />
-                  </label>
-                </div>
+                <Shield className="w-4 h-4 text-[var(--text-muted)]" />
               </div>
 
-              <div className="popup-surface rounded-3xl p-4 md:p-5 border border-[var(--glass-border)]">
-                <div className="flex items-center justify-between gap-3 mb-4">
-                  <div>
-                    <h3 className="text-xs md:text-sm font-bold uppercase tracking-[0.2em] text-[var(--text-secondary)]">
-                      {t('superAdminNetwork.runtimeTitle')}
-                    </h3>
-                    <p className="mt-1 text-xs text-[var(--text-muted)]">
-                      {t('superAdminNetwork.runtimeSubtitle')}
-                    </p>
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
+                <InfoField
+                  label={t('superAdminNetwork.runtime.domain')}
+                  value={domainFqdnPreview || '-'}
+                  accent={Boolean(domainFqdnPreview)}
+                />
+                <InfoField
+                  label={t('superAdminNetwork.runtime.backupPath')}
+                  value={backupPathPreview}
+                />
+                <div className="rounded-2xl border border-[var(--glass-border)] bg-[var(--glass-bg)] px-4 py-3">
+                  <p className="text-[10px] uppercase tracking-[0.16em] text-[var(--text-muted)]">
+                    {t('superAdminNetwork.runtimeTitle')}
+                  </p>
+                  <div className="mt-3 flex flex-wrap items-center gap-2">
+                    <StatusBadge
+                      ready={wireGuardApplied}
+                      readyLabel={t('superAdminNetwork.runtime.wgApplied')}
+                      pendingLabel={t('superAdminNetwork.pending')}
+                    />
+                    <StatusBadge
+                      ready={caddyApplied}
+                      readyLabel={t('superAdminNetwork.runtime.caddyApplied')}
+                      pendingLabel={t('superAdminNetwork.pending')}
+                    />
                   </div>
-                  <Shield className="w-4 h-4 text-[var(--text-muted)]" />
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                  <InfoField label={t('superAdminNetwork.runtime.domain')} value={domainFqdnPreview || '-'} accent={Boolean(domainFqdnPreview)} />
-                  <InfoField label={t('superAdminNetwork.runtime.aRecord')} value={domainFqdnPreview ? `${formState.domainLabel || formState.locationId} -> ${overview?.server?.publicHost || '-'}` : '-'} />
-                  <InfoField label={t('superAdminNetwork.runtime.backupPath')} value={backupPathPreview} />
-                  <InfoField label={t('superAdminNetwork.runtime.serverHost')} value={overview?.server?.publicHost || '-'} />
-                  <InfoField label={t('superAdminNetwork.runtime.serverKey')} value={overview?.server?.wireGuardServerPublicKey || t('superAdminNetwork.runtime.notConfigured')} />
-                  <InfoField label={t('superAdminNetwork.runtime.listenPort')} value={String(overview?.server?.wireGuardListenPort || '-')} />
-                </div>
-
-                <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-3">
-                  <div className="rounded-2xl border border-[var(--glass-border)] bg-[var(--glass-bg)] px-4 py-3">
-                    <p className="text-[10px] uppercase tracking-[0.16em] text-[var(--text-muted)]">{t('superAdminNetwork.runtime.wgApplied')}</p>
-                    <div className="mt-2 flex items-center gap-2">
-                      <StatusBadge
-                        ready={Boolean(detail?.site?.runtime?.wireGuardApplied)}
-                        readyLabel={t('superAdminNetwork.applied')}
-                        pendingLabel={t('superAdminNetwork.pending')}
-                      />
-                    </div>
-                    <p className="mt-3 text-xs text-[var(--text-secondary)]">
-                      {detail?.site?.runtime?.matchedPeer?.allowedIps?.join(', ') || t('superAdminNetwork.active.none')}
-                    </p>
-                  </div>
-
-                  <div className="rounded-2xl border border-[var(--glass-border)] bg-[var(--glass-bg)] px-4 py-3">
-                    <p className="text-[10px] uppercase tracking-[0.16em] text-[var(--text-muted)]">{t('superAdminNetwork.runtime.caddyApplied')}</p>
-                    <div className="mt-2 flex items-center gap-2">
-                      <StatusBadge
-                        ready={Boolean(detail?.site?.runtime?.caddyApplied)}
-                        readyLabel={t('superAdminNetwork.applied')}
-                        pendingLabel={t('superAdminNetwork.pending')}
-                      />
-                    </div>
-                    <p className="mt-3 text-xs text-[var(--text-secondary)]">
-                      {detail?.site?.runtime?.matchedCaddy?.reverseProxy || t('superAdminNetwork.active.none')}
-                    </p>
-                  </div>
+                  <p className="mt-3 text-xs text-[var(--text-secondary)]">
+                    {detail?.site?.runtime?.matchedCaddy?.reverseProxy
+                      || detail?.site?.runtime?.matchedPeer?.allowedIps?.join(', ')
+                      || t('superAdminNetwork.active.none')}
+                  </p>
                 </div>
               </div>
             </section>
 
             <section className="popup-surface rounded-3xl p-4 md:p-5 border border-[var(--glass-border)]">
               <div className="flex items-center justify-between gap-3 mb-4">
+                <div>
+                  <h3 className="text-xs md:text-sm font-bold uppercase tracking-[0.2em] text-[var(--text-secondary)]">
+                    {t('superAdminNetwork.fieldsTitle')}
+                  </h3>
+                  <p className="mt-1 text-xs text-[var(--text-muted)]">
+                    {t('superAdminNetwork.fieldsSubtitle')}
+                  </p>
+                </div>
+                {loadingDetail ? <RefreshCw className="w-4 h-4 animate-spin text-[var(--text-muted)]" /> : <Database className="w-4 h-4 text-[var(--text-muted)]" />}
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <label className="flex flex-col gap-2">
+                  <span className={fieldLabelClass}>{t('superAdminNetwork.form.locationId')}</span>
+                  <input className={textInputClass} value={formState.locationId} onChange={(event) => updateField('locationId', event.target.value)} readOnly={!isNewLocation} />
+                </label>
+                <label className="flex flex-col gap-2">
+                  <span className={fieldLabelClass}>{t('superAdminNetwork.form.displayName')}</span>
+                  <input className={textInputClass} value={formState.displayName} onChange={(event) => updateField('displayName', event.target.value)} />
+                </label>
+                <label className="flex flex-col gap-2">
+                  <span className={fieldLabelClass}>{t('superAdminNetwork.form.lanSubnet')}</span>
+                  <input className={textInputClass} value={formState.lanSubnet} onChange={(event) => updateField('lanSubnet', event.target.value)} placeholder="192.168.107.0/24" />
+                </label>
+                <label className="flex flex-col gap-2">
+                  <span className={fieldLabelClass}>{t('superAdminNetwork.form.routerIp')}</span>
+                  <input className={textInputClass} value={formState.routerIp} onChange={(event) => updateField('routerIp', event.target.value)} placeholder="192.168.107.1" />
+                </label>
+                <label className="flex flex-col gap-2">
+                  <span className={fieldLabelClass}>{t('superAdminNetwork.form.haIp')}</span>
+                  <input className={textInputClass} value={formState.haIp} onChange={(event) => updateField('haIp', event.target.value)} placeholder="192.168.107.120" />
+                </label>
+                <label className="flex flex-col gap-2">
+                  <span className={fieldLabelClass}>{t('superAdminNetwork.form.tunnelIp')}</span>
+                  <input className={textInputClass} value={formState.tunnelIp} onChange={(event) => updateField('tunnelIp', event.target.value)} placeholder="10.88.0.5" />
+                </label>
+                <label className="flex flex-col gap-2 md:col-span-2">
+                  <span className={fieldLabelClass}>{t('superAdminNetwork.form.domainLabel')}</span>
+                  <input className={textInputClass} value={formState.domainLabel} onChange={(event) => updateField('domainLabel', event.target.value)} placeholder="obf1" />
+                </label>
+              </div>
+
+              <div className="mt-4 rounded-2xl border border-[var(--glass-border)] bg-[var(--glass-bg)] px-4 py-4">
+                <button
+                  type="button"
+                  onClick={() => setShowAdvancedFields((current) => !current)}
+                  className="flex w-full items-center justify-between gap-3 text-left"
+                >
+                  <div>
+                    <p className="text-[10px] uppercase tracking-[0.16em] text-[var(--text-muted)]">
+                      {showAdvancedFields ? t('superAdminNetwork.hideAdvanced') : t('superAdminNetwork.showAdvanced')}
+                    </p>
+                    <p className="mt-1 text-xs text-[var(--text-secondary)]">
+                      {t('superAdminNetwork.manualActionsHint')}
+                    </p>
+                  </div>
+                  <ChevronDown className={`h-4 w-4 text-[var(--text-muted)] transition-transform ${showAdvancedFields ? 'rotate-180' : ''}`} />
+                </button>
+
+                {showAdvancedFields ? (
+                  <div className="mt-4 space-y-4">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <label className="flex flex-col gap-2">
+                        <span className={fieldLabelClass}>{t('superAdminNetwork.form.clientId')}</span>
+                        <input className={textInputClass} value={formState.clientId || selectedClientId} readOnly />
+                      </label>
+                      <label className="flex flex-col gap-2">
+                        <span className={fieldLabelClass}>{t('superAdminNetwork.form.backupLocationId')}</span>
+                        <input className={textInputClass} value={formState.backupLocationId} onChange={(event) => updateField('backupLocationId', event.target.value)} />
+                      </label>
+                      <label className="flex flex-col gap-2 md:col-span-2">
+                        <span className={fieldLabelClass}>{t('superAdminNetwork.form.domainFqdn')}</span>
+                        <input className={textInputClass} value={formState.domainFqdn} onChange={(event) => updateField('domainFqdn', event.target.value)} placeholder={domainSuffix ? `obf1.${domainSuffix}` : 'obf1.smarti.dev'} />
+                      </label>
+                    </div>
+
+                    <div className="rounded-2xl border border-[var(--glass-border)] bg-[color-mix(in_srgb,var(--bg-primary)_72%,transparent)] px-4 py-4">
+                      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                        <div>
+                          <p className="text-[10px] uppercase tracking-[0.16em] text-[var(--text-muted)]">
+                            {t('superAdminNetwork.manualActions')}
+                          </p>
+                          <p className="mt-1 text-xs text-[var(--text-secondary)]">
+                            {t('superAdminNetwork.manualActionsHint')}
+                          </p>
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                          <button
+                            type="button"
+                            onClick={() => handleApply('wireguard')}
+                            disabled={!detail?.persisted || applyingTarget === 'wireguard'}
+                            className="inline-flex items-center justify-center gap-2 px-3 py-2 rounded-xl border border-[var(--glass-border)] bg-[var(--glass-bg)] text-[var(--text-primary)] text-xs font-bold uppercase tracking-[0.14em] hover:bg-[var(--glass-bg-hover)] transition-colors disabled:opacity-60"
+                          >
+                            {applyingTarget === 'wireguard' ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Wifi className="w-4 h-4" />}
+                            {t('superAdminNetwork.applyWireGuard')}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleApply('caddy')}
+                            disabled={!detail?.persisted || applyingTarget === 'caddy'}
+                            className="inline-flex items-center justify-center gap-2 px-3 py-2 rounded-xl border border-[var(--glass-border)] bg-[var(--glass-bg)] text-[var(--text-primary)] text-xs font-bold uppercase tracking-[0.14em] hover:bg-[var(--glass-bg-hover)] transition-colors disabled:opacity-60"
+                          >
+                            {applyingTarget === 'caddy' ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Globe className="w-4 h-4" />}
+                            {t('superAdminNetwork.applyCaddy')}
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                ) : null}
+              </div>
+            </section>
+
+            <section className="popup-surface rounded-3xl p-4 md:p-5 border border-[var(--glass-border)]">
+              <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
                 <div>
                   <h3 className="text-xs md:text-sm font-bold uppercase tracking-[0.2em] text-[var(--text-secondary)]">
                     {t('superAdminNetwork.previewsTitle')}
                   </h3>
                   <p className="mt-1 text-xs text-[var(--text-muted)]">
-                    {t('superAdminNetwork.previewsSubtitle')}
+                    {showInspector ? t('superAdminNetwork.activeSubtitle') : t('superAdminNetwork.previewsSubtitle')}
                   </p>
                 </div>
-                <Key className="w-4 h-4 text-[var(--text-muted)]" />
+                <button
+                  type="button"
+                  onClick={() => setShowInspector((current) => !current)}
+                  className="inline-flex items-center justify-center gap-2 self-start rounded-xl border border-[var(--glass-border)] bg-[var(--glass-bg)] px-3 py-2 text-xs font-bold uppercase tracking-[0.14em] text-[var(--text-primary)] transition-colors hover:bg-[var(--glass-bg-hover)]"
+                >
+                  <Link className="h-4 w-4" />
+                  {showInspector ? t('superAdminNetwork.inspectClose') : t('superAdminNetwork.inspectOpen')}
+                </button>
               </div>
 
-              <div className="grid grid-cols-1 2xl:grid-cols-3 gap-4">
-                <PreviewPanel
-                  title={t('superAdminNetwork.preview.wireGuard')}
-                  subtitle={t('superAdminNetwork.preview.wireGuardSubtitle')}
-                  value={wireGuardPeerPreview}
-                  emptyLabel={t('superAdminNetwork.preview.empty')}
-                />
-                <PreviewPanel
-                  title={t('superAdminNetwork.preview.caddy')}
-                  subtitle={t('superAdminNetwork.preview.caddySubtitle')}
-                  value={caddyPreview}
-                  emptyLabel={t('superAdminNetwork.preview.empty')}
-                />
-                <PreviewPanel
-                  title={t('superAdminNetwork.preview.umr')}
-                  subtitle={t('superAdminNetwork.preview.umrSubtitle')}
-                  value={detail?.artifacts?.umrConfig || ''}
-                  emptyLabel={detail?.artifacts?.umrConfigError || t('superAdminNetwork.preview.umrUnavailable')}
-                  tone={detail?.artifacts?.umrConfig ? 'neutral' : 'warn'}
-                />
-              </div>
-            </section>
+              {showInspector ? (
+                <>
+                  <div className="mt-4 inline-flex rounded-2xl border border-[var(--glass-border)] bg-[var(--glass-bg)] p-1">
+                    <button
+                      type="button"
+                      onClick={() => setInspectorTab('preview')}
+                      className={`rounded-2xl px-3 py-2 text-xs font-semibold transition-colors ${inspectorTab === 'preview' ? 'bg-[color-mix(in_srgb,var(--accent-color)_16%,transparent)] text-[var(--text-primary)]' : 'text-[var(--text-secondary)]'}`}
+                    >
+                      {t('superAdminNetwork.inspectPreview')}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setInspectorTab('live')}
+                      className={`rounded-2xl px-3 py-2 text-xs font-semibold transition-colors ${inspectorTab === 'live' ? 'bg-[color-mix(in_srgb,var(--accent-color)_16%,transparent)] text-[var(--text-primary)]' : 'text-[var(--text-secondary)]'}`}
+                    >
+                      {t('superAdminNetwork.inspectLive')}
+                    </button>
+                  </div>
 
-            <section className="popup-surface rounded-3xl p-4 md:p-5 border border-[var(--glass-border)]">
-              <div className="flex items-center justify-between gap-3 mb-4">
-                <div>
-                  <h3 className="text-xs md:text-sm font-bold uppercase tracking-[0.2em] text-[var(--text-secondary)]">
-                    {t('superAdminNetwork.activeTitle')}
-                  </h3>
-                  <p className="mt-1 text-xs text-[var(--text-muted)]">
-                    {t('superAdminNetwork.activeSubtitle')}
-                  </p>
+                  {inspectorTab === 'preview' ? (
+                    <div className="mt-4 grid grid-cols-1 2xl:grid-cols-3 gap-4">
+                      <PreviewPanel
+                        title={t('superAdminNetwork.preview.wireGuard')}
+                        subtitle={t('superAdminNetwork.preview.wireGuardSubtitle')}
+                        value={wireGuardPeerPreview}
+                        emptyLabel={t('superAdminNetwork.preview.empty')}
+                      />
+                      <PreviewPanel
+                        title={t('superAdminNetwork.preview.caddy')}
+                        subtitle={t('superAdminNetwork.preview.caddySubtitle')}
+                        value={caddyPreview}
+                        emptyLabel={t('superAdminNetwork.preview.empty')}
+                      />
+                      <PreviewPanel
+                        title={t('superAdminNetwork.preview.umr')}
+                        subtitle={t('superAdminNetwork.preview.umrSubtitle')}
+                        value={detail?.artifacts?.umrConfig || ''}
+                        emptyLabel={detail?.artifacts?.umrConfigError || t('superAdminNetwork.preview.umrUnavailable')}
+                        tone={detail?.artifacts?.umrConfig ? 'neutral' : 'warn'}
+                      />
+                    </div>
+                  ) : (
+                    <div className="mt-4 space-y-4">
+                      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3">
+                        <InfoField
+                          label={t('superAdminNetwork.runtime.aRecord')}
+                          value={domainFqdnPreview ? `${formState.domainLabel || formState.locationId} -> ${overview?.server?.publicHost || '-'}` : '-'}
+                        />
+                        <InfoField
+                          label={t('superAdminNetwork.runtime.serverHost')}
+                          value={overview?.server?.publicHost || '-'}
+                        />
+                        <InfoField
+                          label={t('superAdminNetwork.runtime.serverKey')}
+                          value={overview?.server?.wireGuardServerPublicKey || t('superAdminNetwork.runtime.notConfigured')}
+                        />
+                        <InfoField
+                          label={t('superAdminNetwork.runtime.listenPort')}
+                          value={String(overview?.server?.wireGuardListenPort || '-')}
+                        />
+                      </div>
+
+                      <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+                        <PreviewPanel
+                          title={t('superAdminNetwork.active.wireGuard')}
+                          value={detail?.site?.runtime?.matchedPeer?.raw || ''}
+                          emptyLabel={t('superAdminNetwork.active.none')}
+                        />
+                        <PreviewPanel
+                          title={t('superAdminNetwork.active.caddy')}
+                          value={detail?.site?.runtime?.matchedCaddy?.raw || ''}
+                          emptyLabel={t('superAdminNetwork.active.none')}
+                        />
+                      </div>
+                    </div>
+                  )}
+                </>
+              ) : (
+                <div className="mt-4 rounded-2xl border border-[var(--glass-border)] bg-[var(--glass-bg)] px-4 py-4 text-sm text-[var(--text-secondary)]">
+                  {hasPublishedConfig ? t('superAdminNetwork.activeSubtitle') : t('superAdminNetwork.previewsSubtitle')}
                 </div>
-                <Link className="w-4 h-4 text-[var(--text-muted)]" />
-              </div>
-
-              <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
-                <PreviewPanel
-                  title={t('superAdminNetwork.active.wireGuard')}
-                  value={detail?.site?.runtime?.matchedPeer?.raw || ''}
-                  emptyLabel={t('superAdminNetwork.active.none')}
-                />
-                <PreviewPanel
-                  title={t('superAdminNetwork.active.caddy')}
-                  value={detail?.site?.runtime?.matchedCaddy?.raw || ''}
-                  emptyLabel={t('superAdminNetwork.active.none')}
-                />
-              </div>
+              )}
             </section>
           </div>
         </section>
