@@ -5,10 +5,13 @@ import {
   Database,
   Download,
   Globe,
+  HardDrive,
   Link,
   MapPin,
+  Monitor,
   Plus,
   RefreshCw,
+  Router,
   Server,
   Shield,
   Wifi,
@@ -144,6 +147,46 @@ function WorkflowChip({ step, label }) {
         {step}
       </span>
       <span>{label}</span>
+    </div>
+  );
+}
+
+function TopologyNode({ icon: Icon, title, primary, secondary, status, ready = false, accent = false }) {
+  const toneClass = ready
+    ? 'border-[var(--status-success-border)] bg-[color-mix(in_srgb,var(--status-success-bg)_82%,transparent)]'
+    : 'border-[var(--glass-border)] bg-[var(--glass-bg)]';
+
+  return (
+    <div className={`relative min-w-0 rounded-3xl border px-4 py-4 ${toneClass}`}>
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="text-[10px] uppercase tracking-[0.16em] text-[var(--text-muted)]">{title}</p>
+          <p className="mt-2 text-sm font-semibold text-[var(--text-primary)] break-all">{primary || '-'}</p>
+          {secondary ? (
+            <p className="mt-1 text-xs text-[var(--text-secondary)] break-all">{secondary}</p>
+          ) : null}
+        </div>
+        <div className={`rounded-2xl border p-2 ${accent ? 'border-[var(--accent-color)]/20 bg-[color-mix(in_srgb,var(--accent-color)_14%,transparent)]' : 'border-current/10 bg-black/5'}`}>
+          <Icon className="h-4 w-4 text-[var(--text-primary)] opacity-80" />
+        </div>
+      </div>
+
+      <div className="mt-4">
+        <StatusBadge
+          ready={ready}
+          readyLabel={status}
+          pendingLabel={status}
+        />
+      </div>
+    </div>
+  );
+}
+
+function TopologyConnector({ label, active = false }) {
+  return (
+    <div className="hidden xl:flex min-w-[72px] flex-col items-center justify-center gap-2 px-1">
+      <div className={`h-px w-full ${active ? 'bg-[var(--status-success-border)]' : 'bg-[var(--glass-border)]'}`} />
+      <span className="text-[10px] uppercase tracking-[0.16em] text-[var(--text-muted)]">{label}</span>
     </div>
   );
 }
@@ -335,6 +378,11 @@ AllowedIPs = ${tunnelIpPart}, ${subnetPart}`;
     if (!root || !clientId || !backupLocationId) return '-';
     return `${root}/${clientId}/${backupLocationId}`;
   }, [overview?.server?.backupRoot, formState.clientId, formState.backupLocationId, formState.locationId, selectedClientId]);
+  const routerConfigured = Boolean(formState.routerIp && formState.lanSubnet);
+  const haConfigured = Boolean(formState.haIp);
+  const tunnelConfigured = Boolean(formState.tunnelIp);
+  const domainConfigured = Boolean(domainFqdnPreview);
+  const backupConfigured = backupPathPreview !== '-';
 
   useEffect(() => {
     setShowAdvancedFields(false);
@@ -567,6 +615,113 @@ AllowedIPs = ${tunnelIpPart}, ${subnetPart}`;
           </aside>
 
           <div className="flex flex-col gap-4">
+            <section className="popup-surface rounded-3xl p-4 md:p-5 border border-[var(--glass-border)]">
+              <div className="flex items-center justify-between gap-3 mb-4">
+                <div>
+                  <h3 className="text-xs md:text-sm font-bold uppercase tracking-[0.2em] text-[var(--text-secondary)]">
+                    {t('superAdminNetwork.mapTitle')}
+                  </h3>
+                  <p className="mt-1 text-xs text-[var(--text-muted)]">
+                    {t('superAdminNetwork.mapSubtitle')}
+                  </p>
+                </div>
+                <Wifi className="w-4 h-4 text-[var(--text-muted)]" />
+              </div>
+
+              <div className="rounded-[28px] border border-[var(--glass-border)] bg-[linear-gradient(180deg,color-mix(in_srgb,var(--glass-bg)_90%,transparent),color-mix(in_srgb,var(--bg-primary)_86%,transparent))] p-4 md:p-5">
+                <div className="flex flex-col gap-4 xl:flex-row xl:items-stretch">
+                  <TopologyNode
+                    icon={Globe}
+                    title={t('superAdminNetwork.map.domain')}
+                    primary={domainFqdnPreview || '-'}
+                    secondary={overview?.server?.publicHost || '-'}
+                    status={caddyApplied ? t('superAdminNetwork.map.published') : (domainConfigured ? t('superAdminNetwork.map.configured') : t('superAdminNetwork.map.missing'))}
+                    ready={domainConfigured}
+                    accent
+                  />
+                  <TopologyConnector label="443" active={caddyApplied} />
+                  <TopologyNode
+                    icon={Server}
+                    title={t('superAdminNetwork.map.server')}
+                    primary={overview?.server?.publicHost || '-'}
+                    secondary={`WG ${overview?.server?.wireGuardListenPort || '-'}`}
+                    status={t('superAdminNetwork.map.live')}
+                    ready={Boolean(overview?.server?.publicHost)}
+                  />
+                  <TopologyConnector label="WG" active={wireGuardApplied} />
+                  <TopologyNode
+                    icon={Wifi}
+                    title={t('superAdminNetwork.map.tunnel')}
+                    primary={formState.tunnelIp ? `${formState.tunnelIp}/32` : '-'}
+                    secondary={wireGuardApplied ? (detail?.site?.runtime?.matchedPeer?.allowedIps?.join(', ') || '') : formState.lanSubnet}
+                    status={wireGuardApplied ? t('superAdminNetwork.map.published') : (tunnelConfigured ? t('superAdminNetwork.map.configured') : t('superAdminNetwork.map.missing'))}
+                    ready={tunnelConfigured}
+                  />
+                  <TopologyConnector label="LAN" active={routerConfigured} />
+                  <TopologyNode
+                    icon={Router}
+                    title={t('superAdminNetwork.map.router')}
+                    primary={formState.routerIp || '-'}
+                    secondary={formState.lanSubnet || '-'}
+                    status={routerConfigured ? t('superAdminNetwork.map.configured') : t('superAdminNetwork.map.missing')}
+                    ready={routerConfigured}
+                  />
+                  <TopologyConnector label="8123" active={haConfigured} />
+                  <TopologyNode
+                    icon={Monitor}
+                    title={t('superAdminNetwork.map.ha')}
+                    primary={formState.haIp || '-'}
+                    secondary={selectedLocationName}
+                    status={haConfigured ? t('superAdminNetwork.map.configured') : t('superAdminNetwork.map.missing')}
+                    ready={haConfigured}
+                  />
+                </div>
+
+                <div className="mt-4 grid grid-cols-1 xl:grid-cols-[1.4fr_auto_1fr] gap-4 items-center">
+                  <div className="rounded-3xl border border-[var(--glass-border)] bg-[var(--glass-bg)] px-4 py-4">
+                    <div className="flex items-center justify-between gap-3">
+                      <div>
+                        <p className="text-[10px] uppercase tracking-[0.16em] text-[var(--text-muted)]">
+                          {t('superAdminNetwork.map.accessPath')}
+                        </p>
+                        <p className="mt-2 text-sm text-[var(--text-primary)]">
+                          {domainFqdnPreview || '-'} <span className="text-[var(--text-secondary)]">→</span> {formState.haIp || '-'}:8123
+                        </p>
+                      </div>
+                      <StatusBadge
+                        ready={caddyApplied && haConfigured}
+                        readyLabel={t('superAdminNetwork.map.ready')}
+                        pendingLabel={t('superAdminNetwork.pending')}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="hidden xl:block h-px w-10 bg-[var(--glass-border)]" />
+
+                  <div className="rounded-3xl border border-[var(--glass-border)] bg-[var(--glass-bg)] px-4 py-4">
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="text-[10px] uppercase tracking-[0.16em] text-[var(--text-muted)]">
+                          {t('superAdminNetwork.map.backup')}
+                        </p>
+                        <p className="mt-2 text-sm text-[var(--text-primary)] break-all">{backupPathPreview}</p>
+                      </div>
+                      <div className="rounded-2xl border border-current/10 bg-black/5 p-2">
+                        <HardDrive className="h-4 w-4 text-[var(--text-primary)] opacity-80" />
+                      </div>
+                    </div>
+                    <div className="mt-3">
+                      <StatusBadge
+                        ready={backupConfigured}
+                        readyLabel={t('superAdminNetwork.map.configured')}
+                        pendingLabel={t('superAdminNetwork.map.missing')}
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </section>
+
             <section className="popup-surface rounded-3xl p-4 md:p-5 border border-[var(--glass-border)]">
               {selectedClient ? (
                 <>
