@@ -57,6 +57,13 @@ const toNum = (value) => {
 };
 const roundToOne = (value) => Math.round(Number(value) * 10) / 10;
 
+const normalizeScoreValue = (value) => {
+  const parsed = toNum(value);
+  if (parsed === null) return null;
+  const score = parsed > 0 && parsed < 1 ? parsed * 100 : parsed;
+  return Math.max(0, Math.min(100, Math.round(score)));
+};
+
 const calcDeviationPct = (temp, target) => {
   const tempNum = toNum(temp);
   const targetNum = toNum(target);
@@ -130,11 +137,17 @@ const formatTemperature = (entity) => {
 
 const getDirectScore = (settings, entities) => {
   const scoreEntityId = String(settings?.healthScoreEntityId || settings?.scoreEntityId || '').trim();
-  const scoreFromEntity = scoreEntityId ? toNum(entities?.[scoreEntityId]?.state) : null;
-  if (scoreFromEntity !== null) return Math.max(0, Math.min(100, Math.round(scoreFromEntity)));
+  const scoreEntity = scoreEntityId ? entities?.[scoreEntityId] : null;
+  const scoreFromEntity = normalizeScoreValue(
+    scoreEntity?.state
+      ?? scoreEntity?.attributes?.healthScore
+      ?? scoreEntity?.attributes?.health_score
+      ?? scoreEntity?.attributes?.score
+  );
+  if (scoreFromEntity !== null) return scoreFromEntity;
 
-  const directScore = toNum(settings?.healthScore ?? settings?.score);
-  if (directScore !== null) return Math.max(0, Math.min(100, Math.round(directScore)));
+  const directScore = normalizeScoreValue(settings?.healthScore ?? settings?.score);
+  if (directScore !== null) return directScore;
 
   return null;
 };
@@ -182,29 +195,30 @@ const computeHealthScore = (settings) => {
 };
 
 const getScoreTone = (score) => {
-  if (!Number.isFinite(Number(score))) {
+  const normalizedScore = normalizeScoreValue(score);
+  if (normalizedScore === null) {
     return {
       score: null,
       border: 'rgba(255, 255, 255, 0.18)',
       shadow: 'inset 0 0 0 1px rgba(255, 255, 255, 0.05)',
     };
   }
-  if (Number(score) > 90) {
+  if (normalizedScore > 90) {
     return {
-      score: Math.round(Number(score)),
+      score: normalizedScore,
       border: 'rgba(16, 185, 129, 0.95)',
       shadow: '0 0 0 1px rgba(16, 185, 129, 0.18), 0 18px 36px rgba(6, 95, 70, 0.28)',
     };
   }
-  if (Number(score) >= 70) {
+  if (normalizedScore >= 70) {
     return {
-      score: Math.round(Number(score)),
+      score: normalizedScore,
       border: 'rgba(245, 158, 11, 0.95)',
       shadow: '0 0 0 1px rgba(245, 158, 11, 0.2), 0 18px 36px rgba(146, 64, 14, 0.28)',
     };
   }
   return {
-    score: Math.round(Number(score)),
+    score: normalizedScore,
     border: 'rgba(244, 63, 94, 0.95)',
     shadow: '0 0 0 1px rgba(244, 63, 94, 0.2), 0 18px 36px rgba(136, 19, 55, 0.3)',
   };
@@ -369,11 +383,12 @@ export default function PopupLauncherCard({
   const heading = customNames[cardId] || settings.heading || tr(t, 'popupLauncher.defaultTitle', 'Quick access');
   const buttons = normalizeButtons(settings.buttons);
   const columns = clampColumns(settings.columns);
+  const hasSaunaButtons = buttons.some((button) => button.targetCardId.startsWith('sauna_card_'));
   const explicitMobileSpan = Number(settings.gridColSpan);
   const maxMobileColumns = Number.isFinite(explicitMobileSpan)
     ? Math.max(1, Math.min(2, Math.round(explicitMobileSpan)))
     : 2;
-  const displayColumns = isMobile ? Math.min(columns, maxMobileColumns) : columns;
+  const displayColumns = isMobile && hasSaunaButtons ? 1 : (isMobile ? Math.min(columns, maxMobileColumns) : columns);
   const getSaunaSummary = (button) => {
     const targetSettings = resolveTargetSettings({
       cardSettings,

@@ -45,6 +45,30 @@ describe('grid layout sizing', () => {
     expect(size).toEqual({ colSpan: 2, rowSpan: 4 });
   });
 
+  it('reserves one launcher row per sauna button on mobile', () => {
+    const size = getCardGridSize('popup_launcher_card_home', getKey, {
+      'popup_launcher_card_home': {
+        type: 'popup_launcher',
+        columns: 2,
+        buttons: [
+          { targetCardId: 'sauna_card_one' },
+          { targetCardId: 'sauna_card_two' },
+          { targetCardId: 'sauna_card_three' },
+        ],
+      },
+    }, 'home', 2, { isMobile: true });
+
+    expect(size).toEqual({ colSpan: 2, rowSpan: 6 });
+  });
+
+  it('keeps sauna cards tall enough for their mobile content', () => {
+    const size = getCardGridSize('sauna_card_home', getKey, {
+      'sauna_card_home': { type: 'sauna' },
+    }, 'home', 2, { isMobile: true });
+
+    expect(size).toEqual({ colSpan: 2, rowSpan: 8 });
+  });
+
   it('places mixed card sizes without overlap', () => {
     const sizeFn = (id) => {
       if (id === 'a') return { colSpan: 4, rowSpan: 4 };

@@ -97,7 +97,7 @@ const hasSaunaLauncherButtons = (settings) => (
   && settings.buttons.some((button) => String(button?.targetCardId || '').startsWith('sauna_card_'))
 );
 
-const getPopupLauncherMinRowSpan = (cardId, settings, colSpan) => {
+const getPopupLauncherMinRowSpan = (cardId, settings, colSpan, { isMobile = false } = {}) => {
   const isPopupLauncher = cardId.startsWith('popup_launcher_card_') || settings?.type === 'popup_launcher';
   if (!isPopupLauncher || !hasSaunaLauncherButtons(settings)) return null;
 
@@ -106,18 +106,24 @@ const getPopupLauncherMinRowSpan = (cardId, settings, colSpan) => {
 
   const configuredColumns = clampSpan(settings.columns, 2, 4);
   const availableColumns = Math.max(1, Number(colSpan) || 1);
-  const buttonColumns = Math.max(1, Math.min(configuredColumns, availableColumns));
+  const buttonColumns = isMobile ? 1 : Math.max(1, Math.min(configuredColumns, availableColumns));
   const buttonRows = Math.ceil(buttons.length / buttonColumns);
 
   return Math.min(MAX_CARD_ROW_SPAN, (buttonRows * 2) + (buttonRows === 1 ? 1 : 0));
 };
 
-export const getCardGridSize = (cardId, getCardSettingsKey, cardSettings, activePage, columns = 4) => {
+const getCardMinRowSpan = (cardId, settings, colSpan, options) => {
+  const popupMin = getPopupLauncherMinRowSpan(cardId, settings, colSpan, options);
+  const saunaMin = (cardId.startsWith('sauna_card_') || settings?.type === 'sauna') ? 8 : null;
+  return Math.max(popupMin || 1, saunaMin || 1);
+};
+
+export const getCardGridSize = (cardId, getCardSettingsKey, cardSettings, activePage, columns = 4, options = {}) => {
   const settings = cardSettings[getCardSettingsKey(cardId)] || cardSettings[cardId] || {};
   const legacySpan = getCardGridSpan(cardId, getCardSettingsKey, cardSettings, activePage);
 
   const colSpan = clampSpan(settings.gridColSpan, legacySpan, Math.max(1, columns));
-  const minRowSpan = getPopupLauncherMinRowSpan(cardId, settings, colSpan);
+  const minRowSpan = getCardMinRowSpan(cardId, settings, colSpan, options);
   const rowSpan = Math.max(clampSpan(settings.gridRowSpan, legacySpan), minRowSpan || 1);
 
   return { colSpan, rowSpan };

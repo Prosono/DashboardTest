@@ -2080,15 +2080,15 @@ function AppContent({
   });
 
   const getCardGridSize = useCallback(
-    (cardId) => _getCardGridSize(cardId, getCardSettingsKey, cardSettings, activePage, gridColCount),
-    [getCardSettingsKey, cardSettings, activePage, gridColCount]
+    (cardId) => _getCardGridSize(cardId, getCardSettingsKey, cardSettings, activePage, gridColCount, { isMobile }),
+    [getCardSettingsKey, cardSettings, activePage, gridColCount, isMobile]
   );
 
   const adjustCardGridSize = useCallback((cardId, deltaCol = 0, deltaRow = 0) => {
     if (!deltaCol && !deltaRow) return;
     const settingsKey = getCardSettingsKey(cardId);
     persistCardSettings((prev) => {
-      const current = _getCardGridSize(cardId, getCardSettingsKey, prev, activePage, gridColCount);
+      const current = _getCardGridSize(cardId, getCardSettingsKey, prev, activePage, gridColCount, { isMobile });
       const nextCol = Math.max(1, Math.min(gridColCount, current.colSpan + deltaCol));
       const nextRow = Math.max(1, Math.min(MAX_CARD_ROW_SPAN, current.rowSpan + deltaRow));
       return {
@@ -2100,7 +2100,7 @@ function AppContent({
         },
       };
     });
-  }, [persistCardSettings, getCardSettingsKey, activePage, gridColCount]);
+  }, [persistCardSettings, getCardSettingsKey, activePage, gridColCount, isMobile]);
 
   const moveCardInArray = useCallback((cardId, direction) => {
     const newConfig = { ...pagesConfig };

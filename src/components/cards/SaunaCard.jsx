@@ -800,7 +800,7 @@ export default function SaunaCard({
       {controls}
 
       <div className="relative z-10 h-full md:h-auto min-h-0 flex flex-col overflow-y-hidden md:overflow-visible">
-        <div className="grid grid-cols-3 items-start gap-4">
+        <div className="grid grid-cols-1 items-start gap-3 sm:grid-cols-3 sm:gap-4">
           <div className="min-w-0 space-y-2">
             <div className="flex items-center gap-3 min-w-0">
               <div className={cx(
@@ -910,7 +910,7 @@ export default function SaunaCard({
             </div>
           </div>
 
-          <div className="text-right flex flex-col items-end gap-2">
+          <div className="flex flex-col items-center gap-2 text-center sm:items-end sm:text-right">
             {settings?.showManualMode !== false && settings?.manualModeEntityId && (
               <button
                 type="button"
