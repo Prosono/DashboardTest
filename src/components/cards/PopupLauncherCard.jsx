@@ -444,7 +444,7 @@ export default function PopupLauncherCard({
     ? Math.max(1, Math.min(2, Math.round(explicitMobileSpan)))
     : 2;
   const displayColumns = hasSaunaButtons
-    ? Math.max(1, Math.min(buttons.length || 1, isMobile ? 2 : 4))
+    ? Math.max(1, Math.min(buttons.length || 1, isMobile ? 2 : 3))
     : (isMobile ? Math.min(columns, maxMobileColumns) : columns);
   const getSaunaSummary = (button) => {
     const targetSettings = resolveTargetSettings({

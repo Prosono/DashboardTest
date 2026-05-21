@@ -61,7 +61,7 @@ describe('grid layout sizing', () => {
     expect(size).toEqual({ colSpan: 2, rowSpan: 5 });
   });
 
-  it('expands sauna launcher cards to four columns on desktop grids', () => {
+  it('reserves desktop sauna launcher rows for three button columns', () => {
     const size = getCardGridSize('popup_launcher_card_home', getKey, {
       'popup_launcher_card_home': {
         type: 'popup_launcher',
@@ -73,11 +73,13 @@ describe('grid layout sizing', () => {
           { targetCardId: 'sauna_card_three' },
           { targetCardId: 'sauna_card_four' },
           { targetCardId: 'sauna_card_five' },
+          { targetCardId: 'sauna_card_six' },
+          { targetCardId: 'sauna_card_seven' },
         ],
       },
     }, 'home', 4);
 
-    expect(size).toEqual({ colSpan: 4, rowSpan: 5 });
+    expect(size).toEqual({ colSpan: 4, rowSpan: 7 });
   });
 
   it('keeps sauna cards tall enough for their mobile content', () => {
