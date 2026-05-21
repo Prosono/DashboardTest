@@ -29,12 +29,53 @@ export default function StatusPill({
   const isWarningAlertPill = entityId.includes('system_warning_details');
   const isCriticalAlertPill = entityId.includes('system_critical_details');
   const isAlertPill = isWarningAlertPill || isCriticalAlertPill;
-  const lightLabelStyle = isLightTheme && isAlertPill
-    ? { color: isCriticalAlertPill ? '#7f1d1d' : '#92400e' }
-    : undefined;
-  const lightSubLabelStyle = isLightTheme && isAlertPill
-    ? { color: isCriticalAlertPill ? '#991b1b' : '#b45309' }
-    : undefined;
+  const alertTone = (() => {
+    if (isWarningAlertPill) {
+      return isLightTheme
+        ? {
+            bg: 'rgba(255, 247, 237, 0.95)',
+            iconBg: 'rgba(254, 215, 170, 0.95)',
+            iconColor: 'text-amber-700',
+            labelColor: 'text-amber-800',
+            sublabelColor: 'text-amber-700',
+            labelStyle: { color: '#92400e' },
+            sublabelStyle: { color: '#b45309' },
+            borderClass: 'border border-amber-700/30',
+          }
+        : {
+            bg: 'rgba(245, 158, 11, 0.16)',
+            iconBg: 'rgba(245, 158, 11, 0.24)',
+            iconColor: 'text-amber-300',
+            labelColor: 'text-amber-200',
+            sublabelColor: 'text-amber-100',
+            borderClass: '',
+          };
+    }
+    if (isCriticalAlertPill) {
+      return isLightTheme
+        ? {
+            bg: 'rgba(153, 27, 27, 0.18)',
+            iconBg: 'rgba(239, 68, 68, 0.22)',
+            iconColor: 'text-red-800',
+            labelColor: 'text-red-800',
+            sublabelColor: 'text-red-700',
+            labelStyle: { color: '#7f1d1d' },
+            sublabelStyle: { color: '#991b1b' },
+            borderClass: 'border border-red-800/30',
+          }
+        : {
+            bg: 'rgba(220, 38, 38, 0.2)',
+            iconBg: 'rgba(220, 38, 38, 0.25)',
+            iconColor: 'text-red-300',
+            labelColor: 'text-red-200',
+            sublabelColor: 'text-red-100',
+            borderClass: '',
+          };
+    }
+    return null;
+  })();
+  const alertLabelStyle = isLightTheme && isAlertPill ? alertTone?.labelStyle : undefined;
+  const alertSubLabelStyle = isLightTheme && isAlertPill ? alertTone?.sublabelStyle : undefined;
   
   // Check visibility conditions (defined early to avoid hoisting issues)
   const checkCondition = (condition, checkEntity, getAttr) => {
@@ -157,11 +198,11 @@ export default function StatusPill({
           </div>
         )}
         <div className="flex flex-col items-start">
-          <span className={`${textSize} uppercase font-bold leading-tight ${labelColor}`} style={lightLabelStyle}>
+          <span className={`${textSize} uppercase font-bold leading-tight ${labelColor}`} style={alertLabelStyle}>
             {label}
           </span>
           {sublabel && (
-            <span className={`${textSize} font-medium uppercase tracking-widest italic ${sublabelColor}`} style={lightSubLabelStyle}>
+            <span className={`${textSize} font-medium uppercase tracking-widest italic ${sublabelColor}`} style={alertSubLabelStyle}>
               {sublabel}
             </span>
           )}
@@ -188,17 +229,11 @@ export default function StatusPill({
   const IconComponent = pill.icon ? (getIconComponent(pill.icon) || Activity) : Activity;
   
   // Get colors
-  const bgColor = (isLightTheme && isCriticalAlertPill)
-    ? 'rgba(153, 27, 27, 0.18)'
-    : (pill.bgColor || 'rgba(255, 255, 255, 0.03)');
-  const iconBgColor = (isLightTheme && isCriticalAlertPill)
-    ? 'rgba(239, 68, 68, 0.22)'
-    : (pill.iconBgColor || 'rgba(59, 130, 246, 0.1)');
-  const iconColor = (isLightTheme && isCriticalAlertPill)
-    ? 'text-red-800'
-    : (pill.iconColor || 'text-blue-400');
-  const labelColor = pill.labelColor || 'text-[var(--text-secondary)]';
-  const sublabelColor = pill.sublabelColor || 'text-[var(--text-muted)]';
+  const bgColor = alertTone?.bg || pill.bgColor || 'rgba(255, 255, 255, 0.03)';
+  const iconBgColor = alertTone?.iconBg || pill.iconBgColor || 'rgba(59, 130, 246, 0.1)';
+  const iconColor = alertTone?.iconColor || pill.iconColor || 'text-blue-400';
+  const labelColor = alertTone?.labelColor || pill.labelColor || 'text-[var(--text-secondary)]';
+  const sublabelColor = alertTone?.sublabelColor || pill.sublabelColor || 'text-[var(--text-muted)]';
   
   const animated = pill.animated !== false && (
     entity.state === 'on' || 
@@ -214,10 +249,10 @@ export default function StatusPill({
   const Wrapper = onClick ? 'button' : 'div';
   const wrapperProps = onClick ? {
     onClick,
-    className: `flex items-center ${paddingClass} rounded-2xl transition-all hover:bg-[var(--glass-bg-hover)] active:scale-95 ${animated ? 'animate-pulse' : ''} ${isLightTheme && isCriticalAlertPill ? 'border border-red-800/30' : ''}`,
+    className: `flex items-center ${paddingClass} rounded-2xl transition-all hover:bg-[var(--glass-bg-hover)] active:scale-95 ${animated ? 'animate-pulse' : ''} ${alertTone?.borderClass || ''}`,
     style: { backgroundColor: bgColor }
   } : {
-    className: `flex items-center ${paddingClass} rounded-2xl ${animated ? 'animate-pulse' : ''} ${isLightTheme && isCriticalAlertPill ? 'border border-red-800/30' : ''}`,
+    className: `flex items-center ${paddingClass} rounded-2xl ${animated ? 'animate-pulse' : ''} ${alertTone?.borderClass || ''}`,
     style: { backgroundColor: bgColor }
   };
 
@@ -227,10 +262,10 @@ export default function StatusPill({
         <IconComponent className={`${isMobile ? 'w-3 h-3' : 'w-4 h-4'}`} />
       </div>
       <div className="flex flex-col items-start">
-        <span className={`${textSize} uppercase font-bold leading-tight ${labelColor}`} style={lightLabelStyle}>
+        <span className={`${textSize} uppercase font-bold leading-tight ${labelColor}`} style={alertLabelStyle}>
           {label}
         </span>
-        <span className={`${textSize} font-medium uppercase tracking-widest italic ${sublabelColor}`} style={lightSubLabelStyle}>
+        <span className={`${textSize} font-medium uppercase tracking-widest italic ${sublabelColor}`} style={alertSubLabelStyle}>
           {sublabel}
         </span>
       </div>
