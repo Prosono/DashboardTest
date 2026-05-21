@@ -106,10 +106,10 @@ const getPopupLauncherMinRowSpan = (cardId, settings, colSpan, { isMobile = fals
 
   const configuredColumns = clampSpan(settings.columns, 2, 4);
   const availableColumns = Math.max(1, Number(colSpan) || 1);
-  const buttonColumns = isMobile ? 1 : Math.max(1, Math.min(configuredColumns, availableColumns));
+  const buttonColumns = Math.max(1, Math.min(configuredColumns, availableColumns, isMobile ? 2 : 4));
   const buttonRows = Math.ceil(buttons.length / buttonColumns);
 
-  return Math.min(MAX_CARD_ROW_SPAN, (buttonRows * 2) + (buttonRows === 1 ? 1 : 0));
+  return Math.min(MAX_CARD_ROW_SPAN, (buttonRows * 2) + 1);
 };
 
 const getCardMinRowSpan = (cardId, settings, colSpan, options) => {

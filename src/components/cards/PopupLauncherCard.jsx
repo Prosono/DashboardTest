@@ -173,6 +173,29 @@ const normalizeHealthSamples = (rawValue) => {
     .sort((a, b) => a.timestampMs - b.timestampMs);
 };
 
+const normalizeBookingSamples = (rawValue) => {
+  if (!Array.isArray(rawValue)) return [];
+  return rawValue
+    .map((entry, index) => {
+      const timestamp = String(entry?.timestamp || entry?.time || '').trim();
+      const timestampMs = Date.parse(timestamp);
+      const startTemp = toNum(entry?.startTemp ?? entry?.temperature ?? entry?.temp);
+      if (!Number.isFinite(timestampMs) || startTemp === null) return null;
+      const targetTemp = toNum(entry?.targetTemp);
+      const deviationPct = toNum(entry?.deviationPct ?? entry?.deviationPercent);
+      return {
+        id: String(entry?.id || `${timestamp}_${index}`),
+        timestampMs,
+        startTemp,
+        targetTemp,
+        deviationPct: deviationPct !== null ? roundToOne(deviationPct) : calcDeviationPct(startTemp, targetTemp),
+        bookingType: norm(entry?.bookingType ?? entry?.type),
+      };
+    })
+    .filter(Boolean)
+    .sort((a, b) => a.timestampMs - b.timestampMs);
+};
+
 const clampSummaryHours = (value) => {
   const parsed = Number(value);
   if (!Number.isFinite(parsed)) return 48;
@@ -184,8 +207,11 @@ const computeHealthScore = (settings) => {
   if (!samples.length) return null;
 
   const windowStart = Date.now() - (clampSummaryHours(settings?.summaryHours) * 60 * 60 * 1000);
-  const targetSamples = samples
+  const recentTargetSamples = samples
     .filter((entry) => entry.timestampMs >= windowStart && entry.targetTemp !== null && entry.deviationPct !== null);
+  const targetSamples = recentTargetSamples.length
+    ? recentTargetSamples
+    : samples.filter((entry) => entry.targetTemp !== null && entry.deviationPct !== null);
   if (!targetSamples.length) return null;
 
   const avgDeviationPct = roundToOne(
@@ -193,6 +219,30 @@ const computeHealthScore = (settings) => {
   );
   return calcScoreFromDeviationPct(avgDeviationPct);
 };
+
+const computeBookingScore = (settings) => {
+  const samples = normalizeBookingSamples(settings?.bookingSnapshots)
+    .filter((entry) => entry.bookingType !== 'service');
+  if (!samples.length) return null;
+
+  const windowStart = Date.now() - (clampSummaryHours(settings?.summaryHours) * 60 * 60 * 1000);
+  const recentTargetSamples = samples
+    .filter((entry) => entry.timestampMs >= windowStart && entry.targetTemp !== null && entry.deviationPct !== null);
+  const targetSamples = recentTargetSamples.length
+    ? recentTargetSamples
+    : samples.filter((entry) => entry.targetTemp !== null && entry.deviationPct !== null);
+  if (!targetSamples.length) return null;
+
+  const scores = targetSamples
+    .map((entry) => calcScoreFromDeviationPct(entry.deviationPct))
+    .filter((entryScore) => Number.isFinite(Number(entryScore)));
+  if (!scores.length) return null;
+  return Math.max(0, Math.min(100, Math.round(scores.reduce((sum, score) => sum + score, 0) / scores.length)));
+};
+
+const computeScoreFromSettings = (settings) => (
+  computeHealthScore(settings) ?? computeBookingScore(settings)
+);
 
 const getScoreTone = (score) => {
   const normalizedScore = normalizeScoreValue(score);
@@ -292,15 +342,20 @@ const resolveHealthScore = ({
       return {
         ...candidate,
         settings,
-        healthScore: healthScore !== null ? healthScore : computeHealthScore(settings),
+        healthScore: healthScore !== null ? healthScore : computeScoreFromSettings(settings),
         hasDirectScore: healthScore !== null,
       };
     })
     .filter(({ cardId, settingsKey, settings }) => (
       settings?.type === 'sauna_health_score'
+      || settings?.type === 'sauna_booking_temp'
       || String(cardId).startsWith('sauna_health_score_card_')
+      || String(cardId).startsWith('sauna_booking_temp_card_')
       || String(settingsKey).includes('sauna_health_score_card_')
+      || String(settingsKey).includes('sauna_booking_temp_card_')
       || String(settings?.type || '').includes('health_score')
+      || Array.isArray(settings?.healthSnapshots)
+      || Array.isArray(settings?.bookingSnapshots)
     ));
 
   const saunaTempEntityId = String(targetSettings?.tempEntityId || '').trim();
@@ -383,12 +438,11 @@ export default function PopupLauncherCard({
   const heading = customNames[cardId] || settings.heading || tr(t, 'popupLauncher.defaultTitle', 'Quick access');
   const buttons = normalizeButtons(settings.buttons);
   const columns = clampColumns(settings.columns);
-  const hasSaunaButtons = buttons.some((button) => button.targetCardId.startsWith('sauna_card_'));
   const explicitMobileSpan = Number(settings.gridColSpan);
   const maxMobileColumns = Number.isFinite(explicitMobileSpan)
     ? Math.max(1, Math.min(2, Math.round(explicitMobileSpan)))
     : 2;
-  const displayColumns = isMobile && hasSaunaButtons ? 1 : (isMobile ? Math.min(columns, maxMobileColumns) : columns);
+  const displayColumns = isMobile ? Math.min(columns, maxMobileColumns) : columns;
   const getSaunaSummary = (button) => {
     const targetSettings = resolveTargetSettings({
       cardSettings,

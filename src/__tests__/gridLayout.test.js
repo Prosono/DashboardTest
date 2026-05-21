@@ -42,10 +42,10 @@ describe('grid layout sizing', () => {
       },
     }, 'home', 2);
 
-    expect(size).toEqual({ colSpan: 2, rowSpan: 4 });
+    expect(size).toEqual({ colSpan: 2, rowSpan: 5 });
   });
 
-  it('reserves one launcher row per sauna button on mobile', () => {
+  it('reserves enough rows for two-column sauna launcher buttons on mobile', () => {
     const size = getCardGridSize('popup_launcher_card_home', getKey, {
       'popup_launcher_card_home': {
         type: 'popup_launcher',
@@ -58,7 +58,7 @@ describe('grid layout sizing', () => {
       },
     }, 'home', 2, { isMobile: true });
 
-    expect(size).toEqual({ colSpan: 2, rowSpan: 6 });
+    expect(size).toEqual({ colSpan: 2, rowSpan: 5 });
   });
 
   it('keeps sauna cards tall enough for their mobile content', () => {
