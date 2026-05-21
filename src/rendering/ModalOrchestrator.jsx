@@ -817,6 +817,7 @@ export default function ModalOrchestrator({
           customIcons,
           getA,
           getS,
+          getCardSettingsKey,
           getEntityImageUrl,
           callService,
           isMediaActive,

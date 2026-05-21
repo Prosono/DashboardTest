@@ -660,7 +660,17 @@ export function renderSaunaMapCard(cardId, dragProps, getControls, cardStyle, se
 }
 
 export function renderPopupLauncherCard(cardId, dragProps, getControls, cardStyle, settingsKey, ctx) {
-  const { editMode, cardSettings, customNames, setShowPopupCardModal, t } = ctx;
+  const {
+    editMode,
+    cardSettings,
+    customNames,
+    entities,
+    getCardSettingsKey,
+    getEntityImageUrl,
+    activePage,
+    setShowPopupCardModal,
+    t,
+  } = ctx;
   const settings = cardSettings[settingsKey] || cardSettings[cardId] || {};
   return (
     <PopupLauncherCard
@@ -672,6 +682,11 @@ export function renderPopupLauncherCard(cardId, dragProps, getControls, cardStyl
       cardStyle={cardStyle}
       editMode={editMode}
       customNames={customNames}
+      cardSettings={cardSettings}
+      entities={entities}
+      getCardSettingsKey={getCardSettingsKey}
+      getEntityImageUrl={getEntityImageUrl}
+      activePage={activePage}
       onOpenTarget={(payload) => {
         if (editMode) return;
         if (!payload?.targetCardId) return;

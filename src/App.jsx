@@ -2242,6 +2242,7 @@ function AppContent({
     const ctx = {
       entities, editMode, conn, cardSettings, customNames, customIcons,
       getA, getS, getEntityImageUrl, callService, isMediaActive,
+      getCardSettingsKey,
       saveCardSetting, language, isMobile, activePage, activeUrl, authRef, t,
       currentUser, userAdminApi,
       optimisticLightBrightness, setOptimisticLightBrightness,
