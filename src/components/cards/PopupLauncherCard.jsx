@@ -32,6 +32,24 @@ const isOn = (value) => ['on', 'true', '1', 'yes', 'ja'].includes(norm(value));
 const isOnish = (value) => ['on', 'open', 'detected', 'motion', 'occupancy', 'present', 'home', 'true', '1', 'yes', 'ja'].includes(norm(value));
 const isAbsoluteImageUrl = (value) => /^(https?:|data:|blob:)/i.test(String(value || '').trim());
 const shouldResolveWithHaBase = (value) => /^\/(?:api|local|media)\//i.test(String(value || '').trim());
+const toNum = (value) => {
+  const parsed = Number.parseFloat(String(value ?? '').replace(',', '.'));
+  return Number.isFinite(parsed) ? parsed : null;
+};
+const roundToOne = (value) => Math.round(Number(value) * 10) / 10;
+
+const calcDeviationPct = (temp, target) => {
+  const tempNum = toNum(temp);
+  const targetNum = toNum(target);
+  if (tempNum === null || targetNum === null || Math.abs(targetNum) < 0.001) return null;
+  return roundToOne(((tempNum - targetNum) / targetNum) * 100);
+};
+
+const calcScoreFromDeviationPct = (deviationPct) => {
+  const parsed = toNum(deviationPct);
+  if (parsed === null) return null;
+  return Math.max(0, Math.min(100, Math.round(100 - Math.abs(parsed))));
+};
 
 const resolveImageValue = (value, getEntityImageUrl, { forceHaBase = false } = {}) => {
   const raw = String(value ?? '').trim();
@@ -85,10 +103,122 @@ const resolveTargetSettings = ({ cardSettings, getCardSettingsKey, targetCardId,
 
 const formatTemperature = (entity) => {
   if (!entity || isUnavailable(entity.state)) return { value: '--', unit: '' };
-  const numeric = Number.parseFloat(String(entity.state).replace(',', '.'));
+  const numeric = toNum(entity.state);
   const unit = String(entity.attributes?.unit_of_measurement || 'deg C').replace('deg C', '°C');
   if (Number.isFinite(numeric)) return { value: numeric.toFixed(1), unit };
   return { value: String(entity.state), unit: '' };
+};
+
+const normalizeHealthSamples = (rawValue) => {
+  if (!Array.isArray(rawValue)) return [];
+  return rawValue
+    .map((entry, index) => {
+      const timestamp = String(entry?.timestamp || entry?.time || '').trim();
+      const timestampMs = Date.parse(timestamp);
+      const startTemp = toNum(entry?.startTemp ?? entry?.temperature ?? entry?.temp);
+      if (!Number.isFinite(timestampMs) || startTemp === null) return null;
+      const targetTemp = toNum(entry?.targetTemp);
+      const deviationPct = toNum(entry?.deviationPct ?? entry?.deviationPercent);
+      return {
+        id: String(entry?.id || `${timestamp}_${index}`),
+        timestampMs,
+        targetTemp,
+        deviationPct: deviationPct !== null ? roundToOne(deviationPct) : calcDeviationPct(startTemp, targetTemp),
+      };
+    })
+    .filter(Boolean)
+    .sort((a, b) => a.timestampMs - b.timestampMs);
+};
+
+const clampSummaryHours = (value) => {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return 48;
+  return Math.max(6, Math.min(168, Math.round(parsed)));
+};
+
+const computeHealthScore = (settings) => {
+  const explicitScore = toNum(settings?.healthScore ?? settings?.score);
+  if (explicitScore !== null) return Math.max(0, Math.min(100, Math.round(explicitScore)));
+
+  const samples = normalizeHealthSamples(settings?.healthSnapshots);
+  if (!samples.length) return null;
+
+  const windowStart = Date.now() - (clampSummaryHours(settings?.summaryHours) * 60 * 60 * 1000);
+  const targetSamples = samples
+    .filter((entry) => entry.timestampMs >= windowStart && entry.targetTemp !== null && entry.deviationPct !== null);
+  if (!targetSamples.length) return null;
+
+  const avgDeviationPct = roundToOne(
+    targetSamples.reduce((sum, entry) => sum + (entry.deviationPct ?? 0), 0) / targetSamples.length,
+  );
+  return calcScoreFromDeviationPct(avgDeviationPct);
+};
+
+const getScoreTone = (score) => {
+  if (!Number.isFinite(Number(score))) {
+    return {
+      score: null,
+      border: 'rgba(255, 255, 255, 0.1)',
+      shadow: 'inset 0 0 0 1px rgba(255, 255, 255, 0.04)',
+    };
+  }
+  if (Number(score) > 90) {
+    return {
+      score: Math.round(Number(score)),
+      border: 'rgba(16, 185, 129, 0.72)',
+      shadow: '0 0 0 1px rgba(16, 185, 129, 0.18), 0 18px 36px rgba(6, 95, 70, 0.28)',
+    };
+  }
+  if (Number(score) >= 70) {
+    return {
+      score: Math.round(Number(score)),
+      border: 'rgba(245, 158, 11, 0.78)',
+      shadow: '0 0 0 1px rgba(245, 158, 11, 0.2), 0 18px 36px rgba(146, 64, 14, 0.28)',
+    };
+  }
+  return {
+    score: Math.round(Number(score)),
+    border: 'rgba(244, 63, 94, 0.8)',
+    shadow: '0 0 0 1px rgba(244, 63, 94, 0.2), 0 18px 36px rgba(136, 19, 55, 0.3)',
+  };
+};
+
+const resolveHealthScore = ({ targetSettings, cardSettings, entities }) => {
+  const scoreEntityId = String(targetSettings?.healthScoreEntityId || targetSettings?.scoreEntityId || '').trim();
+  const scoreFromEntity = scoreEntityId ? toNum(entities?.[scoreEntityId]?.state) : null;
+  if (scoreFromEntity !== null) return Math.max(0, Math.min(100, Math.round(scoreFromEntity)));
+
+  const directScore = toNum(targetSettings?.healthScore ?? targetSettings?.score);
+  if (directScore !== null) return Math.max(0, Math.min(100, Math.round(directScore)));
+
+  const allSettings = Object.entries(cardSettings || {});
+  const healthCards = allSettings
+    .map(([key, value]) => ({ key, settings: value || {} }))
+    .filter(({ key, settings }) => (
+      settings?.type === 'sauna_health_score'
+      || key.includes('sauna_health_score_card_')
+      || String(settings?.type || '').includes('health_score')
+    ));
+
+  const saunaTempEntityId = String(targetSettings?.tempEntityId || '').trim();
+  const saunaActiveEntityId = String(targetSettings?.saunaActiveBooleanEntityId || '').trim();
+  const saunaZoneEntityId = String(targetSettings?.zoneEntityId || '').trim();
+  const saunaName = norm(targetSettings?.name);
+
+  const ranked = healthCards
+    .map((candidate) => {
+      const settings = candidate.settings;
+      let matchScore = 0;
+      if (saunaTempEntityId && settings?.tempEntityId === saunaTempEntityId) matchScore += 4;
+      if (saunaActiveEntityId && settings?.bookingActiveEntityId === saunaActiveEntityId) matchScore += 4;
+      if (saunaZoneEntityId && settings?.zoneEntityId === saunaZoneEntityId) matchScore += 3;
+      if (saunaName && norm(settings?.name) === saunaName) matchScore += 2;
+      return { ...candidate, matchScore };
+    })
+    .filter((candidate) => candidate.matchScore > 0)
+    .sort((a, b) => b.matchScore - a.matchScore);
+
+  return ranked.length ? computeHealthScore(ranked[0].settings) : null;
 };
 
 export default function PopupLauncherCard({
@@ -134,6 +264,7 @@ export default function PopupLauncherCard({
       motionConfigured: Boolean(targetSettings?.motionEntityId),
       motionOn: motionEntity ? isOnish(motionEntity.state) : false,
       showManual: Boolean(modeStateKnown && !autoModeOn),
+      scoreTone: getScoreTone(resolveHealthScore({ targetSettings, cardSettings, entities })),
     };
   };
 
@@ -201,11 +332,15 @@ export default function PopupLauncherCard({
                   type="button"
                   disabled={editMode || !hasTarget}
                   onClick={(event) => openButtonTarget(event, button, label, hasTarget)}
-                  className={`relative min-h-[128px] overflow-hidden rounded-2xl border text-left transition-all ${
+                  className={`relative aspect-[1.38/1] min-h-[8.25rem] max-h-[16rem] overflow-hidden rounded-2xl border text-left transition-all sm:aspect-[1.55/1] sm:min-h-[10rem] lg:aspect-[1.85/1] lg:min-h-[11.5rem] ${
                     editMode || !hasTarget
                       ? 'opacity-70 cursor-default border-[var(--glass-border)] bg-[var(--glass-bg)]'
-                      : 'border-white/10 bg-slate-950/70 hover:border-emerald-300/30 active:scale-[0.98]'
+                      : 'bg-slate-950/70 active:scale-[0.98]'
                   }`}
+                  style={{
+                    borderColor: sauna.scoreTone.border,
+                    boxShadow: sauna.scoreTone.shadow,
+                  }}
                   aria-label={`${label}: ${sauna.temp.value}${sauna.temp.unit ? ` ${sauna.temp.unit}` : ''}, ${sauna.people} ${tr(t, 'sauna.peopleNow', 'people')}`}
                 >
                   {sauna.imageUrl ? (
@@ -218,8 +353,8 @@ export default function PopupLauncherCard({
                   ) : (
                     <div className="absolute inset-0 bg-gradient-to-br from-emerald-950 via-slate-950 to-orange-950" />
                   )}
-                  <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/35 to-black/20" />
-                  <div className="relative z-10 flex min-h-[128px] flex-col justify-between p-3">
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/88 via-black/38 to-black/18" />
+                  <div className="relative z-10 flex h-full min-h-[8.25rem] flex-col justify-between p-3 sm:min-h-[10rem] sm:p-4 lg:min-h-[11.5rem]">
                     <div className="flex items-start justify-between gap-2">
                       {sauna.showManual ? (
                         <span className="rounded-full border border-orange-300/35 bg-orange-500/20 px-2 py-1 text-[9px] font-extrabold uppercase tracking-widest text-orange-100 shadow-[0_8px_16px_rgba(0,0,0,0.24)]">
@@ -249,7 +384,7 @@ export default function PopupLauncherCard({
                         <div className="min-w-0">
                           <div className="flex items-end gap-1.5 whitespace-nowrap">
                             <Thermometer className="mb-1 h-3.5 w-3.5 shrink-0 text-orange-200/85" />
-                            <span className="text-2xl font-semibold leading-none tabular-nums text-white">
+                            <span className="text-[1.65rem] font-semibold leading-none tabular-nums text-white">
                               {sauna.temp.value}
                             </span>
                             {sauna.temp.unit && (
@@ -260,7 +395,7 @@ export default function PopupLauncherCard({
                           </div>
                         </div>
                         <div className="inline-flex shrink-0 items-center gap-1 rounded-full border border-white/14 bg-black/32 px-2 py-1 text-[11px] font-extrabold tabular-nums text-white">
-                          <User className="h-3 w-3 text-emerald-100/85" />
+                          <User className={`h-3 w-3 ${sauna.motionOn ? 'text-emerald-300 drop-shadow-[0_0_8px_rgba(110,231,183,0.9)]' : 'text-white/72'}`} />
                           <span>{sauna.people}</span>
                         </div>
                       </div>
