@@ -104,9 +104,8 @@ const getPopupLauncherMinRowSpan = (cardId, settings, colSpan, { isMobile = fals
   const buttons = Array.isArray(settings?.buttons) ? settings.buttons.filter(Boolean) : [];
   if (!buttons.length) return null;
 
-  const configuredColumns = clampSpan(settings.columns, 2, 4);
   const availableColumns = Math.max(1, Number(colSpan) || 1);
-  const buttonColumns = Math.max(1, Math.min(configuredColumns, availableColumns, isMobile ? 2 : 4));
+  const buttonColumns = Math.max(1, Math.min(availableColumns, isMobile ? 2 : 4));
   const buttonRows = Math.ceil(buttons.length / buttonColumns);
 
   return Math.min(MAX_CARD_ROW_SPAN, (buttonRows * 2) + 1);
@@ -122,7 +121,11 @@ export const getCardGridSize = (cardId, getCardSettingsKey, cardSettings, active
   const settings = cardSettings[getCardSettingsKey(cardId)] || cardSettings[cardId] || {};
   const legacySpan = getCardGridSpan(cardId, getCardSettingsKey, cardSettings, activePage);
 
-  const colSpan = clampSpan(settings.gridColSpan, legacySpan, Math.max(1, columns));
+  const baseColSpan = clampSpan(settings.gridColSpan, legacySpan, Math.max(1, columns));
+  const saunaLauncherMinColSpan = hasSaunaLauncherButtons(settings)
+    ? Math.min(Math.max(1, columns), options?.isMobile ? 2 : 4)
+    : 1;
+  const colSpan = Math.max(baseColSpan, saunaLauncherMinColSpan);
   const minRowSpan = getCardMinRowSpan(cardId, settings, colSpan, options);
   const rowSpan = Math.max(clampSpan(settings.gridRowSpan, legacySpan), minRowSpan || 1);
 

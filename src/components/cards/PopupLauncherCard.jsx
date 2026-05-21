@@ -438,11 +438,14 @@ export default function PopupLauncherCard({
   const heading = customNames[cardId] || settings.heading || tr(t, 'popupLauncher.defaultTitle', 'Quick access');
   const buttons = normalizeButtons(settings.buttons);
   const columns = clampColumns(settings.columns);
+  const hasSaunaButtons = buttons.some((button) => button.targetCardId.startsWith('sauna_card_'));
   const explicitMobileSpan = Number(settings.gridColSpan);
   const maxMobileColumns = Number.isFinite(explicitMobileSpan)
     ? Math.max(1, Math.min(2, Math.round(explicitMobileSpan)))
     : 2;
-  const displayColumns = isMobile ? Math.min(columns, maxMobileColumns) : columns;
+  const displayColumns = hasSaunaButtons
+    ? Math.max(1, Math.min(buttons.length || 1, isMobile ? 2 : 4))
+    : (isMobile ? Math.min(columns, maxMobileColumns) : columns);
   const getSaunaSummary = (button) => {
     const targetSettings = resolveTargetSettings({
       cardSettings,
@@ -543,7 +546,7 @@ export default function PopupLauncherCard({
                   type="button"
                   disabled={editMode || !hasTarget}
                   onClick={(event) => openButtonTarget(event, button, label, hasTarget)}
-                  className={`relative aspect-[1.38/1] min-h-[8.25rem] max-h-[16rem] overflow-hidden rounded-2xl border-[4px] text-left transition-all sm:aspect-[1.55/1] sm:min-h-[10rem] lg:aspect-[1.85/1] lg:min-h-[11.5rem] ${
+                  className={`relative aspect-[1.16/1] min-h-[7rem] max-h-[13rem] overflow-hidden rounded-2xl border-[4px] text-left transition-all sm:aspect-[1.55/1] sm:min-h-[10rem] sm:max-h-[16rem] lg:aspect-[1.85/1] lg:min-h-[11.5rem] ${
                     editMode || !hasTarget
                       ? 'opacity-70 cursor-default border-[var(--glass-border)] bg-[var(--glass-bg)]'
                       : 'bg-slate-950/70 active:scale-[0.98]'
@@ -565,7 +568,7 @@ export default function PopupLauncherCard({
                     <div className="absolute inset-0 bg-gradient-to-br from-emerald-950 via-slate-950 to-orange-950" />
                   )}
                   <div className="absolute inset-0 bg-gradient-to-t from-black/88 via-black/38 to-black/18" />
-                  <div className="relative z-10 flex h-full min-h-[8.25rem] flex-col justify-between p-3 sm:min-h-[10rem] sm:p-4 lg:min-h-[11.5rem]">
+                  <div className="relative z-10 flex h-full min-h-[7rem] flex-col justify-between p-2.5 sm:min-h-[10rem] sm:p-4 lg:min-h-[11.5rem]">
                     <div className="flex items-start justify-between gap-2">
                       {sauna.showManual ? (
                         <span className="rounded-full border border-orange-300/35 bg-orange-500/20 px-2 py-1 text-[9px] font-extrabold uppercase tracking-widest text-orange-100 shadow-[0_8px_16px_rgba(0,0,0,0.24)]">
@@ -595,7 +598,7 @@ export default function PopupLauncherCard({
                         <div className="min-w-0">
                           <div className="flex items-end gap-1.5 whitespace-nowrap">
                             <Thermometer className="mb-1 h-3.5 w-3.5 shrink-0 text-orange-200/85" />
-                            <span className="text-[1.65rem] font-semibold leading-none tabular-nums text-white">
+                            <span className="text-[1.35rem] font-semibold leading-none tabular-nums text-white sm:text-[1.65rem]">
                               {sauna.temp.value}
                             </span>
                             {sauna.temp.unit && (
