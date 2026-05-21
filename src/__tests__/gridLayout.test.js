@@ -29,6 +29,22 @@ describe('grid layout sizing', () => {
     expect(size).toEqual({ colSpan: 2, rowSpan: 2 });
   });
 
+  it('reserves enough rows for sauna launcher buttons on compact grids', () => {
+    const size = getCardGridSize('popup_launcher_card_home', getKey, {
+      'popup_launcher_card_home': {
+        type: 'popup_launcher',
+        columns: 4,
+        buttons: [
+          { targetCardId: 'sauna_card_one' },
+          { targetCardId: 'sauna_card_two' },
+          { targetCardId: 'sauna_card_three' },
+        ],
+      },
+    }, 'home', 2);
+
+    expect(size).toEqual({ colSpan: 2, rowSpan: 4 });
+  });
+
   it('places mixed card sizes without overlap', () => {
     const sizeFn = (id) => {
       if (id === 'a') return { colSpan: 4, rowSpan: 4 };

@@ -32,6 +32,17 @@ const isOn = (value) => ['on', 'true', '1', 'yes', 'ja'].includes(norm(value));
 const isOnish = (value) => ['on', 'open', 'detected', 'motion', 'occupancy', 'present', 'home', 'true', '1', 'yes', 'ja'].includes(norm(value));
 const isAbsoluteImageUrl = (value) => /^(https?:|data:|blob:)/i.test(String(value || '').trim());
 const shouldResolveWithHaBase = (value) => /^\/(?:api|local|media)\//i.test(String(value || '').trim());
+const normalizeMatchText = (value) => String(value ?? '')
+  .normalize('NFKD')
+  .replace(/[\u0300-\u036f]/g, '')
+  .replace(/[_-]+/g, ' ')
+  .replace(/\s+/g, ' ')
+  .trim()
+  .toLowerCase();
+const tokenize = (value) => normalizeMatchText(value)
+  .split(/[^a-z0-9]+/)
+  .map((token) => token.trim())
+  .filter((token) => token.length >= 2);
 const toNum = (value) => {
   const parsed = Number.parseFloat(String(value ?? '').replace(',', '.'));
   return Number.isFinite(parsed) ? parsed : null;
@@ -109,6 +120,17 @@ const formatTemperature = (entity) => {
   return { value: String(entity.state), unit: '' };
 };
 
+const getDirectScore = (settings, entities) => {
+  const scoreEntityId = String(settings?.healthScoreEntityId || settings?.scoreEntityId || '').trim();
+  const scoreFromEntity = scoreEntityId ? toNum(entities?.[scoreEntityId]?.state) : null;
+  if (scoreFromEntity !== null) return Math.max(0, Math.min(100, Math.round(scoreFromEntity)));
+
+  const directScore = toNum(settings?.healthScore ?? settings?.score);
+  if (directScore !== null) return Math.max(0, Math.min(100, Math.round(directScore)));
+
+  return null;
+};
+
 const normalizeHealthSamples = (rawValue) => {
   if (!Array.isArray(rawValue)) return [];
   return rawValue
@@ -137,9 +159,6 @@ const clampSummaryHours = (value) => {
 };
 
 const computeHealthScore = (settings) => {
-  const explicitScore = toNum(settings?.healthScore ?? settings?.score);
-  if (explicitScore !== null) return Math.max(0, Math.min(100, Math.round(explicitScore)));
-
   const samples = normalizeHealthSamples(settings?.healthSnapshots);
   if (!samples.length) return null;
 
@@ -158,42 +177,74 @@ const getScoreTone = (score) => {
   if (!Number.isFinite(Number(score))) {
     return {
       score: null,
-      border: 'rgba(255, 255, 255, 0.1)',
-      shadow: 'inset 0 0 0 1px rgba(255, 255, 255, 0.04)',
+      border: 'rgba(255, 255, 255, 0.18)',
+      shadow: 'inset 0 0 0 1px rgba(255, 255, 255, 0.05)',
     };
   }
   if (Number(score) > 90) {
     return {
       score: Math.round(Number(score)),
-      border: 'rgba(16, 185, 129, 0.72)',
+      border: 'rgba(16, 185, 129, 0.95)',
       shadow: '0 0 0 1px rgba(16, 185, 129, 0.18), 0 18px 36px rgba(6, 95, 70, 0.28)',
     };
   }
   if (Number(score) >= 70) {
     return {
       score: Math.round(Number(score)),
-      border: 'rgba(245, 158, 11, 0.78)',
+      border: 'rgba(245, 158, 11, 0.95)',
       shadow: '0 0 0 1px rgba(245, 158, 11, 0.2), 0 18px 36px rgba(146, 64, 14, 0.28)',
     };
   }
   return {
     score: Math.round(Number(score)),
-    border: 'rgba(244, 63, 94, 0.8)',
+    border: 'rgba(244, 63, 94, 0.95)',
     shadow: '0 0 0 1px rgba(244, 63, 94, 0.2), 0 18px 36px rgba(136, 19, 55, 0.3)',
   };
 };
 
-const resolveHealthScore = ({ targetSettings, cardSettings, entities }) => {
-  const scoreEntityId = String(targetSettings?.healthScoreEntityId || targetSettings?.scoreEntityId || '').trim();
-  const scoreFromEntity = scoreEntityId ? toNum(entities?.[scoreEntityId]?.state) : null;
-  if (scoreFromEntity !== null) return Math.max(0, Math.min(100, Math.round(scoreFromEntity)));
+const getEntityName = (entities, entityId) => {
+  if (!entityId) return '';
+  return entities?.[entityId]?.attributes?.friendly_name || entityId;
+};
 
-  const directScore = toNum(targetSettings?.healthScore ?? targetSettings?.score);
-  if (directScore !== null) return Math.max(0, Math.min(100, Math.round(directScore)));
+const buildTextScore = (baseTexts, sourceTexts) => {
+  const baseTokens = new Set((baseTexts || []).flatMap(tokenize));
+  const sourceTokens = new Set((sourceTexts || []).flatMap(tokenize));
+  const baseCompact = (baseTexts || []).map((value) => normalizeMatchText(value).replace(/\s+/g, '')).filter(Boolean);
+  const sourceCompact = (sourceTexts || []).map((value) => normalizeMatchText(value).replace(/\s+/g, '')).filter(Boolean);
+  let score = 0;
+
+  baseTokens.forEach((token) => {
+    if (sourceTokens.has(token)) score += token.length >= 4 ? 3 : 2;
+  });
+
+  baseCompact.forEach((baseValue) => {
+    sourceCompact.forEach((sourceValue) => {
+      if (!baseValue || !sourceValue) return;
+      if (baseValue === sourceValue) score += 8;
+      else if (baseValue.length >= 4 && sourceValue.includes(baseValue)) score += 5;
+      else if (sourceValue.length >= 4 && baseValue.includes(sourceValue)) score += 4;
+    });
+  });
+
+  return score;
+};
+
+const resolveHealthScore = ({ targetSettings, cardSettings, entities }) => {
+  const directScore = getDirectScore(targetSettings, entities);
+  if (directScore !== null) return directScore;
 
   const allSettings = Object.entries(cardSettings || {});
   const healthCards = allSettings
-    .map(([key, value]) => ({ key, settings: value || {} }))
+    .map(([key, value]) => {
+      const settings = value || {};
+      const healthScore = getDirectScore(settings, entities);
+      return {
+        key,
+        settings,
+        healthScore: healthScore !== null ? healthScore : computeHealthScore(settings),
+      };
+    })
     .filter(({ key, settings }) => (
       settings?.type === 'sauna_health_score'
       || key.includes('sauna_health_score_card_')
@@ -203,22 +254,47 @@ const resolveHealthScore = ({ targetSettings, cardSettings, entities }) => {
   const saunaTempEntityId = String(targetSettings?.tempEntityId || '').trim();
   const saunaActiveEntityId = String(targetSettings?.saunaActiveBooleanEntityId || '').trim();
   const saunaZoneEntityId = String(targetSettings?.zoneEntityId || '').trim();
-  const saunaName = norm(targetSettings?.name);
+  const saunaMatchTexts = [
+    targetSettings?.name,
+    targetSettings?.heading,
+    targetSettings?.title,
+    saunaTempEntityId,
+    saunaActiveEntityId,
+    saunaZoneEntityId,
+    getEntityName(entities, saunaTempEntityId),
+    getEntityName(entities, saunaActiveEntityId),
+    getEntityName(entities, saunaZoneEntityId),
+  ].filter(Boolean);
 
   const ranked = healthCards
     .map((candidate) => {
       const settings = candidate.settings;
       let matchScore = 0;
-      if (saunaTempEntityId && settings?.tempEntityId === saunaTempEntityId) matchScore += 4;
-      if (saunaActiveEntityId && settings?.bookingActiveEntityId === saunaActiveEntityId) matchScore += 4;
-      if (saunaZoneEntityId && settings?.zoneEntityId === saunaZoneEntityId) matchScore += 3;
-      if (saunaName && norm(settings?.name) === saunaName) matchScore += 2;
+      const candidateTempEntityId = String(settings?.tempEntityId || '').trim();
+      const candidateActiveEntityId = String(settings?.bookingActiveEntityId || settings?.saunaActiveBooleanEntityId || '').trim();
+      const candidateZoneEntityId = String(settings?.zoneEntityId || '').trim();
+      const candidateMatchTexts = [
+        candidate.key,
+        settings?.name,
+        settings?.heading,
+        settings?.title,
+        candidateTempEntityId,
+        candidateActiveEntityId,
+        candidateZoneEntityId,
+        getEntityName(entities, candidateTempEntityId),
+        getEntityName(entities, candidateActiveEntityId),
+        getEntityName(entities, candidateZoneEntityId),
+      ].filter(Boolean);
+      if (saunaTempEntityId && candidateTempEntityId && candidateTempEntityId === saunaTempEntityId) matchScore += 100;
+      if (saunaActiveEntityId && candidateActiveEntityId && candidateActiveEntityId === saunaActiveEntityId) matchScore += 80;
+      if (saunaZoneEntityId && candidateZoneEntityId && candidateZoneEntityId === saunaZoneEntityId) matchScore += 70;
+      matchScore += buildTextScore(saunaMatchTexts, candidateMatchTexts);
       return { ...candidate, matchScore };
     })
     .filter((candidate) => candidate.matchScore > 0)
     .sort((a, b) => b.matchScore - a.matchScore);
 
-  return ranked.length ? computeHealthScore(ranked[0].settings) : null;
+  return ranked.length && ranked[0].matchScore >= 3 ? ranked[0].healthScore : null;
 };
 
 export default function PopupLauncherCard({
@@ -234,12 +310,18 @@ export default function PopupLauncherCard({
   getCardSettingsKey,
   getEntityImageUrl,
   activePage,
+  isMobile = false,
   onOpenTarget,
   t,
 }) {
   const heading = customNames[cardId] || settings.heading || tr(t, 'popupLauncher.defaultTitle', 'Quick access');
   const buttons = normalizeButtons(settings.buttons);
   const columns = clampColumns(settings.columns);
+  const explicitMobileSpan = Number(settings.gridColSpan);
+  const maxMobileColumns = Number.isFinite(explicitMobileSpan)
+    ? Math.max(1, Math.min(2, Math.round(explicitMobileSpan)))
+    : 2;
+  const displayColumns = isMobile ? Math.min(columns, maxMobileColumns) : columns;
   const getSaunaSummary = (button) => {
     const targetSettings = resolveTargetSettings({
       cardSettings,
@@ -283,7 +365,7 @@ export default function PopupLauncherCard({
   return (
     <div
       {...dragProps}
-      className={`touch-feedback w-full rounded-3xl border relative overflow-hidden p-4 sm:p-5 font-sans break-inside-avoid ${
+      className={`touch-feedback h-full w-full rounded-3xl border relative overflow-hidden p-4 sm:p-5 font-sans break-inside-avoid ${
         editMode ? 'cursor-move' : ''
       }`}
       style={{
@@ -312,7 +394,7 @@ export default function PopupLauncherCard({
       ) : (
         <div
           className="grid gap-2.5"
-          style={{ gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))` }}
+          style={{ gridTemplateColumns: `repeat(${displayColumns}, minmax(0, 1fr))` }}
         >
           {buttons.map((button) => {
             const Icon = getIconComponent(button.icon) || LayoutGrid;
@@ -332,7 +414,7 @@ export default function PopupLauncherCard({
                   type="button"
                   disabled={editMode || !hasTarget}
                   onClick={(event) => openButtonTarget(event, button, label, hasTarget)}
-                  className={`relative aspect-[1.38/1] min-h-[8.25rem] max-h-[16rem] overflow-hidden rounded-2xl border text-left transition-all sm:aspect-[1.55/1] sm:min-h-[10rem] lg:aspect-[1.85/1] lg:min-h-[11.5rem] ${
+                  className={`relative aspect-[1.38/1] min-h-[8.25rem] max-h-[16rem] overflow-hidden rounded-2xl border-[4px] text-left transition-all sm:aspect-[1.55/1] sm:min-h-[10rem] lg:aspect-[1.85/1] lg:min-h-[11.5rem] ${
                     editMode || !hasTarget
                       ? 'opacity-70 cursor-default border-[var(--glass-border)] bg-[var(--glass-bg)]'
                       : 'bg-slate-950/70 active:scale-[0.98]'

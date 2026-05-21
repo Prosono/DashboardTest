@@ -92,12 +92,33 @@ const clampSpan = (value, fallback, max = MAX_CARD_ROW_SPAN) => {
   return Math.max(1, Math.min(max, Math.round(parsed)));
 };
 
+const hasSaunaLauncherButtons = (settings) => (
+  Array.isArray(settings?.buttons)
+  && settings.buttons.some((button) => String(button?.targetCardId || '').startsWith('sauna_card_'))
+);
+
+const getPopupLauncherMinRowSpan = (cardId, settings, colSpan) => {
+  const isPopupLauncher = cardId.startsWith('popup_launcher_card_') || settings?.type === 'popup_launcher';
+  if (!isPopupLauncher || !hasSaunaLauncherButtons(settings)) return null;
+
+  const buttons = Array.isArray(settings?.buttons) ? settings.buttons.filter(Boolean) : [];
+  if (!buttons.length) return null;
+
+  const configuredColumns = clampSpan(settings.columns, 2, 4);
+  const availableColumns = Math.max(1, Number(colSpan) || 1);
+  const buttonColumns = Math.max(1, Math.min(configuredColumns, availableColumns));
+  const buttonRows = Math.ceil(buttons.length / buttonColumns);
+
+  return Math.min(MAX_CARD_ROW_SPAN, (buttonRows * 2) + (buttonRows === 1 ? 1 : 0));
+};
+
 export const getCardGridSize = (cardId, getCardSettingsKey, cardSettings, activePage, columns = 4) => {
   const settings = cardSettings[getCardSettingsKey(cardId)] || cardSettings[cardId] || {};
   const legacySpan = getCardGridSpan(cardId, getCardSettingsKey, cardSettings, activePage);
 
   const colSpan = clampSpan(settings.gridColSpan, legacySpan, Math.max(1, columns));
-  const rowSpan = clampSpan(settings.gridRowSpan, legacySpan);
+  const minRowSpan = getPopupLauncherMinRowSpan(cardId, settings, colSpan);
+  const rowSpan = Math.max(clampSpan(settings.gridRowSpan, legacySpan), minRowSpan || 1);
 
   return { colSpan, rowSpan };
 };

@@ -378,6 +378,16 @@ export default function SaunaHealthScoreCard({
   const ringDashArray = `${(ringProgress / 100) * ringCircumference} ${ringCircumference}`;
   const tone = getHealthTone(score);
 
+  useEffect(() => {
+    if (!settingsKey || typeof saveCardSetting !== 'function') return;
+    const nextScore = Number.isFinite(Number(score)) ? Math.round(Number(score)) : null;
+    const storedScore = Number.isFinite(Number(settings?.healthScore))
+      ? Math.round(Number(settings.healthScore))
+      : null;
+    if (storedScore === nextScore) return;
+    saveCardSetting(settingsKey, 'healthScore', nextScore);
+  }, [saveCardSetting, score, settings?.healthScore, settingsKey]);
+
   const missingConfig = [];
   if (!tempEntityId) missingConfig.push(tr('sauna.healthScore.tempEntity', 'Temperature sensor'));
   if (!activeEntityId) missingConfig.push(tr('sauna.healthScore.activeEntity', 'Booking active sensor'));

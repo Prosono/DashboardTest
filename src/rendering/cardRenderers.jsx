@@ -668,6 +668,7 @@ export function renderPopupLauncherCard(cardId, dragProps, getControls, cardStyl
     getCardSettingsKey,
     getEntityImageUrl,
     activePage,
+    isMobile,
     setShowPopupCardModal,
     t,
   } = ctx;
@@ -687,6 +688,7 @@ export function renderPopupLauncherCard(cardId, dragProps, getControls, cardStyl
       getCardSettingsKey={getCardSettingsKey}
       getEntityImageUrl={getEntityImageUrl}
       activePage={activePage}
+      isMobile={isMobile}
       onOpenTarget={(payload) => {
         if (editMode) return;
         if (!payload?.targetCardId) return;
