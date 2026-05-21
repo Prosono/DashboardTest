@@ -849,7 +849,7 @@ function AppContent({
           persistent: inAppPersistent,
           browserOnlyWhenBackground,
         });
-        if (Boolean(criticalConfig.sms)) {
+        if (criticalConfig.sms) {
           dispatchSmsNotification({
             title,
             message,
@@ -879,7 +879,7 @@ function AppContent({
           persistent: inAppPersistent,
           browserOnlyWhenBackground,
         });
-        if (Boolean(warningConfig.sms)) {
+        if (warningConfig.sms) {
           dispatchSmsNotification({
             title,
             message,
@@ -968,7 +968,7 @@ function AppContent({
           persistent: inAppPersistent,
           browserOnlyWhenBackground,
         });
-        if (Boolean(channels.sms)) {
+        if (channels.sms) {
           dispatchSmsNotification({
             title,
             message,
@@ -2847,15 +2847,8 @@ function AppContent({
                   const index = (pagesConfig[activePage] || []).indexOf(id);
                   const placement = gridLayout[id];
                   const settingsKey = getCardSettingsKey(id);
-                  const settings = cardSettings[settingsKey] || cardSettings[id] || {};
-                  const defaultLegacyRowSpan = placement?.rowSpan || 1;
-                  const defaultLegacyColSpan = placement?.colSpan || 1;
-                  const rowSpan = Number.isFinite(Number(settings.gridRowSpan))
-                    ? Math.max(1, Math.round(Number(settings.gridRowSpan)))
-                    : defaultLegacyRowSpan;
-                  const colSpan = Number.isFinite(Number(settings.gridColSpan))
-                    ? Math.max(1, Math.min(gridColCount, Math.round(Number(settings.gridColSpan))))
-                    : defaultLegacyColSpan;
+                  const rowSpan = Math.max(1, Math.round(Number(placement?.rowSpan) || 1));
+                  const colSpan = Math.max(1, Math.min(gridColCount, Math.round(Number(placement?.colSpan) || 1)));
                   const heading = cardSettings[settingsKey]?.heading;
 
                   if (!editMode && (hiddenCards.includes(id) || isCardHiddenByLogic(id) || !isCardVisibleForCurrentRole(id))) return null;

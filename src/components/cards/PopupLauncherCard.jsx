@@ -43,6 +43,14 @@ const tokenize = (value) => normalizeMatchText(value)
   .split(/[^a-z0-9]+/)
   .map((token) => token.trim())
   .filter((token) => token.length >= 2);
+const extractCardId = (settingsKey) => {
+  const parts = String(settingsKey || '').split('::');
+  return parts[parts.length - 1] || String(settingsKey || '');
+};
+const getSettingsPageId = (settingsKey) => {
+  const parts = String(settingsKey || '').split('::');
+  return parts.length > 1 ? parts[0] : '';
+};
 const toNum = (value) => {
   const parsed = Number.parseFloat(String(value ?? '').replace(',', '.'));
   return Number.isFinite(parsed) ? parsed : null;
@@ -230,24 +238,54 @@ const buildTextScore = (baseTexts, sourceTexts) => {
   return score;
 };
 
-const resolveHealthScore = ({ targetSettings, cardSettings, entities }) => {
+const getMergedCardSettings = (cardSettings) => {
+  const byCardId = new Map();
+  Object.entries(cardSettings || {}).forEach(([settingsKey, value]) => {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return;
+    const cardId = extractCardId(settingsKey);
+    const existing = byCardId.get(cardId);
+    const isScopedKey = String(settingsKey || '').includes('::');
+    const existingIsScoped = String(existing?.settingsKey || '').includes('::');
+    const settings = isScopedKey || !existingIsScoped
+      ? { ...(existing?.settings || {}), ...value }
+      : { ...value, ...(existing?.settings || {}) };
+    byCardId.set(cardId, {
+      cardId,
+      settingsKey: isScopedKey ? settingsKey : (existing?.settingsKey || settingsKey),
+      pageId: isScopedKey ? getSettingsPageId(settingsKey) : (existing?.pageId || getSettingsPageId(settingsKey)),
+      settings,
+    });
+  });
+  return Array.from(byCardId.values());
+};
+
+const resolveHealthScore = ({
+  targetCardId,
+  targetPageId,
+  buttonLabel,
+  targetSettings,
+  cardSettings,
+  customNames,
+  entities,
+}) => {
   const directScore = getDirectScore(targetSettings, entities);
   if (directScore !== null) return directScore;
 
-  const allSettings = Object.entries(cardSettings || {});
-  const healthCards = allSettings
-    .map(([key, value]) => {
-      const settings = value || {};
+  const healthCards = getMergedCardSettings(cardSettings)
+    .map((candidate) => {
+      const settings = candidate.settings || {};
       const healthScore = getDirectScore(settings, entities);
       return {
-        key,
+        ...candidate,
         settings,
         healthScore: healthScore !== null ? healthScore : computeHealthScore(settings),
+        hasDirectScore: healthScore !== null,
       };
     })
-    .filter(({ key, settings }) => (
+    .filter(({ cardId, settingsKey, settings }) => (
       settings?.type === 'sauna_health_score'
-      || key.includes('sauna_health_score_card_')
+      || String(cardId).startsWith('sauna_health_score_card_')
+      || String(settingsKey).includes('sauna_health_score_card_')
       || String(settings?.type || '').includes('health_score')
     ));
 
@@ -255,6 +293,9 @@ const resolveHealthScore = ({ targetSettings, cardSettings, entities }) => {
   const saunaActiveEntityId = String(targetSettings?.saunaActiveBooleanEntityId || '').trim();
   const saunaZoneEntityId = String(targetSettings?.zoneEntityId || '').trim();
   const saunaMatchTexts = [
+    targetCardId,
+    customNames?.[targetCardId],
+    buttonLabel,
     targetSettings?.name,
     targetSettings?.heading,
     targetSettings?.title,
@@ -274,7 +315,9 @@ const resolveHealthScore = ({ targetSettings, cardSettings, entities }) => {
       const candidateActiveEntityId = String(settings?.bookingActiveEntityId || settings?.saunaActiveBooleanEntityId || '').trim();
       const candidateZoneEntityId = String(settings?.zoneEntityId || '').trim();
       const candidateMatchTexts = [
-        candidate.key,
+        candidate.cardId,
+        candidate.settingsKey,
+        customNames?.[candidate.cardId],
         settings?.name,
         settings?.heading,
         settings?.title,
@@ -285,16 +328,25 @@ const resolveHealthScore = ({ targetSettings, cardSettings, entities }) => {
         getEntityName(entities, candidateActiveEntityId),
         getEntityName(entities, candidateZoneEntityId),
       ].filter(Boolean);
-      if (saunaTempEntityId && candidateTempEntityId && candidateTempEntityId === saunaTempEntityId) matchScore += 100;
-      if (saunaActiveEntityId && candidateActiveEntityId && candidateActiveEntityId === saunaActiveEntityId) matchScore += 80;
-      if (saunaZoneEntityId && candidateZoneEntityId && candidateZoneEntityId === saunaZoneEntityId) matchScore += 70;
+      const exactMatch = Boolean(
+        (saunaZoneEntityId && candidateZoneEntityId && candidateZoneEntityId === saunaZoneEntityId)
+        || (saunaTempEntityId && candidateTempEntityId && candidateTempEntityId === saunaTempEntityId)
+        || (saunaActiveEntityId && candidateActiveEntityId && candidateActiveEntityId === saunaActiveEntityId)
+      );
+      if (saunaZoneEntityId && candidateZoneEntityId && candidateZoneEntityId === saunaZoneEntityId) matchScore += 140;
+      if (saunaTempEntityId && candidateTempEntityId && candidateTempEntityId === saunaTempEntityId) matchScore += 130;
+      if (saunaActiveEntityId && candidateActiveEntityId && candidateActiveEntityId === saunaActiveEntityId) matchScore += 120;
+      if (targetPageId && candidate.pageId && candidate.pageId === targetPageId) matchScore += 12;
+      if (candidate.hasDirectScore) matchScore += 8;
       matchScore += buildTextScore(saunaMatchTexts, candidateMatchTexts);
-      return { ...candidate, matchScore };
+      return { ...candidate, exactMatch, matchScore };
     })
     .filter((candidate) => candidate.matchScore > 0)
     .sort((a, b) => b.matchScore - a.matchScore);
 
-  return ranked.length && ranked[0].matchScore >= 3 ? ranked[0].healthScore : null;
+  const exactRanked = ranked.filter((candidate) => candidate.exactMatch);
+  const best = exactRanked[0] || ranked[0] || null;
+  return best && best.matchScore >= 3 ? best.healthScore : null;
 };
 
 export default function PopupLauncherCard({
@@ -346,7 +398,15 @@ export default function PopupLauncherCard({
       motionConfigured: Boolean(targetSettings?.motionEntityId),
       motionOn: motionEntity ? isOnish(motionEntity.state) : false,
       showManual: Boolean(modeStateKnown && !autoModeOn),
-      scoreTone: getScoreTone(resolveHealthScore({ targetSettings, cardSettings, entities })),
+      scoreTone: getScoreTone(resolveHealthScore({
+        targetCardId: button.targetCardId,
+        targetPageId: button.targetPageId,
+        buttonLabel: button.label,
+        targetSettings,
+        cardSettings,
+        customNames,
+        entities,
+      })),
     };
   };
 
