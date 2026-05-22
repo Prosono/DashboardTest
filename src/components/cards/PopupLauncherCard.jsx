@@ -208,14 +208,26 @@ const resolveSaunaAlert = ({ label, targetCardId, targetSettings, customNames, e
     { severity: 'warning', entityId: warningEntityId, lines: getAlertLines(entities?.[warningEntityId]) },
   ];
 
+  const matched = [];
   for (const candidate of candidates) {
     if (!candidate.entityId || !candidate.lines.length) continue;
     const matchedLines = candidate.lines.filter((line) => getSaunaAlertMatch(line, names));
     if (matchedLines.length) {
-      return { ...candidate, lines: matchedLines };
+      matched.push({ ...candidate, lines: matchedLines });
     }
   }
-  return null;
+
+  if (!matched.length) return null;
+  const critical = matched.find((candidate) => candidate.severity === 'critical');
+  const primary = critical || matched[0];
+  return {
+    severity: primary.severity,
+    entityId: primary.entityId,
+    lines: matched.flatMap((candidate) => candidate.lines.map((line) => ({
+      severity: candidate.severity,
+      text: line,
+    }))),
+  };
 };
 
 const resolveImageValue = (value, getEntityImageUrl, { forceHaBase = false } = {}) => {
@@ -845,7 +857,7 @@ export default function PopupLauncherCard({
                     <button
                       type="button"
                       onClick={(event) => openSaunaAlert(event, sauna, label)}
-                      className={`absolute left-1/2 top-1/2 z-20 flex -translate-x-1/2 -translate-y-1/2 items-center justify-center transition active:scale-95 ${
+                      className={`absolute left-1/2 top-[38%] z-20 flex -translate-x-1/2 -translate-y-1/2 items-center justify-center transition active:scale-95 sm:top-1/2 ${
                         sauna.alert.severity === 'critical'
                           ? 'text-red-300'
                           : 'text-orange-300'

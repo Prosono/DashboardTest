@@ -106,6 +106,7 @@ export default function SensorModal({
   entities = {},
   customName,
   focusText,
+  alertLines = [],
   overlayEntities = [],
   conn,
   haUrl,
@@ -132,9 +133,17 @@ export default function SensorModal({
     start: historyQuery.start,
     end: historyQuery.end,
   }), [historyQuery.end, historyQuery.start]);
-  const isSystemWarningDetails = entityId === 'sensor.system_warning_details';
-  const isSystemCriticalDetails = entityId === 'sensor.system_critical_details';
-  const isSystemDetailsSensor = isSystemWarningDetails || isSystemCriticalDetails;
+  const hasAlertLineOverride = Array.isArray(alertLines) && alertLines.length > 0;
+  const alertOverrideHasCritical = hasAlertLineOverride && alertLines.some((entry) => {
+    const severity = typeof entry === 'string' ? '' : String(entry?.severity || '').trim().toLowerCase();
+    return severity.includes('critical') || severity.includes('kritisk') || severity === 'error';
+  });
+  const normalizedEntityId = String(entityId || '').trim().toLowerCase();
+  const isSystemCriticalDetails = normalizedEntityId.includes('system_critical_details')
+    || (hasAlertLineOverride && alertOverrideHasCritical);
+  const isSystemWarningDetails = normalizedEntityId.includes('system_warning_details')
+    || (hasAlertLineOverride && !isSystemCriticalDetails);
+  const isSystemDetailsSensor = isSystemWarningDetails || isSystemCriticalDetails || hasAlertLineOverride;
 
   const parseWarningLines = (rawValue) => {
     const raw = String(rawValue ?? '').replace(/\r\n/g, '\n').trim();
@@ -885,15 +894,39 @@ export default function SensorModal({
   // Icon Logic
   const Icon = getIconComponent(attrs.icon) || Activity;
   const warningSource = attrs?.text ?? attrs?.details ?? attrs?.warning_details ?? attrs?.warnings ?? state;
-  const allWarningLines = isSystemDetailsSensor ? parseWarningLines(warningSource) : [];
+  const normalizeWarningSeverity = (value) => {
+    const normalized = String(value || '').trim().toLowerCase();
+    if (normalized.includes('critical') || normalized.includes('kritisk') || normalized === 'error') return 'critical';
+    return 'warning';
+  };
+  const normalizedAlertLines = Array.isArray(alertLines)
+    ? alertLines
+      .map((entry) => {
+        const text = typeof entry === 'string'
+          ? entry
+          : (entry?.text ?? entry?.line ?? entry?.message ?? '');
+        const severity = typeof entry === 'string'
+          ? (isSystemCriticalDetails ? 'critical' : 'warning')
+          : normalizeWarningSeverity(entry?.severity);
+        const cleanText = String(text || '').trim();
+        return cleanText ? { text: cleanText, severity } : null;
+      })
+      .filter(Boolean)
+    : [];
+  const allWarningLineItems = normalizedAlertLines.length
+    ? normalizedAlertLines
+    : (isSystemDetailsSensor ? parseWarningLines(warningSource).map((line) => ({
+      text: line,
+      severity: isSystemCriticalDetails ? 'critical' : 'warning',
+    })) : []);
   const normalizedFocus = String(focusText || '')
     .normalize('NFKD')
     .replace(/[\u0300-\u036f]/g, '')
     .trim()
     .toLowerCase();
-  const warningLines = normalizedFocus
-    ? allWarningLines.filter((line) => {
-      const normalizedLine = String(line || '')
+  const warningLineItems = normalizedFocus && !normalizedAlertLines.length
+    ? allWarningLineItems.filter((item) => {
+      const normalizedLine = String(item?.text || '')
         .normalize('NFKD')
         .replace(/[\u0300-\u036f]/g, '')
         .trim()
@@ -902,13 +935,10 @@ export default function SensorModal({
         || normalizedLine.startsWith(`${normalizedFocus} `)
         || normalizedLine.startsWith(`${normalizedFocus}:`);
     })
-    : allWarningLines;
+    : allWarningLineItems;
 
   if (isSystemDetailsSensor) {
     const title = customName || (isSystemCriticalDetails ? 'Kritiske varsler' : 'Systemvarsler');
-    const toneClass = isSystemCriticalDetails
-      ? 'border-red-400/30 bg-red-600/15'
-      : 'border-orange-400/30 bg-orange-500/12';
     const headerIconClass = isSystemCriticalDetails
       ? 'bg-red-500/20 text-red-400'
       : 'bg-orange-500/18 text-orange-300';
@@ -939,22 +969,28 @@ export default function SensorModal({
               </h2>
             </div>
             <p className={`text-xs uppercase tracking-widest font-bold ${secondaryTextClass}`}>
-              {warningLines.length} varsler
+              {warningLineItems.length} varsler
             </p>
           </div>
 
           <div className="p-4 md:p-6 overflow-y-auto custom-scrollbar space-y-2">
-            {warningLines.length === 0 && (
+            {warningLineItems.length === 0 && (
               <div className={`rounded-2xl border border-emerald-500/25 bg-emerald-500/10 px-4 py-3 text-sm font-medium ${isLightTheme ? 'text-emerald-700' : 'text-emerald-300'}`}>
                 {t('warnings.none') === 'warnings.none' ? 'Ingen aktive varsler.' : t('warnings.none')}
               </div>
             )}
-            {warningLines.map((line, index) => (
-              <div key={`${index}_${line.slice(0, 20)}`} className={`rounded-2xl border px-4 py-3 flex items-start gap-3 ${toneClass}`}>
-                <span className={`${isSystemCriticalDetails ? 'text-red-400' : 'text-orange-300'} leading-none pt-0.5`}>⚠️</span>
-                <p className="text-sm text-[var(--text-primary)] leading-relaxed">{line}</p>
-              </div>
-            ))}
+            {warningLineItems.map((item, index) => {
+              const isCriticalLine = item.severity === 'critical';
+              const lineToneClass = isCriticalLine
+                ? 'border-red-400/30 bg-red-600/15'
+                : 'border-orange-400/30 bg-orange-500/12';
+              return (
+                <div key={`${index}_${item.text.slice(0, 20)}`} className={`rounded-2xl border px-4 py-3 flex items-start gap-3 ${lineToneClass}`}>
+                  <span className={`${isCriticalLine ? 'text-red-400' : 'text-orange-300'} leading-none pt-0.5`}>⚠️</span>
+                  <p className="text-sm text-[var(--text-primary)] leading-relaxed">{item.text}</p>
+                </div>
+              );
+            })}
           </div>
 
           <div className={`px-6 pb-5 pt-2 text-center text-[11px] font-mono ${faintTextClass}`}>

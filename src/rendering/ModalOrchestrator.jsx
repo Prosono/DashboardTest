@@ -135,12 +135,17 @@ function PopupCardFitFrame({
       data-disable-pull-refresh="true"
     >
       <div className="w-full h-full flex justify-center overflow-hidden">
-        <div className="w-full" style={{ height: scaledHeight ? `${scaledHeight}px` : '100%' }}>
+        <div
+          className={isMobile ? 'shrink-0' : 'w-full'}
+          style={{
+            width: isMobile && scale > 0 ? `${100 / scale}%` : '100%',
+            height: scaledHeight ? `${scaledHeight}px` : '100%',
+          }}
+        >
           <div
             ref={contentRef}
             className="w-full"
             style={{
-              width: isMobile && scale > 0 ? `${100 / scale}%` : '100%',
               transform: `scale(${scale})`,
               transformOrigin: 'top center',
               willChange: 'transform',
@@ -1142,6 +1147,7 @@ export default function ModalOrchestrator({
             entities={entities}
             customName={sensorPayload.customName || customNames[sensorEntityId]}
             focusText={sensorPayload.focusText || ''}
+            alertLines={Array.isArray(sensorPayload.alertLines) ? sensorPayload.alertLines : []}
             overlayEntities={Array.isArray(sensorPayload.overlayEntities) ? sensorPayload.overlayEntities : []}
             conn={conn}
             haUrl={activeUrl}

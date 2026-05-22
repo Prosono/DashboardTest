@@ -703,6 +703,7 @@ export function renderPopupLauncherCard(cardId, dragProps, getControls, cardStyl
         setShowSensorInfoModal({
           entityId: payload.entityId,
           focusText: payload.saunaName,
+          alertLines: Array.isArray(payload.lines) ? payload.lines : [],
           customName: `${payload.severity === 'critical' ? 'Kritiske varsler' : 'Systemvarsler'} - ${payload.saunaName}`,
         });
       }}
