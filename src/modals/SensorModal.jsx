@@ -9,6 +9,26 @@ import { getIconComponent } from '../icons';
 
 const HISTORY_PRESET_OPTIONS = [1, 3, 6, 12, 24, 48, 72, 168, 336, 720];
 const OVERLAY_COLOR_PALETTE = ['#38bdf8', '#ef4444', '#a855f7', '#22c55e', '#f59e0b', '#14b8a6', '#f97316', '#e879f9'];
+const ALERT_DETAIL_ATTRIBUTE_KEYS = [
+  'text',
+  'details',
+  'critical_details',
+  'criticalDetails',
+  'critical_alerts',
+  'criticalAlerts',
+  'criticals',
+  'critical',
+  'warning_details',
+  'warningDetails',
+  'warning_alerts',
+  'warningAlerts',
+  'warnings',
+  'alerts',
+  'active_alerts',
+  'activeAlerts',
+  'items',
+  'messages',
+];
 
 const makeTr = (t) => (key, fallback) => {
   const out = typeof t === 'function' ? t(key) : undefined;
@@ -28,6 +48,15 @@ const parseDateTimeLocalInputValue = (value) => {
   const parsed = new Date(String(value || '').trim());
   return Number.isNaN(parsed.getTime()) ? null : parsed;
 };
+
+const cleanAlertLine = (value) => String(value ?? '')
+  .replace(/^text:\s*/i, '')
+  .replace(/^[\s"'`*•·-]+/g, '')
+  .replace(/^(?:⚠️|⚠|🚨|❗|‼️|⛔|🔴|🟠|🟡|🔺|▲|△)\s*/u, '')
+  .replace(/^\[(?:critical|kritisk|warning|varsel|systemvarsel|alarm|alert)\]\s*/i, '')
+  .replace(/^(?:critical|kritisk|warning|varsel|systemvarsel|alarm|alert)\s*[:|-]\s*/i, '')
+  .replace(/^(?:critical|kritisk|warning|varsel|systemvarsel|alarm|alert)\s+/i, '')
+  .trim();
 
 const buildPresetHistoryWindow = (hours) => {
   const safeHours = Math.max(1, Number(hours) || 24);
@@ -146,10 +175,25 @@ export default function SensorModal({
   const isSystemDetailsSensor = isSystemWarningDetails || isSystemCriticalDetails || hasAlertLineOverride;
 
   const parseWarningLines = (rawValue) => {
+    if (Array.isArray(rawValue)) {
+      return rawValue.flatMap((entry) => parseWarningLines(entry));
+    }
+    if (rawValue && typeof rawValue === 'object') {
+      const candidate = rawValue.text
+        ?? rawValue.line
+        ?? rawValue.message
+        ?? rawValue.title
+        ?? rawValue.summary
+        ?? rawValue.name
+        ?? rawValue.details
+        ?? rawValue.description;
+      return candidate === undefined || candidate === null ? [] : parseWarningLines(candidate);
+    }
+
     const raw = String(rawValue ?? '').replace(/\r\n/g, '\n').trim();
     if (!raw) return [];
     const low = raw.toLowerCase();
-    if (low === 'unknown' || low === 'unavailable' || low === 'none') return [];
+    if (low === 'unknown' || low === 'unavailable' || low === 'none' || low === 'ok' || low === '0') return [];
 
     let lines = raw
       .split('\n')
@@ -157,15 +201,15 @@ export default function SensorModal({
       .filter(Boolean);
 
     // Some integrations return all warnings in one long line.
-    if (lines.length <= 1 && raw.includes('⚠️')) {
+    if (lines.length <= 1 && /(?:⚠️|⚠|🚨|❗|‼️|⛔|🔴|🟠|🟡|🔺|▲|△)/u.test(raw)) {
       lines = raw
-        .split(/(?=⚠️)/g)
+        .split(/(?=⚠️|⚠|🚨|❗|‼️|⛔|🔴|🟠|🟡|🔺|▲|△)/gu)
         .map((line) => line.trim())
         .filter(Boolean);
     }
 
     return lines
-      .map((line) => line.replace(/^text:\s*/i, '').replace(/^⚠️\s*/u, '').trim())
+      .map(cleanAlertLine)
       .filter(Boolean);
   };
 
@@ -893,7 +937,10 @@ export default function SensorModal({
 
   // Icon Logic
   const Icon = getIconComponent(attrs.icon) || Activity;
-  const warningSource = attrs?.text ?? attrs?.details ?? attrs?.warning_details ?? attrs?.warnings ?? state;
+  const warningSources = ALERT_DETAIL_ATTRIBUTE_KEYS
+    .map((key) => attrs?.[key])
+    .filter((value) => value !== undefined && value !== null && String(value).trim() !== '');
+  if (!warningSources.length) warningSources.push(state);
   const normalizeWarningSeverity = (value) => {
     const normalized = String(value || '').trim().toLowerCase();
     if (normalized.includes('critical') || normalized.includes('kritisk') || normalized === 'error') return 'critical';
@@ -915,7 +962,7 @@ export default function SensorModal({
     : [];
   const allWarningLineItems = normalizedAlertLines.length
     ? normalizedAlertLines
-    : (isSystemDetailsSensor ? parseWarningLines(warningSource).map((line) => ({
+    : (isSystemDetailsSensor ? Array.from(new Set(warningSources.flatMap((source) => parseWarningLines(source)))).map((line) => ({
       text: line,
       severity: isSystemCriticalDetails ? 'critical' : 'warning',
     })) : []);
@@ -926,7 +973,7 @@ export default function SensorModal({
     .toLowerCase();
   const warningLineItems = normalizedFocus && !normalizedAlertLines.length
     ? allWarningLineItems.filter((item) => {
-      const normalizedLine = String(item?.text || '')
+      const normalizedLine = cleanAlertLine(item?.text || '')
         .normalize('NFKD')
         .replace(/[\u0300-\u036f]/g, '')
         .trim()

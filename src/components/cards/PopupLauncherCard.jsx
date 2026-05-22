@@ -156,7 +156,52 @@ const getBookingTypeLabel = (type, t) => {
   return tr(t, 'calendarBooking.type.felles', 'Felles');
 };
 
+const ALERT_DETAIL_ATTRIBUTE_KEYS = [
+  'text',
+  'details',
+  'critical_details',
+  'criticalDetails',
+  'critical_alerts',
+  'criticalAlerts',
+  'criticals',
+  'critical',
+  'warning_details',
+  'warningDetails',
+  'warning_alerts',
+  'warningAlerts',
+  'warnings',
+  'alerts',
+  'active_alerts',
+  'activeAlerts',
+  'items',
+  'messages',
+];
+
+const cleanAlertLine = (value) => String(value ?? '')
+  .replace(/^text:\s*/i, '')
+  .replace(/^[\s"'`*•·-]+/g, '')
+  .replace(/^(?:⚠️|⚠|🚨|❗|‼️|⛔|🔴|🟠|🟡|🔺|▲|△)\s*/u, '')
+  .replace(/^\[(?:critical|kritisk|warning|varsel|systemvarsel|alarm|alert)\]\s*/i, '')
+  .replace(/^(?:critical|kritisk|warning|varsel|systemvarsel|alarm|alert)\s*[:|-]\s*/i, '')
+  .replace(/^(?:critical|kritisk|warning|varsel|systemvarsel|alarm|alert)\s+/i, '')
+  .trim();
+
 const parseWarningLines = (rawValue) => {
+  if (Array.isArray(rawValue)) {
+    return rawValue.flatMap((entry) => parseWarningLines(entry));
+  }
+  if (rawValue && typeof rawValue === 'object') {
+    const candidate = rawValue.text
+      ?? rawValue.line
+      ?? rawValue.message
+      ?? rawValue.title
+      ?? rawValue.summary
+      ?? rawValue.name
+      ?? rawValue.details
+      ?? rawValue.description;
+    return candidate === undefined || candidate === null ? [] : parseWarningLines(candidate);
+  }
+
   const raw = String(rawValue ?? '').replace(/\r\n/g, '\n').trim();
   if (!raw) return [];
   const low = raw.toLowerCase();
@@ -167,26 +212,29 @@ const parseWarningLines = (rawValue) => {
     .map((line) => line.trim())
     .filter(Boolean);
 
-  if (lines.length <= 1 && raw.includes('⚠️')) {
+  if (lines.length <= 1 && /(?:⚠️|⚠|🚨|❗|‼️|⛔|🔴|🟠|🟡|🔺|▲|△)/u.test(raw)) {
     lines = raw
-      .split(/(?=⚠️)/g)
+      .split(/(?=⚠️|⚠|🚨|❗|‼️|⛔|🔴|🟠|🟡|🔺|▲|△)/gu)
       .map((line) => line.trim())
       .filter(Boolean);
   }
 
   return lines
-    .map((line) => line.replace(/^text:\s*/i, '').replace(/^⚠️\s*/u, '').trim())
+    .map(cleanAlertLine)
     .filter(Boolean);
 };
 
 const getAlertLines = (entity) => {
   const attrs = entity?.attributes || {};
-  const source = attrs.text ?? attrs.details ?? attrs.warning_details ?? attrs.warnings ?? entity?.state;
-  return parseWarningLines(source);
+  const sources = ALERT_DETAIL_ATTRIBUTE_KEYS
+    .map((key) => attrs[key])
+    .filter((value) => value !== undefined && value !== null && String(value).trim() !== '');
+  if (!sources.length) sources.push(entity?.state);
+  return Array.from(new Set(sources.flatMap((source) => parseWarningLines(source))));
 };
 
 const getSaunaAlertMatch = (line, names) => {
-  const normalizedLine = normalizeMatchText(line);
+  const normalizedLine = normalizeMatchText(cleanAlertLine(line));
   if (!normalizedLine) return false;
   return (names || [])
     .map((name) => normalizeMatchText(name))
