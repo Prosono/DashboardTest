@@ -144,19 +144,12 @@ const getBookingType = (event) => {
   return 'felles';
 };
 
-const getBookingPalette = (type, isOngoing = false) => {
-  if (isOngoing) {
-    return {
-      color: '#7f98b7',
-      softBg: 'rgba(127, 152, 183, 0.08)',
-      softBorder: 'rgba(127, 152, 183, 0.2)',
-    };
-  }
+const getBookingPalette = (type) => {
   if (type === 'service') {
     return {
-      color: '#b49a6d',
-      softBg: 'rgba(180, 154, 109, 0.075)',
-      softBorder: 'rgba(180, 154, 109, 0.19)',
+      color: '#ffbf2f',
+      softBg: 'rgba(255, 191, 47, 0.11)',
+      softBorder: 'rgba(255, 191, 47, 0.26)',
     };
   }
   if (type === 'aufguss') {
@@ -168,15 +161,15 @@ const getBookingPalette = (type, isOngoing = false) => {
   }
   if (type === 'private') {
     return {
-      color: '#af839f',
-      softBg: 'rgba(175, 131, 159, 0.075)',
-      softBorder: 'rgba(175, 131, 159, 0.19)',
+      color: '#ff5cae',
+      softBg: 'rgba(255, 92, 174, 0.11)',
+      softBorder: 'rgba(255, 92, 174, 0.26)',
     };
   }
   return {
-    color: '#7b97be',
-    softBg: 'rgba(123, 151, 190, 0.075)',
-    softBorder: 'rgba(123, 151, 190, 0.19)',
+    color: '#63a4ff',
+    softBg: 'rgba(99, 164, 255, 0.11)',
+    softBorder: 'rgba(99, 164, 255, 0.26)',
   };
 };
 
@@ -210,7 +203,7 @@ const CalendarBookingCard = ({
   isEditMode,
   size,
   iconName,
-  customName,
+  customName: _customName,
 }) => {
   const [events, setEvents] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -307,7 +300,7 @@ const CalendarBookingCard = ({
       cancelled = true;
       window.clearInterval(intervalId);
     };
-  }, [conn, selectedCalendarId, isVisible, t, daysAhead]);
+  }, [conn, selectedCalendarId, isVisible, t, daysAhead, locale]);
 
   const selectedCalendarName = selectedCalendarId
     ? (entities?.[selectedCalendarId]?.attributes?.friendly_name || selectedCalendarId)

@@ -92,7 +92,7 @@ const normalizeBookingStateType = (value) => {
 
 const getBookingTypeColor = (type) => {
   const normalized = normalizeBookingType(type);
-  if (normalized === 'service') return '#b49a6d';
+  if (normalized === 'service') return '#ffbf2f';
   if (normalized === 'aufguss') return '#8f82b4';
   if (normalized === 'private') return '#ff5cae';
   return '#63a4ff';
