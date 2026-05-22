@@ -58,7 +58,7 @@ describe('grid layout sizing', () => {
       },
     }, 'home', 2, { isMobile: true });
 
-    expect(size).toEqual({ colSpan: 2, rowSpan: 5 });
+    expect(size).toEqual({ colSpan: 2, rowSpan: 4 });
   });
 
   it('reserves desktop sauna launcher rows for three button columns', () => {

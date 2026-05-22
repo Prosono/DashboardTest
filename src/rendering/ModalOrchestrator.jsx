@@ -75,11 +75,13 @@ function PopupCardFitFrame({
     const rawHeight = content.scrollHeight;
     if (rawWidth <= 0 || rawHeight <= 0) return;
 
-    const nextScale = Math.min(1, viewportWidth / rawWidth, viewportHeight / rawHeight);
+    const nextScale = isMobile
+      ? Math.min(1, viewportWidth / rawWidth)
+      : Math.min(1, viewportWidth / rawWidth, viewportHeight / rawHeight);
     const boundedScale = Number.isFinite(nextScale) ? Math.max(scaleFloor, nextScale) : 1;
     setScale((prev) => (Math.abs(prev - boundedScale) > 0.005 ? boundedScale : prev));
     setScaledHeight((rawHeight * boundedScale) + 2);
-  }, [fitToViewport, scaleFloor]);
+  }, [fitToViewport, isMobile, scaleFloor]);
 
   useEffect(() => {
     const raf = requestAnimationFrame(recalcScale);
@@ -123,7 +125,7 @@ function PopupCardFitFrame({
   return (
     <div
       ref={viewportRef}
-      className="overflow-hidden"
+      className={isMobile ? 'overflow-x-hidden overflow-y-auto custom-scrollbar' : 'overflow-hidden'}
       style={{
         height: isMobile
           ? `calc(100dvh - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px) - ${Math.max(24, Number(viewportHeightOffsetPx) || 68)}px)`
@@ -132,7 +134,7 @@ function PopupCardFitFrame({
       }}
       data-disable-pull-refresh="true"
     >
-      <div className="w-full h-full flex justify-center overflow-hidden">
+      <div className={isMobile ? 'w-full min-h-full flex justify-center' : 'w-full h-full flex justify-center overflow-hidden'}>
         <div className="w-full" style={{ height: scaledHeight ? `${scaledHeight}px` : '100%' }}>
           <div
             ref={contentRef}

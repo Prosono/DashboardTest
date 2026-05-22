@@ -56,6 +56,28 @@ const toNum = (value) => {
   return Number.isFinite(parsed) ? parsed : null;
 };
 const roundToOne = (value) => Math.round(Number(value) * 10) / 10;
+const SCORE_MISS_PENALTY = 10;
+const SCORE_HITRATE_WEIGHT = 0.25;
+const BOOKING_TYPES = ['felles', 'aufguss', 'private', 'service'];
+const GENERIC_BOOKING_STATES = new Set([
+  'ja',
+  'yes',
+  'on',
+  'true',
+  '1',
+  'nei',
+  'no',
+  'off',
+  'false',
+  '0',
+  'active',
+  'aktiv',
+  'booked',
+  'occupied',
+  'heat',
+  'heating',
+]);
+const POSITIVE_SERVICE_STATES = new Set(['ja', 'yes', 'on', 'true', '1', 'service']);
 
 const normalizeScoreValue = (value) => {
   const parsed = toNum(value);
@@ -71,10 +93,66 @@ const calcDeviationPct = (temp, target) => {
   return roundToOne(((tempNum - targetNum) / targetNum) * 100);
 };
 
-const calcScoreFromDeviationPct = (deviationPct) => {
+const calcScoreFromDeviationPct = (deviationPct, options = {}) => {
+  const { hit = null, missPenalty = SCORE_MISS_PENALTY } = options;
   const parsed = toNum(deviationPct);
   if (parsed === null) return null;
-  return Math.max(0, Math.min(100, Math.round(100 - Math.abs(parsed))));
+  const baseScore = Math.max(0, Math.min(100, Math.round(100 - Math.abs(parsed))));
+  if (hit === false) {
+    return Math.max(0, baseScore - Math.max(0, Number(missPenalty) || 0));
+  }
+  return baseScore;
+};
+
+const isTargetReached = (startTemp, targetTemp, toleranceC = 0) => {
+  const start = toNum(startTemp);
+  const target = toNum(targetTemp);
+  if (start === null || target === null) return null;
+  const safeTolerance = Number.isFinite(Number(toleranceC)) ? Math.max(0, Number(toleranceC)) : 0;
+  return start >= (target - safeTolerance);
+};
+
+const normalizeBookingType = (value, fallback = 'felles') => {
+  const normalized = String(value ?? '')
+    .trim()
+    .toLowerCase()
+    .normalize('NFKD')
+    .replace(/[\u0300-\u036f]/g, '');
+  if (!normalized) return fallback;
+  if (normalized.includes('aufguss')) return 'aufguss';
+  if (normalized.includes('service') || normalized.includes('vedlikehold') || normalized.includes('maintenance')) return 'service';
+  if (normalized.includes('privat') || normalized.includes('private')) return 'private';
+  if (normalized.includes('felles') || normalized.includes('shared') || normalized.includes('regular') || normalized.includes('vanlig')) return 'felles';
+  if (POSITIVE_SERVICE_STATES.has(normalized)) return 'service';
+  if (BOOKING_TYPES.includes(normalized)) return normalized;
+  return fallback;
+};
+
+const normalizeBookingStateType = (value) => {
+  const normalized = String(value ?? '')
+    .trim()
+    .toLowerCase()
+    .normalize('NFKD')
+    .replace(/[\u0300-\u036f]/g, '');
+  if (!normalized || GENERIC_BOOKING_STATES.has(normalized)) return null;
+  const bookingType = normalizeBookingType(normalized, '');
+  return BOOKING_TYPES.includes(bookingType) ? bookingType : null;
+};
+
+const getBookingTypeColor = (type) => {
+  const normalized = normalizeBookingType(type);
+  if (normalized === 'service') return '#ffbf2f';
+  if (normalized === 'aufguss') return '#9c71ff';
+  if (normalized === 'private') return '#ff5cae';
+  return '#63a4ff';
+};
+
+const getBookingTypeLabel = (type, t) => {
+  const normalized = normalizeBookingType(type);
+  if (normalized === 'service') return tr(t, 'calendarBooking.type.service', 'Service');
+  if (normalized === 'aufguss') return tr(t, 'calendarBooking.type.aufguss', 'Aufguss');
+  if (normalized === 'private') return tr(t, 'calendarBooking.type.private', 'Privat');
+  return tr(t, 'calendarBooking.type.felles', 'Felles');
 };
 
 const resolveImageValue = (value, getEntityImageUrl, { forceHaBase = false } = {}) => {
@@ -226,18 +304,33 @@ const computeBookingScore = (settings) => {
   if (!samples.length) return null;
 
   const windowStart = Date.now() - (clampSummaryHours(settings?.summaryHours) * 60 * 60 * 1000);
-  const recentTargetSamples = samples
-    .filter((entry) => entry.timestampMs >= windowStart && entry.targetTemp !== null && entry.deviationPct !== null);
-  const targetSamples = recentTargetSamples.length
-    ? recentTargetSamples
-    : samples.filter((entry) => entry.targetTemp !== null && entry.deviationPct !== null);
-  if (!targetSamples.length) return null;
+  const recentSamples = samples.filter((entry) => entry.timestampMs >= windowStart);
+  const scoreFromSamples = (candidateSamples) => {
+    const targetSamples = candidateSamples.filter((entry) => entry.targetTemp !== null);
+    const targetSamplesWithPct = targetSamples.filter((entry) => entry.deviationPct !== null);
+    if (!targetSamplesWithPct.length) return null;
 
-  const scores = targetSamples
-    .map((entry) => calcScoreFromDeviationPct(entry.deviationPct))
-    .filter((entryScore) => Number.isFinite(Number(entryScore)));
-  if (!scores.length) return null;
-  return Math.max(0, Math.min(100, Math.round(scores.reduce((sum, score) => sum + score, 0) / scores.length)));
+    const targetToleranceC = Number.isFinite(Number(settings?.targetToleranceC)) ? Number(settings.targetToleranceC) : 0;
+    const scoreSamples = targetSamplesWithPct
+      .map((entry) => ({
+        score: calcScoreFromDeviationPct(entry.deviationPct, {
+          hit: isTargetReached(entry.startTemp, entry.targetTemp, targetToleranceC),
+        }),
+      }))
+      .filter((entry) => entry.score !== null);
+    if (!scoreSamples.length) return null;
+
+    const avgScore = scoreSamples.reduce((sum, entry) => sum + (entry.score ?? 0), 0) / scoreSamples.length;
+    const reachedCount = targetSamples
+      .filter((entry) => entry.startTemp >= (entry.targetTemp - targetToleranceC))
+      .length;
+    const reachedRate = targetSamples.length ? Math.round((reachedCount / targetSamples.length) * 100) : null;
+    return reachedRate !== null
+      ? Math.max(0, Math.min(100, Math.round((avgScore * (1 - SCORE_HITRATE_WEIGHT)) + (reachedRate * SCORE_HITRATE_WEIGHT))))
+      : Math.max(0, Math.min(100, Math.round(avgScore)));
+  };
+
+  return scoreFromSamples(recentSamples) ?? scoreFromSamples(samples);
 };
 
 const computeScoreFromSettings = (settings) => (
@@ -323,7 +416,7 @@ const getMergedCardSettings = (cardSettings) => {
   return Array.from(byCardId.values());
 };
 
-const resolveHealthScore = ({
+const resolveScoreSource = ({
   targetCardId,
   targetPageId,
   buttonLabel,
@@ -332,18 +425,26 @@ const resolveHealthScore = ({
   customNames,
   entities,
 }) => {
-  const directScore = getDirectScore(targetSettings, entities);
-  if (directScore !== null) return directScore;
+  const directTargetScore = getDirectScore(targetSettings, entities);
 
   const healthCards = getMergedCardSettings(cardSettings)
     .map((candidate) => {
       const settings = candidate.settings || {};
       const healthScore = getDirectScore(settings, entities);
+      const isBookingTempScoreSource = Boolean(
+        settings?.type === 'sauna_booking_temp'
+        || String(candidate.cardId).startsWith('sauna_booking_temp_card_')
+        || String(candidate.settingsKey).includes('sauna_booking_temp_card_')
+        || Array.isArray(settings?.bookingSnapshots)
+      );
       return {
         ...candidate,
         settings,
-        healthScore: healthScore !== null ? healthScore : computeScoreFromSettings(settings),
+        healthScore: healthScore !== null
+          ? healthScore
+          : (isBookingTempScoreSource ? computeBookingScore(settings) : computeScoreFromSettings(settings)),
         hasDirectScore: healthScore !== null,
+        isBookingTempScoreSource,
       };
     })
     .filter(({ cardId, settingsKey, settings }) => (
@@ -381,7 +482,7 @@ const resolveHealthScore = ({
       const settings = candidate.settings;
       let matchScore = 0;
       const candidateTempEntityId = String(settings?.tempEntityId || '').trim();
-      const candidateActiveEntityId = String(settings?.bookingActiveEntityId || settings?.saunaActiveBooleanEntityId || '').trim();
+      const candidateActiveEntityId = String(settings?.bookingActiveEntityId || settings?.activeEntityId || settings?.saunaActiveBooleanEntityId || '').trim();
       const candidateZoneEntityId = String(settings?.zoneEntityId || '').trim();
       const candidateMatchTexts = [
         candidate.cardId,
@@ -406,16 +507,83 @@ const resolveHealthScore = ({
       if (saunaTempEntityId && candidateTempEntityId && candidateTempEntityId === saunaTempEntityId) matchScore += 130;
       if (saunaActiveEntityId && candidateActiveEntityId && candidateActiveEntityId === saunaActiveEntityId) matchScore += 120;
       if (targetPageId && candidate.pageId && candidate.pageId === targetPageId) matchScore += 12;
+      if (candidate.isBookingTempScoreSource) matchScore += 10;
       if (candidate.hasDirectScore) matchScore += 8;
       matchScore += buildTextScore(saunaMatchTexts, candidateMatchTexts);
       return { ...candidate, exactMatch, matchScore };
     })
-    .filter((candidate) => candidate.matchScore > 0)
+    .filter((candidate) => candidate.matchScore > 0 && candidate.healthScore !== null)
     .sort((a, b) => b.matchScore - a.matchScore);
 
   const exactRanked = ranked.filter((candidate) => candidate.exactMatch);
-  const best = exactRanked[0] || ranked[0] || null;
-  return best && best.matchScore >= 3 ? best.healthScore : null;
+  const bestBookingTemp = (exactRanked.find((candidate) => candidate.isBookingTempScoreSource)
+    || ranked.find((candidate) => candidate.isBookingTempScoreSource));
+  const best = bestBookingTemp || exactRanked[0] || ranked[0] || null;
+  if (best && best.matchScore >= 3) {
+    return {
+      score: best.healthScore,
+      settings: best.settings,
+      sourceType: best.isBookingTempScoreSource ? 'sauna_booking_temp' : (best.settings?.type || ''),
+    };
+  }
+
+  if (directTargetScore !== null) {
+    return { score: directTargetScore, settings: targetSettings, sourceType: 'target' };
+  }
+
+  return { score: null, settings: null, sourceType: '' };
+};
+
+const getLatestSnapshotBookingType = (settings) => {
+  const samples = normalizeBookingSamples(settings?.bookingSnapshots);
+  if (!samples.length) return null;
+  const windowStart = Date.now() - (clampSummaryHours(settings?.summaryHours) * 60 * 60 * 1000);
+  const recentSamples = samples.filter((entry) => entry.timestampMs >= windowStart);
+  const scopedSamples = recentSamples.length ? recentSamples : samples;
+  const latest = scopedSamples[scopedSamples.length - 1];
+  return latest?.bookingType ? normalizeBookingType(latest.bookingType, '') : null;
+};
+
+const getBookingTypeFromEntity = (entity, { positiveStateAsService = false } = {}) => {
+  if (!entity) return null;
+  const attrs = entity.attributes || {};
+  const candidates = [
+    attrs.current_booking_type,
+    attrs.currentBookingType,
+    attrs.booking_type,
+    attrs.bookingType,
+    attrs.next_booking_type,
+    attrs.nextBookingType,
+    attrs.type,
+    entity.state,
+  ];
+  for (const candidate of candidates) {
+    const bookingType = normalizeBookingStateType(candidate);
+    if (bookingType) return bookingType;
+  }
+  const normalizedState = norm(entity.state);
+  if (positiveStateAsService && POSITIVE_SERVICE_STATES.has(normalizedState)) return 'service';
+  return null;
+};
+
+const resolveBookingType = (targetSettings, entities, scoreSourceSettings) => {
+  const serviceEntity = targetSettings?.serviceEntityId ? entities?.[targetSettings.serviceEntityId] : null;
+  const activeEntity = targetSettings?.saunaActiveBooleanEntityId ? entities?.[targetSettings.saunaActiveBooleanEntityId] : null;
+  const nextBookingEntity = targetSettings?.nextBookingInMinutesEntityId ? entities?.[targetSettings.nextBookingInMinutesEntityId] : null;
+
+  const explicitType = [
+    targetSettings?.currentBookingType,
+    targetSettings?.bookingType,
+    getBookingTypeFromEntity(serviceEntity, { positiveStateAsService: true }),
+    getBookingTypeFromEntity(activeEntity),
+    getBookingTypeFromEntity(nextBookingEntity),
+  ].find(Boolean);
+  if (explicitType) return explicitType;
+
+  if (serviceEntity && POSITIVE_SERVICE_STATES.has(norm(serviceEntity.state))) return 'service';
+  if (activeEntity && isOnish(activeEntity.state)) return 'felles';
+
+  return getLatestSnapshotBookingType(scoreSourceSettings);
 };
 
 export default function PopupLauncherCard({
@@ -462,6 +630,16 @@ export default function PopupLauncherCard({
     const modeStateKnown = modeEntity && !isUnavailable(modeEntity.state);
     const autoModeOn = modeStateKnown && isOn(modeEntity.state);
     const temp = formatTemperature(tempEntity);
+    const scoreSource = resolveScoreSource({
+      targetCardId: button.targetCardId,
+      targetPageId: button.targetPageId,
+      buttonLabel: button.label,
+      targetSettings,
+      cardSettings,
+      customNames,
+      entities,
+    });
+    const bookingType = resolveBookingType(targetSettings, entities, scoreSource?.settings);
 
     return {
       imageUrl: resolveSaunaImageUrl(targetSettings, entities, getEntityImageUrl),
@@ -470,15 +648,10 @@ export default function PopupLauncherCard({
       motionConfigured: Boolean(targetSettings?.motionEntityId),
       motionOn: motionEntity ? isOnish(motionEntity.state) : false,
       showManual: Boolean(modeStateKnown && !autoModeOn),
-      scoreTone: getScoreTone(resolveHealthScore({
-        targetCardId: button.targetCardId,
-        targetPageId: button.targetPageId,
-        buttonLabel: button.label,
-        targetSettings,
-        cardSettings,
-        customNames,
-        entities,
-      })),
+      scoreTone: getScoreTone(scoreSource?.score),
+      bookingType,
+      bookingTypeColor: bookingType ? getBookingTypeColor(bookingType) : null,
+      bookingTypeLabel: bookingType ? getBookingTypeLabel(bookingType, t) : null,
     };
   };
 
@@ -570,13 +743,21 @@ export default function PopupLauncherCard({
                   <div className="absolute inset-0 bg-gradient-to-t from-black/88 via-black/38 to-black/18" />
                   <div className="relative z-10 flex h-full min-h-[7rem] flex-col justify-between p-2.5 sm:min-h-[10rem] sm:p-4 lg:min-h-[11.5rem]">
                     <div className="flex items-start justify-between gap-2">
-                      {sauna.showManual ? (
-                        <span className="rounded-full border border-orange-300/35 bg-orange-500/20 px-2 py-1 text-[9px] font-extrabold uppercase tracking-widest text-orange-100 shadow-[0_8px_16px_rgba(0,0,0,0.24)]">
-                          {tr(t, 'sauna.manualMode', 'Manual')}
-                        </span>
-                      ) : (
-                        <span />
-                      )}
+                      <div className="flex min-w-0 items-center gap-1.5">
+                        {sauna.bookingTypeColor && (
+                          <span
+                            className="h-2.5 w-2.5 shrink-0 rounded-full border border-white/40 shadow-[0_0_14px_rgba(255,255,255,0.18)]"
+                            style={{ backgroundColor: sauna.bookingTypeColor }}
+                            title={sauna.bookingTypeLabel}
+                            aria-label={sauna.bookingTypeLabel}
+                          />
+                        )}
+                        {sauna.showManual && (
+                          <span className="rounded-full border border-orange-300/35 bg-orange-500/20 px-2 py-1 text-[9px] font-extrabold uppercase tracking-widest text-orange-100 shadow-[0_8px_16px_rgba(0,0,0,0.24)]">
+                            {tr(t, 'sauna.manualMode', 'Manual')}
+                          </span>
+                        )}
+                      </div>
                       {sauna.motionConfigured && (
                         <span
                           className={`mt-1 h-2.5 w-2.5 shrink-0 rounded-full border ${
@@ -608,8 +789,14 @@ export default function PopupLauncherCard({
                             )}
                           </div>
                         </div>
-                        <div className="inline-flex shrink-0 items-center gap-1 rounded-full border border-white/14 bg-black/32 px-2 py-1 text-[11px] font-extrabold tabular-nums text-white">
-                          <User className={`h-3 w-3 ${sauna.motionOn ? 'text-emerald-300 drop-shadow-[0_0_8px_rgba(110,231,183,0.9)]' : 'text-white/72'}`} />
+                        <div
+                          className={`inline-flex shrink-0 items-center gap-1 rounded-full border px-2 py-1 text-[11px] font-extrabold tabular-nums text-white ${
+                            sauna.motionOn
+                              ? 'border-emerald-200/55 bg-emerald-400/25 shadow-[0_0_14px_rgba(110,231,183,0.34)]'
+                              : 'border-white/14 bg-black/32'
+                          }`}
+                        >
+                          <User className="h-3 w-3 text-white/85" />
                           <span>{sauna.people}</span>
                         </div>
                       </div>

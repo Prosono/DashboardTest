@@ -113,6 +113,9 @@ const getPopupLauncherMinRowSpan = (cardId, settings, colSpan, { isMobile = fals
     isMobile ? SAUNA_LAUNCHER_MOBILE_COLUMNS : SAUNA_LAUNCHER_DESKTOP_COLUMNS,
   ));
   const buttonRows = Math.ceil(buttons.length / buttonColumns);
+  if (isMobile) {
+    return Math.min(MAX_CARD_ROW_SPAN, buttonRows + 2);
+  }
 
   return Math.min(MAX_CARD_ROW_SPAN, (buttonRows * 2) + 1);
 };
