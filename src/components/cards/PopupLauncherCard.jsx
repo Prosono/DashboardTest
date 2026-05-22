@@ -30,6 +30,7 @@ const norm = (value) => String(value ?? '').trim().toLowerCase();
 const isUnavailable = (value) => ['', 'unknown', 'unavailable', 'none', 'null'].includes(norm(value));
 const isOn = (value) => ['on', 'true', '1', 'yes', 'ja'].includes(norm(value));
 const isOnish = (value) => ['on', 'open', 'detected', 'motion', 'occupancy', 'present', 'home', 'true', '1', 'yes', 'ja'].includes(norm(value));
+const isActiveStatus = (value) => isOnish(value) || ['active', 'aktiv'].includes(norm(value));
 const isAbsoluteImageUrl = (value) => /^(https?:|data:|blob:)/i.test(String(value || '').trim());
 const shouldResolveWithHaBase = (value) => /^\/(?:api|local|media)\//i.test(String(value || '').trim());
 const normalizeMatchText = (value) => String(value ?? '')
@@ -658,7 +659,7 @@ const resolveBookingType = (targetSettings, entities, scoreSourceSettings) => {
   if (serviceEntity && POSITIVE_SERVICE_STATES.has(norm(serviceEntity.state))) return 'service';
 
   const activeKnown = activeEntity && !isUnavailable(activeEntity.state);
-  const activeNow = activeKnown ? isOnish(activeEntity.state) : false;
+  const activeNow = activeKnown ? isActiveStatus(activeEntity.state) : false;
   const latestSnapshotType = getLatestSnapshotBookingType(scoreSourceSettings);
   if (activeNow && latestSnapshotType) return latestSnapshotType;
   if (activeNow) return 'felles';
@@ -709,6 +710,13 @@ export default function PopupLauncherCard({
     const tempEntity = targetSettings?.tempEntityId ? entities?.[targetSettings.tempEntityId] : null;
     const peopleEntity = targetSettings?.peopleNowEntityId ? entities?.[targetSettings.peopleNowEntityId] : null;
     const motionEntity = targetSettings?.motionEntityId ? entities?.[targetSettings.motionEntityId] : null;
+    const statusEntityId = String(
+      targetSettings?.saunaActiveBooleanEntityId
+      || targetSettings?.activeEntityId
+      || targetSettings?.bookingActiveEntityId
+      || '',
+    ).trim();
+    const statusEntity = statusEntityId ? entities?.[statusEntityId] : null;
     const modeEntity = targetSettings?.manualModeEntityId ? entities?.[targetSettings.manualModeEntityId] : null;
     const modeStateKnown = modeEntity && !isUnavailable(modeEntity.state);
     const autoModeOn = modeStateKnown && isOn(modeEntity.state);
@@ -729,6 +737,8 @@ export default function PopupLauncherCard({
       imageUrl: resolveSaunaImageUrl(targetSettings, entities, getEntityImageUrl),
       temp,
       people: peopleEntity && !isUnavailable(peopleEntity.state) ? String(peopleEntity.state) : '--',
+      statusConfigured: Boolean(statusEntityId),
+      statusActive: statusEntity ? isActiveStatus(statusEntity.state) : false,
       motionConfigured: Boolean(targetSettings?.motionEntityId),
       motionOn: motionEntity ? isOnish(motionEntity.state) : false,
       showManual: Boolean(modeStateKnown && !autoModeOn),
@@ -821,6 +831,9 @@ export default function PopupLauncherCard({
               const motionLabel = sauna.motionOn
                 ? tr(t, 'sauna.motionDetected', 'Motion')
                 : tr(t, 'sauna.noMotion', 'No motion');
+              const statusLabel = sauna.statusActive
+                ? tr(t, 'sauna.active', 'Active')
+                : tr(t, 'status.inactive', 'Inactive');
               const AlertIcon = AlertTriangle;
 
               return (
@@ -893,15 +906,15 @@ export default function PopupLauncherCard({
                           </span>
                         )}
                       </div>
-                      {sauna.motionConfigured && (
+                      {sauna.statusConfigured && (
                         <span
                           className={`mt-1 h-2.5 w-2.5 shrink-0 rounded-full border ${
-                            sauna.motionOn
+                            sauna.statusActive
                               ? 'border-emerald-200/80 bg-emerald-300 shadow-[0_0_14px_rgba(110,231,183,0.75)]'
                               : 'border-white/30 bg-white/25'
                           }`}
-                          title={motionLabel}
-                          aria-label={motionLabel}
+                          title={statusLabel}
+                          aria-label={statusLabel}
                         />
                       )}
                     </div>
@@ -930,6 +943,8 @@ export default function PopupLauncherCard({
                               ? 'border-emerald-200/55 bg-emerald-400/25 shadow-[0_0_14px_rgba(110,231,183,0.34)]'
                               : 'border-white/14 bg-black/32'
                           }`}
+                          title={motionLabel}
+                          aria-label={motionLabel}
                         >
                           <User className="h-3 w-3 text-white/85" />
                           <span>{sauna.people}</span>
