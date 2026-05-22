@@ -105,6 +105,7 @@ export default function SensorModal({
   entity,
   entities = {},
   customName,
+  focusText,
   overlayEntities = [],
   conn,
   haUrl,
@@ -884,13 +885,33 @@ export default function SensorModal({
   // Icon Logic
   const Icon = getIconComponent(attrs.icon) || Activity;
   const warningSource = attrs?.text ?? attrs?.details ?? attrs?.warning_details ?? attrs?.warnings ?? state;
-  const warningLines = isSystemDetailsSensor ? parseWarningLines(warningSource) : [];
+  const allWarningLines = isSystemDetailsSensor ? parseWarningLines(warningSource) : [];
+  const normalizedFocus = String(focusText || '')
+    .normalize('NFKD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .trim()
+    .toLowerCase();
+  const warningLines = normalizedFocus
+    ? allWarningLines.filter((line) => {
+      const normalizedLine = String(line || '')
+        .normalize('NFKD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .trim()
+        .toLowerCase();
+      return normalizedLine === normalizedFocus
+        || normalizedLine.startsWith(`${normalizedFocus} `)
+        || normalizedLine.startsWith(`${normalizedFocus}:`);
+    })
+    : allWarningLines;
 
   if (isSystemDetailsSensor) {
-    const title = isSystemCriticalDetails ? 'Kritiske varsler' : 'Systemvarsler';
+    const title = customName || (isSystemCriticalDetails ? 'Kritiske varsler' : 'Systemvarsler');
     const toneClass = isSystemCriticalDetails
       ? 'border-red-400/30 bg-red-600/15'
-      : 'border-red-500/20 bg-red-500/10';
+      : 'border-orange-400/30 bg-orange-500/12';
+    const headerIconClass = isSystemCriticalDetails
+      ? 'bg-red-500/20 text-red-400'
+      : 'bg-orange-500/18 text-orange-300';
     return (
       <div
         className="fixed inset-0 z-[150] flex items-center justify-center p-3 sm:p-4 md:p-6"
@@ -910,11 +931,11 @@ export default function SensorModal({
 
           <div className="p-5 sm:p-6 md:p-8 border-b" style={panelBorderStyle}>
             <div className="flex items-center gap-3 mb-2">
-              <div className="p-3 rounded-xl bg-red-500/20 text-red-400">
+              <div className={`p-3 rounded-xl ${headerIconClass}`}>
                 <AlertTriangle className="w-5 h-5" />
               </div>
               <h2 className="text-lg sm:text-xl md:text-2xl font-light tracking-tight text-[var(--text-primary)] uppercase italic leading-tight break-words">
-                {t('warnings.title') === 'warnings.title' ? title : t('warnings.title')}
+                {customName ? title : (t('warnings.title') === 'warnings.title' ? title : t('warnings.title'))}
               </h2>
             </div>
             <p className={`text-xs uppercase tracking-widest font-bold ${secondaryTextClass}`}>
@@ -930,7 +951,7 @@ export default function SensorModal({
             )}
             {warningLines.map((line, index) => (
               <div key={`${index}_${line.slice(0, 20)}`} className={`rounded-2xl border px-4 py-3 flex items-start gap-3 ${toneClass}`}>
-                <span className="text-red-400 leading-none pt-0.5">⚠️</span>
+                <span className={`${isSystemCriticalDetails ? 'text-red-400' : 'text-orange-300'} leading-none pt-0.5`}>⚠️</span>
                 <p className="text-sm text-[var(--text-primary)] leading-relaxed">{line}</p>
               </div>
             ))}

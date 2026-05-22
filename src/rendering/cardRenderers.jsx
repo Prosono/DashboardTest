@@ -669,6 +669,8 @@ export function renderPopupLauncherCard(cardId, dragProps, getControls, cardStyl
     getEntityImageUrl,
     activePage,
     isMobile,
+    notificationAlertEntityIds,
+    setShowSensorInfoModal,
     setShowPopupCardModal,
     t,
   } = ctx;
@@ -689,11 +691,20 @@ export function renderPopupLauncherCard(cardId, dragProps, getControls, cardStyl
       getEntityImageUrl={getEntityImageUrl}
       activePage={activePage}
       isMobile={isMobile}
+      alertEntityIds={notificationAlertEntityIds}
       onOpenTarget={(payload) => {
         if (editMode) return;
         if (!payload?.targetCardId) return;
         if (payload.targetCardId === cardId) return;
         setShowPopupCardModal(payload);
+      }}
+      onOpenAlert={(payload) => {
+        if (editMode || !payload?.entityId) return;
+        setShowSensorInfoModal({
+          entityId: payload.entityId,
+          focusText: payload.saunaName,
+          customName: `${payload.severity === 'critical' ? 'Kritiske varsler' : 'Systemvarsler'} - ${payload.saunaName}`,
+        });
       }}
       t={t}
     />

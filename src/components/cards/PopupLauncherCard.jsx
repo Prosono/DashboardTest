@@ -1,5 +1,5 @@
 import React from 'react';
-import { ArrowRight, LayoutGrid, Thermometer, User, getIconComponent } from '../../icons';
+import { AlertTriangle, ArrowRight, LayoutGrid, Thermometer, User, getIconComponent } from '../../icons';
 
 const clampColumns = (value) => {
   const numeric = Number(value);
@@ -153,6 +153,69 @@ const getBookingTypeLabel = (type, t) => {
   if (normalized === 'aufguss') return tr(t, 'calendarBooking.type.aufguss', 'Aufguss');
   if (normalized === 'private') return tr(t, 'calendarBooking.type.private', 'Privat');
   return tr(t, 'calendarBooking.type.felles', 'Felles');
+};
+
+const parseWarningLines = (rawValue) => {
+  const raw = String(rawValue ?? '').replace(/\r\n/g, '\n').trim();
+  if (!raw) return [];
+  const low = raw.toLowerCase();
+  if (['unknown', 'unavailable', 'none', 'ok', '0'].includes(low)) return [];
+
+  let lines = raw
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean);
+
+  if (lines.length <= 1 && raw.includes('⚠️')) {
+    lines = raw
+      .split(/(?=⚠️)/g)
+      .map((line) => line.trim())
+      .filter(Boolean);
+  }
+
+  return lines
+    .map((line) => line.replace(/^text:\s*/i, '').replace(/^⚠️\s*/u, '').trim())
+    .filter(Boolean);
+};
+
+const getAlertLines = (entity) => {
+  const attrs = entity?.attributes || {};
+  const source = attrs.text ?? attrs.details ?? attrs.warning_details ?? attrs.warnings ?? entity?.state;
+  return parseWarningLines(source);
+};
+
+const getSaunaAlertMatch = (line, names) => {
+  const normalizedLine = normalizeMatchText(line);
+  if (!normalizedLine) return false;
+  return (names || [])
+    .map((name) => normalizeMatchText(name))
+    .filter((name) => name.length >= 2)
+    .some((name) => normalizedLine === name || normalizedLine.startsWith(`${name} `) || normalizedLine.startsWith(`${name}:`));
+};
+
+const resolveSaunaAlert = ({ label, targetCardId, targetSettings, customNames, entities, alertEntityIds }) => {
+  const names = [
+    label,
+    customNames?.[targetCardId],
+    targetSettings?.name,
+    targetSettings?.heading,
+    targetSettings?.title,
+  ].filter(Boolean);
+  const criticalEntityId = String(alertEntityIds?.critical || 'sensor.system_critical_details').trim();
+  const warningEntityId = String(alertEntityIds?.warning || 'sensor.system_warning_details').trim();
+  const candidates = [
+    { severity: 'critical', entityId: criticalEntityId, lines: getAlertLines(entities?.[criticalEntityId]) },
+    { severity: 'warning', entityId: warningEntityId, lines: getAlertLines(entities?.[warningEntityId]) },
+  ];
+
+  for (const candidate of candidates) {
+    if (!candidate.entityId || !candidate.lines.length) continue;
+    const matchedLines = candidate.lines.filter((line) => getSaunaAlertMatch(line, names));
+    if (matchedLines.length) {
+      return { ...candidate, lines: matchedLines };
+    }
+  }
+  return null;
 };
 
 const resolveImageValue = (value, getEntityImageUrl, { forceHaBase = false } = {}) => {
@@ -581,9 +644,15 @@ const resolveBookingType = (targetSettings, entities, scoreSourceSettings) => {
   if (explicitType) return explicitType;
 
   if (serviceEntity && POSITIVE_SERVICE_STATES.has(norm(serviceEntity.state))) return 'service';
-  if (activeEntity && isOnish(activeEntity.state)) return 'felles';
 
-  return getLatestSnapshotBookingType(scoreSourceSettings);
+  const activeKnown = activeEntity && !isUnavailable(activeEntity.state);
+  const activeNow = activeKnown ? isOnish(activeEntity.state) : false;
+  const latestSnapshotType = getLatestSnapshotBookingType(scoreSourceSettings);
+  if (activeNow && latestSnapshotType) return latestSnapshotType;
+  if (activeNow) return 'felles';
+  if (activeKnown) return null;
+
+  return latestSnapshotType;
 };
 
 export default function PopupLauncherCard({
@@ -600,7 +669,9 @@ export default function PopupLauncherCard({
   getEntityImageUrl,
   activePage,
   isMobile = false,
+  alertEntityIds,
   onOpenTarget,
+  onOpenAlert,
   t,
 }) {
   const heading = customNames[cardId] || settings.heading || tr(t, 'popupLauncher.defaultTitle', 'Quick access');
@@ -640,6 +711,7 @@ export default function PopupLauncherCard({
       entities,
     });
     const bookingType = resolveBookingType(targetSettings, entities, scoreSource?.settings);
+    const label = button.label || tr(t, 'popupLauncher.openCard', 'Open card');
 
     return {
       imageUrl: resolveSaunaImageUrl(targetSettings, entities, getEntityImageUrl),
@@ -652,6 +724,14 @@ export default function PopupLauncherCard({
       bookingType,
       bookingTypeColor: bookingType ? getBookingTypeColor(bookingType) : null,
       bookingTypeLabel: bookingType ? getBookingTypeLabel(bookingType, t) : null,
+      alert: resolveSaunaAlert({
+        label,
+        targetCardId: button.targetCardId,
+        targetSettings,
+        customNames,
+        entities,
+        alertEntityIds,
+      }),
     };
   };
 
@@ -665,6 +745,23 @@ export default function PopupLauncherCard({
       targetCardId: button.targetCardId,
       targetPageId: button.targetPageId,
     });
+  };
+
+  const openSaunaAlert = (event, sauna, label) => {
+    event.stopPropagation();
+    if (editMode || !sauna?.alert?.entityId || typeof onOpenAlert !== 'function') return;
+    onOpenAlert({
+      entityId: sauna.alert.entityId,
+      severity: sauna.alert.severity,
+      saunaName: label,
+      lines: sauna.alert.lines,
+    });
+  };
+
+  const openCardOnKeyDown = (event, button, label, hasTarget) => {
+    if (event.key !== 'Enter' && event.key !== ' ') return;
+    event.preventDefault();
+    openButtonTarget(event, button, label, hasTarget);
   };
 
   return (
@@ -712,13 +809,16 @@ export default function PopupLauncherCard({
               const motionLabel = sauna.motionOn
                 ? tr(t, 'sauna.motionDetected', 'Motion')
                 : tr(t, 'sauna.noMotion', 'No motion');
+              const AlertIcon = AlertTriangle;
 
               return (
-                <button
+                <div
                   key={button.id}
-                  type="button"
-                  disabled={editMode || !hasTarget}
+                  role="button"
+                  tabIndex={editMode || !hasTarget ? -1 : 0}
+                  aria-disabled={editMode || !hasTarget}
                   onClick={(event) => openButtonTarget(event, button, label, hasTarget)}
+                  onKeyDown={(event) => openCardOnKeyDown(event, button, label, hasTarget)}
                   className={`relative aspect-[1.16/1] min-h-[7rem] max-h-[13rem] overflow-hidden rounded-2xl border-[4px] text-left transition-all sm:aspect-[1.55/1] sm:min-h-[10rem] sm:max-h-[16rem] lg:aspect-[1.85/1] lg:min-h-[11.5rem] ${
                     editMode || !hasTarget
                       ? 'opacity-70 cursor-default border-[var(--glass-border)] bg-[var(--glass-bg)]'
@@ -741,6 +841,29 @@ export default function PopupLauncherCard({
                     <div className="absolute inset-0 bg-gradient-to-br from-emerald-950 via-slate-950 to-orange-950" />
                   )}
                   <div className="absolute inset-0 bg-gradient-to-t from-black/88 via-black/38 to-black/18" />
+                  {sauna.alert && (
+                    <button
+                      type="button"
+                      onClick={(event) => openSaunaAlert(event, sauna, label)}
+                      className={`absolute left-1/2 top-1/2 z-20 flex -translate-x-1/2 -translate-y-1/2 items-center justify-center transition active:scale-95 ${
+                        sauna.alert.severity === 'critical'
+                          ? 'text-red-300'
+                          : 'text-orange-300'
+                      }`}
+                      title={`${sauna.alert.severity === 'critical' ? tr(t, 'notificationTimeline.filter.severity.critical', 'Critical') : tr(t, 'notificationTimeline.filter.severity.warning', 'Warning')}: ${label}`}
+                      aria-label={`${label}: ${sauna.alert.lines.length} ${tr(t, 'warnings.title', 'alerts')}`}
+                    >
+                      <span
+                        className={`rounded-full border p-3 backdrop-blur-[2px] sm:p-4 ${
+                          sauna.alert.severity === 'critical'
+                            ? 'border-red-300/45 bg-red-600/18 shadow-[0_0_30px_rgba(248,113,113,0.38)] animate-pulse'
+                            : 'border-orange-300/45 bg-orange-500/18 shadow-[0_0_28px_rgba(251,146,60,0.34)]'
+                        }`}
+                      >
+                        <AlertIcon className="h-9 w-9 drop-shadow-[0_0_12px_rgba(0,0,0,0.72)] sm:h-12 sm:w-12" />
+                      </span>
+                    </button>
+                  )}
                   <div className="relative z-10 flex h-full min-h-[7rem] flex-col justify-between p-2.5 sm:min-h-[10rem] sm:p-4 lg:min-h-[11.5rem]">
                     <div className="flex items-start justify-between gap-2">
                       <div className="flex min-w-0 items-center gap-1.5">
@@ -778,12 +901,12 @@ export default function PopupLauncherCard({
                       <div className="mt-2 flex items-end justify-between gap-2">
                         <div className="min-w-0">
                           <div className="flex items-end gap-1.5 whitespace-nowrap">
-                            <Thermometer className="mb-1 h-3.5 w-3.5 shrink-0 text-orange-200/85" />
-                            <span className="text-[1.35rem] font-semibold leading-none tabular-nums text-white sm:text-[1.65rem]">
+                            <Thermometer className="mb-0.5 h-3 w-3 shrink-0 text-orange-200/85 sm:mb-1 sm:h-3.5 sm:w-3.5" />
+                            <span className="text-[1.08rem] font-semibold leading-none tabular-nums text-white sm:text-[1.65rem]">
                               {sauna.temp.value}
                             </span>
                             {sauna.temp.unit && (
-                              <span className="mb-0.5 text-[11px] font-bold text-white/72">
+                              <span className="mb-0.5 text-[9px] font-bold text-white/72 sm:text-[11px]">
                                 {sauna.temp.unit}
                               </span>
                             )}
@@ -802,7 +925,7 @@ export default function PopupLauncherCard({
                       </div>
                     </div>
                   </div>
-                </button>
+                </div>
               );
             }
 

@@ -76,7 +76,7 @@ function PopupCardFitFrame({
     if (rawWidth <= 0 || rawHeight <= 0) return;
 
     const nextScale = isMobile
-      ? Math.min(1, viewportWidth / rawWidth)
+      ? Math.min(1, viewportHeight / rawHeight)
       : Math.min(1, viewportWidth / rawWidth, viewportHeight / rawHeight);
     const boundedScale = Number.isFinite(nextScale) ? Math.max(scaleFloor, nextScale) : 1;
     setScale((prev) => (Math.abs(prev - boundedScale) > 0.005 ? boundedScale : prev));
@@ -125,7 +125,7 @@ function PopupCardFitFrame({
   return (
     <div
       ref={viewportRef}
-      className={isMobile ? 'overflow-x-hidden overflow-y-auto custom-scrollbar' : 'overflow-hidden'}
+      className="overflow-hidden"
       style={{
         height: isMobile
           ? `calc(100dvh - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px) - ${Math.max(24, Number(viewportHeightOffsetPx) || 68)}px)`
@@ -134,12 +134,13 @@ function PopupCardFitFrame({
       }}
       data-disable-pull-refresh="true"
     >
-      <div className={isMobile ? 'w-full min-h-full flex justify-center' : 'w-full h-full flex justify-center overflow-hidden'}>
+      <div className="w-full h-full flex justify-center overflow-hidden">
         <div className="w-full" style={{ height: scaledHeight ? `${scaledHeight}px` : '100%' }}>
           <div
             ref={contentRef}
             className="w-full"
             style={{
+              width: isMobile && scale > 0 ? `${100 / scale}%` : '100%',
               transform: `scale(${scale})`,
               transformOrigin: 'top center',
               willChange: 'transform',
@@ -281,6 +282,7 @@ export default function ModalOrchestrator({
     canManageAdministration,
     canManageNotifications,
     notificationConfig,
+    notificationAlertEntityIds,
     notificationConfigLoading,
     notificationConfigSaving,
     notificationConfigMessage,
@@ -904,6 +906,7 @@ export default function ModalOrchestrator({
             setShowPopupCardModal(null);
             setShowSaunaDebugModal(value);
           },
+          notificationAlertEntityIds,
           setShowPopupCardModal,
           openMediaModal: (mpId, groupKey, groupIds) => {
             setShowPopupCardModal(null);
@@ -987,7 +990,7 @@ export default function ModalOrchestrator({
                 isMobile={isMobileSaunaPopup}
                 liftPx={0}
                 viewportHeightOffsetPx={isMobileSaunaPopup ? 62 : 68}
-                scaleFloor={isMobileSaunaPopup ? 0.52 : 0.45}
+                scaleFloor={isMobileSaunaPopup ? 0.38 : 0.45}
               >
                 {popupCard || (
                   <div className="rounded-2xl border border-[var(--glass-border)] bg-[var(--glass-bg)] p-5 text-sm text-[var(--text-secondary)]">
@@ -1138,6 +1141,7 @@ export default function ModalOrchestrator({
             entity={entities[sensorEntityId]}
             entities={entities}
             customName={sensorPayload.customName || customNames[sensorEntityId]}
+            focusText={sensorPayload.focusText || ''}
             overlayEntities={Array.isArray(sensorPayload.overlayEntities) ? sensorPayload.overlayEntities : []}
             conn={conn}
             haUrl={activeUrl}
