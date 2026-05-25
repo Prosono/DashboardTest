@@ -21,6 +21,9 @@
         const WATCHDOG_ID = 'smart-sauna-boot-watchdog';
         const AUTO_SOFT_REPAIR_KEY = '__smart_sauna_auto_soft_repair_ts__';
         const AUTO_SOFT_REPAIR_WINDOW_MS = 60000;
+        const RESUME_CHECK_DELAY_MS = 3500;
+        const INITIAL_RESUME_GRACE_MS = 10000;
+        const bootStartedAt = Date.now();
         const STORAGE_PREFIXES = [
           'tunet_',
           'ha_',
@@ -70,15 +73,30 @@
         };
 
         window.__SMART_SAUNA_CLIENT_LOG__ = sendClientLog;
+        window.__SMART_SAUNA_APP_READY_TS__ = Number(window.__SMART_SAUNA_APP_READY_TS__ || 0) || 0;
         sendClientLog('boot.html.start', {
           readyState: document.readyState,
           userAgent: window.navigator.userAgent,
         });
 
         const getRoot = () => document.getElementById('root');
-        const appHasRendered = () => {
+        const rootLooksRendered = () => {
           const root = getRoot();
-          return Boolean(root && root.childElementCount > 0 && root.textContent.trim().length > 0);
+          if (!root || root.childElementCount <= 0 || root.textContent.trim().length <= 0) return false;
+          const rect = root.getBoundingClientRect();
+          return rect.width > 20 && rect.height > 20;
+        };
+        const appIsReady = () => Boolean(Number(window.__SMART_SAUNA_APP_READY_TS__ || 0));
+        const appLooksUsable = () => appIsReady() && rootLooksRendered();
+
+        window.__SMART_SAUNA_MARK_APP_READY__ = (details = {}) => {
+          window.__SMART_SAUNA_APP_READY_TS__ = Date.now();
+          sendClientLog('boot.app_ready', {
+            readyState: document.readyState,
+            rootRendered: rootLooksRendered(),
+            ...details,
+          });
+          removeWatchdog();
         };
 
         const removeWatchdog = () => {
@@ -106,13 +124,13 @@
           });
         };
 
-        const tryAutoSoftRepair = () => {
+        const tryAutoSoftRepair = (reason = 'boot-timeout') => {
           try {
             const now = Date.now();
             const lastRepair = Number(window.sessionStorage.getItem(AUTO_SOFT_REPAIR_KEY) || 0);
             if (Number.isFinite(lastRepair) && now - lastRepair < AUTO_SOFT_REPAIR_WINDOW_MS) return false;
             window.sessionStorage.setItem(AUTO_SOFT_REPAIR_KEY, String(now));
-            sendClientLog('boot.auto_soft_repair', { reason: 'boot-timeout' }, 'warn');
+            sendClientLog('boot.auto_soft_repair', { reason }, 'warn');
             repairStorage('soft');
             window.location.reload();
             return true;
@@ -122,8 +140,13 @@
         };
 
         const showWatchdog = (reason) => {
-          if (appHasRendered() || document.getElementById(WATCHDOG_ID)) return;
-          sendClientLog('boot.watchdog.show', { reason }, 'warn');
+          if (appLooksUsable() || document.getElementById(WATCHDOG_ID)) return;
+          sendClientLog('boot.watchdog.show', {
+            reason,
+            appReady: appIsReady(),
+            rootRendered: rootLooksRendered(),
+            readyState: document.readyState,
+          }, 'warn');
 
           const overlay = document.createElement('div');
           overlay.id = WATCHDOG_ID;
@@ -191,13 +214,53 @@
         const root = getRoot();
         if (root && window.MutationObserver) {
           new MutationObserver(() => {
-            if (appHasRendered()) removeWatchdog();
+            if (appLooksUsable()) removeWatchdog();
           }).observe(root, { childList: true, subtree: true, characterData: true });
         }
 
+        let resumeCheckTimer = null;
+        const scheduleResumeCheck = (trigger, details = {}) => {
+          const snapshot = {
+            trigger,
+            readyState: document.readyState,
+            appReady: appIsReady(),
+            rootRendered: rootLooksRendered(),
+            visibilityState: document.visibilityState || '',
+            ...details,
+          };
+          sendClientLog('boot.resume_check', snapshot);
+          if (document.visibilityState && document.visibilityState !== 'visible') return;
+          if (!appIsReady() && Date.now() - bootStartedAt < INITIAL_RESUME_GRACE_MS) return;
+          window.clearTimeout(resumeCheckTimer);
+          resumeCheckTimer = window.setTimeout(() => {
+            if (appLooksUsable()) return;
+            const reason = `resume-${trigger}`;
+            sendClientLog('boot.resume_not_ready', {
+              ...snapshot,
+              appReady: appIsReady(),
+              rootRendered: rootLooksRendered(),
+              readyState: document.readyState,
+            }, 'warn');
+            if (tryAutoSoftRepair(reason)) return;
+            showWatchdog(reason);
+          }, RESUME_CHECK_DELAY_MS);
+        };
+
+        window.addEventListener('pageshow', (event) => {
+          scheduleResumeCheck('pageshow', { persisted: Boolean(event.persisted) });
+        });
+        document.addEventListener('visibilitychange', () => {
+          if (document.visibilityState === 'visible') {
+            scheduleResumeCheck('visibility');
+          }
+        });
+        window.addEventListener('focus', () => {
+          scheduleResumeCheck('focus');
+        });
+
         window.setTimeout(() => {
-          if (appHasRendered()) return;
-          if (tryAutoSoftRepair()) return;
+          if (appLooksUsable()) return;
+          if (tryAutoSoftRepair('boot-timeout')) return;
           showWatchdog('boot-timeout');
         }, 9000);
       })();

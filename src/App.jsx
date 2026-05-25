@@ -3299,6 +3299,21 @@ export default function App() {
     return () => { mounted = false; };
   }, [applySharedHaConfig, clearHaRuntimeConfig, setConfig]);
 
+  useEffect(() => {
+    if (!authReady) return;
+    const readyDetails = {
+      hasUser: Boolean(currentUser?.id),
+      clientId: currentUser?.clientId || getClientId(),
+      role: currentUser?.role || '',
+      isPlatformAdmin: Boolean(currentUser?.isPlatformAdmin),
+    };
+    if (typeof window !== 'undefined' && typeof window.__SMART_SAUNA_MARK_APP_READY__ === 'function') {
+      window.__SMART_SAUNA_MARK_APP_READY__(readyDetails);
+    } else {
+      sendClientLog('boot.app_ready', readyDetails);
+    }
+  }, [authReady, currentUser?.clientId, currentUser?.id, currentUser?.isPlatformAdmin, currentUser?.role]);
+
   const doLogin = async (e) => {
     e.preventDefault();
     setLoggingIn(true);
