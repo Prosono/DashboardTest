@@ -343,7 +343,7 @@ export default function SuperAdminOverview({
     }
 
     if (showRefreshSpinner) setRefreshing(true);
-    else setLoading(true);
+    if (!isRefresh) setLoading(true);
     if (shouldShowError) setError('');
     try {
       const payload = await userAdminApi.fetchPlatformOverview(80);
