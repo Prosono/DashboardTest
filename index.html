@@ -33,6 +33,48 @@
           'tunet_calendar_modal_selection',
         ];
 
+        const readStorageValue = (key) => {
+          try {
+            return window.localStorage ? window.localStorage.getItem(key) || '' : '';
+          } catch {
+            return '';
+          }
+        };
+
+        const sendClientLog = (event, details = {}, level = 'info') => {
+          try {
+            const payload = {
+              event,
+              level,
+              href: window.location.href,
+              page: window.location.pathname,
+              visibilityState: document.visibilityState || '',
+              isStandalone: Boolean(window.navigator.standalone || window.matchMedia?.('(display-mode: standalone)')?.matches),
+              hasAuthToken: Boolean(readStorageValue('tunet_app_auth_token')),
+              clientId: readStorageValue('tunet_client_id'),
+              theme: readStorageValue('tunet_theme'),
+              details,
+            };
+            const body = JSON.stringify(payload);
+            const blob = new Blob([body], { type: 'application/json' });
+            if (window.navigator.sendBeacon && window.navigator.sendBeacon('/api/client-log', blob)) return;
+            window.fetch('/api/client-log', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body,
+              keepalive: true,
+            }).catch(() => {});
+          } catch {
+            // Diagnostic logging must never block boot.
+          }
+        };
+
+        window.__SMART_SAUNA_CLIENT_LOG__ = sendClientLog;
+        sendClientLog('boot.html.start', {
+          readyState: document.readyState,
+          userAgent: window.navigator.userAgent,
+        });
+
         const getRoot = () => document.getElementById('root');
         const appHasRendered = () => {
           const root = getRoot();
@@ -70,6 +112,7 @@
             const lastRepair = Number(window.sessionStorage.getItem(AUTO_SOFT_REPAIR_KEY) || 0);
             if (Number.isFinite(lastRepair) && now - lastRepair < AUTO_SOFT_REPAIR_WINDOW_MS) return false;
             window.sessionStorage.setItem(AUTO_SOFT_REPAIR_KEY, String(now));
+            sendClientLog('boot.auto_soft_repair', { reason: 'boot-timeout' }, 'warn');
             repairStorage('soft');
             window.location.reload();
             return true;
@@ -80,6 +123,7 @@
 
         const showWatchdog = (reason) => {
           if (appHasRendered() || document.getElementById(WATCHDOG_ID)) return;
+          sendClientLog('boot.watchdog.show', { reason }, 'warn');
 
           const overlay = document.createElement('div');
           overlay.id = WATCHDOG_ID;
@@ -114,12 +158,17 @@
 
           overlay.addEventListener('click', (event) => {
             const action = event.target && event.target.getAttribute('data-action');
-            if (action === 'reload') window.location.reload();
+            if (action === 'reload') {
+              sendClientLog('boot.watchdog.reload', { reason });
+              window.location.reload();
+            }
             if (action === 'soft-repair') {
+              sendClientLog('boot.watchdog.soft_repair', { reason }, 'warn');
               repairStorage('soft');
               window.location.reload();
             }
             if (action === 'full-repair') {
+              sendClientLog('boot.watchdog.full_repair', { reason }, 'warn');
               repairStorage('full');
               window.location.reload();
             }
@@ -134,6 +183,7 @@
         window.addEventListener('error', (event) => {
           const target = event && event.target;
           if (target && target.tagName === 'SCRIPT') {
+            sendClientLog('boot.script_load_failed', { src: target.src || '' }, 'error');
             showWatchdog('script-load-failed');
           }
         }, true);

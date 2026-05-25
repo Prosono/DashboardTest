@@ -10,6 +10,7 @@ import clientsRouter from './routes/clients.js';
 import brandingRouter from './routes/branding.js';
 import imageProxyRouter from './routes/imageProxy.js';
 import { startRemoteInstanceHealthMonitor } from './remoteInstanceHealthMonitor.js';
+import { appendRawLogEntry } from './rawLog.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PORT = parseInt(globalThis.process?.env?.PORT || '3002', 10);
@@ -25,6 +26,37 @@ const iosCacheRecoveryEnabled = ['1', 'true', 'yes', 'on'].includes(
 const isIOSUserAgent = (userAgent = '') => {
   const ua = String(userAgent || '');
   return /iPad|iPhone|iPod/i.test(ua) || (/Macintosh/i.test(ua) && /Mobile/i.test(ua));
+};
+
+const toSafeLogString = (value, max = 512) => String(value || '').trim().slice(0, max);
+
+const getRequestIp = (req) => {
+  const forwardedFor = toSafeLogString(req?.get?.('x-forwarded-for') || req?.headers?.['x-forwarded-for'], 512);
+  const firstForwarded = forwardedFor
+    .split(',')
+    .map((part) => part.trim())
+    .find(Boolean);
+  return (firstForwarded || toSafeLogString(req?.ip || req?.socket?.remoteAddress || '', 256)).replace(/^::ffff:/i, '');
+};
+
+const getRequestUserAgent = (req) => toSafeLogString(req?.get?.('user-agent') || req?.headers?.['user-agent'], 512);
+
+const writeServerRawLog = (level, event, req, details = {}) => {
+  try {
+    appendRawLogEntry({
+      level,
+      event,
+      details: {
+        method: req?.method || '',
+        path: req?.originalUrl || req?.url || '',
+        ip: getRequestIp(req),
+        userAgent: getRequestUserAgent(req),
+        ...details,
+      },
+    });
+  } catch {
+    // Diagnostic logging is best effort only.
+  }
 };
 
 const setAppShellHeaders = (res) => {
@@ -92,6 +124,24 @@ app.use('/api/clients', clientsRouter);
 app.use('/api/branding', brandingRouter);
 app.use('/api/image-proxy', imageProxyRouter);
 
+app.post('/api/client-log', (req, res) => {
+  const body = req.body && typeof req.body === 'object' ? req.body : {};
+  const event = toSafeLogString(body.event || 'event', 140).replace(/[^a-z0-9_.:-]+/gi, '_') || 'event';
+  const details = body.details && typeof body.details === 'object' ? body.details : {};
+  writeServerRawLog(body.level === 'warn' || body.level === 'error' ? body.level : 'info', `client.${event}`, req, {
+    href: toSafeLogString(body.href, 500),
+    page: toSafeLogString(body.page, 160),
+    visibilityState: toSafeLogString(body.visibilityState, 40),
+    isStandalone: body.isStandalone === undefined ? undefined : Boolean(body.isStandalone),
+    hasAuthToken: body.hasAuthToken === undefined ? undefined : Boolean(body.hasAuthToken),
+    clientId: toSafeLogString(body.clientId, 120),
+    theme: toSafeLogString(body.theme, 80),
+    details,
+  });
+  res.setHeader('Cache-Control', 'no-store');
+  return res.json({ success: true });
+});
+
 app.get('/api/health', (_req, res) => {
   res.setHeader('Cache-Control', 'no-store');
   res.json({ status: 'ok', version: globalThis.process?.env?.npm_package_version || 'unknown', buildId: appBuildId });
@@ -101,6 +151,13 @@ if (isProduction) {
   const distPath = join(__dirname, '..', 'dist');
   if (existsSync(distPath)) {
     const sendAppShell = (req, res) => {
+      if (isIOSUserAgent(req.headers['user-agent']) || req.query?._ss_recover) {
+        writeServerRawLog('info', 'http.app_shell', req, {
+          buildId: appBuildId,
+          iosCacheRecovery: iosCacheRecoveryEnabled,
+          recover: toSafeLogString(req.query?._ss_recover, 80),
+        });
+      }
       setAppShellHeaders(res);
       setIOSCacheRecoveryHeaders(req, res);
       return res.sendFile(join(distPath, 'index.html'));

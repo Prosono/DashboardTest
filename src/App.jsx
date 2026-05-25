@@ -59,8 +59,10 @@ import './styles/dashboard.css';
 import { clearAllOAuthTokens, clearOAuthTokens, loadTokensForConnection, saveTokens, saveTokensForConnection } from './services/oauthStorage';
 import {
   fetchCurrentUser,
+  clearAuthToken,
   clearStoredHaConfig,
   getClientId,
+  getAuthToken,
   loginWithPassword,
   logoutUser,
   readStoredHaConfig,
@@ -138,6 +140,11 @@ const ADMIN_SETTINGS_PAGE_ID = '__admin_settings';
 const ADMIN_NOTIFICATIONS_PAGE_ID = '__admin_notifications';
 const ADMIN_USERS_PAGE_ID = '__admin_users';
 const AUTO_ALERT_PILL_HIDDEN_KEY_PREFIX = 'tunet_auto_alert_pills_hidden_';
+
+const sendClientLog = (event, details = {}, level = 'info') => {
+  if (typeof window === 'undefined' || typeof window.__SMART_SAUNA_CLIENT_LOG__ !== 'function') return;
+  window.__SMART_SAUNA_CLIENT_LOG__(event, details, level);
+};
 const EmbeddedConfigModal = lazy(() => import('./modals/ConfigModal'));
 
 const formatLoginError = (error) => {
@@ -3219,6 +3226,10 @@ export default function App() {
   useEffect(() => {
     let mounted = true;
     const init = async () => {
+      sendClientLog('auth.init.start', {
+        hasToken: Boolean(getAuthToken()),
+        clientId: getClientId(),
+      });
       try {
         const branding = await fetchServerGlobalBranding().catch(() => null);
         if (mounted && branding && typeof branding === 'object') {
@@ -3227,6 +3238,13 @@ export default function App() {
 
         const user = await fetchCurrentUser();
         if (!mounted) return;
+        sendClientLog('auth.init.current_user.success', {
+          hasUser: Boolean(user),
+          clientId: user?.clientId || getClientId(),
+          role: user?.role || '',
+          isPlatformAdmin: Boolean(user?.isPlatformAdmin),
+          hasToken: Boolean(getAuthToken()),
+        });
         setCurrentUser(user);
 
         if (user) {
@@ -3234,6 +3252,11 @@ export default function App() {
           const shared = await fetchSharedHaConfig().catch(() => null);
           if (!mounted) return;
           const applied = applySharedHaConfig(shared);
+          sendClientLog('auth.init.ha_config', {
+            hasSharedConfig: Boolean(shared),
+            appliedSharedConfig: Boolean(applied),
+            clientId: user.clientId || getClientId(),
+          });
           if (!applied) {
           const localScoped = readStoredHaConfig(user.clientId || getClientId());
           const normalizedLocal = normalizeHaConfig(localScoped || {});
@@ -3245,7 +3268,18 @@ export default function App() {
           }
           }
         }
-      } catch {
+      } catch (error) {
+        sendClientLog('auth.init.failed', {
+          status: error?.status || 0,
+          code: error?.code || '',
+          requestId: error?.requestId || '',
+          message: error?.message || '',
+          hasToken: Boolean(getAuthToken()),
+          clientId: getClientId(),
+        }, 'warn');
+        if (error?.status === 401) {
+          clearAuthToken();
+        }
         if (mounted) {
           setCurrentUser(null);
           clearHaRuntimeConfig();
@@ -3254,6 +3288,10 @@ export default function App() {
         if (mounted) {
           setHaConfigHydrated(true);
           setAuthReady(true);
+          sendClientLog('auth.init.ready', {
+            hasToken: Boolean(getAuthToken()),
+            clientId: getClientId(),
+          });
         }
       }
     };
@@ -3269,9 +3307,21 @@ export default function App() {
       const result = await loginWithPassword(String(clientId || '').trim(), username, password);
       const user = result?.user || null;
       setStoredClientId(user?.clientId || String(clientId || '').trim());
+      sendClientLog('auth.login.client_success', {
+        requestId: result?.requestId || '',
+        clientId: user?.clientId || String(clientId || '').trim(),
+        role: user?.role || '',
+        isPlatformAdmin: Boolean(user?.isPlatformAdmin),
+        hasStoredToken: Boolean(getAuthToken()),
+      });
 
       const shared = await fetchSharedHaConfig().catch(() => null);
       const applied = applySharedHaConfig(shared);
+      sendClientLog('auth.login.ha_config', {
+        hasSharedConfig: Boolean(shared),
+        appliedSharedConfig: Boolean(applied),
+        clientId: user?.clientId || getClientId(),
+      });
       if (!applied) {
         const localScoped = readStoredHaConfig(user?.clientId || getClientId());
         const normalizedLocal = normalizeHaConfig(localScoped || {});
@@ -3288,6 +3338,14 @@ export default function App() {
       setHaConfigHydrated(true);
       setShowPassword(false);
     } catch (error) {
+      sendClientLog('auth.login.client_failed', {
+        status: error?.status || 0,
+        code: error?.code || '',
+        requestId: error?.requestId || '',
+        message: error?.message || '',
+        clientId: String(clientId || '').trim(),
+        hasStoredToken: Boolean(getAuthToken()),
+      }, 'warn');
       setAuthError(formatLoginError(error));
     } finally {
       setLoggingIn(false);

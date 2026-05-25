@@ -1,4 +1,4 @@
-import { StrictMode, Component } from 'react'
+import { StrictMode, Component, useEffect } from 'react'
 import ReactDOM from 'react-dom/client'
 import './styles/index.css'
 import App from './App.jsx'
@@ -8,6 +8,11 @@ import { NotificationProvider } from './contexts/NotificationContext'
 
 const CHUNK_RELOAD_TS_KEY = '__smart_sauna_chunk_reload_ts__';
 const CHUNK_RELOAD_WINDOW_MS = 15000;
+
+const sendClientLog = (event, details = {}, level = 'info') => {
+  if (typeof window === 'undefined' || typeof window.__SMART_SAUNA_CLIENT_LOG__ !== 'function') return;
+  window.__SMART_SAUNA_CLIENT_LOG__(event, details, level);
+};
 
 const isDynamicImportChunkError = (errorLike) => {
   const message = String(errorLike?.message || errorLike || '').toLowerCase();
@@ -38,6 +43,11 @@ const triggerChunkRecoveryReload = (errorLike) => {
 
 if (typeof window !== 'undefined') {
   window.addEventListener('unhandledrejection', (event) => {
+    sendClientLog('boot.unhandled_rejection', {
+      message: String(event?.reason?.message || event?.reason || '').slice(0, 500),
+      name: String(event?.reason?.name || '').slice(0, 120),
+      stack: String(event?.reason?.stack || '').slice(0, 1200),
+    }, 'error');
     if (triggerChunkRecoveryReload(event?.reason)) {
       event.preventDefault();
     }
@@ -46,8 +56,18 @@ if (typeof window !== 'undefined') {
   window.addEventListener('error', (event) => {
     const target = event?.target;
     if (target && target.tagName === 'SCRIPT' && target.src && target.src.includes('/assets/')) {
+      sendClientLog('boot.asset_script_error', { src: target.src }, 'error');
       triggerChunkRecoveryReload(new Error(`Script load failed: ${target.src}`));
+      return;
     }
+    sendClientLog('boot.window_error', {
+      message: String(event?.message || '').slice(0, 500),
+      filename: String(event?.filename || '').slice(0, 240),
+      lineno: event?.lineno || 0,
+      colno: event?.colno || 0,
+      error: String(event?.error?.message || event?.error || '').slice(0, 500),
+      stack: String(event?.error?.stack || '').slice(0, 1200),
+    }, 'error');
   }, true);
 }
 
@@ -63,6 +83,11 @@ class ErrorBoundary extends Component {
 
   componentDidCatch(error, errorInfo) {
     if (triggerChunkRecoveryReload(error)) return;
+    sendClientLog('boot.error_boundary', {
+      message: String(error?.message || error || '').slice(0, 500),
+      stack: String(error?.stack || '').slice(0, 1200),
+      componentStack: String(errorInfo?.componentStack || '').slice(0, 1200),
+    }, 'error');
     console.error('App Error:', error, errorInfo);
   }
 
@@ -113,9 +138,23 @@ class ErrorBoundary extends Component {
   }
 }
 
+function BootProbe() {
+  useEffect(() => {
+    sendClientLog('boot.react.committed', {
+      readyState: document.readyState,
+    });
+  }, []);
+  return null;
+}
+
+sendClientLog('boot.bundle.start', {
+  readyState: typeof document !== 'undefined' ? document.readyState : '',
+});
+
 ReactDOM.createRoot(document.getElementById('root')).render(
   <StrictMode>
     <ErrorBoundary>
+      <BootProbe />
       <ConfigProvider>
         <PageProvider>
           <NotificationProvider>
