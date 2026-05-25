@@ -11,6 +11,7 @@ import {
 } from '../dashboardVersions.js';
 import { mergeHaConfigPayload, parseHaConfigRow, serializeHaConnections } from '../haConfig.js';
 import { parseStoredAppActionHistory } from '../appActionHistory.js';
+import { loadLoginAuditHistory } from '../loginAudit.js';
 import {
   createClientBackupReadStream,
   deleteClientBackupFile,
@@ -701,6 +702,7 @@ router.get('/overview', (req, res) => {
       return (Number.isFinite(bTs) ? bTs : 0) - (Number.isFinite(aTs) ? aTs : 0);
     })
     .slice(0, logLimit);
+  const recentLoginAttempts = loadLoginAuditHistory(logLimit);
 
   const instances = clientOverview.flatMap((client) => (
     (Array.isArray(client.connections) ? client.connections : []).map((connection) => ({
@@ -748,6 +750,7 @@ router.get('/overview', (req, res) => {
       ...totals,
       logs: recentLogs.length,
       appActions: Number(totals.appActions || 0),
+      loginAttempts: recentLoginAttempts.length,
     },
     clients: clientOverview,
     sessions: allSessionOverview,
@@ -756,6 +759,7 @@ router.get('/overview', (req, res) => {
     remoteHealth,
     recentLogs,
     recentAppActions,
+    recentLoginAttempts,
   });
 });
 

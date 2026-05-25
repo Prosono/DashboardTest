@@ -22,6 +22,7 @@ import {
   PLATFORM_ADMIN_CLIENT_ID,
   SUPER_ADMIN_CLIENT_ID,
 } from '../platformAdmin.js';
+import { appendLoginAuditEntry } from '../loginAudit.js';
 import { hashPassword, verifyPassword } from '../password.js';
 import { mergeHaConfigPayload, parseHaConfigRow, serializeHaConnections } from '../haConfig.js';
 import {
@@ -88,6 +89,11 @@ const writeLoginLog = (level, event, details = {}) => {
   Object.keys(payload).forEach((key) => {
     if (payload[key] === undefined || payload[key] === '') delete payload[key];
   });
+  try {
+    appendLoginAuditEntry(payload);
+  } catch (auditError) {
+    console.warn('[auth-login] failed to persist login audit', auditError?.message || auditError);
+  }
   const line = `[auth-login] ${JSON.stringify(payload)}`;
   if (level === 'warn') console.warn(line);
   else console.log(line);
