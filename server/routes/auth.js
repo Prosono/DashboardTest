@@ -69,6 +69,30 @@ const SUPER_ADMIN_PASSWORD = String(
 const SUPER_ADMIN_USER_ID = 'platform-super-admin';
 const SUPER_ADMIN_DB_USERNAME = '__platform_super_admin__';
 
+const toLogString = (value, max = 160) => String(value || '').trim().slice(0, max);
+
+const writeLoginLog = (level, event, details = {}) => {
+  const payload = {
+    event,
+    requestId: toLogString(details.requestId, 80),
+    clientId: toLogString(details.clientId, 120),
+    username: toLogString(details.username, 120),
+    reason: toLogString(details.reason, 120),
+    ip: toLogString(details.ip, 120),
+    userAgent: toLogString(details.userAgent, 260),
+    clientExists: details.clientExists === undefined ? undefined : Boolean(details.clientExists),
+    userExists: details.userExists === undefined ? undefined : Boolean(details.userExists),
+    role: toLogString(details.role, 80),
+    isSuperAdmin: details.isSuperAdmin === undefined ? undefined : Boolean(details.isSuperAdmin),
+  };
+  Object.keys(payload).forEach((key) => {
+    if (payload[key] === undefined || payload[key] === '') delete payload[key];
+  });
+  const line = `[auth-login] ${JSON.stringify(payload)}`;
+  if (level === 'warn') console.warn(line);
+  else console.log(line);
+};
+
 const loadSuperAdminConfig = () => {
   const dbUsername = db.prepare("SELECT value FROM system_settings WHERE key = 'super_admin_username'").get()?.value || '';
   const dbPasswordHash = db.prepare("SELECT value FROM system_settings WHERE key = 'super_admin_password_hash'").get()?.value || '';
@@ -153,20 +177,47 @@ const writeSmsDedupeTimestamp = (key, timestampMs) => {
 };
 
 router.post('/login', (req, res) => {
+  const requestId = randomUUID();
+  res.setHeader('X-Smart-Sauna-Login-Request', requestId);
+
   const clientIdRaw = String(req.body?.clientId || '').trim();
   const clientId = normalizeClientId(clientIdRaw);
   const username = String(req.body?.username || '').trim();
   const password = String(req.body?.password || '');
+  const ip = getClientIp(req);
+  const userAgent = getUserAgent(req);
 
   if (!clientId || !username || !password) {
-    return res.status(400).json({ error: 'Client ID, username and password are required' });
+    writeLoginLog('warn', 'missing_fields', {
+      requestId,
+      clientId,
+      username,
+      reason: 'missing_fields',
+      ip,
+      userAgent,
+    });
+    return res.status(400).json({
+      error: 'Client ID, username and password are required',
+      code: 'MISSING_LOGIN_FIELDS',
+      requestId,
+    });
   }
 
   const throttleStatus = getLoginThrottleStatus(req, clientId, username);
   if (throttleStatus.blocked) {
+    writeLoginLog('warn', 'rate_limited', {
+      requestId,
+      clientId,
+      username,
+      reason: 'rate_limited',
+      ip,
+      userAgent,
+    });
     res.setHeader('Retry-After', String(throttleStatus.retryAfterSeconds));
     return res.status(429).json({
       error: 'Too many login attempts. Try again later.',
+      code: 'RATE_LIMITED',
+      requestId,
       retryAfterSeconds: throttleStatus.retryAfterSeconds,
     });
   }
@@ -182,7 +233,20 @@ router.post('/login', (req, res) => {
 
   if (isSuperAdminCredentials && !isSuperAdminLogin) {
     recordFailedLoginAttempt(req, clientId, username);
-    return res.status(401).json({ error: 'Invalid client ID, username or password' });
+    writeLoginLog('warn', 'invalid_login', {
+      requestId,
+      clientId,
+      username,
+      reason: 'super_admin_wrong_client',
+      ip,
+      userAgent,
+      isSuperAdmin: true,
+    });
+    return res.status(401).json({
+      error: 'Invalid client ID, username or password',
+      code: 'INVALID_LOGIN',
+      requestId,
+    });
   }
 
   if (isSuperAdminLogin) {
@@ -210,10 +274,20 @@ router.post('/login', (req, res) => {
       activityLabel: 'login',
       activityPath: '/auth/login',
       activityData: { role: 'super_admin' },
-      ipAddress: getClientIp(req),
-      userAgent: getUserAgent(req),
+      ipAddress: ip,
+      userAgent,
     });
     clearLoginAttempts(req, clientId, username);
+    writeLoginLog('info', 'success', {
+      requestId,
+      clientId,
+      username,
+      reason: 'super_admin',
+      ip,
+      userAgent,
+      role: 'admin',
+      isSuperAdmin: true,
+    });
     return res.json({
       token: session.token,
       expiresAt: session.expiresAt,
@@ -240,24 +314,63 @@ router.post('/login', (req, res) => {
   const targetClient = db.prepare('SELECT id FROM clients WHERE id = ?').get(clientId);
   if (!targetClient) {
     recordFailedLoginAttempt(req, clientId, username);
-    return res.status(401).json({ error: 'Invalid client ID, username or password' });
+    writeLoginLog('warn', 'invalid_login', {
+      requestId,
+      clientId,
+      username,
+      reason: 'client_not_found',
+      ip,
+      userAgent,
+      clientExists: false,
+    });
+    return res.status(401).json({
+      error: 'Invalid client ID, username or password',
+      code: 'INVALID_LOGIN',
+      requestId,
+    });
   }
 
   const user = db.prepare('SELECT * FROM users WHERE client_id = ? AND username = ?').get(clientId, username);
   if (!user || !verifyPassword(password, user.password_hash)) {
     recordFailedLoginAttempt(req, clientId, username);
-    return res.status(401).json({ error: 'Invalid client ID, username or password' });
+    writeLoginLog('warn', 'invalid_login', {
+      requestId,
+      clientId,
+      username,
+      reason: user ? 'password_mismatch' : 'user_not_found',
+      ip,
+      userAgent,
+      clientExists: true,
+      userExists: Boolean(user),
+      role: user?.role,
+    });
+    return res.status(401).json({
+      error: 'Invalid client ID, username or password',
+      code: 'INVALID_LOGIN',
+      requestId,
+    });
   }
 
   const session = createSession(user.id, {
     activityLabel: 'login',
     activityPath: '/auth/login',
     activityData: { role: user.role || 'user' },
-    ipAddress: getClientIp(req),
-    userAgent: getUserAgent(req),
+    ipAddress: ip,
+    userAgent,
   });
   clearLoginAttempts(req, clientId, username);
-  return res.json({ token: session.token, expiresAt: session.expiresAt, user: safeUser(user) });
+  writeLoginLog('info', 'success', {
+    requestId,
+    clientId,
+    username,
+    reason: 'password_login',
+    ip,
+    userAgent,
+    clientExists: true,
+    userExists: true,
+    role: user.role,
+  });
+  return res.json({ token: session.token, expiresAt: session.expiresAt, user: safeUser(user), requestId });
 });
 
 router.post('/logout', authRequired, (req, res) => {

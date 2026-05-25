@@ -139,6 +139,32 @@ const ADMIN_USERS_PAGE_ID = '__admin_users';
 const AUTO_ALERT_PILL_HIDDEN_KEY_PREFIX = 'tunet_auto_alert_pills_hidden_';
 const EmbeddedConfigModal = lazy(() => import('./modals/ConfigModal'));
 
+const formatLoginError = (error) => {
+  const requestId = String(error?.requestId || '').trim();
+  const suffix = requestId ? ` Kode: ${requestId.slice(0, 8)}.` : '';
+  const message = String(error?.message || '').toLowerCase();
+
+  if (error?.status === 401 || error?.code === 'INVALID_LOGIN') {
+    return `Feil Client ID, brukernavn eller passord. Kontroller at Client ID er riktig.${suffix}`;
+  }
+
+  if (error?.status === 429 || error?.code === 'RATE_LIMITED') {
+    const retry = Number(error?.retryAfterSeconds || 0);
+    return `For mange innloggingsforsok. Prov igjen${retry > 0 ? ` om ${retry} sekunder` : ' senere'}.${suffix}`;
+  }
+
+  if (
+    error?.name === 'TypeError'
+    || message.includes('failed to fetch')
+    || message.includes('load failed')
+    || message.includes('network')
+  ) {
+    return `Appen fikk ikke kontakt med serveren. Sjekk nettverk og prov igjen.${suffix}`;
+  }
+
+  return `${error?.message || 'Innlogging feilet'}${suffix}`;
+};
+
 const getAutoAlertPillsHiddenStorageKey = (clientScopeRaw) => {
   const scope = String(clientScopeRaw || '').trim().toLowerCase() || 'default';
   return `${AUTO_ALERT_PILL_HIDDEN_KEY_PREFIX}${scope}`;
@@ -3261,7 +3287,7 @@ export default function App() {
       setHaConfigHydrated(true);
       setShowPassword(false);
     } catch (error) {
-      setAuthError(error?.message || 'Login failed');
+      setAuthError(formatLoginError(error));
     } finally {
       setLoggingIn(false);
     }
@@ -3492,7 +3518,22 @@ export default function App() {
             </div>
           </div>
 
-          {authError && <div className="text-sm text-red-300 bg-red-500/15 border border-red-500/30 rounded-xl px-3 py-2">{authError}</div>}
+          {authError && (
+            <div className="text-sm text-red-300 bg-red-500/15 border border-red-500/30 rounded-xl px-3 py-2 space-y-2">
+              <p>{authError}</p>
+              <button
+                type="button"
+                onClick={() => {
+                  setStoredClientId('');
+                  setClientId('');
+                  setAuthError('Lagret Client ID er nullstilt. Skriv inn riktig Client ID og prov igjen.');
+                }}
+                className="text-[11px] uppercase tracking-[0.16em] font-bold text-red-100 underline underline-offset-4"
+              >
+                Nullstill lagret Client ID
+              </button>
+            </div>
+          )}
 
           <button
             disabled={loggingIn}

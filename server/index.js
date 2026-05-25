@@ -41,6 +41,38 @@ const setIOSCacheRecoveryHeaders = (req, res) => {
   res.setHeader('X-Smart-Sauna-Cache-Recovery', 'cache');
 };
 
+const sendMissingAssetRecovery = (req, res) => {
+  const path = String(req.path || '');
+  if (!/\.(?:js|mjs)$/i.test(path)) {
+    return res.status(404).type('text/plain').send('Asset not found');
+  }
+
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
+  res.setHeader('Pragma', 'no-cache');
+  res.setHeader('Expires', '0');
+  res.setHeader('X-Smart-Sauna-Missing-Asset-Recovery', 'reload');
+  res.type('application/javascript');
+  return res.send(`
+const key = '__smart_sauna_missing_asset_reload_ts__';
+const now = Date.now();
+try {
+  const last = Number(window.sessionStorage.getItem(key) || 0);
+  if (!Number.isFinite(last) || now - last > 15000) {
+    window.sessionStorage.setItem(key, String(now));
+    const url = new URL(window.location.href);
+    url.searchParams.set('_ss_recover', String(now));
+    window.location.replace(url.toString());
+  } else {
+    window.location.reload();
+  }
+} catch {
+  window.location.reload();
+}
+export const smartSaunaMissingAssetRecovery = true;
+export default null;
+`);
+};
+
 const app = express();
 app.use(express.json({ limit: '3mb' }));
 
@@ -79,7 +111,7 @@ if (isProduction) {
     const assetsPath = join(distPath, 'assets');
     if (existsSync(assetsPath)) {
       app.use('/assets', express.static(assetsPath, {
-        fallthrough: false,
+        fallthrough: true,
         maxAge: '1y',
         immutable: true,
         setHeaders: (res) => {
@@ -87,6 +119,7 @@ if (isProduction) {
         },
       }));
     }
+    app.get('/assets/*', sendMissingAssetRecovery);
 
     app.use(express.static(distPath, {
       index: false,
@@ -102,7 +135,7 @@ if (isProduction) {
         return res.status(404).json({ error: 'Not found' });
       }
       if (req.path.startsWith('/assets/')) {
-        return res.status(404).type('text/plain').send('Asset not found');
+        return sendMissingAssetRecovery(req, res);
       }
       return sendAppShell(req, res);
     });

@@ -41,8 +41,28 @@ const DEFAULT_SECTION_SPACING = {
   navToGrid: 24,
 };
 
+const cloneDefaultPagesConfig = () => ({
+  ...DEFAULT_PAGES_CONFIG,
+  header: Array.isArray(DEFAULT_PAGES_CONFIG.header) ? [...DEFAULT_PAGES_CONFIG.header] : [],
+  pages: Array.isArray(DEFAULT_PAGES_CONFIG.pages) ? [...DEFAULT_PAGES_CONFIG.pages] : ['home'],
+  home: Array.isArray(DEFAULT_PAGES_CONFIG.home) ? [...DEFAULT_PAGES_CONFIG.home] : [],
+});
+
+const isPlainObject = (value) => Boolean(value && typeof value === 'object' && !Array.isArray(value));
+const safeRecord = (value, fallback = {}) => (isPlainObject(value) ? value : fallback);
+const safeStringArray = (value, fallback = []) => (
+  Array.isArray(value)
+    ? value.map((entry) => String(entry || '').trim()).filter(Boolean)
+    : fallback
+);
+
+const safeNumber = (value, fallback) => {
+  const parsed = typeof value === 'number' ? value : Number(value);
+  return Number.isFinite(parsed) ? parsed : fallback;
+};
+
 const getDefaultDashboardState = () => ({
-  pagesConfig: DEFAULT_PAGES_CONFIG,
+  pagesConfig: cloneDefaultPagesConfig(),
   cardSettings: {},
   customNames: {},
   customIcons: {},
@@ -60,7 +80,7 @@ const getDefaultDashboardState = () => ({
 });
 
 function normalizePagesConfig(parsed) {
-  if (!parsed) return DEFAULT_PAGES_CONFIG;
+  if (!isPlainObject(parsed)) return cloneDefaultPagesConfig();
 
   const next = { ...parsed };
 
@@ -85,14 +105,15 @@ function normalizePagesConfig(parsed) {
     next.pages = detectedPages.length > 0 ? detectedPages : ['home'];
   }
 
-  next.pages = next.pages.filter(id => id !== 'settings' && id !== 'lights' && id !== 'automations');
+  next.pages = safeStringArray(next.pages, ['home'])
+    .filter(id => id !== 'settings' && id !== 'lights' && id !== 'automations');
   if (next.pages.length === 0) { next.pages = ['home']; }
 
   next.pages.forEach((pageId) => {
-    if (!Array.isArray(next[pageId])) { next[pageId] = []; }
+    next[pageId] = safeStringArray(next[pageId], []);
   });
 
-  if (!next.header) { next.header = []; }
+  next.header = safeStringArray(next.header, []);
 
   return next;
 }
@@ -101,39 +122,44 @@ function normalizeDashboardState(raw) {
   const defaults = getDefaultDashboardState();
   const source = raw || {};
 
-  const spacingSaved = source.sectionSpacing;
-  const sectionSpacing = spacingSaved
-    ? {
-      headerToStatus: Number.isFinite(spacingSaved.headerToStatus) ? spacingSaved.headerToStatus : DEFAULT_SECTION_SPACING.headerToStatus,
-      statusToNav: Number.isFinite(spacingSaved.statusToNav) ? spacingSaved.statusToNav : DEFAULT_SECTION_SPACING.statusToNav,
-      navToGrid: Number.isFinite(spacingSaved.navToGrid) ? spacingSaved.navToGrid : DEFAULT_SECTION_SPACING.navToGrid,
-    }
-    : defaults.sectionSpacing;
+  try {
+    const spacingSaved = safeRecord(source.sectionSpacing, null);
+    const sectionSpacing = spacingSaved
+      ? {
+        headerToStatus: safeNumber(spacingSaved.headerToStatus, DEFAULT_SECTION_SPACING.headerToStatus),
+        statusToNav: safeNumber(spacingSaved.statusToNav, DEFAULT_SECTION_SPACING.statusToNav),
+        navToGrid: safeNumber(spacingSaved.navToGrid, DEFAULT_SECTION_SPACING.navToGrid),
+      }
+      : defaults.sectionSpacing;
 
-  const normalizedPageSettings = { ...(source.pageSettings || {}) };
-  Object.keys(normalizedPageSettings).forEach((pageId) => {
-    if (normalizedPageSettings[pageId]?.type === 'sonos') {
-      normalizedPageSettings[pageId] = { ...normalizedPageSettings[pageId], type: 'media' };
-    }
-  });
+    const normalizedPageSettings = { ...safeRecord(source.pageSettings, defaults.pageSettings) };
+    Object.keys(normalizedPageSettings).forEach((pageId) => {
+      if (normalizedPageSettings[pageId]?.type === 'sonos') {
+        normalizedPageSettings[pageId] = { ...normalizedPageSettings[pageId], type: 'media' };
+      }
+    });
 
-  return {
-    pagesConfig: normalizePagesConfig(source.pagesConfig),
-    cardSettings: source.cardSettings || defaults.cardSettings,
-    customNames: source.customNames || defaults.customNames,
-    customIcons: source.customIcons || defaults.customIcons,
-    hiddenCards: (source.hiddenCards || defaults.hiddenCards).filter(id => !deprecatedCardIds.includes(id)),
-    pageSettings: normalizedPageSettings,
-    gridColumns: Number.isFinite(source.gridColumns) ? source.gridColumns : defaults.gridColumns,
-    gridGapH: Number.isFinite(source.gridGapH) ? source.gridGapH : defaults.gridGapH,
-    gridGapV: Number.isFinite(source.gridGapV) ? source.gridGapV : defaults.gridGapV,
-    cardBorderRadius: Number.isFinite(source.cardBorderRadius) ? source.cardBorderRadius : defaults.cardBorderRadius,
-    headerScale: Number.isFinite(source.headerScale) ? source.headerScale : defaults.headerScale,
-    sectionSpacing,
-    headerTitle: typeof source.headerTitle === 'string' ? source.headerTitle : defaults.headerTitle,
-    headerSettings: applyStoredLogoOverrides(source.headerSettings || defaults.headerSettings),
-    statusPillsConfig: Array.isArray(source.statusPillsConfig) ? source.statusPillsConfig : defaults.statusPillsConfig,
-  };
+    return {
+      pagesConfig: normalizePagesConfig(source.pagesConfig),
+      cardSettings: safeRecord(source.cardSettings, defaults.cardSettings),
+      customNames: safeRecord(source.customNames, defaults.customNames),
+      customIcons: safeRecord(source.customIcons, defaults.customIcons),
+      hiddenCards: safeStringArray(source.hiddenCards, defaults.hiddenCards).filter(id => !deprecatedCardIds.includes(id)),
+      pageSettings: normalizedPageSettings,
+      gridColumns: safeNumber(source.gridColumns, defaults.gridColumns),
+      gridGapH: safeNumber(source.gridGapH, defaults.gridGapH),
+      gridGapV: safeNumber(source.gridGapV, defaults.gridGapV),
+      cardBorderRadius: safeNumber(source.cardBorderRadius, defaults.cardBorderRadius),
+      headerScale: safeNumber(source.headerScale, defaults.headerScale),
+      sectionSpacing,
+      headerTitle: typeof source.headerTitle === 'string' ? source.headerTitle : defaults.headerTitle,
+      headerSettings: applyStoredLogoOverrides(safeRecord(source.headerSettings, defaults.headerSettings)),
+      statusPillsConfig: Array.isArray(source.statusPillsConfig) ? source.statusPillsConfig : defaults.statusPillsConfig,
+    };
+  } catch (error) {
+    console.warn('Invalid dashboard state. Falling back to default dashboard.', error);
+    return defaults;
+  }
 }
 
 function loadLegacyLocalStorageState() {

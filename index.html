@@ -16,6 +16,142 @@
   </head>
   <body>
     <div id="root"></div>
+    <script>
+      (() => {
+        const WATCHDOG_ID = 'smart-sauna-boot-watchdog';
+        const AUTO_SOFT_REPAIR_KEY = '__smart_sauna_auto_soft_repair_ts__';
+        const AUTO_SOFT_REPAIR_WINDOW_MS = 60000;
+        const STORAGE_PREFIXES = [
+          'tunet_',
+          'ha_',
+          '__smart_sauna_',
+        ];
+        const SOFT_STORAGE_KEYS = [
+          'tunet_shared_dashboard_cache',
+          'tunet_shared_dashboard_profiles_cache',
+          'tunet_active_page',
+          'tunet_calendar_modal_selection',
+        ];
+
+        const getRoot = () => document.getElementById('root');
+        const appHasRendered = () => {
+          const root = getRoot();
+          return Boolean(root && root.childElementCount > 0 && root.textContent.trim().length > 0);
+        };
+
+        const removeWatchdog = () => {
+          const existing = document.getElementById(WATCHDOG_ID);
+          if (existing) existing.remove();
+        };
+
+        const storageMatches = (key, repairMode) => {
+          if (repairMode === 'soft') {
+            return SOFT_STORAGE_KEYS.some((prefix) => key === prefix || key.startsWith(`${prefix}::`));
+          }
+          return STORAGE_PREFIXES.some((prefix) => key.startsWith(prefix));
+        };
+
+        const repairStorage = (repairMode) => {
+          [window.localStorage, window.sessionStorage].forEach((storage) => {
+            if (!storage) return;
+            try {
+              Array.from({ length: storage.length }, (_, index) => storage.key(index))
+                .filter((key) => key && storageMatches(key, repairMode))
+                .forEach((key) => storage.removeItem(key));
+            } catch {
+              // Best effort recovery only.
+            }
+          });
+        };
+
+        const tryAutoSoftRepair = () => {
+          try {
+            const now = Date.now();
+            const lastRepair = Number(window.sessionStorage.getItem(AUTO_SOFT_REPAIR_KEY) || 0);
+            if (Number.isFinite(lastRepair) && now - lastRepair < AUTO_SOFT_REPAIR_WINDOW_MS) return false;
+            window.sessionStorage.setItem(AUTO_SOFT_REPAIR_KEY, String(now));
+            repairStorage('soft');
+            window.location.reload();
+            return true;
+          } catch {
+            return false;
+          }
+        };
+
+        const showWatchdog = (reason) => {
+          if (appHasRendered() || document.getElementById(WATCHDOG_ID)) return;
+
+          const overlay = document.createElement('div');
+          overlay.id = WATCHDOG_ID;
+          overlay.setAttribute('role', 'dialog');
+          overlay.setAttribute('aria-live', 'polite');
+          overlay.style.cssText = [
+            'position:fixed',
+            'inset:0',
+            'z-index:2147483647',
+            'display:flex',
+            'align-items:center',
+            'justify-content:center',
+            'padding:24px',
+            'background:#0b1220',
+            'color:#f8fafc',
+            'font-family:Inter,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif',
+          ].join(';');
+
+          overlay.innerHTML = `
+            <div style="width:min(420px,100%);border:1px solid rgba(148,163,184,.32);border-radius:20px;padding:24px;background:rgba(15,23,42,.94);box-shadow:0 24px 80px rgba(0,0,0,.38)">
+              <div style="font-size:12px;letter-spacing:.22em;text-transform:uppercase;color:#94a3b8;font-weight:800;margin-bottom:10px">Smart Sauna</div>
+              <h1 style="font-size:22px;line-height:1.2;margin:0 0 10px;font-weight:750">Appen startet ikke</h1>
+              <p style="font-size:14px;line-height:1.55;margin:0 0 18px;color:#cbd5e1">Dette kan skje hvis iOS har beholdt gammel app-cache eller lokal dashboard-state. Serverdata blir ikke slettet.</p>
+              <div style="display:grid;gap:10px">
+                <button data-action="reload" style="border:0;border-radius:12px;padding:13px 14px;background:#38bdf8;color:#082f49;font-weight:800;font-size:14px">Last inn pa nytt</button>
+                <button data-action="soft-repair" style="border:1px solid rgba(148,163,184,.38);border-radius:12px;padding:13px 14px;background:rgba(148,163,184,.12);color:#f8fafc;font-weight:750;font-size:14px">Reparer dashboard-cache</button>
+                <button data-action="full-repair" style="border:1px solid rgba(251,113,133,.38);border-radius:12px;padding:13px 14px;background:rgba(127,29,29,.28);color:#fecdd3;font-weight:750;font-size:14px">Nullstill appdata og logg inn pa nytt</button>
+              </div>
+              <p style="font-size:11px;line-height:1.45;margin:14px 0 0;color:#94a3b8">Kode: ${String(reason || 'boot-timeout')}</p>
+            </div>
+          `;
+
+          overlay.addEventListener('click', (event) => {
+            const action = event.target && event.target.getAttribute('data-action');
+            if (action === 'reload') window.location.reload();
+            if (action === 'soft-repair') {
+              repairStorage('soft');
+              window.location.reload();
+            }
+            if (action === 'full-repair') {
+              repairStorage('full');
+              window.location.reload();
+            }
+          });
+
+          document.body.appendChild(overlay);
+        };
+
+        window.__SMART_SAUNA_HIDE_BOOT_WATCHDOG__ = removeWatchdog;
+        window.__SMART_SAUNA_SHOW_BOOT_WATCHDOG__ = showWatchdog;
+
+        window.addEventListener('error', (event) => {
+          const target = event && event.target;
+          if (target && target.tagName === 'SCRIPT') {
+            showWatchdog('script-load-failed');
+          }
+        }, true);
+
+        const root = getRoot();
+        if (root && window.MutationObserver) {
+          new MutationObserver(() => {
+            if (appHasRendered()) removeWatchdog();
+          }).observe(root, { childList: true, subtree: true, characterData: true });
+        }
+
+        window.setTimeout(() => {
+          if (appHasRendered()) return;
+          if (tryAutoSoftRepair()) return;
+          showWatchdog('boot-timeout');
+        }, 9000);
+      })();
+    </script>
     <script type="module" src="/src/main.jsx"></script>
   </body>
 </html>

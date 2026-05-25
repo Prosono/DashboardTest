@@ -33,6 +33,9 @@ const createApiError = async (res) => {
   const body = await res.json().catch(() => ({}));
   const err = new Error(body.error || `API error ${res.status}`);
   err.status = res.status;
+  err.code = body.code || '';
+  err.requestId = body.requestId || res.headers?.get?.('X-Smart-Sauna-Login-Request') || '';
+  err.retryAfterSeconds = body.retryAfterSeconds || null;
   return err;
 };
 
