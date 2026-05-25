@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { randomUUID } from 'crypto';
 import db, { DEFAULT_CLIENT_ID, normalizeClientId, provisionClientDefaults } from '../db.js';
-import { adminRequired, authRequired } from '../auth.js';
+import { adminRequired, authRequired, getClientIp, getUserAgent } from '../auth.js';
 import { hashPassword } from '../password.js';
 import {
   fetchDashboardVersionRow,
@@ -12,6 +12,12 @@ import {
 import { mergeHaConfigPayload, parseHaConfigRow, serializeHaConnections } from '../haConfig.js';
 import { parseStoredAppActionHistory } from '../appActionHistory.js';
 import { loadLoginAuditHistory } from '../loginAudit.js';
+import {
+  appendRawLogEntry,
+  getRawLogText,
+  loadRawLogLines,
+  MAX_RAW_LOG_LINES,
+} from '../rawLog.js';
 import {
   createClientBackupReadStream,
   deleteClientBackupFile,
@@ -703,6 +709,8 @@ router.get('/overview', (req, res) => {
     })
     .slice(0, logLimit);
   const recentLoginAttempts = loadLoginAuditHistory(logLimit);
+  const rawLogLines = loadRawLogLines(MAX_RAW_LOG_LINES);
+  const recentRawLogLines = rawLogLines.slice(-Math.min(logLimit, 120)).reverse();
 
   const instances = clientOverview.flatMap((client) => (
     (Array.isArray(client.connections) ? client.connections : []).map((connection) => ({
@@ -751,6 +759,7 @@ router.get('/overview', (req, res) => {
       logs: recentLogs.length,
       appActions: Number(totals.appActions || 0),
       loginAttempts: recentLoginAttempts.length,
+      rawLogLines: rawLogLines.length,
     },
     clients: clientOverview,
     sessions: allSessionOverview,
@@ -760,7 +769,34 @@ router.get('/overview', (req, res) => {
     recentLogs,
     recentAppActions,
     recentLoginAttempts,
+    recentRawLogLines,
+    rawLogMaxLines: MAX_RAW_LOG_LINES,
   });
+});
+
+router.get('/logs/raw/download', (req, res) => {
+  try {
+    appendRawLogEntry({
+      level: 'info',
+      event: 'superadmin.raw_log.download',
+      details: {
+        username: req.auth?.user?.username || '',
+        clientId: req.auth?.user?.clientId || '',
+        ip: getClientIp(req),
+        userAgent: getUserAgent(req),
+      },
+    });
+  } catch {
+    // Downloading the diagnostic log should not fail because the log entry itself failed.
+  }
+
+  const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+  const fileName = `smart-sauna-raw-log-${stamp}.log`;
+  const text = getRawLogText() || '# Smart Sauna raw log is empty\n';
+  res.setHeader('Cache-Control', 'no-store');
+  res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+  res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
+  return res.send(text);
 });
 
 router.get('/backups/overview', async (_req, res) => {

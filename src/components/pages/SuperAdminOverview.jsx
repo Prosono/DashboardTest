@@ -6,6 +6,7 @@ import {
   Check,
   Clock,
   Database,
+  Download,
   LogIn,
   RefreshCw,
   Server,
@@ -180,6 +181,18 @@ const formatLoginReason = (reason, t) => {
   return labelKey ? t(labelKey) : normalized.replace(/_/g, ' ');
 };
 
+const triggerBlobDownload = (blob, fileName) => {
+  if (typeof document === 'undefined' || !blob) return;
+  const url = globalThis.URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = fileName || 'smart-sauna-raw-log.log';
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  globalThis.URL.revokeObjectURL(url);
+};
+
 const toMetricSnapshot = (payload) => {
   const generatedAt = Date.parse(String(payload?.generatedAt || ''));
   if (!Number.isFinite(generatedAt)) return null;
@@ -326,6 +339,7 @@ export default function SuperAdminOverview({
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState('');
+  const [downloadingRawLog, setDownloadingRawLog] = useState(false);
   const [activeKpiKey, setActiveKpiKey] = useState('');
   const [historyWindowKey, setHistoryWindowKey] = useState('24h');
   const [kpiHistory, setKpiHistory] = useState(() => readKpiHistory());
@@ -376,6 +390,20 @@ export default function SuperAdminOverview({
     return () => window.clearInterval(intervalId);
   }, [loadOverview]);
 
+  const handleDownloadRawLog = useCallback(async () => {
+    if (!userAdminApi?.downloadPlatformRawLog) return;
+    setDownloadingRawLog(true);
+    setError('');
+    try {
+      const result = await userAdminApi.downloadPlatformRawLog();
+      triggerBlobDownload(result.blob, result.fileName || 'smart-sauna-raw-log.log');
+    } catch (downloadError) {
+      setError(downloadError?.message || t('superAdminOverview.rawLog.downloadFailed'));
+    } finally {
+      setDownloadingRawLog(false);
+    }
+  }, [userAdminApi, t]);
+
   const totals = useMemo(
     () => (overview?.totals && typeof overview.totals === 'object' ? overview.totals : {}),
     [overview?.totals],
@@ -414,6 +442,11 @@ export default function SuperAdminOverview({
     () => (Array.isArray(overview?.recentLoginAttempts) ? overview.recentLoginAttempts : []),
     [overview?.recentLoginAttempts],
   );
+  const recentRawLogLines = useMemo(
+    () => (Array.isArray(overview?.recentRawLogLines) ? overview.recentRawLogLines : []),
+    [overview?.recentRawLogLines],
+  );
+  const rawLogMaxLines = Number(overview?.rawLogMaxLines || 2000);
   const failedLoginAttemptCount = useMemo(
     () => recentLoginAttempts.filter((attempt) => attempt?.status !== 'success').length,
     [recentLoginAttempts],
@@ -1030,6 +1063,36 @@ export default function SuperAdminOverview({
                       );
                     })}
                   </div>
+                )}
+              </div>
+
+              <div className="popup-surface rounded-3xl p-4 md:p-5 border border-[var(--glass-border)]">
+                <div className="flex items-start justify-between gap-3 mb-4">
+                  <div>
+                    <h3 className="text-xs md:text-sm font-bold uppercase tracking-[0.2em] text-[var(--text-secondary)]">
+                      {t('superAdminOverview.sections.rawLog')}
+                    </h3>
+                    <p className="mt-1 text-[10px] uppercase tracking-[0.16em] text-[var(--text-muted)]">
+                      {t('superAdminOverview.rawLog.maxLines')}: {formatNumber(totals.rawLogLines || recentRawLogLines.length || 0)} / {formatNumber(rawLogMaxLines)}
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleDownloadRawLog}
+                    disabled={downloadingRawLog || !userAdminApi?.downloadPlatformRawLog}
+                    className="shrink-0 inline-flex items-center justify-center gap-2 px-3 py-2 rounded-xl border border-[var(--glass-border)] bg-[var(--glass-bg)] text-[var(--text-primary)] text-[10px] font-bold uppercase tracking-[0.16em] hover:bg-[var(--glass-bg-hover)] transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+                  >
+                    {downloadingRawLog ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
+                    {downloadingRawLog ? t('superAdminOverview.rawLog.downloading') : t('superAdminOverview.rawLog.download')}
+                  </button>
+                </div>
+
+                {recentRawLogLines.length === 0 ? (
+                  <p className="text-sm text-[var(--text-secondary)]">{t('superAdminOverview.rawLog.empty')}</p>
+                ) : (
+                  <pre className="max-h-[36vh] overflow-auto custom-scrollbar rounded-xl border border-[var(--glass-border)] bg-black/30 p-3 text-[10px] leading-relaxed text-[var(--text-secondary)] whitespace-pre-wrap break-words">
+                    {recentRawLogLines.join('\n')}
+                  </pre>
                 )}
               </div>
 

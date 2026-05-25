@@ -1,5 +1,6 @@
 import crypto from 'crypto';
 import db from './db.js';
+import { appendRawLogEntry } from './rawLog.js';
 
 const SESSION_TTL_MS = 1000 * 60 * 60 * 24 * 7;
 const SESSION_TOUCH_INTERVAL_MS = 30_000;
@@ -19,6 +20,24 @@ export const getClientIp = (req) => {
 };
 
 export const getUserAgent = (req) => toSafeString(req?.get?.('user-agent') || req?.headers?.['user-agent'], 512);
+
+const writeAuthRawLog = (level, event, req, details = {}) => {
+  try {
+    appendRawLogEntry({
+      level,
+      event,
+      details: {
+        method: req?.method || '',
+        path: req?.originalUrl || req?.url || '',
+        ip: getClientIp(req),
+        userAgent: getUserAgent(req),
+        ...details,
+      },
+    });
+  } catch {
+    // Auth checks must never fail because diagnostic logging failed.
+  }
+};
 
 const normalizeActivityData = (value) => {
   if (!value) return '';
@@ -154,7 +173,10 @@ export const getTokenFromRequest = (req) => {
 
 export const authRequired = (req, res, next) => {
   const token = getTokenFromRequest(req);
-  if (!token) return res.status(401).json({ error: 'Missing bearer token' });
+  if (!token) {
+    writeAuthRawLog('warn', 'auth.session.missing_token', req);
+    return res.status(401).json({ error: 'Missing bearer token' });
+  }
 
   const session = db.prepare(`
     SELECT
@@ -176,9 +198,20 @@ export const authRequired = (req, res, next) => {
     WHERE s.token = ?
   `).get(token);
 
-  if (!session) return res.status(401).json({ error: 'Invalid session' });
+  if (!session) {
+    writeAuthRawLog('warn', 'auth.session.invalid_token', req, {
+      tokenPreview: String(token || '').slice(0, 12),
+    });
+    return res.status(401).json({ error: 'Invalid session' });
+  }
   if (Date.parse(session.expires_at) <= Date.now()) {
     deleteSession(token);
+    writeAuthRawLog('warn', 'auth.session.expired', req, {
+      userId: session.user_id,
+      clientId: session.scope_client_id || session.user_client_id || '',
+      username: session.session_username || session.username || '',
+      expiredAt: session.expires_at,
+    });
     return res.status(401).json({ error: 'Session expired' });
   }
 

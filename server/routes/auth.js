@@ -23,6 +23,7 @@ import {
   SUPER_ADMIN_CLIENT_ID,
 } from '../platformAdmin.js';
 import { appendLoginAuditEntry } from '../loginAudit.js';
+import { appendRawLogEntry } from '../rawLog.js';
 import { hashPassword, verifyPassword } from '../password.js';
 import { mergeHaConfigPayload, parseHaConfigRow, serializeHaConnections } from '../haConfig.js';
 import {
@@ -93,6 +94,15 @@ const writeLoginLog = (level, event, details = {}) => {
     appendLoginAuditEntry(payload);
   } catch (auditError) {
     console.warn('[auth-login] failed to persist login audit', auditError?.message || auditError);
+  }
+  try {
+    appendRawLogEntry({
+      level,
+      event: `auth.login.${event}`,
+      details: payload,
+    });
+  } catch (rawLogError) {
+    console.warn('[auth-login] failed to persist raw log', rawLogError?.message || rawLogError);
   }
   const line = `[auth-login] ${JSON.stringify(payload)}`;
   if (level === 'warn') console.warn(line);

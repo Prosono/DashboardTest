@@ -286,6 +286,20 @@ export const fetchPlatformOverview = async (logLimit = 50) => {
   return payload && typeof payload === 'object' ? payload : null;
 };
 
+export const downloadPlatformRawLog = async () => {
+  const response = await apiFetch('/api/clients/logs/raw/download', {
+    method: 'GET',
+    headers: {
+      Accept: 'text/plain',
+    },
+  });
+  const blob = await response.blob();
+  return {
+    blob,
+    fileName: parseDownloadFileName(response.headers.get('Content-Disposition'), 'smart-sauna-raw-log.log'),
+  };
+};
+
 export const fetchClientBackupOverview = async () => {
   const payload = await apiRequest('/api/clients/backups/overview', { method: 'GET' });
   return payload && typeof payload === 'object' ? payload : null;
