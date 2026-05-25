@@ -14,6 +14,32 @@ import { startRemoteInstanceHealthMonitor } from './remoteInstanceHealthMonitor.
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PORT = parseInt(globalThis.process?.env?.PORT || '3002', 10);
 const isProduction = globalThis.process?.env?.NODE_ENV === 'production';
+const appBuildId = globalThis.process?.env?.APP_BUILD_ID
+  || globalThis.process?.env?.SOURCE_VERSION
+  || globalThis.process?.env?.npm_package_version
+  || 'unknown';
+const iosCacheRecoveryEnabled = ['1', 'true', 'yes', 'on'].includes(
+  String(globalThis.process?.env?.IOS_CACHE_RECOVERY || '').trim().toLowerCase(),
+);
+
+const isIOSUserAgent = (userAgent = '') => {
+  const ua = String(userAgent || '');
+  return /iPad|iPhone|iPod/i.test(ua) || (/Macintosh/i.test(ua) && /Mobile/i.test(ua));
+};
+
+const setAppShellHeaders = (res) => {
+  res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+  res.setHeader('Pragma', 'no-cache');
+  res.setHeader('Expires', '0');
+  res.setHeader('X-Smart-Sauna-Build', appBuildId);
+};
+
+const setIOSCacheRecoveryHeaders = (req, res) => {
+  if (!iosCacheRecoveryEnabled || !isIOSUserAgent(req.headers['user-agent'])) return;
+  // Clears WKWebView/Safari HTTP cache for this origin without deleting localStorage or auth tokens.
+  res.setHeader('Clear-Site-Data', '"cache"');
+  res.setHeader('X-Smart-Sauna-Cache-Recovery', 'cache');
+};
 
 const app = express();
 app.use(express.json({ limit: '3mb' }));
@@ -35,12 +61,21 @@ app.use('/api/branding', brandingRouter);
 app.use('/api/image-proxy', imageProxyRouter);
 
 app.get('/api/health', (_req, res) => {
-  res.json({ status: 'ok', version: globalThis.process?.env?.npm_package_version || 'unknown' });
+  res.setHeader('Cache-Control', 'no-store');
+  res.json({ status: 'ok', version: globalThis.process?.env?.npm_package_version || 'unknown', buildId: appBuildId });
 });
 
 if (isProduction) {
   const distPath = join(__dirname, '..', 'dist');
   if (existsSync(distPath)) {
+    const sendAppShell = (req, res) => {
+      setAppShellHeaders(res);
+      setIOSCacheRecoveryHeaders(req, res);
+      return res.sendFile(join(distPath, 'index.html'));
+    };
+
+    app.get(['/', '/index.html'], sendAppShell);
+
     const assetsPath = join(distPath, 'assets');
     if (existsSync(assetsPath)) {
       app.use('/assets', express.static(assetsPath, {
@@ -57,9 +92,7 @@ if (isProduction) {
       index: false,
       setHeaders: (res, filePath) => {
         if (filePath.endsWith('.html')) {
-          res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
-          res.setHeader('Pragma', 'no-cache');
-          res.setHeader('Expires', '0');
+          setAppShellHeaders(res);
         }
       },
     }));
@@ -71,10 +104,7 @@ if (isProduction) {
       if (req.path.startsWith('/assets/')) {
         return res.status(404).type('text/plain').send('Asset not found');
       }
-      res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
-      res.setHeader('Pragma', 'no-cache');
-      res.setHeader('Expires', '0');
-      return res.sendFile(join(distPath, 'index.html'));
+      return sendAppShell(req, res);
     });
   }
 }
