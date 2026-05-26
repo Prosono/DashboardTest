@@ -6,10 +6,7 @@ import {
   Check,
   Clock,
   Database,
-  Download,
-  LogIn,
   RefreshCw,
-  Server,
   Shield,
   User,
   Wifi,
@@ -83,39 +80,6 @@ const semanticToneClass = {
   neutral: 'text-[var(--text-primary)] border-[var(--glass-border)] bg-[var(--glass-bg)]',
 };
 
-const loginStatusTheme = {
-  success: {
-    labelKey: 'superAdminOverview.loginAttempts.status.success',
-    className: statusTheme.ready.className,
-    rowStatus: 'ready',
-    tone: 'good',
-  },
-  blocked: {
-    labelKey: 'superAdminOverview.loginAttempts.status.blocked',
-    className: statusTheme.missing_token.className,
-    rowStatus: 'missing_token',
-    tone: 'warn',
-  },
-  failed: {
-    labelKey: 'superAdminOverview.loginAttempts.status.failed',
-    className: statusTheme.missing_url.className,
-    rowStatus: 'missing_url',
-    tone: 'danger',
-  },
-};
-
-const loginReasonLabelKeys = {
-  missing_fields: 'superAdminOverview.loginAttempts.reason.missing_fields',
-  rate_limited: 'superAdminOverview.loginAttempts.reason.rate_limited',
-  super_admin_wrong_client: 'superAdminOverview.loginAttempts.reason.super_admin_wrong_client',
-  super_admin: 'superAdminOverview.loginAttempts.reason.super_admin',
-  password_login: 'superAdminOverview.loginAttempts.reason.password_login',
-  client_not_found: 'superAdminOverview.loginAttempts.reason.client_not_found',
-  user_not_found: 'superAdminOverview.loginAttempts.reason.user_not_found',
-  password_mismatch: 'superAdminOverview.loginAttempts.reason.password_mismatch',
-  invalid_login: 'superAdminOverview.loginAttempts.reason.invalid_login',
-};
-
 const normalizeClientIdValue = (value) => String(value || '').trim().toLowerCase();
 
 const getEffectiveConnectionStatus = (instance) => {
@@ -174,25 +138,6 @@ const formatDateTime = (value, language) => {
   }
 };
 
-const formatLoginReason = (reason, t) => {
-  const normalized = String(reason || '').trim();
-  if (!normalized) return '-';
-  const labelKey = loginReasonLabelKeys[normalized];
-  return labelKey ? t(labelKey) : normalized.replace(/_/g, ' ');
-};
-
-const triggerBlobDownload = (blob, fileName) => {
-  if (typeof document === 'undefined' || !blob) return;
-  const url = globalThis.URL.createObjectURL(blob);
-  const link = document.createElement('a');
-  link.href = url;
-  link.download = fileName || 'smart-sauna-raw-log.log';
-  document.body.appendChild(link);
-  link.click();
-  link.remove();
-  globalThis.URL.revokeObjectURL(url);
-};
-
 const toMetricSnapshot = (payload) => {
   const generatedAt = Date.parse(String(payload?.generatedAt || ''));
   if (!Number.isFinite(generatedAt)) return null;
@@ -209,9 +154,6 @@ const toMetricSnapshot = (payload) => {
       dashboards: Number(totals.dashboards || 0),
       activeSessions: Number(totals.activeSessions || 0),
       onlineSessions: Number(totals.onlineSessions || 0),
-      logs: Number(totals.logs || 0),
-      appActions: Number(totals.appActions || 0),
-      loginAttempts: Number(totals.loginAttempts || 0),
     },
   };
 };
@@ -339,7 +281,6 @@ export default function SuperAdminOverview({
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState('');
-  const [downloadingRawLog, setDownloadingRawLog] = useState(false);
   const [activeKpiKey, setActiveKpiKey] = useState('');
   const [historyWindowKey, setHistoryWindowKey] = useState('24h');
   const [kpiHistory, setKpiHistory] = useState(() => readKpiHistory());
@@ -390,20 +331,6 @@ export default function SuperAdminOverview({
     return () => window.clearInterval(intervalId);
   }, [loadOverview]);
 
-  const handleDownloadRawLog = useCallback(async () => {
-    if (!userAdminApi?.downloadPlatformRawLog) return;
-    setDownloadingRawLog(true);
-    setError('');
-    try {
-      const result = await userAdminApi.downloadPlatformRawLog();
-      triggerBlobDownload(result.blob, result.fileName || 'smart-sauna-raw-log.log');
-    } catch (downloadError) {
-      setError(downloadError?.message || t('superAdminOverview.rawLog.downloadFailed'));
-    } finally {
-      setDownloadingRawLog(false);
-    }
-  }, [userAdminApi, t]);
-
   const totals = useMemo(
     () => (overview?.totals && typeof overview.totals === 'object' ? overview.totals : {}),
     [overview?.totals],
@@ -429,27 +356,6 @@ export default function SuperAdminOverview({
         return (Number.isFinite(bTs) ? bTs : 0) - (Number.isFinite(aTs) ? aTs : 0);
       }),
     [sessions],
-  );
-  const recentLogs = useMemo(
-    () => (Array.isArray(overview?.recentLogs) ? overview.recentLogs : []),
-    [overview?.recentLogs],
-  );
-  const recentAppActions = useMemo(
-    () => (Array.isArray(overview?.recentAppActions) ? overview.recentAppActions : []),
-    [overview?.recentAppActions],
-  );
-  const recentLoginAttempts = useMemo(
-    () => (Array.isArray(overview?.recentLoginAttempts) ? overview.recentLoginAttempts : []),
-    [overview?.recentLoginAttempts],
-  );
-  const recentRawLogLines = useMemo(
-    () => (Array.isArray(overview?.recentRawLogLines) ? overview.recentRawLogLines : []),
-    [overview?.recentRawLogLines],
-  );
-  const rawLogMaxLines = Number(overview?.rawLogMaxLines || 2000);
-  const failedLoginAttemptCount = useMemo(
-    () => recentLoginAttempts.filter((attempt) => attempt?.status !== 'success').length,
-    [recentLoginAttempts],
   );
   const generatedAt = overview?.generatedAt || null;
   const remoteHealthOverview = useMemo(
@@ -596,33 +502,10 @@ export default function SuperAdminOverview({
       value: totals.onlineSessions || 0,
       tone: Number(totals.onlineSessions || 0) > 0 ? 'good' : 'neutral',
     },
-    {
-      key: 'loginAttempts',
-      icon: LogIn,
-      label: t('superAdminOverview.stats.loginAttempts'),
-      value: totals.loginAttempts || recentLoginAttempts.length || 0,
-      tone: failedLoginAttemptCount > 0 ? 'warn' : 'neutral',
-    },
-    {
-      key: 'logs',
-      icon: Activity,
-      label: t('superAdminOverview.stats.logs'),
-      value: totals.logs || 0,
-      tone: 'neutral',
-    },
-    {
-      key: 'appActions',
-      icon: Activity,
-      label: t('superAdminOverview.stats.appActions'),
-      value: totals.appActions || 0,
-      tone: 'neutral',
-    },
   ]), [
     connectionStats.connections,
     connectionStats.issueConnections,
     connectionStats.readyConnections,
-    failedLoginAttemptCount,
-    recentLoginAttempts.length,
     t,
     totals,
   ]);
@@ -730,38 +613,10 @@ export default function SuperAdminOverview({
             value: session.lastActivityLabel || session.lastActivityPath || t('superAdminOverview.sessions.unknownActivity'),
             date: session.lastSeenAt || session.lastActivityAt || session.createdAt,
           }));
-      case 'loginAttempts':
-        return recentLoginAttempts.map((attempt, index) => {
-          const status = loginStatusTheme[attempt?.status] || loginStatusTheme.failed;
-          return {
-            id: attempt.id || attempt.requestId || `login-${index}`,
-            title: `${attempt.username || '-'} / ${attempt.clientId || '-'}`,
-            subtitle: `${t('superAdminOverview.loginAttempts.ip')}: ${attempt.ipAddress || '-'} • ${attempt.deviceLabel || attempt.deviceType || '-'}`,
-            value: formatLoginReason(attempt.reason, t),
-            status: status.rowStatus,
-            date: attempt.createdAt,
-          };
-        });
-      case 'logs':
-        return recentLogs.map((log) => ({
-          id: log.id,
-          title: `${log.clientId} / ${log.dashboardId}`,
-          subtitle: `${t('superAdminOverview.logs.savedBy')}: ${log.createdByUsername || log.createdBy || '-'}`,
-          value: log.type || 'log',
-          date: log.createdAt,
-        }));
-      case 'appActions':
-        return recentAppActions.map((entry, index) => ({
-          id: entry.id || `${entry.clientId || 'client'}_${entry.createdAt || index}`,
-          title: `${entry.clientName || entry.clientId || '-'} / ${entry.entityName || entry.entityId || '-'}`,
-          subtitle: `${t('superAdminOverview.appActions.actor')}: ${entry?.actor?.username || entry?.actor?.id || '-'}`,
-          value: [entry.domain, entry.service].filter(Boolean).join('.') || t('superAdminOverview.appActions.fallback'),
-          date: entry.createdAt || null,
-        }));
       default:
         return [];
     }
-  }, [activeKpiKey, clients, instances, issues, recentLogs, recentAppActions, recentLoginAttempts, sortedSessions, t]);
+  }, [activeKpiKey, clients, instances, issues, sortedSessions, t]);
 
   return (
     <div className="page-transition flex flex-col gap-4 md:gap-6 font-sans" data-disable-pull-refresh="true">
@@ -939,7 +794,7 @@ export default function SuperAdminOverview({
             </div>
           </section>
 
-          <section className="grid grid-cols-1 xl:grid-cols-[1.35fr_0.65fr] gap-4">
+          <section className="grid grid-cols-1 gap-4">
             <div className="popup-surface rounded-3xl p-4 md:p-5 border border-[var(--glass-border)]">
               <div className="flex items-center justify-between gap-3 mb-4">
                 <h3 className="text-xs md:text-sm font-bold uppercase tracking-[0.2em] text-[var(--text-secondary)]">
@@ -1000,168 +855,6 @@ export default function SuperAdminOverview({
                   ))}
                 </div>
               )}
-            </div>
-
-            <div className="flex flex-col gap-4">
-              <div className="popup-surface rounded-3xl p-4 md:p-5 border border-[var(--glass-border)]">
-                <div className="flex items-center justify-between gap-3 mb-4">
-                  <div>
-                    <h3 className="text-xs md:text-sm font-bold uppercase tracking-[0.2em] text-[var(--text-secondary)]">
-                      {t('superAdminOverview.sections.loginAttempts')}
-                    </h3>
-                    <p className="mt-1 inline-flex items-center gap-2 text-[10px] uppercase tracking-[0.16em] text-[var(--text-muted)]">
-                      <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                      {t('superAdminOverview.loginAttempts.live')}
-                    </p>
-                  </div>
-                  <LogIn className="w-4 h-4 text-[var(--text-muted)]" />
-                </div>
-
-                {recentLoginAttempts.length === 0 ? (
-                  <p className="text-sm text-[var(--text-secondary)]">{t('superAdminOverview.loginAttempts.empty')}</p>
-                ) : (
-                  <div className="space-y-2 max-h-[36vh] overflow-y-auto custom-scrollbar pr-1">
-                    {recentLoginAttempts.map((attempt, index) => {
-                      const status = loginStatusTheme[attempt?.status] || loginStatusTheme.failed;
-                      return (
-                        <div
-                          key={attempt.id || attempt.requestId || `login-${index}`}
-                          className="rounded-xl border border-[var(--glass-border)] bg-[var(--glass-bg)] px-3 py-2.5"
-                        >
-                          <div className="flex items-start justify-between gap-2">
-                            <div className="min-w-0">
-                              <p className="text-xs font-semibold text-[var(--text-primary)] truncate">
-                                {attempt.username || '-'}
-                              </p>
-                              <p className="text-[10px] uppercase tracking-[0.14em] text-[var(--text-muted)] truncate">
-                                {t('superAdminOverview.client.id')}: {attempt.clientId || '-'}
-                              </p>
-                            </div>
-                            <span className={`shrink-0 px-2 py-1 rounded-full text-[10px] uppercase tracking-[0.14em] ${status.className}`}>
-                              {t(status.labelKey)}
-                            </span>
-                          </div>
-
-                          <p className="mt-2 text-[11px] text-[var(--text-secondary)]">
-                            {t('superAdminOverview.loginAttempts.reasonLabel')}: {formatLoginReason(attempt.reason, t)}
-                          </p>
-                          <div className="mt-2 grid grid-cols-2 gap-2 text-[11px]">
-                            <div className="rounded-lg border border-[var(--glass-border)] bg-[var(--card-bg)] px-2 py-1.5">
-                              <p className="text-[10px] uppercase tracking-[0.12em] text-[var(--text-muted)]">{t('superAdminOverview.loginAttempts.ip')}</p>
-                              <p className="text-[var(--text-primary)] truncate">{attempt.ipAddress || '-'}</p>
-                            </div>
-                            <div className="rounded-lg border border-[var(--glass-border)] bg-[var(--card-bg)] px-2 py-1.5">
-                              <p className="text-[10px] uppercase tracking-[0.12em] text-[var(--text-muted)]">{t('superAdminOverview.loginAttempts.device')}</p>
-                              <p className="text-[var(--text-primary)] truncate">{attempt.deviceLabel || attempt.deviceType || '-'}</p>
-                            </div>
-                          </div>
-                          <div className="mt-2 flex flex-wrap items-center justify-between gap-2 text-[10px] uppercase tracking-[0.12em] text-[var(--text-muted)]">
-                            <span>{formatDateTime(attempt.createdAt, language)}</span>
-                            <span>{t('superAdminOverview.loginAttempts.requestId')}: {attempt.requestId || '-'}</span>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
-
-              <div className="popup-surface rounded-3xl p-4 md:p-5 border border-[var(--glass-border)]">
-                <div className="flex items-start justify-between gap-3 mb-4">
-                  <div>
-                    <h3 className="text-xs md:text-sm font-bold uppercase tracking-[0.2em] text-[var(--text-secondary)]">
-                      {t('superAdminOverview.sections.rawLog')}
-                    </h3>
-                    <p className="mt-1 text-[10px] uppercase tracking-[0.16em] text-[var(--text-muted)]">
-                      {t('superAdminOverview.rawLog.maxLines')}: {formatNumber(totals.rawLogLines || recentRawLogLines.length || 0)} / {formatNumber(rawLogMaxLines)}
-                    </p>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={handleDownloadRawLog}
-                    disabled={downloadingRawLog || !userAdminApi?.downloadPlatformRawLog}
-                    className="shrink-0 inline-flex items-center justify-center gap-2 px-3 py-2 rounded-xl border border-[var(--glass-border)] bg-[var(--glass-bg)] text-[var(--text-primary)] text-[10px] font-bold uppercase tracking-[0.16em] hover:bg-[var(--glass-bg-hover)] transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
-                  >
-                    {downloadingRawLog ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
-                    {downloadingRawLog ? t('superAdminOverview.rawLog.downloading') : t('superAdminOverview.rawLog.download')}
-                  </button>
-                </div>
-
-                {recentRawLogLines.length === 0 ? (
-                  <p className="text-sm text-[var(--text-secondary)]">{t('superAdminOverview.rawLog.empty')}</p>
-                ) : (
-                  <pre className="max-h-[36vh] overflow-auto custom-scrollbar rounded-xl border border-[var(--glass-border)] bg-black/30 p-3 text-[10px] leading-relaxed text-[var(--text-secondary)] whitespace-pre-wrap break-words">
-                    {recentRawLogLines.join('\n')}
-                  </pre>
-                )}
-              </div>
-
-              <div className="popup-surface rounded-3xl p-4 md:p-5 border border-[var(--glass-border)]">
-                <div className="flex items-center justify-between gap-3 mb-4">
-                  <h3 className="text-xs md:text-sm font-bold uppercase tracking-[0.2em] text-[var(--text-secondary)]">
-                    {t('superAdminOverview.sections.logs')}
-                  </h3>
-                  <Server className="w-4 h-4 text-[var(--text-muted)]" />
-                </div>
-
-                {recentLogs.length === 0 ? (
-                  <p className="text-sm text-[var(--text-secondary)]">{t('superAdminOverview.logs.empty')}</p>
-                ) : (
-                  <div className="space-y-2 max-h-[28vh] overflow-y-auto custom-scrollbar pr-1">
-                    {recentLogs.map((log) => (
-                      <div
-                        key={log.id}
-                        className="rounded-xl border border-[var(--glass-border)] bg-[var(--glass-bg)] px-3 py-2.5"
-                      >
-                        <p className="text-xs font-semibold text-[var(--text-primary)]">
-                          {log.clientId} / {log.dashboardId}
-                        </p>
-                        <p className="text-[11px] text-[var(--text-secondary)] mt-0.5">
-                          {t('superAdminOverview.logs.savedBy')}: {log.createdByUsername || log.createdBy || '-'}
-                        </p>
-                        <p className="text-[10px] uppercase tracking-[0.14em] text-[var(--text-muted)] mt-1">
-                          {formatDateTime(log.createdAt, language)}
-                        </p>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-
-              <div className="popup-surface rounded-3xl p-4 md:p-5 border border-[var(--glass-border)]">
-                <div className="flex items-center justify-between gap-3 mb-4">
-                  <h3 className="text-xs md:text-sm font-bold uppercase tracking-[0.2em] text-[var(--text-secondary)]">
-                    {t('superAdminOverview.sections.appActions')}
-                  </h3>
-                  <Activity className="w-4 h-4 text-[var(--text-muted)]" />
-                </div>
-
-                {recentAppActions.length === 0 ? (
-                  <p className="text-sm text-[var(--text-secondary)]">{t('superAdminOverview.appActions.empty')}</p>
-                ) : (
-                  <div className="space-y-2 max-h-[30vh] overflow-y-auto custom-scrollbar pr-1">
-                    {recentAppActions.map((entry, index) => (
-                      <div
-                        key={entry.id || `${entry.clientId || 'client'}_${entry.createdAt || index}`}
-                        className="rounded-xl border border-[var(--glass-border)] bg-[var(--glass-bg)] px-3 py-2.5"
-                      >
-                        <p className="text-xs font-semibold text-[var(--text-primary)]">
-                          {entry.clientName || entry.clientId || '-'} / {entry.entityName || entry.entityId || '-'}
-                        </p>
-                        <p className="text-[11px] text-[var(--text-secondary)] mt-0.5">
-                          {[entry.domain, entry.service].filter(Boolean).join('.') || t('superAdminOverview.appActions.fallback')}
-                        </p>
-                        <p className="text-[11px] text-[var(--text-secondary)] mt-0.5">
-                          {t('superAdminOverview.appActions.actor')}: {entry?.actor?.username || entry?.actor?.id || '-'}
-                        </p>
-                        <p className="text-[10px] uppercase tracking-[0.14em] text-[var(--text-muted)] mt-1">
-                          {formatDateTime(entry.createdAt, language)}
-                        </p>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
             </div>
           </section>
 

@@ -9,6 +9,7 @@ import {
   Check,
   Edit2,
   LayoutGrid,
+  LogIn,
   Settings,
   Server,
   Wifi,
@@ -32,6 +33,7 @@ import {
   PageNavigation,
   PersonStatus,
   SuperAdminBackupsPage,
+  SuperAdminLoggingPage,
   SuperAdminNetworkPage,
   SuperAdminOverview,
 } from './components';
@@ -136,6 +138,7 @@ import { DEFAULT_NOTIFICATION_CONFIG, normalizeNotificationConfig } from './util
 const SUPER_ADMIN_OVERVIEW_PAGE_ID = '__super_admin_overview';
 const SUPER_ADMIN_BACKUPS_PAGE_ID = '__super_admin_backups';
 const SUPER_ADMIN_NETWORK_PAGE_ID = '__super_admin_network';
+const SUPER_ADMIN_LOGGING_PAGE_ID = '__super_admin_logging';
 const ADMIN_SETTINGS_PAGE_ID = '__admin_settings';
 const ADMIN_NOTIFICATIONS_PAGE_ID = '__admin_notifications';
 const ADMIN_USERS_PAGE_ID = '__admin_users';
@@ -447,6 +450,7 @@ function AppContent({
   const superAdminFixedPages = useMemo(() => ([
     SUPER_ADMIN_NETWORK_PAGE_ID,
     SUPER_ADMIN_BACKUPS_PAGE_ID,
+    SUPER_ADMIN_LOGGING_PAGE_ID,
     ADMIN_SETTINGS_PAGE_ID,
     ADMIN_NOTIFICATIONS_PAGE_ID,
     ADMIN_USERS_PAGE_ID,
@@ -1993,6 +1997,7 @@ function AppContent({
     [SUPER_ADMIN_OVERVIEW_PAGE_ID]: { label: t('superAdminOverview.pageLabel'), icon: Server },
     [SUPER_ADMIN_NETWORK_PAGE_ID]: { label: t('superAdminNetwork.pageLabel'), icon: Wifi, locked: true },
     [SUPER_ADMIN_BACKUPS_PAGE_ID]: { label: t('superAdminBackups.pageLabel'), icon: Archive, locked: true },
+    [SUPER_ADMIN_LOGGING_PAGE_ID]: { label: t('superAdminLogging.pageLabel'), icon: LogIn, locked: true },
     [ADMIN_SETTINGS_PAGE_ID]: { label: t('system.tabConnection'), icon: Settings, locked: true },
     [ADMIN_NOTIFICATIONS_PAGE_ID]: { label: t('system.tabNotifications'), icon: Bell, locked: true },
     [ADMIN_USERS_PAGE_ID]: { label: t('userMgmt.menu'), icon: User, locked: true },
@@ -2015,6 +2020,7 @@ function AppContent({
     if (activePage === SUPER_ADMIN_OVERVIEW_PAGE_ID) return t('superAdminOverview.pageLabel');
     if (activePage === SUPER_ADMIN_NETWORK_PAGE_ID) return t('superAdminNetwork.pageLabel');
     if (activePage === SUPER_ADMIN_BACKUPS_PAGE_ID) return t('superAdminBackups.pageLabel');
+    if (activePage === SUPER_ADMIN_LOGGING_PAGE_ID) return t('superAdminLogging.pageLabel');
     if (activePage === ADMIN_SETTINGS_PAGE_ID) return t('system.tabConnection');
     if (activePage === ADMIN_NOTIFICATIONS_PAGE_ID) return t('system.tabNotifications');
     if (activePage === ADMIN_USERS_PAGE_ID) return t('userMgmt.menu');
@@ -2751,6 +2757,15 @@ function AppContent({
                 isMobile={isMobile}
               />
             </div>
+          ) : activePage === SUPER_ADMIN_LOGGING_PAGE_ID && isPlatformAdmin ? (
+            <div key={activePage} className={pageTransitionClass}>
+              <SuperAdminLoggingPage
+                t={t}
+                language={language}
+                userAdminApi={userAdminApi}
+                isMobile={isMobile}
+              />
+            </div>
           ) : isSuperAdminUtilityPage ? (
             <div key={activePage} className={pageTransitionClass}>
               <ModalSuspense>
@@ -3170,7 +3185,7 @@ export default function App() {
     const globalVersion = Date.parse(String(globalBranding?.updatedAt || '')) || 0;
     const withVersion = appendLogoVersion(configured, globalVersion || getStoredHeaderLogoVersion());
     return withVersion || '/logo.png';
-  }, [currentUser, currentTheme, globalBranding]);
+  }, [currentTheme, globalBranding]);
   const loginTitle = String(globalBranding?.title || 'Smart Sauna Systems').trim() || 'Smart Sauna Systems';
 
   const clearHaRuntimeConfig = useCallback(() => {
