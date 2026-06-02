@@ -379,7 +379,6 @@ export default function SaunaCard({
 
   const tempEntity = settings?.tempEntityId ? entities?.[settings.tempEntityId] : null;
   const thermostatEntity = settings?.thermostatEntityId ? entities?.[settings.thermostatEntityId] : null;
-  const motionEntity = settings?.motionEntityId ? entities?.[settings.motionEntityId] : null;
   const flameEntity = settings?.flameEntityId ? entities?.[settings.flameEntityId] : null;
 
   const preheatMinutesEntity = settings?.preheatMinutesEntityId ? entities?.[settings.preheatMinutesEntityId] : null;
@@ -401,6 +400,13 @@ export default function SaunaCard({
   const lockIds = useMemo(() => asArray(settings?.lockEntityIds), [settings?.lockEntityIds]);
   const doorIds = useMemo(() => asArray(settings?.doorEntityIds), [settings?.doorEntityIds]);
   const fanIds = useMemo(() => asArray(settings?.fanEntityIds), [settings?.fanEntityIds]);
+  const switchIds = useMemo(() => asArray(settings?.switchEntityIds), [settings?.switchEntityIds]);
+  const motionIds = useMemo(() => {
+    const ids = asArray(settings?.motionEntityIds);
+    const legacyId = String(settings?.motionEntityId || '').trim();
+    if (!legacyId || ids.includes(legacyId)) return ids;
+    return [legacyId, ...ids];
+  }, [settings?.motionEntityId, settings?.motionEntityIds]);
   const thermostatIds = useMemo(() => asArray(settings?.thermostatEntityIds), [settings?.thermostatEntityIds]);
   const codeIds = useMemo(() => asArray(settings?.codeEntityIds), [settings?.codeEntityIds]);
   const tempOverviewIds = useMemo(() => asArray(settings?.tempOverviewEntityIds), [settings?.tempOverviewEntityIds]);
@@ -411,7 +417,6 @@ export default function SaunaCard({
   const tempIsValid = Number.isFinite(currentTemp);
 
   const thermostatOn = isOnish(thermostatEntity?.state);
-  const motionOn = isOnish(motionEntity?.state);
   const flameOn = isOnish(flameEntity?.state);
   const peopleNow = peopleNowEntity?.state ?? '0';
 
@@ -419,6 +424,9 @@ export default function SaunaCard({
   const unlockedDoors = lockIds.filter((id) => norm(entities?.[id]?.state) === 'unlocked').length;
   const openDoors = countOn(doorIds, entities);
   const activeFans = countOn(fanIds, entities);
+  const activeSwitches = countOn(switchIds, entities);
+  const activeMotion = countOn(motionIds, entities);
+  const motionOn = activeMotion > 0;
   const activeThermostats = countOn(thermostatIds, entities);
   const autoLockOn = isOn(autoLockEntity?.state);
 
@@ -739,12 +747,13 @@ export default function SaunaCard({
     settings?.showThermostat !== false && { key: 'thermostat', icon: iconFor(settings?.thermostatIcon, Shield), title: tr('sauna.thermostat', 'Termostat'), value: thermostatOn ? tr('common.on', 'På') : tr('common.off', 'Av'), active: thermostatOn, onClick: () => openFieldModal(tr('sauna.thermostat', 'Termostat'), [settings?.thermostatEntityId]), clickable: Boolean(settings?.thermostatEntityId), category: 'control' },
     settings?.showLights !== false && { key: 'lights', icon: iconFor(settings?.lightsIcon, Lightbulb), title: tr('sauna.lights', 'Lys'), value: lightIds.length ? `${lightsOn}/${lightIds.length} ${tr('common.on', 'på')}` : '--', active: lightsOn > 0, onClick: openGlobalLightModal, clickable: Boolean(settings?.lightsModalEntityId || lightIds?.length), category: 'control' },
     settings?.showFans !== false && { key: 'fans', icon: iconFor(settings?.fansIcon, Fan), title: tr('sauna.fans', 'Vifter'), value: fanIds.length ? `${activeFans}/${fanIds.length} ${tr('common.on', 'på')}` : '--', active: activeFans > 0, onClick: () => openFieldModal(tr('sauna.fans', 'Vifter'), fanIds, { fieldType: 'fan' }), clickable: fanIds.length > 0, category: 'control' },
+    settings?.showSwitches !== false && switchIds.length > 0 && { key: 'switches', icon: iconFor(settings?.switchesIcon, ToggleRight), title: tr('sauna.switches', 'Brytere'), value: `${activeSwitches}/${switchIds.length} ${tr('common.on', 'på')}`, active: activeSwitches > 0, onClick: () => openFieldModal(tr('sauna.switches', 'Brytere'), switchIds, { fieldType: 'switch' }), clickable: switchIds.length > 0, category: 'control' },
     settings?.showThermostatOverview !== false && { key: 'thermostatGroup', icon: iconFor(settings?.thermostatsIcon, Shield), title: tr('sauna.thermostats', 'Termostater'), value: thermostatIds.length ? `${activeThermostats}/${thermostatIds.length} ${tr('common.on', 'på')}` : '--', active: activeThermostats > 0, onClick: () => openFieldModal(tr('sauna.thermostats', 'Termostater'), thermostatIds), clickable: thermostatIds.length > 0, category: 'control' },
     settings?.showActiveCodes !== false && { key: 'codes', icon: iconFor(settings?.codesIcon, Hash), title: tr('sauna.activeCodes', 'Aktive koder'), value: codeIds.length ? `${codeIds.length}` : '--', active: codeIds.length > 0, onClick: () => openFieldModal(tr('sauna.activeCodes', 'Aktive koder'), codeIds, { fieldType: 'number', numberMode: 'code', numberMaxDigits: 4 }), clickable: codeIds.length > 0, category: 'safety' },
     settings?.showAutoLock !== false && { key: 'autoLock', icon: iconFor(settings?.autoLockIcon, ToggleRight), title: tr('sauna.autoLock', 'Autolåsing'), value: autoLockOn ? tr('common.on', 'På') : tr('common.off', 'Av'), active: autoLockOn, onClick: () => openFieldModal(tr('sauna.autoLock', 'Autolåsing'), [settings?.autoLockEntityId], { fieldType: 'switch' }), clickable: Boolean(settings?.autoLockEntityId), category: 'safety' },
     settings?.showDoors !== false && { key: 'doors', icon: iconFor(settings?.doorsIcon, DoorOpen), title: tr('sauna.doors', 'Dør'), value: `${openDoors} ${openDoors === 1 ? tr('sauna.openShort', 'åpen') : tr('sauna.openShortPlural', 'åpne')}`, active: openDoors > 0, onClick: () => openFieldModal(tr('sauna.doors', 'Dører'), doorIds, { fieldType: 'door' }), clickable: doorIds.length > 0, category: 'safety' },
     settings?.showLocks !== false && { key: 'locks', icon: iconFor(settings?.locksIcon, Lock), title: tr('sauna.locks', 'Lås'), value: `${unlockedDoors} ${unlockedDoors === 1 ? tr('sauna.unlockedShort', 'ulåst') : tr('sauna.unlockedShortPlural', 'ulåste')}`, active: unlockedDoors > 0, onClick: () => openFieldModal(tr('sauna.locks', 'Låser'), lockIds, { fieldType: 'lock' }), clickable: lockIds.length > 0, category: 'safety' },
-    settings?.showMotion !== false && { key: 'motion', icon: iconFor(settings?.motionIcon, Activity), title: tr('sauna.motion', 'Bevegelse'), value: motionOn ? tr('sauna.motionDetected', 'Registrert') : tr('sauna.noMotion', 'Ingen'), active: motionOn, onClick: () => openFieldModal(tr('sauna.motion', 'Bevegelse'), [settings?.motionEntityId], { fieldType: 'motion' }), clickable: Boolean(settings?.motionEntityId), category: 'safety' },
+    settings?.showMotion !== false && { key: 'motion', icon: iconFor(settings?.motionIcon, Activity), title: tr('sauna.motion', 'Bevegelse'), value: motionOn ? (motionIds.length > 1 ? `${activeMotion}/${motionIds.length} ${tr('sauna.motionDetected', 'Registrert').toLowerCase()}` : tr('sauna.motionDetected', 'Registrert')) : tr('sauna.noMotion', 'Ingen'), active: motionOn, onClick: () => openFieldModal(tr('sauna.motion', 'Bevegelse'), motionIds, { fieldType: 'motion' }), clickable: motionIds.length > 0, category: 'safety' },
   ].filter(Boolean);
 
   const controlStats = statItems.filter((item) => item.category === 'control');

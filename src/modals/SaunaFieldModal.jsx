@@ -561,7 +561,7 @@ export default function SaunaFieldModal({
                     <ToggleRight className="w-5 h-5 text-[var(--text-secondary)]" />
                   </div>
                   <div className="min-w-0">
-                    <div className="text-sm md:text-base font-bold truncate">{tr('common.switch', 'Bryter')}</div>
+                    <div className="text-sm md:text-base font-bold truncate">{tr('sauna.switches', 'Brytere')}</div>
                     <div className="text-[10px] uppercase tracking-widest text-[var(--text-secondary)]">{switchEntityIds.length} {tr('common.entities', 'entiteter')}</div>
                   </div>
                 </div>

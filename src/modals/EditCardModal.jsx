@@ -2033,6 +2033,7 @@ export default function EditCardModal({
               { key: 'showLocks', label: translateText('sauna.showLocks', 'Show locks') },
               { key: 'showDoors', label: translateText('sauna.showDoors', 'Show doors') },
               { key: 'showFans', label: translateText('sauna.showFans', 'Show fans') },
+              { key: 'showSwitches', label: translateText('sauna.showSwitches', 'Show switches') },
               { key: 'showThermostatOverview', label: translateText('sauna.showThermostatOverview', 'Show thermostat overview') },
               { key: 'showActiveCodes', label: translateText('sauna.showActiveCodes', 'Show active codes') },
               { key: 'showTempOverview', label: translateText('sauna.showTempOverview', 'Show temperature overview') },
@@ -2108,14 +2109,6 @@ export default function EditCardModal({
                 filter: (id) => id.startsWith('climate.') || id.startsWith('switch.') || id.startsWith('input_boolean.'),
               },
               {
-                key: 'motionEntityId',
-                label: translateText('sauna.motionEntity', 'Bevegelse - sensor'),
-                filter: (id) => {
-                  const e = entities[id];
-                  return e && id.startsWith('binary_sensor.') && ['motion', 'occupancy', 'presence'].includes(String(e.attributes?.device_class || ''));
-                },
-              },
-              {
                 key: 'flameEntityId',
                 label: translateText('sauna.flameEntity', 'Varme/Flamme - bryter'),
                 filter: (id) => id.startsWith('switch.') || id.startsWith('input_boolean.') || id.startsWith('binary_sensor.'),
@@ -2136,6 +2129,11 @@ export default function EditCardModal({
                 return id.startsWith('binary_sensor.') && ['door', 'window', 'opening'].includes(dc);
               }},
               { key: 'fanEntityIds', label: translateText('sauna.fanEntities', 'Vifter - entiteter'), filter: (id) => id.startsWith('fan.') || id.startsWith('switch.') },
+              { key: 'switchEntityIds', label: translateText('sauna.switchEntities', 'Brytere - entiteter'), filter: (id) => id.startsWith('switch.') || id.startsWith('input_boolean.') },
+              { key: 'motionEntityIds', legacyKey: 'motionEntityId', label: translateText('sauna.motionEntities', 'Bevegelse - sensorer'), filter: (id) => {
+                const e = entities[id];
+                return e && id.startsWith('binary_sensor.') && ['motion', 'occupancy', 'presence'].includes(String(e.attributes?.device_class || ''));
+              }},
               { key: 'thermostatEntityIds', label: translateText('sauna.thermostatEntities', 'Termostater - entiteter'), filter: (id) => id.startsWith('climate.') || id.startsWith('switch.') || id.startsWith('input_boolean.') },
               { key: 'codeEntityIds', label: translateText('sauna.codeEntities', 'Aktive koder - entiteter'), filter: (id) => id.startsWith('input_number.') || id.startsWith('number.') || id.startsWith('sensor.') },
               { key: 'tempOverviewEntityIds', label: translateText('sauna.tempOverviewEntities', 'Temperaturoversikt - sensorer'), filter: (id) => {
@@ -2232,7 +2230,9 @@ export default function EditCardModal({
                 })}
 
                 {multiSelectors.map((opt) => {
-                  const selected = Array.isArray(editSettings[opt.key]) ? editSettings[opt.key] : [];
+                  const selectedFromKey = Array.isArray(editSettings[opt.key]) ? editSettings[opt.key] : [];
+                  const legacySelection = opt.legacyKey ? String(editSettings[opt.legacyKey] || '').trim() : '';
+                  const selected = Array.from(new Set([...selectedFromKey, legacySelection].filter(Boolean)));
                   const matching = allEntityIds.filter(opt.filter).sort((a, b) => (entities[a]?.attributes?.friendly_name || a).localeCompare(entities[b]?.attributes?.friendly_name || b));
                   const query = String(saunaMultiSearch?.[opt.key] || '').toLowerCase().trim();
                   const filtered = query
@@ -2264,6 +2264,7 @@ export default function EditCardModal({
                               onClick={() => {
                                 const next = isSelected ? selected.filter((x) => x !== id) : [...selected, id];
                                 saveCardSetting(editSettingsKey, opt.key, next);
+                                if (opt.legacyKey) saveCardSetting(editSettingsKey, opt.legacyKey, null);
                               }}
                               className={`w-full text-left px-3 py-2 rounded-xl transition-colors ${isSelected ? 'text-blue-400' : 'text-[var(--text-secondary)] hover:bg-[var(--glass-bg-hover)]'}`}
                             >
@@ -2287,6 +2288,7 @@ export default function EditCardModal({
                       { key: 'locksIcon', label: t('sauna.unlocked') || 'Locks' },
                       { key: 'doorsIcon', label: t('sauna.doorsOpen') || 'Doors' },
                       { key: 'fansIcon', label: t('sauna.fans') || 'Fans' },
+                      { key: 'switchesIcon', label: t('sauna.switches') || 'Switches' },
                       { key: 'thermostatsIcon', label: t('sauna.thermostats') || 'Thermostats' },
                       { key: 'codesIcon', label: t('sauna.activeCodes') || 'Codes' },
                       { key: 'autoLockIcon', label: t('sauna.autoLock') || 'Auto lock' },

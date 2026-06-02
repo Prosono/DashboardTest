@@ -219,6 +219,7 @@ export const handleAddSelected = (ctx) => {
         showLocks: true,
         showDoors: true,
         showFans: true,
+        showSwitches: true,
         showThermostatOverview: true,
         showActiveCodes: true,
         showTempOverview: true,
