@@ -164,6 +164,10 @@ if (isProduction) {
     };
 
     app.get(['/', '/index.html'], sendAppShell);
+    app.get('/logo.png', (_req, res) => {
+      res.setHeader('Cache-Control', 'no-store');
+      return res.redirect(302, '/favicon.png?v=2026-06-09-smart-sauna-logo');
+    });
 
     const assetsPath = join(distPath, 'assets');
     if (existsSync(assetsPath)) {

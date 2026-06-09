@@ -1,5 +1,5 @@
 import { Edit2 } from '../icons';
-import { appendLogoVersion, getLogoForTheme, resolveLogoUrl } from '../utils/branding';
+import { appendLogoVersion, getLogoForTheme, handleLogoImageError, resolveLogoUrl } from '../utils/branding';
 
 /**
  * Header component with title, time and edit controls
@@ -94,6 +94,7 @@ export default function Header({
                 alt="Header logo"
                 className="h-12 w-auto md:h-14 object-contain select-none"
                 loading="lazy"
+                onError={handleLogoImageError}
               />
             )}
             {headerSettings.showTitle && (

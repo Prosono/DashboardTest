@@ -1,4 +1,5 @@
 const ABSOLUTE_URL_PATTERN = /^[a-zA-Z][a-zA-Z\d+\-.]*:/;
+export const DEFAULT_LOGO_URL = '/favicon.png?v=2026-06-09-smart-sauna-logo';
 const LOGO_OVERRIDES_KEY = 'tunet_header_logo_overrides';
 const normalizeThemeKey = (theme) => String(theme || '').trim().toLowerCase();
 
@@ -109,9 +110,29 @@ const withQueryParam = (url, key, value) => {
 };
 
 export const appendLogoVersion = (url, version) => {
+  const raw = String(url || '').trim();
   const stamp = Number(version);
-  if (!Number.isFinite(stamp) || stamp <= 0) return String(url || '').trim();
-  return withQueryParam(url, 'logo_v', Math.trunc(stamp));
+  if (!Number.isFinite(stamp) || stamp <= 0) return raw;
+  if (/^(data|blob):/i.test(raw)) return raw;
+  return withQueryParam(raw, 'logo_v', Math.trunc(stamp));
+};
+
+export const handleLogoImageError = (event) => {
+  const image = event?.currentTarget;
+  if (!image) return;
+
+  const currentSource = String(image.getAttribute('src') || image.src || '');
+  const normalizedFallback = DEFAULT_LOGO_URL.replace(/^\//, '');
+  const isFallbackSource = currentSource === DEFAULT_LOGO_URL
+    || currentSource.endsWith(DEFAULT_LOGO_URL)
+    || currentSource.endsWith(`/${normalizedFallback}`);
+  if (image.dataset.logoFallback === '1' || isFallbackSource) {
+    image.style.display = 'none';
+    return;
+  }
+
+  image.dataset.logoFallback = '1';
+  image.src = DEFAULT_LOGO_URL;
 };
 
 const getVersionFromSettings = (settings) => {

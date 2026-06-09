@@ -126,9 +126,9 @@ import EditOverlay from './components/ui/EditOverlay';
 import AuroraBackground from './components/effects/AuroraBackground';
 import {
   appendLogoVersion,
+  DEFAULT_LOGO_URL,
   getLogoForTheme,
-  getStoredHeaderLogoUrl,
-  getStoredHeaderLogoVersion,
+  handleLogoImageError,
   resolveLogoUrl,
   saveStoredLogoOverrides,
 } from './utils/branding';
@@ -2457,6 +2457,7 @@ function AppContent({
                   alt="Header logo"
                   className="h-8 w-auto object-contain select-none opacity-95"
                   loading="lazy"
+                  onError={handleLogoImageError}
                 />
               )}
               {(pagesConfig.header || []).map(id => personStatus(id))}
@@ -3179,13 +3180,7 @@ export default function App() {
     }
   }, [currentUser?.isPlatformAdmin]);
 
-  const loginLogoUrl = useMemo(() => {
-    const fromGlobal = getLogoForTheme(globalBranding, currentTheme);
-    const configured = resolveLogoUrl(fromGlobal || getStoredHeaderLogoUrl(currentTheme));
-    const globalVersion = Date.parse(String(globalBranding?.updatedAt || '')) || 0;
-    const withVersion = appendLogoVersion(configured, globalVersion || getStoredHeaderLogoVersion());
-    return withVersion || '/logo.png';
-  }, [currentTheme, globalBranding]);
+  const loginLogoUrl = DEFAULT_LOGO_URL;
   const loginTitle = String(globalBranding?.title || 'Smart Sauna Systems').trim() || 'Smart Sauna Systems';
 
   const clearHaRuntimeConfig = useCallback(() => {
@@ -3540,6 +3535,7 @@ export default function App() {
                 className="w-16 h-16 object-contain select-none"
                 loading="eager"
                 decoding="async"
+                onError={handleLogoImageError}
               />
             </div>
             <h1
