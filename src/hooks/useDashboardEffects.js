@@ -64,7 +64,7 @@ export function useDashboardEffects({
 
   // ── Document title, favicon & viewport meta ────────────────────────────
   useEffect(() => {
-    const browserTitle = 'Smart Sauna';
+    const browserTitle = String(resolvedHeaderTitle || '').trim() || 'Smart Sauna Systems';
     document.title = browserTitle;
 
     let link = document.querySelector("link[rel~='icon']");
@@ -74,7 +74,7 @@ export function useDashboardEffects({
       document.head.appendChild(link);
     }
     link.type = 'image/png';
-    link.href = '/favicon.png';
+    link.href = '/favicon.png?v=2026-06-09-smart-sauna-logo';
 
     let shortcutIcon = document.querySelector("link[rel='shortcut icon']");
     if (!shortcutIcon) {
@@ -83,7 +83,7 @@ export function useDashboardEffects({
       document.head.appendChild(shortcutIcon);
     }
     shortcutIcon.type = 'image/png';
-    shortcutIcon.href = '/favicon.png';
+    shortcutIcon.href = '/favicon.png?v=2026-06-09-smart-sauna-logo';
 
     let meta = document.querySelector("meta[name='viewport']");
     if (!meta) {

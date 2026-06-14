@@ -1,6 +1,7 @@
 {
-  "name": "Smart Sauna",
+  "name": "Smart Sauna Systems",
   "short_name": "Smart Sauna",
+  "description": "Dashboard for booking, temperatur, adgang, varsler og driftsstatus for badstuer.",
   "start_url": "/",
   "display": "standalone",
   "orientation": "portrait",

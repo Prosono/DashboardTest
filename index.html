@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="no">
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/png" href="/favicon.png?v=2026-06-09-smart-sauna-logo" />
@@ -9,7 +9,31 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <meta name="theme-color" content="#f5f7fb" />
     <meta name="apple-mobile-web-app-status-bar-style" content="default" />
-    <title>Smart Sauna</title>
+    <title>Smart Sauna Systems | Drift og booking for badstuer</title>
+    <meta name="description" content="Smart Sauna Systems samler booking, temperatur, adgang, varsler og driftsstatus for badstuer i ett oversiktlig dashboard." />
+    <meta name="robots" content="index,follow,max-snippet:160,max-image-preview:large" />
+    <link rel="canonical" href="https://smartsauna.no/" />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Smart Sauna Systems" />
+    <meta property="og:title" content="Smart Sauna Systems | Drift og booking for badstuer" />
+    <meta property="og:description" content="Få kontroll på badstuedrift med booking, temperatur, adgang, varsler og rapportering samlet i ett dashboard." />
+    <meta property="og:url" content="https://smartsauna.no/" />
+    <meta property="og:image" content="https://smartsauna.no/favicon.png?v=2026-06-09-smart-sauna-logo" />
+    <meta name="twitter:card" content="summary" />
+    <meta name="twitter:title" content="Smart Sauna Systems | Drift og booking for badstuer" />
+    <meta name="twitter:description" content="Booking, temperatur, adgang, varsler og driftsstatus for badstuer samlet i ett dashboard." />
+    <meta name="twitter:image" content="https://smartsauna.no/favicon.png?v=2026-06-09-smart-sauna-logo" />
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "SoftwareApplication",
+        "name": "Smart Sauna Systems",
+        "applicationCategory": "BusinessApplication",
+        "operatingSystem": "Web, iOS, Android",
+        "url": "https://smartsauna.no/",
+        "description": "Dashboard for booking, temperatur, adgang, varsler og driftsstatus for badstuer."
+      }
+    </script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@100..900&family=Lato:wght@100;300;400;700&family=Montserrat:wght@100..900&family=Open+Sans:wght@300..800&family=Oswald:wght@200..700&family=Playfair+Display:ital,wght@0,400..900;1,400..900&family=Raleway:wght@100..900&family=Roboto:wght@100;300;400;500;700;900&display=swap" rel="stylesheet">
@@ -152,6 +176,7 @@
           overlay.id = WATCHDOG_ID;
           overlay.setAttribute('role', 'dialog');
           overlay.setAttribute('aria-live', 'polite');
+          overlay.setAttribute('data-nosnippet', '');
           overlay.style.cssText = [
             'position:fixed',
             'inset:0',
