@@ -1,0 +1,9 @@
+[Unit]
+Description=Watch SmartSauna WireGuard configuration
+
+[Path]
+PathChanged=/etc/wireguard/wg0.conf
+Unit=smarti-wireguard-sync.service
+
+[Install]
+WantedBy=multi-user.target

@@ -17,6 +17,8 @@ services:
       - NETWORK_SERVER_PUBLIC_HOST=65.21.203.69
       - NETWORK_WG_SERVER_PUBLIC_KEY=lrOUZtZzokAzBtsGorxA7/jgK7ROnIaemE4Y0VCbAgA=
       - NETWORK_WG_LISTEN_PORT=51820
+      - NETWORK_WG_SYNC_STATUS_PATH=/app/runtime/status/wireguard.json
+      - NETWORK_CADDY_SYNC_STATUS_PATH=/app/runtime/status/caddy.json
       - UNIFI_MOBILITY_API_KEY=${UNIFI_MOBILITY_API_KEY:-}
       - UNIFY_API_KEY=${UNIFY_API_KEY:-}
       - UNIFI_MOBILITY_API_URL=${UNIFI_MOBILITY_API_URL:-https://api.ui.com/v1/mobility}
@@ -36,6 +38,7 @@ services:
       - /srv/ha-backups:/app/ha-backups
       - /etc/wireguard:/app/runtime/wireguard
       - /etc/caddy:/app/runtime/caddy
+      - /var/lib/smarti-network-runtime:/app/runtime/status:ro
     healthcheck:
       test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://127.0.0.1:3002/api/health"]
       interval: 30s

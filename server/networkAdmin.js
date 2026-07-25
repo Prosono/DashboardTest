@@ -108,6 +108,8 @@ const WG_VALIDATE_COMMAND = String(env.NETWORK_WG_VALIDATE_COMMAND || '').trim()
 const WG_RELOAD_COMMAND = String(env.NETWORK_WG_RELOAD_COMMAND || '').trim();
 const CADDY_VALIDATE_COMMAND = String(env.NETWORK_CADDY_VALIDATE_COMMAND || '').trim();
 const CADDY_RELOAD_COMMAND = String(env.NETWORK_CADDY_RELOAD_COMMAND || '').trim();
+const WG_SYNC_STATUS_PATH = String(env.NETWORK_WG_SYNC_STATUS_PATH || '').trim();
+const CADDY_SYNC_STATUS_PATH = String(env.NETWORK_CADDY_SYNC_STATUS_PATH || '').trim();
 
 const toBase64 = (value) => {
   const normalized = String(value || '').replace(/-/g, '+').replace(/_/g, '/');
@@ -157,6 +159,31 @@ const fileAccess = (filePath) => {
     readable,
     writable,
   };
+};
+
+const readSyncStatus = (filePath) => {
+  const normalizedPath = String(filePath || '').trim();
+  if (!normalizedPath) return { configured: false, available: false };
+  try {
+    const payload = JSON.parse(readFileSync(normalizedPath, 'utf8'));
+    return {
+      configured: true,
+      available: true,
+      ok: payload?.ok === true,
+      state: String(payload?.state || '').trim(),
+      message: String(payload?.message || '').trim(),
+      updatedAt: String(payload?.updatedAt || '').trim(),
+    };
+  } catch {
+    return {
+      configured: true,
+      available: false,
+      ok: false,
+      state: 'waiting',
+      message: '',
+      updatedAt: '',
+    };
+  }
 };
 
 const ensureParentDirectory = (filePath) => {
@@ -323,6 +350,43 @@ const removeManagedBlock = (content, startMarker, endMarker) => {
   return String(content || '').replace(pattern, '').replace(/\n{3,}/g, '\n\n');
 };
 
+export const reconcileWireGuardSiteConfig = (content, site, mode = 'apply') => {
+  const marker = buildSiteMarker(site);
+  const startMarker = `# BEGIN SMARTI NETWORK SITE ${marker}`;
+  const endMarker = `# END SMARTI NETWORK SITE ${marker}`;
+  const expectedAllowedIps = new Set(
+    [`${site?.tunnelIp || ''}/32`, site?.lanSubnet]
+      .map((value) => String(value || '').trim())
+      .filter((value) => value && value !== '/32'),
+  );
+  const expectedPublicKey = String(site?.wireGuardPublicKey || '').trim();
+  const withoutManagedBlock = removeManagedBlock(content, startMarker, endMarker);
+  const sections = String(withoutManagedBlock || '').split(/(?=^\[Peer\][ \t]*\r?$)/gm);
+  const removedPeers = [];
+  const keptSections = sections.filter((section) => {
+    if (!section.trimStart().startsWith('[Peer]')) return true;
+    const publicKey = section.match(/^\s*PublicKey\s*=\s*(.+)$/m)?.[1]?.trim() || '';
+    const allowedIps = (section.match(/^\s*AllowedIPs\s*=\s*(.+)$/m)?.[1] || '')
+      .split(',')
+      .map((value) => value.trim())
+      .filter(Boolean);
+    const conflicts = Boolean(
+      (expectedPublicKey && publicKey === expectedPublicKey)
+      || allowedIps.some((value) => expectedAllowedIps.has(value)),
+    );
+    if (conflicts) removedPeers.push({ publicKey, allowedIps });
+    return !conflicts;
+  });
+  const cleaned = keptSections.join('').replace(/\n{3,}/g, '\n\n').trimEnd();
+  const next = mode === 'remove'
+    ? `${cleaned}\n`
+    : `${cleaned}${cleaned ? '\n\n' : ''}${buildWireGuardPeerSnippet(site)}`;
+  return {
+    content: next,
+    removedPeers,
+  };
+};
+
 const writeFileAtomic = (filePath, content) => {
   ensureParentDirectory(filePath);
   const tempPath = `${filePath}.tmp-${globalThis.process?.pid || 'network'}-${randomUUID()}`;
@@ -368,7 +432,7 @@ ${site.domainFqdn} {
 `;
 };
 
-const createWireGuardKeyPair = () => {
+export const createWireGuardKeyPair = () => {
   const { privateKey, publicKey } = generateKeyPairSync('x25519');
   const privateJwk = privateKey.export({ format: 'jwk' });
   const publicJwk = publicKey.export({ format: 'jwk' });
@@ -524,9 +588,13 @@ export const getNetworkRuntimeConfig = () => {
     },
     commands: {
       wireGuardValidate: Boolean(WG_VALIDATE_COMMAND),
-      wireGuardReload: Boolean(WG_RELOAD_COMMAND),
+      wireGuardReload: Boolean(WG_RELOAD_COMMAND || WG_SYNC_STATUS_PATH),
       caddyValidate: Boolean(CADDY_VALIDATE_COMMAND),
-      caddyReload: Boolean(CADDY_RELOAD_COMMAND),
+      caddyReload: Boolean(CADDY_RELOAD_COMMAND || CADDY_SYNC_STATUS_PATH),
+    },
+    syncStatus: {
+      wireGuard: readSyncStatus(WG_SYNC_STATUS_PATH),
+      caddy: readSyncStatus(CADDY_SYNC_STATUS_PATH),
     },
   };
 };
@@ -535,13 +603,17 @@ export const deriveSiteRuntimeState = (site, runtimeConfig) => {
   const peers = Array.isArray(runtimeConfig?.active?.wireGuardPeers) ? runtimeConfig.active.wireGuardPeers : [];
   const caddySites = Array.isArray(runtimeConfig?.active?.caddySites) ? runtimeConfig.active.caddySites : [];
   const marker = buildSiteMarker(site);
-  const matchedPeer = peers.find((peer) => (
+  const matchingPeers = peers.filter((peer) => (
     peer.marker === marker
-  )) || peers.find((peer) => (
+  ) || (
     (site.wireGuardPublicKey && peer.publicKey === site.wireGuardPublicKey)
     || (site.tunnelIp && peer.allowedIps.includes(`${site.tunnelIp}/32`))
     || (site.lanSubnet && peer.allowedIps.includes(site.lanSubnet))
-  )) || null;
+  ));
+  const matchedPeer = matchingPeers.find((peer) => peer.marker === marker)
+    || matchingPeers[0]
+    || null;
+  const wireGuardDuplicate = matchingPeers.length > 1;
   const matchedCaddy = caddySites.find((entry) => (
     entry.marker === marker
   )) || caddySites.find((entry) => (
@@ -553,7 +625,8 @@ export const deriveSiteRuntimeState = (site, runtimeConfig) => {
   )) || null;
   const expectedAllowedIps = [`${site.tunnelIp}/32`, site.lanSubnet].filter(Boolean);
   const wireGuardDrifted = Boolean(matchedPeer) && (
-    (site.wireGuardPublicKey && matchedPeer.publicKey !== site.wireGuardPublicKey)
+    wireGuardDuplicate
+    || (site.wireGuardPublicKey && matchedPeer.publicKey !== site.wireGuardPublicKey)
     || expectedAllowedIps.some((value) => !matchedPeer.allowedIps.includes(value))
   );
   const expectedReverseProxy = site.haIp ? `${site.haIp}:8123` : '';
@@ -566,6 +639,7 @@ export const deriveSiteRuntimeState = (site, runtimeConfig) => {
     wireGuardApplied: Boolean(matchedPeer),
     caddyApplied: Boolean(matchedCaddy),
     wireGuardDrifted,
+    wireGuardDuplicate,
     caddyDrifted,
     drifted: wireGuardDrifted || caddyDrifted,
     matchedPeer,
@@ -587,22 +661,14 @@ const mutateSiteRuntimeConfig = (site, target = 'all', mode = 'apply') => {
     validate: {},
     reload: {},
     manualReloadRequired: [],
+    reconciledWireGuardPeers: [],
   };
   const changes = [];
   if (normalizedTarget === 'all' || normalizedTarget === 'wireguard') {
     const original = runtimeConfig.active.wireGuardRaw || '';
-    const next = mode === 'remove'
-      ? removeManagedBlock(
-        original,
-        `# BEGIN SMARTI NETWORK SITE ${marker}`,
-        `# END SMARTI NETWORK SITE ${marker}`,
-      )
-      : replaceManagedBlock(
-        original,
-        `# BEGIN SMARTI NETWORK SITE ${marker}`,
-        `# END SMARTI NETWORK SITE ${marker}`,
-        buildWireGuardPeerSnippet(site),
-      );
+    const reconciliation = reconcileWireGuardSiteConfig(original, site, mode);
+    const next = reconciliation.content;
+    result.reconciledWireGuardPeers = reconciliation.removedPeers;
     if (next !== original) {
       changes.push({
         key: 'wireGuard',
@@ -678,6 +744,17 @@ const mutateSiteRuntimeConfig = (site, target = 'all', mode = 'apply') => {
 
   changes.forEach((change) => {
     const reload = runShellCommand(change.reloadCommand);
+    const syncStatusPath = change.key === 'wireGuard' ? WG_SYNC_STATUS_PATH : CADDY_SYNC_STATUS_PATH;
+    if (!reload.supported && syncStatusPath) {
+      result.reload[change.key] = {
+        supported: true,
+        ok: true,
+        queued: true,
+        output: '',
+        error: '',
+      };
+      return;
+    }
     result.reload[change.key] = reload;
     if (!reload.supported) result.manualReloadRequired.push(change.resultKey);
   });

@@ -1,0 +1,8 @@
+[Unit]
+Description=Synchronize SmartSauna Caddy configuration
+After=caddy.service
+Requires=caddy.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/smarti-network-sync caddy

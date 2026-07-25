@@ -28,6 +28,7 @@ import {
   buildNetworkSiteArtifacts,
   applySiteToRuntimeConfig,
   createNetworkSiteFromInput,
+  createWireGuardKeyPair,
   deriveSiteRuntimeState,
   getNetworkRuntimeConfig,
   networkDefaults,
@@ -325,6 +326,7 @@ const sanitizeRuntimeConfigForResponse = (runtimeConfig = {}) => ({
   server: runtimeConfig?.server || {},
   files: runtimeConfig?.files || {},
   commands: runtimeConfig?.commands || {},
+  syncStatus: runtimeConfig?.syncStatus || {},
   active: {
     wireGuardPeers: Array.isArray(runtimeConfig?.active?.wireGuardPeers) ? runtimeConfig.active.wireGuardPeers : [],
     caddySites: Array.isArray(runtimeConfig?.active?.caddySites) ? runtimeConfig.active.caddySites : [],
@@ -1026,6 +1028,7 @@ router.get('/network/overview', (_req, res) => {
       files: runtime.files,
       active: runtime.active,
       commands: runtime.commands,
+      syncStatus: runtime.syncStatus,
       mobility: getUnifiMobilityStatus(),
       clients: overview.clients,
       diagnostics: {
@@ -1366,6 +1369,84 @@ router.post('/network/sites/:clientId/:locationId/apply', (req, res) => {
     });
   } catch (error) {
     return res.status(400).json({ error: error?.message || 'Failed to apply server config' });
+  }
+});
+
+router.post('/network/sites/:clientId/:locationId/wireguard/rotate', (req, res) => {
+  const clientId = normalizeClientId(req.params.clientId);
+  const locationId = normalizeLocationId(req.params.locationId);
+  const confirmation = normalizeLocationId(req.body?.confirmation);
+  if (!clientId || !locationId) {
+    return res.status(400).json({ error: 'Valid clientId and locationId are required' });
+  }
+  if (confirmation !== locationId) {
+    return res.status(400).json({
+      error: 'Confirm the location ID before rotating WireGuard keys',
+      code: 'WIREGUARD_ROTATION_CONFIRMATION_REQUIRED',
+    });
+  }
+
+  const row = db.prepare(`
+    SELECT
+      client_id,
+      location_id,
+      display_name,
+      backup_location_id,
+      lan_subnet,
+      router_ip,
+      umr_mac,
+      mobility_workspace_id,
+      mobility_device_id,
+      switch_ip,
+      switch_mac,
+      ha_ip,
+      ha_mac,
+      knx_ip,
+      knx_mac,
+      tunnel_ip,
+      domain_label,
+      domain_fqdn,
+      wireguard_private_key,
+      wireguard_public_key,
+      created_at,
+      updated_at
+    FROM network_sites
+    WHERE client_id = ? AND location_id = ?
+  `).get(clientId, locationId);
+  if (!row) return res.status(404).json({ error: 'Saved network configuration not found' });
+
+  try {
+    const previousSite = mapNetworkSiteRow(row);
+    if (!previousSite.tunnelIp || !previousSite.lanSubnet) {
+      return res.status(400).json({ error: 'Tunnel IP and LAN subnet are required before rotating keys' });
+    }
+    const keys = createWireGuardKeyPair();
+    const updatedAt = new Date().toISOString();
+    db.prepare(`
+      UPDATE network_sites
+      SET wireguard_private_key = ?, wireguard_public_key = ?, updated_at = ?
+      WHERE client_id = ? AND location_id = ?
+    `).run(keys.privateKey, keys.publicKey, updatedAt, clientId, locationId);
+
+    const rotatedSite = {
+      ...previousSite,
+      wireGuardPrivateKey: keys.privateKey,
+      wireGuardPublicKey: keys.publicKey,
+      updatedAt,
+    };
+    const overview = loadNetworkOverviewData();
+    return res.json({
+      success: true,
+      previousPublicKey: previousSite.wireGuardPublicKey || '',
+      site: toPublicNetworkSite(rotatedSite, overview.runtimeConfig),
+      artifacts: buildNetworkSiteArtifacts(rotatedSite),
+      runtime: sanitizeRuntimeConfigForResponse(overview.runtimeConfig),
+    });
+  } catch (error) {
+    return res.status(400).json({
+      error: error?.message || 'Failed to rotate WireGuard keys',
+      code: 'WIREGUARD_ROTATION_FAILED',
+    });
   }
 });
 

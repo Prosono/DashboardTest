@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   createNetworkSiteFromInput,
+  createWireGuardKeyPair,
   buildUmrConfigText,
   deriveSiteRuntimeState,
   isValidDomainName,
@@ -9,6 +10,7 @@ import {
   isValidMacAddress,
   parseCaddyConfig,
   parseWireGuardConfig,
+  reconcileWireGuardSiteConfig,
   validateNetworkSite,
 } from '../../server/networkAdmin.js';
 
@@ -124,5 +126,90 @@ oslo.example.no {
     expect(site.switchMac).toBe('aa:bb:cc:dd:ee:ff');
     expect(profile).toContain('MTU = 1420');
     expect(profile).toContain('PersistentKeepalive = 25');
+  });
+
+  it('reconciles legacy and managed peers that claim the same routes', () => {
+    const site = {
+      clientId: 'obf',
+      locationId: 'sofienborg',
+      displayName: 'OBF Sofienborg',
+      wireGuardPublicKey: 'new-obf-public-key',
+      tunnelIp: '10.88.0.5',
+      lanSubnet: '192.168.107.0/24',
+    };
+    const existing = `[Interface]
+Address = 10.88.0.1/24
+
+[Peer]
+# Karistranda
+PublicKey = karistranda-public-key
+AllowedIPs = 10.88.0.4/32, 192.168.40.0/24
+
+[Peer]
+# Legacy OBF
+PublicKey = old-obf-public-key
+AllowedIPs = 10.88.0.5/32, 192.168.107.0/24
+
+# BEGIN SMARTI NETWORK SITE obf/sofienborg
+[Peer]
+# OBF Sofienborg
+PublicKey = new-obf-public-key
+AllowedIPs = 10.88.0.5/32, 192.168.107.0/24
+# END SMARTI NETWORK SITE obf/sofienborg
+`;
+
+    const result = reconcileWireGuardSiteConfig(existing, site);
+    const peers = parseWireGuardConfig(result.content);
+
+    expect(result.removedPeers).toHaveLength(1);
+    expect(peers).toHaveLength(2);
+    expect(peers.map((peer) => peer.publicKey)).toEqual([
+      'karistranda-public-key',
+      'new-obf-public-key',
+    ]);
+    expect(result.content).not.toContain('old-obf-public-key');
+    expect(result.content.match(/10\.88\.0\.5\/32/g)).toHaveLength(1);
+  });
+
+  it('marks duplicate legacy and managed peers as runtime drift', () => {
+    const site = {
+      clientId: 'obf',
+      locationId: 'sofienborg',
+      wireGuardPublicKey: 'new-obf-public-key',
+      tunnelIp: '10.88.0.5',
+      lanSubnet: '192.168.107.0/24',
+    };
+    const runtimeConfig = {
+      active: {
+        wireGuardPeers: parseWireGuardConfig(`[Peer]
+PublicKey = old-obf-public-key
+AllowedIPs = 10.88.0.5/32, 192.168.107.0/24
+
+# BEGIN SMARTI NETWORK SITE obf/sofienborg
+[Peer]
+PublicKey = new-obf-public-key
+AllowedIPs = 10.88.0.5/32, 192.168.107.0/24
+# END SMARTI NETWORK SITE obf/sofienborg
+`),
+        caddySites: [],
+      },
+    };
+
+    expect(deriveSiteRuntimeState(site, runtimeConfig)).toMatchObject({
+      wireGuardApplied: true,
+      wireGuardDuplicate: true,
+      wireGuardDrifted: true,
+      drifted: true,
+    });
+  });
+
+  it('generates valid and unique WireGuard key pairs', () => {
+    const first = createWireGuardKeyPair();
+    const second = createWireGuardKeyPair();
+
+    expect(first.privateKey).toMatch(/^[A-Za-z0-9+/]{43}=$/);
+    expect(first.publicKey).toMatch(/^[A-Za-z0-9+/]{43}=$/);
+    expect(second.privateKey).not.toBe(first.privateKey);
+    expect(second.publicKey).not.toBe(first.publicKey);
   });
 });

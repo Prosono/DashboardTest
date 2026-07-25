@@ -74,6 +74,21 @@ docker-compose up -d
 
 Access at `http://localhost:5173`.
 
+### One-time automatic network activation
+
+The super-admin UI writes validated WireGuard and Caddy configuration to the host-mounted
+files. Install the restricted systemd helpers once on each server so changes made in the
+UI are activated without SSH or manual reload commands:
+
+```bash
+sudo ./ops/install-network-sync.sh
+docker compose up -d --build
+```
+
+The helpers can only validate and activate `/etc/wireguard/wg0.conf` and
+`/etc/caddy/Caddyfile`. Their latest status is exposed read-only to the app through
+`/var/lib/smarti-network-runtime`.
+
 ### Using Docker directly
 
 ```bash

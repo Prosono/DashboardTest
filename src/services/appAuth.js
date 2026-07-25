@@ -416,6 +416,17 @@ export const applyNetworkSite = async (clientId, locationId, target = 'all') => 
   return payload && typeof payload === 'object' ? payload : null;
 };
 
+export const rotateNetworkSiteWireGuardKeys = async (clientId, locationId) => {
+  const payload = await apiRequest(
+    `/api/clients/network/sites/${encodeURIComponent(clientId)}/${encodeURIComponent(locationId)}/wireguard/rotate`,
+    {
+      method: 'POST',
+      body: JSON.stringify({ confirmation: locationId }),
+    },
+  );
+  return payload && typeof payload === 'object' ? payload : null;
+};
+
 export const deleteNetworkSite = async (clientId, locationId, removeRuntime = true) => {
   const payload = await apiRequest(
     `/api/clients/network/sites/${encodeURIComponent(clientId)}/${encodeURIComponent(locationId)}`,

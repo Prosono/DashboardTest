@@ -1,0 +1,9 @@
+[Unit]
+Description=Watch SmartSauna Caddy configuration
+
+[Path]
+PathChanged=/etc/caddy/Caddyfile
+Unit=smarti-caddy-sync.service
+
+[Install]
+WantedBy=multi-user.target

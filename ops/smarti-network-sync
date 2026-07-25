@@ -1,0 +1,66 @@
+#!/bin/sh
+set -eu
+
+target="${1:-}"
+status_dir="/var/lib/smarti-network-runtime"
+wireguard_config="/etc/wireguard/wg0.conf"
+caddy_config="/etc/caddy/Caddyfile"
+
+mkdir -p "$status_dir"
+
+write_status() {
+  status_target="$1"
+  status_ok="$2"
+  status_state="$3"
+  status_message="$4"
+  status_file="$status_dir/$status_target.json"
+  status_temp="$status_file.tmp.$$"
+  status_timestamp="$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
+  printf '{"ok":%s,"state":"%s","message":"%s","updatedAt":"%s"}\n' \
+    "$status_ok" "$status_state" "$status_message" "$status_timestamp" > "$status_temp"
+  chmod 0644 "$status_temp"
+  mv "$status_temp" "$status_file"
+}
+
+sync_wireguard() {
+  stripped_config="$(mktemp /run/smarti-wg-sync.XXXXXX)"
+  trap 'rm -f "$stripped_config"' EXIT
+  if ! wg show wg0 >/dev/null 2>&1; then
+    write_status wireguard false error "WireGuard interface wg0 is not active"
+    exit 1
+  fi
+  if ! wg-quick strip "$wireguard_config" > "$stripped_config"; then
+    write_status wireguard false error "WireGuard configuration validation failed"
+    exit 1
+  fi
+  if ! wg syncconf wg0 "$stripped_config"; then
+    write_status wireguard false error "WireGuard live synchronization failed"
+    exit 1
+  fi
+  write_status wireguard true synced "WireGuard configuration is active"
+}
+
+sync_caddy() {
+  if ! caddy validate --config "$caddy_config" >/dev/null; then
+    write_status caddy false error "Caddy configuration validation failed"
+    exit 1
+  fi
+  if ! systemctl reload caddy; then
+    write_status caddy false error "Caddy reload failed"
+    exit 1
+  fi
+  write_status caddy true synced "Caddy configuration is active"
+}
+
+case "$target" in
+  wireguard)
+    sync_wireguard
+    ;;
+  caddy)
+    sync_caddy
+    ;;
+  *)
+    echo "Usage: smarti-network-sync wireguard|caddy" >&2
+    exit 2
+    ;;
+esac

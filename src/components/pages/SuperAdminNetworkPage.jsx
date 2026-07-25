@@ -8,6 +8,7 @@ import {
   Download,
   Globe,
   HardDrive,
+  Key,
   MapPin,
   Monitor,
   Plus,
@@ -268,6 +269,7 @@ export default function SuperAdminNetworkPage({ t, userAdminApi, isMobile }) {
   const [saving, setSaving] = useState(false);
   const [applying, setApplying] = useState('');
   const [downloading, setDownloading] = useState(false);
+  const [rotatingKeys, setRotatingKeys] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
@@ -447,7 +449,12 @@ export default function SuperAdminNetworkPage({ t, userAdminApi, isMobile }) {
   }, [form.backupLocationId, form.locationId, overview?.server?.backupRoot, selectedClientId]);
 
   const wireGuardApplied = Boolean(detail?.site?.runtime?.wireGuardApplied);
+  const wireGuardDrifted = Boolean(detail?.site?.runtime?.wireGuardDrifted);
   const caddyApplied = Boolean(detail?.site?.runtime?.caddyApplied);
+  const wireGuardSync = detail?.runtime?.syncStatus?.wireGuard
+    || overview?.syncStatus?.wireGuard
+    || {};
+  const wireGuardReadyForUmr = wireGuardApplied && !wireGuardDrifted;
   const selectedMobilitySummary = useMemo(
     () => mobilityDevices.find((device) => (
       device.workspaceId === form.mobilityWorkspaceId && device.id === form.mobilityDeviceId
@@ -534,6 +541,13 @@ export default function SuperAdminNetworkPage({ t, userAdminApi, isMobile }) {
 PublicKey = ${publicKey}
 AllowedIPs = ${form.tunnelIp || '<tunnel-ip>'}/32, ${form.lanSubnet || '<lan-subnet>'}`;
   }, [detail?.site?.wireGuardPublicKey, form.displayName, form.lanSubnet, form.locationId, form.tunnelIp, t]);
+  const umrConfigPreview = useMemo(
+    () => String(detail?.artifacts?.umrConfig || '').replace(
+      /^PrivateKey\s*=.*$/m,
+      `PrivateKey = ${t('superAdminNetwork.preview.privateKeyHidden')}`,
+    ),
+    [detail?.artifacts?.umrConfig, t],
+  );
   const caddyPreview = `${domainFqdn || '<domain>'} {
     encode gzip
     reverse_proxy ${form.haIp || '<smarti-hub-ip>'}:8123
@@ -584,11 +598,17 @@ AllowedIPs = ${form.tunnelIp || '<tunnel-ip>'}/32, ${form.lanSubnet || '<lan-sub
     try {
       const payload = await userAdminApi.applyNetworkSite(selectedClientId, form.locationId, target);
       setDetail((current) => ({ ...(current || {}), ...payload }));
-      setMessage(
-        payload?.result?.manualReloadRequired?.length
-          ? `${t('superAdminNetwork.applySuccess')} ${t('superAdminNetwork.manualReload')}: ${payload.result.manualReloadRequired.join(', ')}`
-          : t('superAdminNetwork.applySuccess'),
-      );
+      const removedPeers = Number(payload?.result?.reconciledWireGuardPeers?.length || 0);
+      const reloadQueued = Object.values(payload?.result?.reload || {}).some((entry) => entry?.queued);
+      const resultMessages = [t('superAdminNetwork.applySuccess')];
+      if (removedPeers > 0) resultMessages.push(t('superAdminNetwork.reconciledPeers'));
+      if (reloadQueued) resultMessages.push(t('superAdminNetwork.automaticReloadQueued'));
+      if (payload?.result?.manualReloadRequired?.length) {
+        resultMessages.push(
+          `${t('superAdminNetwork.manualReload')}: ${payload.result.manualReloadRequired.join(', ')}`,
+        );
+      }
+      setMessage(resultMessages.join(' '));
       await loadOverview(true);
       await loadDetail(selectedClientId, form.locationId);
     } catch (applyError) {
@@ -612,6 +632,42 @@ AllowedIPs = ${form.tunnelIp || '<tunnel-ip>'}/32, ${form.lanSubnet || '<lan-sub
       setDownloading(false);
     }
   }, [form.locationId, selectedClientId, t, userAdminApi]);
+
+  const handleRotateWireGuardKeys = useCallback(async () => {
+    if (
+      !detail?.persisted
+      || !userAdminApi?.rotateNetworkSiteWireGuardKeys
+      || !selectedClientId
+      || !form.locationId
+    ) return;
+    if (!globalThis.confirm?.(t('superAdminNetwork.rotateWireGuardConfirm'))) return;
+    setRotatingKeys(true);
+    setError('');
+    setMessage('');
+    try {
+      const payload = await userAdminApi.rotateNetworkSiteWireGuardKeys(
+        selectedClientId,
+        form.locationId,
+      );
+      setDetail((current) => ({ ...(current || {}), ...payload, persisted: true }));
+      setForm(formFromSite(payload?.site));
+      setMessage(t('superAdminNetwork.rotateWireGuardSuccess'));
+      await loadOverview(true);
+      await loadDetail(selectedClientId, form.locationId);
+    } catch (rotateError) {
+      setError(rotateError?.message || t('superAdminNetwork.rotateWireGuardFailed'));
+    } finally {
+      setRotatingKeys(false);
+    }
+  }, [
+    detail?.persisted,
+    form.locationId,
+    loadDetail,
+    loadOverview,
+    selectedClientId,
+    t,
+    userAdminApi,
+  ]);
 
   const handleDelete = useCallback(async () => {
     if (!detail?.persisted || !userAdminApi?.deleteNetworkSite) return;
@@ -1161,32 +1217,102 @@ AllowedIPs = ${form.tunnelIp || '<tunnel-ip>'}/32, ${form.lanSubnet || '<lan-sub
                   <Field label={t('superAdminNetwork.form.lanSubnet')} value={form.lanSubnet} onChange={(value) => updateField('lanSubnet', value)} placeholder="192.168.107.0/24" />
                 </div>
 
+                {detail?.persisted ? (
+                  <div className={`mt-4 flex flex-col gap-3 rounded-2xl border p-4 sm:flex-row sm:items-center sm:justify-between ${
+                    wireGuardDrifted
+                      ? 'border-amber-400/30 bg-amber-400/[0.08]'
+                      : wireGuardReadyForUmr
+                        ? 'border-emerald-400/25 bg-emerald-400/[0.06]'
+                        : 'border-sky-400/25 bg-sky-400/[0.06]'
+                  }`}>
+                    <div className="flex min-w-0 items-start gap-3">
+                      {wireGuardDrifted
+                        ? <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-200" />
+                        : <Shield className="mt-0.5 h-4 w-4 shrink-0 text-[var(--text-secondary)]" />}
+                      <div className="min-w-0">
+                        <p className="text-sm font-semibold text-[var(--text-primary)]">
+                          {wireGuardDrifted
+                            ? t('superAdminNetwork.wireGuardSetup.driftTitle')
+                            : wireGuardReadyForUmr
+                              ? t('superAdminNetwork.wireGuardSetup.readyTitle')
+                              : t('superAdminNetwork.wireGuardSetup.pendingTitle')}
+                        </p>
+                        <p className="mt-1 text-xs leading-5 text-[var(--text-secondary)]">
+                          {wireGuardDrifted
+                            ? t('superAdminNetwork.wireGuardSetup.driftText')
+                            : wireGuardReadyForUmr
+                              ? t('superAdminNetwork.wireGuardSetup.readyText')
+                              : t('superAdminNetwork.wireGuardSetup.pendingText')}
+                        </p>
+                      </div>
+                    </div>
+                    <StatusBadge tone={wireGuardDrifted ? 'warning' : wireGuardReadyForUmr ? 'good' : 'info'}>
+                      {wireGuardDrifted
+                        ? t('superAdminNetwork.nodeStatus.drifted')
+                        : wireGuardReadyForUmr
+                          ? t('superAdminNetwork.applied')
+                          : t('superAdminNetwork.pending')}
+                    </StatusBadge>
+                  </div>
+                ) : null}
+
                 <div className="mt-5 grid grid-cols-1 gap-4 2xl:grid-cols-[0.8fr_1.2fr]">
                   <div className="rounded-2xl border border-[var(--glass-border)] bg-[var(--glass-bg)] p-4">
                     <p className={labelClass}>{t('superAdminNetwork.wireGuardSetup.flowTitle')}</p>
                     <div className="mt-4 space-y-5">
                       <Instruction number="1" title={t('superAdminNetwork.wireGuardSetup.saveTitle')} text={t('superAdminNetwork.wireGuardSetup.saveText')} />
-                      <Instruction number="2" title={t('superAdminNetwork.wireGuardSetup.downloadTitle')} text={t('superAdminNetwork.wireGuardSetup.downloadText')} />
-                      <Instruction number="3" title={t('superAdminNetwork.wireGuardSetup.importTitle')} text={t('superAdminNetwork.wireGuardSetup.importText')} />
+                      <Instruction number="2" title={t('superAdminNetwork.wireGuardSetup.publishTitle')} text={t('superAdminNetwork.wireGuardSetup.publishText')} />
+                      <Instruction number="3" title={t('superAdminNetwork.wireGuardSetup.downloadTitle')} text={t('superAdminNetwork.wireGuardSetup.downloadText')} />
+                      <Instruction number="4" title={t('superAdminNetwork.wireGuardSetup.importTitle')} text={t('superAdminNetwork.wireGuardSetup.importText')} />
+                    </div>
+                    <div className="mt-5 flex items-center justify-between gap-3 rounded-xl border border-[var(--glass-border)] bg-[var(--bg-primary)]/35 px-3.5 py-3">
+                      <div className="min-w-0">
+                        <p className="text-xs font-semibold text-[var(--text-primary)]">{t('superAdminNetwork.wireGuardSetup.autoSyncTitle')}</p>
+                        <p className="mt-1 text-[11px] leading-4 text-[var(--text-secondary)]">
+                          {wireGuardSync?.ok
+                            ? t('superAdminNetwork.wireGuardSetup.autoSyncReady')
+                            : wireGuardSync?.configured
+                              ? t('superAdminNetwork.wireGuardSetup.autoSyncWaiting')
+                              : t('superAdminNetwork.wireGuardSetup.autoSyncMissing')}
+                        </p>
+                      </div>
+                      <StatusBadge tone={wireGuardSync?.ok ? 'good' : wireGuardSync?.configured ? 'warning' : 'danger'}>
+                        {wireGuardSync?.ok
+                          ? t('superAdminNetwork.wireGuardSetup.autoSyncActive')
+                          : wireGuardSync?.configured
+                            ? t('superAdminNetwork.wireGuardSetup.autoSyncPending')
+                            : t('superAdminNetwork.wireGuardSetup.autoSyncUnavailable')}
+                      </StatusBadge>
                     </div>
                     <div className="mt-5 flex flex-wrap gap-2">
                       <button
                         type="button"
-                        onClick={handleDownload}
-                        disabled={!detail?.persisted || downloading || !detail?.artifacts?.umrConfig}
+                        onClick={() => handleApply('wireguard')}
+                        disabled={!detail?.persisted || !stepReady[2] || applying === 'wireguard'}
                         className={`inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl border border-[var(--accent-color)] bg-[color-mix(in_srgb,var(--accent-color)_14%,transparent)] px-4 py-2.5 text-xs font-bold uppercase tracking-[0.12em] disabled:opacity-40 sm:w-auto ${focusClass}`}
+                      >
+                        {applying === 'wireguard' ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Wifi className="h-4 w-4" />}
+                        {wireGuardDrifted
+                          ? t('superAdminNetwork.repairWireGuard')
+                          : t('superAdminNetwork.applyWireGuard')}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleDownload}
+                        disabled={!detail?.persisted || downloading || !detail?.artifacts?.umrConfig || !wireGuardReadyForUmr}
+                        className={`inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl border border-[var(--glass-border)] bg-[var(--glass-bg)] px-4 py-2.5 text-xs font-bold uppercase tracking-[0.12em] disabled:opacity-40 sm:w-auto ${focusClass}`}
                       >
                         {downloading ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
                         {t('superAdminNetwork.downloadUmr')}
                       </button>
                       <button
                         type="button"
-                        onClick={() => handleApply('wireguard')}
-                        disabled={!detail?.persisted || !stepReady[2] || applying === 'wireguard'}
-                        className={`inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl border border-[var(--glass-border)] bg-[var(--glass-bg)] px-4 py-2.5 text-xs font-bold uppercase tracking-[0.12em] disabled:opacity-40 sm:w-auto ${focusClass}`}
+                        onClick={handleRotateWireGuardKeys}
+                        disabled={!detail?.persisted || rotatingKeys || applying === 'wireguard'}
+                        className={`inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl border border-amber-400/25 bg-amber-400/[0.06] px-4 py-2.5 text-xs font-bold uppercase tracking-[0.12em] text-amber-100 disabled:opacity-40 sm:w-auto ${focusClass}`}
                       >
-                        {applying === 'wireguard' ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Wifi className="h-4 w-4" />}
-                        {t('superAdminNetwork.applyWireGuard')}
+                        {rotatingKeys ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Key className="h-4 w-4" />}
+                        {t('superAdminNetwork.rotateWireGuard')}
                       </button>
                     </div>
                   </div>
@@ -1194,7 +1320,7 @@ AllowedIPs = ${form.tunnelIp || '<tunnel-ip>'}/32, ${form.lanSubnet || '<lan-sub
                   <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
                     <CodePanel
                       title={t('superAdminNetwork.preview.umr')}
-                      value={detail?.artifacts?.umrConfig}
+                      value={umrConfigPreview}
                       empty={detail?.artifacts?.umrConfigError || t('superAdminNetwork.preview.umrUnavailable')}
                     />
                     <CodePanel
