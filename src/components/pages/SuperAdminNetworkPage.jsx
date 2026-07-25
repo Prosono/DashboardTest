@@ -461,7 +461,6 @@ export default function SuperAdminNetworkPage({ t, userAdminApi, isMobile }) {
       .filter((client) => normalizeMac(client.macAddress))
       .map((client) => [normalizeMac(client.macAddress), client]),
   ), [mobilitySnapshot?.clients]);
-  const switchClient = mobilityClientsByMac.get(normalizeMac(form.switchMac)) || null;
   const hubClient = mobilityClientsByMac.get(normalizeMac(form.haMac)) || null;
   const knxClient = mobilityClientsByMac.get(normalizeMac(form.knxMac)) || null;
 
@@ -935,7 +934,7 @@ AllowedIPs = ${form.tunnelIp || '<tunnel-ip>'}/32, ${form.lanSubnet || '<lan-sub
                 <MapPin className="h-4 w-4 text-[var(--text-muted)]" />
               </div>
 
-              <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:flex xl:flex-row xl:items-stretch">
+              <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:flex xl:flex-row xl:items-stretch">
                 <DeviceNode
                   icon={Radio}
                   label={t('superAdminNetwork.physical.mobile')}
@@ -959,20 +958,7 @@ AllowedIPs = ${form.tunnelIp || '<tunnel-ip>'}/32, ${form.lanSubnet || '<lan-sub
                   emphasized
                 />
                 <Connector label="LAN" active={Boolean(form.routerIp && form.lanSubnet)} />
-                <DeviceNode
-                  icon={Server}
-                  label={t('superAdminNetwork.physical.switch')}
-                  value={form.switchIp}
-                  detail={form.switchMac}
-                  status={switchClient?.online
-                    ? t('superAdminNetwork.map.live')
-                    : (form.switchIp || form.switchMac
-                      ? t('superAdminNetwork.map.configured')
-                      : t('superAdminNetwork.map.missing'))}
-                  ready={Boolean(switchClient?.online || form.switchIp || form.switchMac)}
-                />
-                <Connector label="PoE" active={Boolean(form.haIp || form.knxIp)} />
-                <div className="grid min-w-0 flex-[1.4] grid-cols-1 gap-3 sm:col-span-2 sm:grid-cols-2 lg:col-span-3 xl:col-span-1">
+                <div className="grid min-w-0 flex-[1.4] grid-cols-1 gap-3 sm:col-span-2 sm:grid-cols-2 xl:col-span-1">
                   <DeviceNode
                     icon={Cpu}
                     label="SMARTi Hub / HA"
@@ -1090,8 +1076,6 @@ AllowedIPs = ${form.tunnelIp || '<tunnel-ip>'}/32, ${form.lanSubnet || '<lan-sub
                 <div className="my-5 border-t border-[var(--glass-border)]" />
                 <p className={labelClass}>{t('superAdminNetwork.siteSetup.equipment')}</p>
                 <div className="mt-3 grid grid-cols-1 gap-4 md:grid-cols-2">
-                  <Field label={t('superAdminNetwork.form.switchIp')} value={form.switchIp} onChange={(value) => updateField('switchIp', value)} placeholder="192.168.107.2" />
-                  <Field label={t('superAdminNetwork.form.switchMac')} value={form.switchMac} onChange={(value) => updateField('switchMac', value)} placeholder="aa:bb:cc:dd:ee:ff" />
                   <Field label={t('superAdminNetwork.form.haIp')} value={form.haIp} onChange={(value) => updateField('haIp', value)} placeholder="192.168.107.120" />
                   <Field label={t('superAdminNetwork.form.haMac')} value={form.haMac} onChange={(value) => updateField('haMac', value)} placeholder="aa:bb:cc:dd:ee:ff" />
                   <Field label={t('superAdminNetwork.form.knxIp')} value={form.knxIp} onChange={(value) => updateField('knxIp', value)} placeholder="192.168.107.10" />
