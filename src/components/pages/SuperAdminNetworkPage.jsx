@@ -3,6 +3,7 @@ import {
   Activity,
   AlertTriangle,
   Check,
+  ChevronDown,
   Cpu,
   Download,
   Globe,
@@ -79,8 +80,9 @@ const triggerBlobDownload = (blob, fileName) => {
   globalThis.setTimeout(() => globalThis.URL.revokeObjectURL(url), 1000);
 };
 
-const inputClass = 'w-full rounded-xl border border-[var(--glass-border)] bg-[var(--glass-bg)] px-3.5 py-3 text-sm text-[var(--text-primary)] outline-none transition-colors focus:border-[var(--accent-color)] focus:ring-2 focus:ring-[color-mix(in_srgb,var(--accent-color)_20%,transparent)]';
+const inputClass = 'w-full rounded-xl border border-[var(--glass-border)] bg-[var(--glass-bg)] px-3.5 py-3 text-base text-[var(--text-primary)] outline-none transition-colors focus:border-[var(--accent-color)] focus:ring-2 focus:ring-[color-mix(in_srgb,var(--accent-color)_20%,transparent)] sm:text-sm';
 const labelClass = 'text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--text-muted)]';
+const focusClass = 'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-color)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--bg-primary)]';
 
 function StatusBadge({ tone = 'neutral', children }) {
   const tones = {
@@ -113,19 +115,19 @@ function NodeStatusBadge({ status = 'draft', t }) {
   );
 }
 
-function Metric({ icon: Icon, label, value, hint, tone = 'neutral' }) {
+function Metric({ icon: Icon, label, value, hint, tone = 'neutral', className = '' }) {
   const border = tone === 'good'
     ? 'border-emerald-400/25 bg-emerald-400/[0.07]'
     : tone === 'warning'
       ? 'border-amber-400/25 bg-amber-400/[0.07]'
       : 'border-[var(--glass-border)] bg-[var(--glass-bg)]';
   return (
-    <div className={`min-w-0 rounded-2xl border px-4 py-3 ${border}`}>
+    <div className={`min-w-0 rounded-2xl border px-4 py-3 ${border} ${className}`}>
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <p className="text-[10px] uppercase tracking-[0.17em] text-[var(--text-muted)]">{label}</p>
-          <p className="mt-1.5 text-2xl font-semibold tracking-tight text-[var(--text-primary)]">{value}</p>
-          <p className="mt-1 truncate text-[11px] text-[var(--text-secondary)]">{hint}</p>
+          <p className="mt-1.5 text-xl font-semibold tracking-tight text-[var(--text-primary)] sm:text-2xl">{value}</p>
+          <p className="mt-1 min-h-8 text-[11px] leading-4 text-[var(--text-secondary)] sm:min-h-0 sm:truncate">{hint}</p>
         </div>
         <Icon className="mt-0.5 h-4 w-4 shrink-0 text-[var(--text-muted)]" />
       </div>
@@ -196,7 +198,7 @@ function StepTab({ step, title, subtitle, ready, active, onClick }) {
     <button
       type="button"
       onClick={onClick}
-      className={`min-w-[190px] flex-1 rounded-2xl border px-4 py-3 text-left transition-colors ${
+      className={`min-h-16 min-w-[78vw] snap-start rounded-2xl border px-4 py-3 text-left transition-colors sm:min-w-[190px] sm:flex-1 ${focusClass} ${
         active
           ? 'border-[var(--accent-color)] bg-[color-mix(in_srgb,var(--accent-color)_13%,var(--glass-bg))]'
           : 'border-[var(--glass-border)] bg-[var(--glass-bg)] hover:bg-[var(--glass-bg-hover)]'
@@ -221,13 +223,14 @@ function StepTab({ step, title, subtitle, ready, active, onClick }) {
   );
 }
 
-function CodePanel({ title, value, empty, minHeight = '170px' }) {
+function CodePanel({ title, value, empty, compact = false }) {
   return (
     <div className="min-w-0 rounded-2xl border border-[var(--glass-border)] bg-[color-mix(in_srgb,var(--bg-primary)_72%,transparent)] p-4">
       <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--text-muted)]">{title}</p>
       <pre
-        className="mt-3 overflow-auto whitespace-pre-wrap break-all rounded-xl border border-[var(--glass-border)] bg-[color-mix(in_srgb,var(--bg-primary)_85%,transparent)] p-3 text-[11px] leading-5 text-[var(--text-secondary)]"
-        style={{ minHeight }}
+        className={`mt-3 overflow-auto whitespace-pre-wrap break-all rounded-xl border border-[var(--glass-border)] bg-[color-mix(in_srgb,var(--bg-primary)_85%,transparent)] p-3 text-[11px] leading-5 text-[var(--text-secondary)] ${
+          compact ? 'min-h-[100px] sm:min-h-[120px]' : 'min-h-[120px] sm:min-h-[170px]'
+        }`}
       >
         {value || empty}
       </pre>
@@ -258,6 +261,7 @@ export default function SuperAdminNetworkPage({ t, userAdminApi, isMobile }) {
   const [activeStep, setActiveStep] = useState(1);
   const [nodeSearch, setNodeSearch] = useState('');
   const [nodeFilter, setNodeFilter] = useState('all');
+  const [mobileRegistryOpen, setMobileRegistryOpen] = useState(Boolean(isMobile));
   const [loading, setLoading] = useState(true);
   const [loadingDetail, setLoadingDetail] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
@@ -547,6 +551,7 @@ AllowedIPs = ${form.tunnelIp || '<tunnel-ip>'}/32, ${form.lanSubnet || '<lan-sub
     setForm(emptyForm(selectedClientId));
     setMobilitySnapshot(null);
     setActiveStep(1);
+    setMobileRegistryOpen(false);
   }, [selectedClientId]);
 
   const handleSave = useCallback(async () => {
@@ -654,9 +659,9 @@ AllowedIPs = ${form.tunnelIp || '<tunnel-ip>'}/32, ${form.lanSubnet || '<lan-sub
   );
 
   return (
-    <div className="page-transition flex flex-col gap-4 md:gap-5" data-disable-pull-refresh="true">
+    <div className="page-transition flex flex-col gap-4 pb-[max(1rem,env(safe-area-inset-bottom))] md:gap-5" data-disable-pull-refresh="true">
       <section className="popup-surface rounded-3xl border border-[var(--glass-border)] p-4 md:p-6">
-        <div className={`flex gap-5 ${isMobile ? 'flex-col' : 'items-start justify-between'}`}>
+        <div className="flex flex-col gap-5 sm:flex-row sm:items-start sm:justify-between">
           <div className="max-w-3xl">
             <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-[var(--text-muted)]">
               {t('superAdminNetwork.eyebrow')}
@@ -672,7 +677,7 @@ AllowedIPs = ${form.tunnelIp || '<tunnel-ip>'}/32, ${form.lanSubnet || '<lan-sub
             type="button"
             onClick={handleRefresh}
             disabled={refreshing}
-            className="inline-flex items-center justify-center gap-2 rounded-xl border border-[var(--glass-border)] bg-[var(--glass-bg)] px-4 py-2.5 text-xs font-bold uppercase tracking-[0.14em] text-[var(--text-primary)] transition-colors hover:bg-[var(--glass-bg-hover)] disabled:opacity-50"
+            className={`inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl border border-[var(--glass-border)] bg-[var(--glass-bg)] px-4 py-2.5 text-xs font-bold uppercase tracking-[0.14em] text-[var(--text-primary)] transition-colors hover:bg-[var(--glass-bg-hover)] disabled:opacity-50 sm:w-auto ${focusClass}`}
           >
             <RefreshCw className={`h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} />
             {t('superAdminNetwork.refresh')}
@@ -691,13 +696,14 @@ AllowedIPs = ${form.tunnelIp || '<tunnel-ip>'}/32, ${form.lanSubnet || '<lan-sub
         </div>
       ) : null}
 
-      <section className="grid grid-cols-2 gap-3 xl:grid-cols-4">
+      <section className="flex snap-x gap-3 overflow-x-auto pb-1 sm:grid sm:grid-cols-2 sm:overflow-visible xl:grid-cols-4">
         <Metric
           icon={Shield}
           label={t('superAdminNetwork.stats.liveNodes')}
           value={`${totals.live}/${totals.locations}`}
           hint={t('superAdminNetwork.stats.runtimeHint')}
           tone={totals.live > 0 ? 'good' : 'neutral'}
+          className="min-w-[160px] snap-start sm:min-w-0"
         />
         <Metric
           icon={Radio}
@@ -707,6 +713,7 @@ AllowedIPs = ${form.tunnelIp || '<tunnel-ip>'}/32, ${form.lanSubnet || '<lan-sub
             ? t('superAdminNetwork.mobility.connectedHint')
             : t('superAdminNetwork.mobility.notConfiguredShort')}
           tone={totals.mobilityOnline > 0 ? 'good' : 'neutral'}
+          className="min-w-[160px] snap-start sm:min-w-0"
         />
         <Metric
           icon={AlertTriangle}
@@ -714,6 +721,7 @@ AllowedIPs = ${form.tunnelIp || '<tunnel-ip>'}/32, ${form.lanSubnet || '<lan-sub
           value={String(totals.attention)}
           hint={t('superAdminNetwork.stats.attentionHint')}
           tone={totals.attention > 0 ? 'warning' : 'good'}
+          className="min-w-[160px] snap-start sm:min-w-0"
         />
         <Metric
           icon={Zap}
@@ -721,6 +729,7 @@ AllowedIPs = ${form.tunnelIp || '<tunnel-ip>'}/32, ${form.lanSubnet || '<lan-sub
           value={String(totals.conflicts)}
           hint={t('superAdminNetwork.stats.conflictsHint')}
           tone={totals.conflicts > 0 ? 'warning' : 'good'}
+          className="min-w-[160px] snap-start sm:min-w-0"
         />
       </section>
 
@@ -729,8 +738,26 @@ AllowedIPs = ${form.tunnelIp || '<tunnel-ip>'}/32, ${form.lanSubnet || '<lan-sub
           {t('superAdminNetwork.loading')}
         </section>
       ) : (
-        <section className="grid grid-cols-1 items-start gap-4 xl:grid-cols-[minmax(300px,0.62fr)_minmax(0,1.38fr)]">
-          <aside className="popup-surface rounded-3xl border border-[var(--glass-border)] p-4 xl:sticky xl:top-4">
+        <section className="grid grid-cols-1 items-start gap-4 lg:grid-cols-[minmax(280px,0.58fr)_minmax(0,1.42fr)]">
+          {isMobile && !mobileRegistryOpen ? (
+            <button
+              type="button"
+              onClick={() => setMobileRegistryOpen(true)}
+              className={`popup-surface flex min-h-14 w-full items-center justify-between gap-4 rounded-2xl border border-[var(--glass-border)] px-4 py-3 text-left ${focusClass}`}
+            >
+              <div className="min-w-0">
+                <p className={labelClass}>{t('superAdminNetwork.mobile.currentSite')}</p>
+                <p className="mt-1 truncate text-sm font-semibold text-[var(--text-primary)]">{locationName}</p>
+              </div>
+              <span className="inline-flex shrink-0 items-center gap-2 text-[10px] font-bold uppercase tracking-[0.12em] text-[var(--text-secondary)]">
+                {t('superAdminNetwork.mobile.changeSite')}
+                <ChevronDown className="h-4 w-4" />
+              </span>
+            </button>
+          ) : null}
+
+          {!isMobile || mobileRegistryOpen ? (
+          <aside className="popup-surface rounded-3xl border border-[var(--glass-border)] p-4 lg:sticky lg:top-4">
             <div className="flex items-start justify-between gap-3">
               <div>
                 <h3 className="text-xs font-bold uppercase tracking-[0.18em] text-[var(--text-secondary)]">
@@ -740,7 +767,18 @@ AllowedIPs = ${form.tunnelIp || '<tunnel-ip>'}/32, ${form.lanSubnet || '<lan-sub
                   {t('superAdminNetwork.fleetSubtitle')}
                 </p>
               </div>
-              <span className="text-[10px] text-[var(--text-muted)]">{filteredNodes.length}/{allNodes.length}</span>
+              <div className="flex items-center gap-2">
+                <span className="text-[10px] text-[var(--text-muted)]">{filteredNodes.length}/{allNodes.length}</span>
+                {isMobile ? (
+                  <button
+                    type="button"
+                    onClick={() => setMobileRegistryOpen(false)}
+                    className={`min-h-11 rounded-xl border border-[var(--glass-border)] px-3 text-[10px] font-bold uppercase tracking-[0.12em] text-[var(--text-secondary)] ${focusClass}`}
+                  >
+                    {t('superAdminNetwork.mobile.done')}
+                  </button>
+                ) : null}
+              </div>
             </div>
 
             <div className="relative mt-4">
@@ -752,13 +790,13 @@ AllowedIPs = ${form.tunnelIp || '<tunnel-ip>'}/32, ${form.lanSubnet || '<lan-sub
                 placeholder={t('superAdminNetwork.searchNodes')}
               />
             </div>
-            <div className="mt-3 flex gap-2 overflow-x-auto pb-1">
+            <div className="mt-3 flex gap-2 overflow-x-auto pb-1 lg:grid lg:grid-cols-2 lg:overflow-visible">
               {['all', 'live', 'attention', 'conflict'].map((filter) => (
                 <button
                   key={filter}
                   type="button"
                   onClick={() => setNodeFilter(filter)}
-                  className={`shrink-0 rounded-full border px-3 py-1.5 text-[9px] font-bold uppercase tracking-[0.13em] ${
+                  className={`min-h-11 shrink-0 rounded-full border px-3.5 py-2 text-[9px] font-bold uppercase tracking-[0.13em] lg:w-full ${focusClass} ${
                     nodeFilter === filter
                       ? 'border-[var(--accent-color)] bg-[color-mix(in_srgb,var(--accent-color)_14%,transparent)] text-[var(--text-primary)]'
                       : 'border-[var(--glass-border)] text-[var(--text-secondary)]'
@@ -782,14 +820,14 @@ AllowedIPs = ${form.tunnelIp || '<tunnel-ip>'}/32, ${form.lanSubnet || '<lan-sub
               <button
                 type="button"
                 onClick={handleNew}
-                className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-[var(--glass-border)] bg-[var(--glass-bg)] hover:bg-[var(--glass-bg-hover)]"
+                className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-[var(--glass-border)] bg-[var(--glass-bg)] hover:bg-[var(--glass-bg-hover)] ${focusClass}`}
                 title={t('superAdminNetwork.newLocation')}
               >
                 <Plus className="h-4 w-4" />
               </button>
             </div>
 
-            <div className="mt-4 max-h-[64vh] space-y-2 overflow-y-auto pr-1 custom-scrollbar">
+            <div className="mt-4 max-h-[56dvh] space-y-2 overflow-y-auto pr-1 custom-scrollbar lg:max-h-[calc(100dvh-22rem)]">
               {filteredNodes.map((node) => {
                 const active = node.clientId === selectedClientId && node.locationId === selectedLocationId;
                 return (
@@ -799,8 +837,9 @@ AllowedIPs = ${form.tunnelIp || '<tunnel-ip>'}/32, ${form.lanSubnet || '<lan-sub
                     onClick={() => {
                       setSelectedClientId(node.clientId);
                       setSelectedLocationId(node.locationId);
+                      setMobileRegistryOpen(false);
                     }}
-                    className={`w-full rounded-2xl border px-4 py-3 text-left transition-colors ${
+                    className={`min-h-14 w-full rounded-2xl border px-4 py-3 text-left transition-colors ${focusClass} ${
                       active
                         ? 'border-[var(--accent-color)] bg-[color-mix(in_srgb,var(--accent-color)_13%,var(--glass-bg))]'
                         : 'border-[var(--glass-border)] bg-[var(--glass-bg)] hover:bg-[var(--glass-bg-hover)]'
@@ -826,12 +865,19 @@ AllowedIPs = ${form.tunnelIp || '<tunnel-ip>'}/32, ${form.lanSubnet || '<lan-sub
                   </button>
                 );
               })}
+              {!filteredNodes.length ? (
+                <div className="rounded-2xl border border-dashed border-[var(--glass-border)] px-4 py-8 text-center text-sm text-[var(--text-secondary)]">
+                  {t('superAdminNetwork.emptyNodeResults')}
+                </div>
+              ) : null}
             </div>
           </aside>
+          ) : null}
 
+          {!isMobile || !mobileRegistryOpen ? (
           <div className="min-w-0 space-y-4">
             <section className="popup-surface rounded-3xl border border-[var(--glass-border)] p-4 md:p-5">
-              <div className={`flex gap-4 ${isMobile ? 'flex-col' : 'items-start justify-between'}`}>
+              <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
                 <div>
                   <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[var(--text-muted)]">
                     {selectedClient?.name || selectedClientId}
@@ -845,11 +891,11 @@ AllowedIPs = ${form.tunnelIp || '<tunnel-ip>'}/32, ${form.lanSubnet || '<lan-sub
                     {t('superAdminNetwork.configuration')}: {configurationPercent}%
                   </p>
                 </div>
-                <div className="flex flex-wrap gap-2">
+                <div className="flex w-full gap-2 md:w-auto md:flex-none md:flex-nowrap">
                   <button
                     type="button"
                     onClick={handleNew}
-                    className="inline-flex items-center gap-2 rounded-xl border border-[var(--glass-border)] bg-[var(--glass-bg)] px-3 py-2 text-xs font-bold uppercase tracking-[0.12em] hover:bg-[var(--glass-bg-hover)]"
+                    className={`inline-flex min-h-11 min-w-0 flex-1 items-center justify-center gap-2 rounded-xl border border-[var(--glass-border)] bg-[var(--glass-bg)] px-3 py-2 text-[10px] font-bold uppercase tracking-[0.1em] hover:bg-[var(--glass-bg-hover)] md:flex-none md:text-xs md:tracking-[0.12em] ${focusClass}`}
                   >
                     <Plus className="h-4 w-4" />
                     {t('superAdminNetwork.newLocation')}
@@ -858,7 +904,7 @@ AllowedIPs = ${form.tunnelIp || '<tunnel-ip>'}/32, ${form.lanSubnet || '<lan-sub
                     type="button"
                     onClick={handleSave}
                     disabled={saving || !form.locationId}
-                    className="inline-flex items-center gap-2 rounded-xl border border-emerald-400/30 bg-emerald-400/10 px-4 py-2 text-xs font-bold uppercase tracking-[0.12em] text-emerald-100 disabled:opacity-45"
+                    className={`inline-flex min-h-11 min-w-0 flex-1 items-center justify-center gap-2 rounded-xl border border-emerald-400/30 bg-emerald-400/10 px-4 py-2 text-[10px] font-bold uppercase tracking-[0.1em] text-emerald-100 disabled:opacity-45 md:flex-none md:text-xs md:tracking-[0.12em] ${focusClass}`}
                   >
                     {saving ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
                     {t('superAdminNetwork.save')}
@@ -867,7 +913,7 @@ AllowedIPs = ${form.tunnelIp || '<tunnel-ip>'}/32, ${form.lanSubnet || '<lan-sub
                     type="button"
                     onClick={handleDelete}
                     disabled={!detail?.persisted || deleting}
-                    className="inline-flex items-center rounded-xl border border-red-400/25 bg-red-400/[0.07] px-3 py-2 text-red-100 disabled:opacity-30"
+                    className={`inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-red-400/25 bg-red-400/[0.07] text-red-100 disabled:opacity-30 ${focusClass}`}
                     title={t('superAdminNetwork.deleteConfig')}
                   >
                     {deleting ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
@@ -889,7 +935,7 @@ AllowedIPs = ${form.tunnelIp || '<tunnel-ip>'}/32, ${form.lanSubnet || '<lan-sub
                 <MapPin className="h-4 w-4 text-[var(--text-muted)]" />
               </div>
 
-              <div className="mt-4 flex flex-col gap-3 xl:flex-row xl:items-stretch">
+              <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:flex xl:flex-row xl:items-stretch">
                 <DeviceNode
                   icon={Radio}
                   label={t('superAdminNetwork.physical.mobile')}
@@ -926,7 +972,7 @@ AllowedIPs = ${form.tunnelIp || '<tunnel-ip>'}/32, ${form.lanSubnet || '<lan-sub
                   ready={Boolean(switchClient?.online || form.switchIp || form.switchMac)}
                 />
                 <Connector label="PoE" active={Boolean(form.haIp || form.knxIp)} />
-                <div className="grid min-w-0 flex-[1.4] grid-cols-1 gap-3 sm:grid-cols-2">
+                <div className="grid min-w-0 flex-[1.4] grid-cols-1 gap-3 sm:col-span-2 sm:grid-cols-2 lg:col-span-3 xl:col-span-1">
                   <DeviceNode
                     icon={Cpu}
                     label="SMARTi Hub / HA"
@@ -976,7 +1022,7 @@ AllowedIPs = ${form.tunnelIp || '<tunnel-ip>'}/32, ${form.lanSubnet || '<lan-sub
             </section>
 
             <section className="popup-surface rounded-3xl border border-[var(--glass-border)] p-3 md:p-4">
-              <div className="flex gap-2 overflow-x-auto pb-1">
+              <div className="flex snap-x snap-mandatory gap-2 overflow-x-auto pb-1">
                 <StepTab
                   step="1"
                   title={t('superAdminNetwork.steps.site')}
@@ -1144,7 +1190,7 @@ AllowedIPs = ${form.tunnelIp || '<tunnel-ip>'}/32, ${form.lanSubnet || '<lan-sub
                         type="button"
                         onClick={handleDownload}
                         disabled={!detail?.persisted || downloading || !detail?.artifacts?.umrConfig}
-                        className="inline-flex items-center gap-2 rounded-xl border border-[var(--accent-color)] bg-[color-mix(in_srgb,var(--accent-color)_14%,transparent)] px-4 py-2.5 text-xs font-bold uppercase tracking-[0.12em] disabled:opacity-40"
+                        className={`inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl border border-[var(--accent-color)] bg-[color-mix(in_srgb,var(--accent-color)_14%,transparent)] px-4 py-2.5 text-xs font-bold uppercase tracking-[0.12em] disabled:opacity-40 sm:w-auto ${focusClass}`}
                       >
                         {downloading ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
                         {t('superAdminNetwork.downloadUmr')}
@@ -1153,7 +1199,7 @@ AllowedIPs = ${form.tunnelIp || '<tunnel-ip>'}/32, ${form.lanSubnet || '<lan-sub
                         type="button"
                         onClick={() => handleApply('wireguard')}
                         disabled={!detail?.persisted || !stepReady[2] || applying === 'wireguard'}
-                        className="inline-flex items-center gap-2 rounded-xl border border-[var(--glass-border)] bg-[var(--glass-bg)] px-4 py-2.5 text-xs font-bold uppercase tracking-[0.12em] disabled:opacity-40"
+                        className={`inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl border border-[var(--glass-border)] bg-[var(--glass-bg)] px-4 py-2.5 text-xs font-bold uppercase tracking-[0.12em] disabled:opacity-40 sm:w-auto ${focusClass}`}
                       >
                         {applying === 'wireguard' ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Wifi className="h-4 w-4" />}
                         {t('superAdminNetwork.applyWireGuard')}
@@ -1206,7 +1252,7 @@ AllowedIPs = ${form.tunnelIp || '<tunnel-ip>'}/32, ${form.lanSubnet || '<lan-sub
                         type="button"
                         onClick={() => handleApply('caddy')}
                         disabled={!detail?.persisted || !domainFqdn || !form.haIp || applying === 'caddy'}
-                        className="inline-flex items-center gap-2 rounded-xl border border-[var(--glass-border)] bg-[var(--glass-bg)] px-4 py-2.5 text-xs font-bold uppercase tracking-[0.12em] disabled:opacity-40"
+                        className={`inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl border border-[var(--glass-border)] bg-[var(--glass-bg)] px-4 py-2.5 text-xs font-bold uppercase tracking-[0.12em] disabled:opacity-40 sm:w-auto ${focusClass}`}
                       >
                         {applying === 'caddy' ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Globe className="h-4 w-4" />}
                         {t('superAdminNetwork.applyCaddy')}
@@ -1215,7 +1261,7 @@ AllowedIPs = ${form.tunnelIp || '<tunnel-ip>'}/32, ${form.lanSubnet || '<lan-sub
                         type="button"
                         onClick={() => handleApply('all')}
                         disabled={!detail?.persisted || !stepReady[2] || !domainFqdn || !form.haIp || applying === 'all'}
-                        className="inline-flex items-center gap-2 rounded-xl border border-emerald-400/30 bg-emerald-400/10 px-4 py-2.5 text-xs font-bold uppercase tracking-[0.12em] text-emerald-100 disabled:opacity-40"
+                        className={`inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl border border-emerald-400/30 bg-emerald-400/10 px-4 py-2.5 text-xs font-bold uppercase tracking-[0.12em] text-emerald-100 disabled:opacity-40 sm:w-auto ${focusClass}`}
                       >
                         {applying === 'all' ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Server className="h-4 w-4" />}
                         {t('superAdminNetwork.applyAll')}
@@ -1275,18 +1321,18 @@ AllowedIPs = ${form.tunnelIp || '<tunnel-ip>'}/32, ${form.lanSubnet || '<lan-sub
 
                 {mobilitySnapshot?.clients?.length ? (
                   <div className="mt-4 overflow-hidden rounded-2xl border border-[var(--glass-border)]">
-                    <div className="grid grid-cols-[1.2fr_0.8fr_0.8fr] gap-3 border-b border-[var(--glass-border)] bg-[var(--glass-bg)] px-4 py-2 text-[9px] font-bold uppercase tracking-[0.14em] text-[var(--text-muted)]">
+                    <div className="hidden grid-cols-[1.2fr_0.8fr_0.8fr] gap-3 border-b border-[var(--glass-border)] bg-[var(--glass-bg)] px-4 py-2 text-[9px] font-bold uppercase tracking-[0.14em] text-[var(--text-muted)] sm:grid">
                       <span>{t('superAdminNetwork.operations.device')}</span>
                       <span>IP</span>
                       <span>{t('superAdminNetwork.operations.status')}</span>
                     </div>
                     {mobilitySnapshot.clients.map((client) => (
-                      <div key={client.id || client.macAddress} className="grid grid-cols-[1.2fr_0.8fr_0.8fr] gap-3 border-b border-[var(--glass-border)] px-4 py-3 text-xs last:border-b-0">
+                      <div key={client.id || client.macAddress} className="flex flex-col gap-3 border-b border-[var(--glass-border)] px-4 py-3 text-xs last:border-b-0 sm:grid sm:grid-cols-[1.2fr_0.8fr_0.8fr]">
                         <div className="min-w-0">
                           <p className="truncate font-semibold text-[var(--text-primary)]">{client.name}</p>
                           <p className="mt-1 truncate text-[10px] text-[var(--text-muted)]">{client.macAddress}</p>
                         </div>
-                        <span className="truncate text-[var(--text-secondary)]">{client.ipAddress || '-'}</span>
+                        <span className="truncate text-[var(--text-secondary)]"><span className="mr-1 font-semibold text-[var(--text-muted)] sm:hidden">IP</span>{client.ipAddress || '-'}</span>
                         <span><StatusBadge tone={client.online ? 'good' : client.blocked ? 'danger' : 'neutral'}>{client.status}</StatusBadge></span>
                       </div>
                     ))}
@@ -1308,7 +1354,7 @@ AllowedIPs = ${form.tunnelIp || '<tunnel-ip>'}/32, ${form.lanSubnet || '<lan-sub
                     title={t('superAdminNetwork.operations.vpn')}
                     value={mobilitySnapshot?.device?.vpn ? JSON.stringify(mobilitySnapshot.device.vpn, null, 2) : ''}
                     empty={t('superAdminNetwork.operations.noVpnData')}
-                    minHeight="120px"
+                    compact
                   />
                   <div className="rounded-2xl border border-[var(--glass-border)] bg-[var(--glass-bg)] p-4">
                     <p className={labelClass}>{t('superAdminNetwork.operations.serverReadiness')}</p>
@@ -1332,6 +1378,7 @@ AllowedIPs = ${form.tunnelIp || '<tunnel-ip>'}/32, ${form.lanSubnet || '<lan-sub
               </section>
             ) : null}
           </div>
+          ) : null}
         </section>
       )}
     </div>

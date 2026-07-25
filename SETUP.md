@@ -151,4 +151,4 @@ UNIFI_MOBILITY_API_URL=https://api.ui.com/v1/mobility
 UNIFI_MOBILITY_CACHE_TTL_MS=60000
 ```
 
-The API key is used only by the backend and is never returned to the browser. Read access works without a cloud subscription. The generated WireGuard file is still imported manually in Mobility because the official Mobility API does not currently document an endpoint for creating VPN profiles.
+`UNIFY_API_KEY` is also supported as a backwards-compatible alias. The API key is used only by the backend and is never returned to the browser. Read access works without a cloud subscription. The generated WireGuard file is still imported manually in Mobility because the official Mobility API does not currently document an endpoint for creating VPN profiles.

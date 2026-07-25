@@ -1,6 +1,8 @@
 const env = globalThis.process?.env || {};
 
-const MOBILITY_API_KEY = String(env.UNIFI_MOBILITY_API_KEY || '').trim();
+const MOBILITY_API_KEY = String(
+  env.UNIFI_MOBILITY_API_KEY || env.UNIFY_API_KEY || '',
+).trim();
 const MOBILITY_API_BASE_URL = String(
   env.UNIFI_MOBILITY_API_URL || 'https://api.ui.com/v1/mobility',
 ).trim().replace(/\/+$/, '');
@@ -69,7 +71,7 @@ const getMobilityConfig = () => ({
 
 const mobilityRequest = async (path) => {
   if (!MOBILITY_API_KEY) {
-    const error = new Error('UNIFI_MOBILITY_API_KEY is not configured');
+    const error = new Error('UNIFI_MOBILITY_API_KEY or UNIFY_API_KEY is not configured');
     error.code = 'MOBILITY_NOT_CONFIGURED';
     error.status = 503;
     throw error;

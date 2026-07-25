@@ -66,4 +66,13 @@ describe('UniFi Mobility operational data', () => {
     expect(JSON.stringify(snapshot)).not.toContain('must-not-leave-server');
     expect(JSON.stringify(snapshot)).not.toContain('must-also-be-redacted');
   });
+
+  it('accepts the existing UNIFY_API_KEY environment variable', async () => {
+    vi.stubEnv('UNIFI_MOBILITY_API_KEY', '');
+    vi.stubEnv('UNIFY_API_KEY', 'existing-alias-key');
+
+    const { getUnifiMobilityStatus } = await import('../../server/unifiMobility.js');
+
+    expect(getUnifiMobilityStatus().configured).toBe(true);
+  });
 });
