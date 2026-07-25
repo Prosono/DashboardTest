@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
+  Activity,
+  AlertTriangle,
   Check,
   ChevronDown,
   Database,
@@ -12,8 +14,10 @@ import {
   Plus,
   RefreshCw,
   Router,
+  Search,
   Server,
   Shield,
+  Trash2,
   Wifi,
 } from '../../icons';
 
@@ -59,20 +63,6 @@ const pickSiteFormState = (site) => ({
 const textInputClass = 'w-full rounded-2xl border border-[var(--glass-border)] bg-[var(--glass-bg)] px-4 py-3 text-sm text-[var(--text-primary)] outline-none focus:border-[var(--accent-color)] focus:ring-2 focus:ring-[color-mix(in_srgb,var(--accent-color)_22%,transparent)] transition-colors';
 const fieldLabelClass = 'text-[10px] uppercase tracking-[0.16em] text-[var(--text-muted)]';
 
-const formatDateTime = (value, language) => {
-  if (!value) return '-';
-  const dt = new Date(value);
-  if (Number.isNaN(dt.getTime())) return '-';
-  try {
-    return dt.toLocaleString(language === 'en' ? 'en-US' : 'nb-NO', {
-      dateStyle: 'medium',
-      timeStyle: 'short',
-    });
-  } catch {
-    return dt.toISOString();
-  }
-};
-
 function SummaryCard({ icon: Icon, label, value, hint, tone = 'neutral' }) {
   const toneClass = tone === 'good'
     ? 'border-[var(--status-success-border)] bg-[var(--status-success-bg)] text-[var(--status-success-text)]'
@@ -105,6 +95,24 @@ function StatusBadge({ ready, readyLabel, pendingLabel }) {
       }`}
     >
       {ready ? readyLabel : pendingLabel}
+    </span>
+  );
+}
+
+const nodeStatusTone = {
+  live: 'border-emerald-400/30 bg-emerald-400/10 text-emerald-200',
+  ready: 'border-blue-400/30 bg-blue-400/10 text-blue-200',
+  partial: 'border-amber-400/30 bg-amber-400/10 text-amber-100',
+  draft: 'border-[var(--glass-border)] bg-[var(--glass-bg)] text-[var(--text-secondary)]',
+  drifted: 'border-orange-400/30 bg-orange-400/10 text-orange-100',
+  conflict: 'border-red-400/30 bg-red-400/10 text-red-100',
+};
+
+function NodeStatusBadge({ status, t }) {
+  const safeStatus = nodeStatusTone[status] ? status : 'draft';
+  return (
+    <span className={`shrink-0 rounded-full border px-2 py-1 text-[9px] font-bold uppercase tracking-[0.13em] ${nodeStatusTone[safeStatus]}`}>
+      {t(`superAdminNetwork.nodeStatus.${safeStatus}`)}
     </span>
   );
 }
@@ -184,7 +192,7 @@ function TopologyNode({ icon: Icon, title, primary, secondary, status, ready = f
 
 function TopologyConnector({ label, active = false }) {
   return (
-    <div className="hidden xl:flex min-w-[72px] flex-col items-center justify-center gap-2 px-1">
+    <div className="hidden 2xl:flex min-w-[56px] flex-col items-center justify-center gap-2 px-1">
       <div className={`h-px w-full ${active ? 'bg-[var(--status-success-border)]' : 'bg-[var(--glass-border)]'}`} />
       <span className="text-[10px] uppercase tracking-[0.16em] text-[var(--text-muted)]">{label}</span>
     </div>
@@ -193,7 +201,6 @@ function TopologyConnector({ label, active = false }) {
 
 export default function SuperAdminNetworkPage({
   t,
-  language,
   userAdminApi,
   isMobile,
 }) {
@@ -211,6 +218,9 @@ export default function SuperAdminNetworkPage({
   const [showAdvancedFields, setShowAdvancedFields] = useState(false);
   const [showInspector, setShowInspector] = useState(false);
   const [inspectorTab, setInspectorTab] = useState('preview');
+  const [nodeSearch, setNodeSearch] = useState('');
+  const [nodeFilter, setNodeFilter] = useState('all');
+  const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState('');
   const [actionMessage, setActionMessage] = useState('');
 
@@ -279,7 +289,38 @@ export default function SuperAdminNetworkPage({
     appliedCaddy: Number(overview?.totals?.appliedCaddy || 0),
     activePeers: Number(overview?.files?.wireGuard?.peerCount || 0),
     activeSites: Number(overview?.files?.caddy?.siteCount || 0),
+    live: Number(overview?.totals?.live || 0),
+    attention: Number(overview?.totals?.attention || 0),
+    conflicts: Array.isArray(overview?.diagnostics?.conflicts) ? overview.diagnostics.conflicts.length : 0,
   }), [overview]);
+
+  const allNodes = useMemo(() => clients.flatMap((client) => (
+    (Array.isArray(client?.locations) ? client.locations : []).map((location) => ({
+      ...location,
+      clientId: client.id,
+      clientName: client.name || client.id,
+    }))
+  )), [clients]);
+
+  const filteredNodes = useMemo(() => {
+    const query = nodeSearch.trim().toLowerCase();
+    return allNodes.filter((node) => {
+      const matchesQuery = !query || [
+        node.displayName,
+        node.locationId,
+        node.clientName,
+        node.clientId,
+        node.domainFqdn,
+        node.tunnelIp,
+        node.lanSubnet,
+      ].some((value) => String(value || '').toLowerCase().includes(query));
+      const matchesFilter = nodeFilter === 'all'
+        || (nodeFilter === 'attention'
+          ? !['live', 'ready'].includes(node.status)
+          : node.status === nodeFilter);
+      return matchesQuery && matchesFilter;
+    });
+  }, [allNodes, nodeFilter, nodeSearch]);
 
   useEffect(() => {
     if (!clients.length) {
@@ -383,6 +424,10 @@ AllowedIPs = ${tunnelIpPart}, ${subnetPart}`;
   const tunnelConfigured = Boolean(formState.tunnelIp);
   const domainConfigured = Boolean(domainFqdnPreview);
   const backupConfigured = backupPathPreview !== '-';
+  const configurationPercent = Math.round((
+    [routerConfigured, haConfigured, tunnelConfigured && Boolean(formState.lanSubnet), domainConfigured, backupConfigured]
+      .filter(Boolean).length / 5
+  ) * 100);
 
   useEffect(() => {
     setShowAdvancedFields(false);
@@ -480,6 +525,26 @@ AllowedIPs = ${tunnelIpPart}, ${subnetPart}`;
     }
   }, [userAdminApi, selectedClientId, formState.locationId, t]);
 
+  const handleDelete = useCallback(async () => {
+    if (!userAdminApi?.deleteNetworkSite || !detail?.persisted || !selectedClientId || !formState.locationId) return;
+    const confirmed = globalThis.confirm?.(t('superAdminNetwork.deleteConfirm'));
+    if (!confirmed) return;
+    setDeleting(true);
+    setActionMessage('');
+    setError('');
+    try {
+      await userAdminApi.deleteNetworkSite(selectedClientId, formState.locationId, true);
+      setDetail(null);
+      setActionMessage(t('superAdminNetwork.deleteSuccess'));
+      await loadOverview(true);
+      await loadDetail(selectedClientId, formState.locationId);
+    } catch (deleteError) {
+      setError(deleteError?.message || t('superAdminNetwork.deleteFailed'));
+    } finally {
+      setDeleting(false);
+    }
+  }, [detail?.persisted, formState.locationId, loadDetail, loadOverview, selectedClientId, t, userAdminApi]);
+
   return (
     <div className="page-transition flex flex-col gap-4 md:gap-6 font-sans" data-disable-pull-refresh="true">
       <section className="popup-surface rounded-3xl p-4 md:p-6 border border-[var(--glass-border)]">
@@ -527,60 +592,137 @@ AllowedIPs = ${tunnelIpPart}, ${subnetPart}`;
         </section>
       ) : null}
 
-      <section className="grid grid-cols-1 md:grid-cols-3 gap-3">
+      <section className="grid grid-cols-2 xl:grid-cols-4 gap-3">
+        <SummaryCard
+          icon={Activity}
+          label={t('superAdminNetwork.stats.liveNodes')}
+          value={String(totals.live)}
+          hint={`${totals.locations} ${t('superAdminNetwork.stats.nodesTotal')}`}
+          tone={totals.live > 0 ? 'good' : 'neutral'}
+        />
+        <SummaryCard
+          icon={AlertTriangle}
+          label={t('superAdminNetwork.stats.attention')}
+          value={String(totals.attention)}
+          hint={t('superAdminNetwork.stats.attentionHint')}
+        />
+        <SummaryCard
+          icon={Shield}
+          label={t('superAdminNetwork.stats.conflicts')}
+          value={String(totals.conflicts)}
+          hint={t('superAdminNetwork.stats.conflictsHint')}
+          tone={totals.conflicts === 0 ? 'good' : 'neutral'}
+        />
         <SummaryCard
           icon={Server}
-          label={t('superAdminNetwork.stats.clients')}
-          value={String(totals.clients)}
-          hint={t('superAdminNetwork.stats.clientsHint')}
-        />
-        <SummaryCard
-          icon={MapPin}
-          label={t('superAdminNetwork.stats.locations')}
-          value={String(totals.locations)}
-          hint={`${totals.activePeers} ${t('superAdminNetwork.stats.wgPeers')?.toLowerCase?.() || 'wg-peers'}`}
-        />
-        <SummaryCard
-          icon={Check}
-          label={t('superAdminNetwork.stats.applied')}
-          value={String(Math.min(totals.appliedWireGuard, totals.appliedCaddy))}
-          hint={`${totals.activeSites} ${t('superAdminNetwork.stats.caddySites')?.toLowerCase?.() || 'caddy-sites'}`}
-          tone={(totals.appliedWireGuard + totals.appliedCaddy) > 0 ? 'good' : 'neutral'}
+          label={t('superAdminNetwork.stats.runtime')}
+          value={`${totals.activePeers}/${totals.activeSites}`}
+          hint={t('superAdminNetwork.stats.runtimeHint')}
         />
       </section>
+
+      {(totals.conflicts > 0
+        || (overview?.diagnostics?.orphanWireGuardPeers?.length || 0) > 0
+        || (overview?.diagnostics?.orphanCaddySites?.length || 0) > 0) ? (
+        <section className="rounded-2xl border border-amber-400/30 bg-amber-400/10 px-4 py-4 text-amber-100">
+          <div className="flex items-start gap-3">
+            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+            <div>
+              <p className="text-xs font-bold uppercase tracking-[0.16em]">{t('superAdminNetwork.diagnosticsTitle')}</p>
+              <p className="mt-1 text-sm text-amber-100/80">
+                {t('superAdminNetwork.diagnosticsSummary')
+                  .replace('{{conflicts}}', String(totals.conflicts))
+                  .replace('{{wg}}', String(overview?.diagnostics?.orphanWireGuardPeers?.length || 0))
+                  .replace('{{caddy}}', String(overview?.diagnostics?.orphanCaddySites?.length || 0))}
+              </p>
+            </div>
+          </div>
+        </section>
+      ) : null}
 
       {loadingOverview ? (
         <section className="popup-surface rounded-3xl p-6 border border-[var(--glass-border)]">
           <p className="text-sm text-[var(--text-secondary)]">{t('superAdminNetwork.loading')}</p>
         </section>
       ) : (
-        <section className="grid grid-cols-1 xl:grid-cols-[0.72fr_1.28fr] gap-4 items-start">
+        <section className="grid grid-cols-1 xl:grid-cols-[minmax(0,0.72fr)_minmax(0,1.28fr)] gap-4 items-start">
           <aside className="popup-surface rounded-3xl p-4 md:p-5 border border-[var(--glass-border)]">
             <div className="flex items-center justify-between gap-3 mb-4">
               <div>
                 <p className="text-xs md:text-sm font-bold uppercase tracking-[0.2em] text-[var(--text-secondary)]">
-                  {t('superAdminNetwork.clientsTitle')}
+                  {t('superAdminNetwork.fleetTitle')}
                 </p>
                 <p className="mt-1 text-xs text-[var(--text-muted)]">
-                  {t('superAdminNetwork.clientsSubtitle')}
+                  {t('superAdminNetwork.fleetSubtitle')}
                 </p>
               </div>
               <span className="text-[10px] uppercase tracking-[0.14em] text-[var(--text-muted)]">
-                {clients.length}
+                {filteredNodes.length}/{allNodes.length}
               </span>
             </div>
 
-            {!clients.length ? (
-              <p className="text-sm text-[var(--text-secondary)]">{t('superAdminNetwork.emptyClients')}</p>
+            <div className="relative">
+              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--text-muted)]" />
+              <input
+                value={nodeSearch}
+                onChange={(event) => setNodeSearch(event.target.value)}
+                placeholder={t('superAdminNetwork.searchNodes')}
+                className="w-full rounded-xl border border-[var(--glass-border)] bg-[var(--glass-bg)] py-2.5 pl-10 pr-3 text-sm outline-none focus:border-[var(--accent-color)]"
+              />
+            </div>
+
+            <div className="mt-3 flex gap-2 overflow-x-auto pb-1">
+              {['all', 'live', 'attention', 'conflict'].map((filter) => (
+                <button
+                  key={filter}
+                  type="button"
+                  onClick={() => setNodeFilter(filter)}
+                  className={`shrink-0 rounded-full border px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.12em] ${
+                    nodeFilter === filter
+                      ? 'border-[var(--accent-color)] bg-[color-mix(in_srgb,var(--accent-color)_16%,transparent)] text-[var(--text-primary)]'
+                      : 'border-[var(--glass-border)] text-[var(--text-secondary)]'
+                  }`}
+                >
+                  {t(`superAdminNetwork.filter.${filter}`)}
+                </button>
+              ))}
+            </div>
+
+            <div className="mt-4 flex items-center gap-2 border-t border-[var(--glass-border)] pt-4">
+              <select
+                value={selectedClientId}
+                onChange={(event) => setSelectedClientId(event.target.value)}
+                className="min-w-0 flex-1 rounded-xl border border-[var(--glass-border)] bg-[var(--glass-bg)] px-3 py-2 text-xs text-[var(--text-primary)]"
+              >
+                {clients.map((client) => <option key={client.id} value={client.id}>{client.name || client.id}</option>)}
+              </select>
+              <button
+                type="button"
+                onClick={handleNewLocation}
+                disabled={!selectedClientId}
+                className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-[var(--glass-border)] bg-[var(--glass-bg)] hover:bg-[var(--glass-bg-hover)] disabled:opacity-40"
+                title={t('superAdminNetwork.newLocation')}
+              >
+                <Plus className="h-4 w-4" />
+              </button>
+            </div>
+
+            {!filteredNodes.length ? (
+              <div className="mt-4 rounded-2xl border border-dashed border-[var(--glass-border)] px-4 py-6 text-center">
+                <p className="text-sm text-[var(--text-secondary)]">{t('superAdminNetwork.emptyNodeResults')}</p>
+              </div>
             ) : (
-              <div className="space-y-2 max-h-[65vh] overflow-y-auto custom-scrollbar pr-1">
-                {clients.map((client) => {
-                  const isActive = client.id === selectedClientId;
+              <div className="mt-4 space-y-2 max-h-[68vh] overflow-y-auto custom-scrollbar pr-1">
+                {filteredNodes.map((node) => {
+                  const isActive = node.clientId === selectedClientId && node.locationId === selectedLocationId;
                   return (
                     <button
-                      key={client.id}
+                      key={`${node.clientId}/${node.locationId}`}
                       type="button"
-                      onClick={() => setSelectedClientId(client.id)}
+                      onClick={() => {
+                        setSelectedClientId(node.clientId);
+                        setSelectedLocationId(node.locationId);
+                      }}
                       className={`w-full text-left rounded-2xl border px-4 py-3 transition-colors ${
                         isActive
                           ? 'border-[var(--accent-color)] bg-[color-mix(in_srgb,var(--accent-color)_16%,transparent)]'
@@ -590,22 +732,17 @@ AllowedIPs = ${tunnelIpPart}, ${subnetPart}`;
                       <div className="flex items-start justify-between gap-3">
                         <div className="min-w-0">
                           <p className="text-sm font-semibold text-[var(--text-primary)] truncate">
-                            {client.name || client.id}
+                            {node.displayName || node.locationId}
                           </p>
                           <p className="mt-1 text-[10px] uppercase tracking-[0.16em] text-[var(--text-muted)] truncate">
-                            {client.id}
+                            {node.clientName} · {node.locationId}
                           </p>
                         </div>
-                        <StatusBadge
-                          ready={Number(client.locationCount || 0) > 0}
-                          readyLabel={t('superAdminNetwork.clientReady')}
-                          pendingLabel={t('superAdminNetwork.clientEmpty')}
-                        />
+                        <NodeStatusBadge status={node.status} t={t} />
                       </div>
-                      <div className="mt-3 flex flex-wrap items-center gap-3 text-[11px] text-[var(--text-secondary)]">
-                        <span>{t('superAdminNetwork.stats.locations')}: {client.locationCount || 0}</span>
-                        <span>{t('superAdminNetwork.stats.wgPeers')}: {client.appliedWireGuardCount || 0}</span>
-                        <span>{t('superAdminNetwork.stats.caddySites')}: {client.appliedCaddyCount || 0}</span>
+                      <div className="mt-3 flex items-center justify-between gap-3 text-[11px] text-[var(--text-secondary)]">
+                        <span className="truncate">{node.domainFqdn || node.tunnelIp || t('superAdminNetwork.noAddress')}</span>
+                        <span className="shrink-0 tabular-nums">{node.configurationPercent || 0}%</span>
                       </div>
                     </button>
                   );
@@ -614,7 +751,7 @@ AllowedIPs = ${tunnelIpPart}, ${subnetPart}`;
             )}
           </aside>
 
-          <div className="flex flex-col gap-4">
+          <div className="min-w-0 flex flex-col gap-4">
             <section className="popup-surface rounded-3xl p-4 md:p-5 border border-[var(--glass-border)]">
               <div className="flex items-center justify-between gap-3 mb-4">
                 <div>
@@ -629,7 +766,7 @@ AllowedIPs = ${tunnelIpPart}, ${subnetPart}`;
               </div>
 
               <div className="rounded-[28px] border border-[var(--glass-border)] bg-[linear-gradient(180deg,color-mix(in_srgb,var(--glass-bg)_90%,transparent),color-mix(in_srgb,var(--bg-primary)_86%,transparent))] p-4 md:p-5">
-                <div className="flex flex-col gap-4 xl:flex-row xl:items-stretch">
+                <div className="flex flex-col gap-4 2xl:flex-row 2xl:items-stretch">
                   <TopologyNode
                     icon={Globe}
                     title={t('superAdminNetwork.map.domain')}
@@ -677,7 +814,7 @@ AllowedIPs = ${tunnelIpPart}, ${subnetPart}`;
                   />
                 </div>
 
-                <div className="mt-4 grid grid-cols-1 xl:grid-cols-[1.4fr_auto_1fr] gap-4 items-center">
+                <div className="mt-4 grid grid-cols-1 2xl:grid-cols-[1.4fr_auto_1fr] gap-4 items-center">
                   <div className="rounded-3xl border border-[var(--glass-border)] bg-[var(--glass-bg)] px-4 py-4">
                     <div className="flex items-center justify-between gap-3">
                       <div>
@@ -696,7 +833,7 @@ AllowedIPs = ${tunnelIpPart}, ${subnetPart}`;
                     </div>
                   </div>
 
-                  <div className="hidden xl:block h-px w-10 bg-[var(--glass-border)]" />
+                  <div className="hidden 2xl:block h-px w-10 bg-[var(--glass-border)]" />
 
                   <div className="rounded-3xl border border-[var(--glass-border)] bg-[var(--glass-bg)] px-4 py-4">
                     <div className="flex items-center justify-between gap-3">
@@ -730,9 +867,12 @@ AllowedIPs = ${tunnelIpPart}, ${subnetPart}`;
                       <p className="text-[10px] uppercase tracking-[0.18em] text-[var(--text-muted)]">
                         {t('superAdminNetwork.selectedClient')}
                       </p>
-                      <h3 className="mt-1 text-base md:text-lg font-semibold text-[var(--text-primary)]">
-                        {selectedClient.name || selectedClient.id}
-                      </h3>
+                      <div className="mt-1 flex flex-wrap items-center gap-2">
+                        <h3 className="text-base md:text-lg font-semibold text-[var(--text-primary)]">
+                          {selectedClient.name || selectedClient.id}
+                        </h3>
+                        {!isNewLocation ? <NodeStatusBadge status={detail?.site?.status || selectedLocationSummary?.status} t={t} /> : null}
+                      </div>
                       <p className="mt-2 text-sm text-[var(--text-secondary)]">
                         {t('superAdminNetwork.selectedLocation')}: <span className="text-[var(--text-primary)]">{selectedLocationName}</span>
                       </p>
@@ -759,7 +899,7 @@ AllowedIPs = ${tunnelIpPart}, ${subnetPart}`;
                       <button
                         type="button"
                         onClick={() => handleApply('wireguard')}
-                        disabled={!detail?.persisted || applyingTarget === 'wireguard'}
+                        disabled={!detail?.persisted || applyingTarget === 'wireguard' || !tunnelConfigured || !formState.lanSubnet}
                         className="inline-flex items-center justify-center gap-2 px-3 py-2 rounded-xl border border-[var(--glass-border)] bg-[var(--glass-bg)] text-[var(--text-primary)] text-xs font-bold uppercase tracking-[0.14em] hover:bg-[var(--glass-bg-hover)] transition-colors disabled:opacity-60"
                       >
                         {applyingTarget === 'wireguard' ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Wifi className="w-4 h-4" />}
@@ -768,7 +908,7 @@ AllowedIPs = ${tunnelIpPart}, ${subnetPart}`;
                       <button
                         type="button"
                         onClick={() => handleApply('caddy')}
-                        disabled={!detail?.persisted || applyingTarget === 'caddy'}
+                        disabled={!detail?.persisted || applyingTarget === 'caddy' || !domainConfigured || !haConfigured}
                         className="inline-flex items-center justify-center gap-2 px-3 py-2 rounded-xl border border-[var(--glass-border)] bg-[var(--glass-bg)] text-[var(--text-primary)] text-xs font-bold uppercase tracking-[0.14em] hover:bg-[var(--glass-bg-hover)] transition-colors disabled:opacity-60"
                       >
                         {applyingTarget === 'caddy' ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Globe className="w-4 h-4" />}
@@ -777,7 +917,7 @@ AllowedIPs = ${tunnelIpPart}, ${subnetPart}`;
                       <button
                         type="button"
                         onClick={() => handleApply('all')}
-                        disabled={!detail?.persisted || applyingTarget === 'all'}
+                        disabled={!detail?.persisted || applyingTarget === 'all' || !tunnelConfigured || !formState.lanSubnet || !domainConfigured || !haConfigured}
                         className="inline-flex items-center justify-center gap-2 px-4 py-2 rounded-xl border border-[var(--glass-border)] bg-[var(--glass-bg)] text-[var(--text-primary)] text-xs font-bold uppercase tracking-[0.14em] hover:bg-[var(--glass-bg-hover)] transition-colors disabled:opacity-60"
                       >
                         {applyingTarget === 'all' ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Server className="w-4 h-4" />}
@@ -791,6 +931,15 @@ AllowedIPs = ${tunnelIpPart}, ${subnetPart}`;
                       >
                         {downloading ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
                         {t('superAdminNetwork.downloadUmr')}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleDelete}
+                        disabled={!detail?.persisted || deleting}
+                        className="inline-flex items-center justify-center gap-2 px-3 py-2 rounded-xl border border-red-400/30 bg-red-400/10 text-red-100 text-xs font-bold uppercase tracking-[0.14em] hover:bg-red-400/15 transition-colors disabled:opacity-40"
+                      >
+                        {deleting ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+                        {t('superAdminNetwork.deleteConfig')}
                       </button>
                     </div>
                   </div>
@@ -825,11 +974,7 @@ AllowedIPs = ${tunnelIpPart}, ${subnetPart}`;
                             >
                               <div className="flex items-center gap-2">
                                 <span className="text-sm font-semibold text-[var(--text-primary)]">{location.displayName || location.locationId}</span>
-                                <StatusBadge
-                                  ready={Boolean(location.runtime?.wireGuardApplied || location.runtime?.caddyApplied)}
-                                  readyLabel={t('superAdminNetwork.applied')}
-                                  pendingLabel={t('superAdminNetwork.pending')}
-                                />
+                                <NodeStatusBadge status={location.status} t={t} />
                               </div>
                               <div className="mt-1 text-[10px] uppercase tracking-[0.16em] text-[var(--text-muted)]">
                                 {location.locationId}
@@ -859,7 +1004,17 @@ AllowedIPs = ${tunnelIpPart}, ${subnetPart}`;
                 <Shield className="w-4 h-4 text-[var(--text-muted)]" />
               </div>
 
-              <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
+              <div className="grid grid-cols-1 lg:grid-cols-4 gap-3">
+                <div className="rounded-2xl border border-[var(--glass-border)] bg-[var(--glass-bg)] px-4 py-3">
+                  <p className="text-[10px] uppercase tracking-[0.16em] text-[var(--text-muted)]">{t('superAdminNetwork.configuration')}</p>
+                  <div className="mt-2 flex items-end justify-between gap-3">
+                    <span className="text-2xl font-semibold tabular-nums">{configurationPercent}%</span>
+                    <span className="text-[10px] text-[var(--text-muted)]">{configurationPercent === 100 ? t('superAdminNetwork.configurationReady') : t('superAdminNetwork.configurationIncomplete')}</span>
+                  </div>
+                  <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-[var(--glass-border)]">
+                    <div className="h-full rounded-full bg-[var(--accent-color)]" style={{ width: `${configurationPercent}%` }} />
+                  </div>
+                </div>
                 <InfoField
                   label={t('superAdminNetwork.runtime.domain')}
                   value={domainFqdnPreview || '-'}

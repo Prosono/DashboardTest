@@ -118,3 +118,23 @@ environment:
   - NODE_ENV=production
 ```
 
+### User invitation email
+
+Creating users from the admin interface sends a one-time activation link. The user chooses their own username and password; the administrator only enters name, email, role, client, and dashboard.
+
+Configure either `SMTP_URL` or the individual SMTP settings:
+
+```yaml
+environment:
+  - APP_PUBLIC_URL=https://dashboard.example.com
+  - SMTP_HOST=smtp.example.com
+  - SMTP_PORT=587
+  - SMTP_SECURE=false
+  - SMTP_USER=mailer@example.com
+  - SMTP_PASSWORD=replace-with-a-secret
+  - SMTP_FROM=Smart Sauna Systems <mailer@example.com>
+  - SMTP_REPLY_TO=support@example.com
+  - USER_INVITATION_TTL_HOURS=72
+```
+
+`APP_PUBLIC_URL`, `SMTP_FROM`, and either `SMTP_URL` or `SMTP_HOST` are required. If email delivery fails, the pending user is rolled back instead of leaving an account without a usable invitation. Invitation tokens are stored as SHA-256 hashes, expire automatically, and can only be used once.

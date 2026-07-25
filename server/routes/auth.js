@@ -61,6 +61,12 @@ import {
   shouldDedupeAppActionEntry,
 } from '../appActionHistory.js';
 import { runRemoteInstanceHealthCheck } from '../remoteInstanceHealthMonitor.js';
+import {
+  hashInvitationToken,
+  isInvitationExpired,
+  validateInvitationPassword,
+  validateInvitationUsername,
+} from '../userInvitations.js';
 
 const SUPER_ADMIN_USERNAME = String(
   globalThis.process?.env?.SUPER_ADMIN_USERNAME || globalThis.process?.env?.DEFAULT_ADMIN_USERNAME || '',
@@ -123,6 +129,124 @@ const loadSuperAdminConfig = () => {
 
 const router = Router();
 const SMS_TARGET_GROUPS = new Set(['admin', 'user', 'inspector']);
+
+const loadInvitationByToken = (token) => db.prepare(`
+  SELECT
+    i.id AS invitation_id,
+    i.user_id,
+    i.email AS invitation_email,
+    i.expires_at,
+    i.sent_at,
+    i.used_at,
+    i.revoked_at,
+    u.client_id,
+    u.full_name,
+    u.email,
+    u.account_status,
+    c.name AS client_name
+  FROM user_invitations i
+  JOIN users u ON u.id = i.user_id
+  JOIN clients c ON c.id = u.client_id
+  WHERE i.token_hash = ?
+`).get(hashInvitationToken(token));
+
+const getInvitationStateError = (invitation) => {
+  if (!invitation) return { status: 404, error: 'Invitation not found', code: 'INVITATION_NOT_FOUND' };
+  if (invitation.revoked_at) return { status: 410, error: 'This invitation has been replaced by a newer invitation', code: 'INVITATION_REVOKED' };
+  if (invitation.used_at || invitation.account_status === 'active') {
+    return { status: 410, error: 'This invitation has already been used', code: 'INVITATION_USED' };
+  }
+  if (isInvitationExpired(invitation.expires_at)) {
+    return { status: 410, error: 'This invitation has expired. Ask an administrator to send a new one.', code: 'INVITATION_EXPIRED' };
+  }
+  if (invitation.account_status !== 'invited') {
+    return { status: 409, error: 'This account cannot be activated with an invitation', code: 'INVITATION_INVALID_STATE' };
+  }
+  return null;
+};
+
+router.get('/invitations/:token', (req, res) => {
+  const token = String(req.params.token || '').trim();
+  if (!token) return res.status(400).json({ error: 'Invitation token is required' });
+  const invitation = loadInvitationByToken(token);
+  const stateError = getInvitationStateError(invitation);
+  if (stateError) return res.status(stateError.status).json(stateError);
+  return res.json({
+    invitation: {
+      fullName: invitation.full_name || '',
+      email: invitation.email || invitation.invitation_email || '',
+      clientId: invitation.client_id,
+      clientName: invitation.client_name || invitation.client_id,
+      expiresAt: invitation.expires_at,
+    },
+  });
+});
+
+router.post('/invitations/:token/accept', (req, res) => {
+  const token = String(req.params.token || '').trim();
+  if (!token) return res.status(400).json({ error: 'Invitation token is required' });
+  const invitation = loadInvitationByToken(token);
+  const stateError = getInvitationStateError(invitation);
+  if (stateError) return res.status(stateError.status).json(stateError);
+
+  const parsedUsername = validateInvitationUsername(req.body?.username);
+  if (!parsedUsername.ok) return res.status(400).json({ error: parsedUsername.error, code: 'INVALID_USERNAME' });
+  const parsedPassword = validateInvitationPassword(req.body?.password);
+  if (!parsedPassword.ok) return res.status(400).json({ error: parsedPassword.error, code: 'INVALID_PASSWORD' });
+
+  const duplicate = db.prepare(`
+    SELECT id
+    FROM users
+    WHERE client_id = ? AND lower(username) = lower(?) AND id != ?
+  `).get(invitation.client_id, parsedUsername.value, invitation.user_id);
+  if (duplicate) return res.status(409).json({ error: 'Username is already in use for this client', code: 'USERNAME_EXISTS' });
+
+  const activatedAt = new Date().toISOString();
+  try {
+    db.transaction(() => {
+      const current = loadInvitationByToken(token);
+      const currentStateError = getInvitationStateError(current);
+      if (currentStateError) {
+        const error = new Error(currentStateError.error);
+        error.code = currentStateError.code;
+        throw error;
+      }
+      db.prepare(`
+        UPDATE users
+        SET username = ?, password_hash = ?, account_status = 'active', activated_at = ?, updated_at = ?
+        WHERE id = ? AND account_status = 'invited'
+      `).run(
+        parsedUsername.value,
+        hashPassword(parsedPassword.value),
+        activatedAt,
+        activatedAt,
+        invitation.user_id,
+      );
+      db.prepare('UPDATE user_invitations SET used_at = ? WHERE id = ? AND used_at IS NULL')
+        .run(activatedAt, invitation.invitation_id);
+      db.prepare(`
+        UPDATE user_invitations
+        SET revoked_at = ?
+        WHERE user_id = ? AND id != ? AND used_at IS NULL AND revoked_at IS NULL
+      `).run(activatedAt, invitation.user_id, invitation.invitation_id);
+      db.prepare('DELETE FROM sessions WHERE user_id = ?').run(invitation.user_id);
+    })();
+  } catch (error) {
+    return res.status(409).json({
+      error: error?.message || 'The invitation could not be completed',
+      code: error?.code || 'INVITATION_ACCEPT_FAILED',
+    });
+  }
+
+  return res.json({
+    success: true,
+    account: {
+      clientId: invitation.client_id,
+      clientName: invitation.client_name || invitation.client_id,
+      username: parsedUsername.value,
+    },
+  });
+});
 
 const normalizeSmsTargetsPayload = (value) => {
   const input = value && typeof value === 'object' ? value : {};
@@ -363,6 +487,25 @@ router.post('/login', (req, res) => {
     return res.status(401).json({
       error: 'Invalid client ID, username or password',
       code: 'INVALID_LOGIN',
+      requestId,
+    });
+  }
+
+  if (String(user.account_status || 'active') !== 'active') {
+    writeLoginLog('warn', 'account_pending', {
+      requestId,
+      clientId,
+      username,
+      reason: 'account_pending_activation',
+      ip,
+      userAgent,
+      clientExists: true,
+      userExists: true,
+      role: user.role,
+    });
+    return res.status(403).json({
+      error: 'The account is waiting for activation through the invitation email',
+      code: 'ACCOUNT_PENDING',
       requestId,
     });
   }

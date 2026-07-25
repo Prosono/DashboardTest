@@ -258,15 +258,13 @@ export default function ConfigModal({
   const [newGlobalDashboardName, setNewGlobalDashboardName] = useState('');
   const [globalActionMessage, setGlobalActionMessage] = useState('');
   const [users, setUsers] = useState([]);
-  const [newUsername, setNewUsername] = useState('');
-  const [newPassword, setNewPassword] = useState('');
+  const [newUserFullName, setNewUserFullName] = useState('');
+  const [newUserEmail, setNewUserEmail] = useState('');
   const [newRole, setNewRole] = useState('user');
   const [newUserDashboard, setNewUserDashboard] = useState('default');
   const [newUserClientId, setNewUserClientId] = useState('');
-  const [newUserHaUrl, setNewUserHaUrl] = useState('');
-  const [newUserHaToken, setNewUserHaToken] = useState('');
-  const [newUserPhoneCountryCode, setNewUserPhoneCountryCode] = useState('+47');
-  const [newUserPhone, setNewUserPhone] = useState('');
+  const [creatingUser, setCreatingUser] = useState(false);
+  const [resendingUserIds, setResendingUserIds] = useState({});
   const [userEdits, setUserEdits] = useState({});
   const [savingUserIds, setSavingUserIds] = useState({});
   const [deletingUserIds, setDeletingUserIds] = useState({});
@@ -393,7 +391,9 @@ export default function ConfigModal({
   };
 
   const buildUserEditState = (user) => ({
-    username: user?.username || '',
+    username: user?.accountStatus === 'invited' ? '' : (user?.username || ''),
+    fullName: user?.fullName || '',
+    email: user?.email || '',
     role: normalizeRole(user?.role),
     assignedDashboardId: user?.assignedDashboardId || 'default',
     haUrl: user?.haUrl || '',
@@ -1573,36 +1573,29 @@ export default function ConfigModal({
 
     const handleCreateUser = async () => {
       if (!canManageAdministration || !userAdminApi?.createUser) return;
-      const username = newUsername.trim();
-      const password = newPassword.trim();
+      const fullName = newUserFullName.trim();
+      const email = newUserEmail.trim().toLowerCase();
       const targetClientId = canManageClients ? String(newUserClientId || '').trim() : (currentUser?.clientId || '');
-      if (!username || !password) {
-        setGlobalActionMessage(t('userMgmt.usernamePasswordRequired'));
+      if (!fullName || !email) {
+        setGlobalActionMessage(t('userMgmt.nameEmailRequired'));
         return;
       }
       if (!targetClientId) {
         setGlobalActionMessage(t('userMgmt.clientIdRequired'));
         return;
       }
+      setCreatingUser(true);
       try {
         const createdUser = await userAdminApi.createUser({
           clientId: targetClientId,
-          username,
-          password,
+          fullName,
+          email,
           role: newRole,
           assignedDashboardId: newUserDashboard || 'default',
-          haUrl: newUserHaUrl.trim(),
-          haToken: newUserHaToken.trim(),
-          phoneCountryCode: normalizePhoneCountryCode(newUserPhoneCountryCode) || '+47',
-          phone: String(newUserPhone || '').trim(),
         });
-        setNewUsername('');
-        setNewPassword('');
+        setNewUserFullName('');
+        setNewUserEmail('');
         setNewUserClientId(currentUser?.clientId || clients[0]?.id || '');
-        setNewUserHaUrl('');
-        setNewUserHaToken('');
-        setNewUserPhoneCountryCode('+47');
-        setNewUserPhone('');
         setShowCreateUserModal(false);
         const list = targetClientId === (currentUser?.clientId || '')
           ? await userAdminApi.listUsers().catch(() => null)
@@ -1619,9 +1612,27 @@ export default function ConfigModal({
           })(users);
           syncUsers(nextUsers);
         }
-        setGlobalActionMessage(`${t('userMgmt.createdUser')}: ${username} (${targetClientId})`);
+        setGlobalActionMessage(`${t('userMgmt.invitationSent')}: ${email} (${targetClientId})`);
       } catch (error) {
         setGlobalActionMessage(error?.message || t('userMgmt.createUserFailed'));
+      } finally {
+        setCreatingUser(false);
+      }
+    };
+
+    const handleResendInvitation = async (userId) => {
+      if (!userAdminApi?.resendUserInvitation) return;
+      setResendingUserIds((prev) => ({ ...prev, [userId]: true }));
+      try {
+        const updated = await userAdminApi.resendUserInvitation(userId);
+        if (updated?.id) {
+          setUsers((prev) => prev.map((user) => (user.id === updated.id ? updated : user)));
+        }
+        setGlobalActionMessage(t('userMgmt.invitationResent'));
+      } catch (error) {
+        setGlobalActionMessage(error?.message || t('userMgmt.invitationResendFailed'));
+      } finally {
+        setResendingUserIds((prev) => ({ ...prev, [userId]: false }));
       }
     };
 
@@ -1672,7 +1683,11 @@ export default function ConfigModal({
       setSavingUserIds((prev) => ({ ...prev, [userId]: true }));
       try {
         const updated = await userAdminApi.updateUser(userId, {
-          username: String(draft.username || '').trim(),
+          ...(users.find((user) => user.id === userId)?.accountStatus === 'invited'
+            ? {}
+            : { username: String(draft.username || '').trim() }),
+          fullName: String(draft.fullName || '').trim(),
+          email: String(draft.email || '').trim().toLowerCase(),
           role: normalizeRole(draft.role),
           assignedDashboardId: String(draft.assignedDashboardId || 'default').trim() || 'default',
           haUrl: String(draft.haUrl || '').trim(),
@@ -2004,15 +2019,35 @@ export default function ConfigModal({
                 </div>
                 <div className="space-y-2 max-h-[26rem] overflow-auto pr-1">
                   {users.map((u) => {
+                    const isInvited = u.accountStatus === 'invited';
                     return (
                       <div key={u.id} className="rounded-lg border border-[var(--glass-border)] bg-[var(--glass-bg-hover)] px-3 py-2 space-y-2">
+                        <div className="min-w-0 flex items-start justify-between gap-3">
+                          <div className="min-w-0">
+                            <p className="text-sm font-semibold truncate">{u.fullName || (isInvited ? u.email : u.username)}</p>
+                            <p className="mt-0.5 text-xs text-[var(--text-secondary)] truncate">{u.email || u.username}</p>
+                          </div>
+                          <span className={`shrink-0 rounded-full border px-2 py-1 text-[9px] font-bold uppercase tracking-wider ${isInvited ? 'border-amber-400/30 bg-amber-400/10 text-amber-200' : 'border-emerald-400/30 bg-emerald-400/10 text-emerald-200'}`}>
+                            {isInvited ? t('userMgmt.pendingActivation') : t('userMgmt.active')}
+                          </span>
+                        </div>
                         <div className="min-w-0">
-                          <p className="text-sm font-semibold truncate">{u.username}</p>
                           <p className="text-[11px] text-[var(--text-secondary)] truncate">{t('userMgmt.role')}: {roleLabel(u.role)} • {t('userMgmt.dashboard')}: {u.assignedDashboardId || 'default'} • {t('userMgmt.client')}: {u.clientId || currentUser?.clientId || '-'}</p>
                         </div>
                         <div className="flex items-center justify-between gap-2">
-                          <span className="text-[10px] uppercase tracking-wider text-[var(--text-secondary)] truncate">ID: {u.id}</span>
-                          <div className="flex gap-2">
+                          <span className="text-[10px] text-[var(--text-secondary)] truncate">
+                            {isInvited && u.invitationExpiresAt ? `${t('userMgmt.expires')}: ${new Date(u.invitationExpiresAt).toLocaleDateString()}` : `ID: ${u.id}`}
+                          </span>
+                          <div className="flex flex-wrap justify-end gap-2">
+                            {isInvited ? (
+                              <button
+                                onClick={() => handleResendInvitation(u.id)}
+                                disabled={!!resendingUserIds[u.id]}
+                                className="px-3 py-1.5 rounded-lg border border-amber-400/30 bg-amber-400/10 text-amber-100 text-[11px] font-bold uppercase tracking-wider disabled:opacity-50"
+                              >
+                                {resendingUserIds[u.id] ? t('userMgmt.sending') : t('userMgmt.resendInvitation')}
+                              </button>
+                            ) : null}
                             <button
                               onClick={() => openEditUser(u)}
                               className="px-3 py-1.5 rounded-lg bg-[var(--glass-bg)] border border-[var(--glass-border)] text-[11px] font-bold uppercase tracking-wider hover:bg-[var(--glass-bg-hover)]"
@@ -2043,6 +2078,9 @@ export default function ConfigModal({
                   <h4 className="text-sm font-bold uppercase tracking-wider">{t('userMgmt.createNewUser')}</h4>
                   <button onClick={() => setShowCreateUserModal(false)} className="p-2 rounded-full hover:bg-[var(--glass-bg-hover)]"><X className="w-4 h-4" /></button>
                 </div>
+                <p className="rounded-xl border border-[var(--glass-border)] bg-[var(--glass-bg)] px-4 py-3 text-sm leading-6 text-[var(--text-secondary)]">
+                  {t('userMgmt.invitationHelp')}
+                </p>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                   <div className="space-y-1">
                     <label className="text-[10px] uppercase tracking-wider text-[var(--text-secondary)] font-bold">{t('userMgmt.client')}</label>
@@ -2061,12 +2099,12 @@ export default function ConfigModal({
                     )}
                   </div>
                   <div className="space-y-1">
-                    <label className="text-[10px] uppercase tracking-wider text-[var(--text-secondary)] font-bold">{t('profile.username')}</label>
-                    <input value={newUsername} onChange={(e) => setNewUsername(e.target.value)} placeholder={t('profile.username')} className="w-full px-3 py-2 rounded-lg bg-[var(--glass-bg-hover)] border border-[var(--glass-border)] text-sm" />
+                    <label className="text-[10px] uppercase tracking-wider text-[var(--text-secondary)] font-bold">{t('profile.name')}</label>
+                    <input value={newUserFullName} onChange={(e) => setNewUserFullName(e.target.value)} autoComplete="name" placeholder={t('profile.name')} className="w-full px-3 py-2 rounded-lg bg-[var(--glass-bg-hover)] border border-[var(--glass-border)] text-sm" />
                   </div>
-                  <div className="space-y-1">
-                    <label className="text-[10px] uppercase tracking-wider text-[var(--text-secondary)] font-bold">{t('userMgmt.password')}</label>
-                    <input value={newPassword} onChange={(e) => setNewPassword(e.target.value)} type="password" placeholder={t('userMgmt.password')} className="w-full px-3 py-2 rounded-lg bg-[var(--glass-bg-hover)] border border-[var(--glass-border)] text-sm" />
+                  <div className="space-y-1 md:col-span-2">
+                    <label className="text-[10px] uppercase tracking-wider text-[var(--text-secondary)] font-bold">{t('profile.email')}</label>
+                    <input value={newUserEmail} onChange={(e) => setNewUserEmail(e.target.value)} type="email" autoComplete="email" placeholder="navn@firma.no" className="w-full px-3 py-2 rounded-lg bg-[var(--glass-bg-hover)] border border-[var(--glass-border)] text-sm" />
                   </div>
                   <div className="space-y-1">
                     <label className="text-[10px] uppercase tracking-wider text-[var(--text-secondary)] font-bold">{t('userMgmt.role')}</label>
@@ -2084,39 +2122,12 @@ export default function ConfigModal({
                       ))}
                     </select>
                   </div>
-                  <div className="space-y-1">
-                    <label className="text-[10px] uppercase tracking-wider text-[var(--text-secondary)] font-bold">{t('profile.countryCode')}</label>
-                    <select
-                      value={normalizePhoneCountryCode(newUserPhoneCountryCode) || '+47'}
-                      onChange={(e) => setNewUserPhoneCountryCode(e.target.value)}
-                      className="w-full px-3 py-2 rounded-lg bg-[var(--glass-bg-hover)] border border-[var(--glass-border)] text-sm"
-                    >
-                      {getPhoneCountryCodeOptions(newUserPhoneCountryCode).map((option) => (
-                        <option key={option.value} value={option.value}>{option.label}</option>
-                      ))}
-                    </select>
-                  </div>
-                  <div className="space-y-1">
-                    <label className="text-[10px] uppercase tracking-wider text-[var(--text-secondary)] font-bold">{t('profile.phone')}</label>
-                    <input
-                      value={newUserPhone}
-                      onChange={(e) => setNewUserPhone(e.target.value)}
-                      placeholder="99999999"
-                      className="w-full px-3 py-2 rounded-lg bg-[var(--glass-bg-hover)] border border-[var(--glass-border)] text-sm"
-                    />
-                  </div>
-                  <div className="space-y-1 md:col-span-2">
-                    <label className="text-[10px] uppercase tracking-wider text-[var(--text-secondary)] font-bold">{t('userMgmt.haUrlOptional')}</label>
-                    <input value={newUserHaUrl} onChange={(e) => setNewUserHaUrl(e.target.value)} placeholder={t('userMgmt.haUrlOptional')} className="w-full px-3 py-2 rounded-lg bg-[var(--glass-bg-hover)] border border-[var(--glass-border)] text-sm" />
-                  </div>
-                  <div className="space-y-1 md:col-span-2">
-                    <label className="text-[10px] uppercase tracking-wider text-[var(--text-secondary)] font-bold">{t('userMgmt.haTokenOptional')}</label>
-                    <input value={newUserHaToken} onChange={(e) => setNewUserHaToken(e.target.value)} placeholder={t('userMgmt.haTokenOptional')} className="w-full px-3 py-2 rounded-lg bg-[var(--glass-bg-hover)] border border-[var(--glass-border)] text-sm" />
-                  </div>
                 </div>
                 <div className="flex gap-2 justify-end">
                   <button onClick={() => setShowCreateUserModal(false)} className="px-4 py-2 rounded-lg border border-[var(--glass-border)] bg-[var(--glass-bg-hover)] text-xs font-bold uppercase tracking-wider">{t('common.cancel')}</button>
-                  <button onClick={handleCreateUser} className="px-4 py-2 rounded-lg bg-indigo-500 hover:bg-indigo-600 text-white text-xs font-bold uppercase tracking-wider">{t('common.save')}</button>
+                  <button onClick={handleCreateUser} disabled={creatingUser} className="px-4 py-2 rounded-lg bg-indigo-500 hover:bg-indigo-600 text-white text-xs font-bold uppercase tracking-wider disabled:opacity-50">
+                    {creatingUser ? t('userMgmt.sending') : t('userMgmt.sendInvitation')}
+                  </button>
                 </div>
               </div>
             </div>
@@ -2140,6 +2151,24 @@ export default function ConfigModal({
                           <input value={u.clientId || currentUser?.clientId || '-'} readOnly className="w-full px-3 py-2 rounded-lg bg-[var(--glass-bg)] border border-[var(--glass-border)] text-sm opacity-80" />
                         </div>
                         <div className="space-y-1">
+                          <label className="text-[10px] uppercase tracking-wider text-[var(--text-secondary)] font-bold">{t('profile.name')}</label>
+                          <input
+                            value={userEdits[u.id]?.fullName ?? ''}
+                            onChange={(e) => updateUserEdit(u.id, { fullName: e.target.value })}
+                            className="w-full px-3 py-2 rounded-lg bg-[var(--glass-bg-hover)] border border-[var(--glass-border)] text-sm"
+                          />
+                        </div>
+                        <div className="space-y-1 md:col-span-2">
+                          <label className="text-[10px] uppercase tracking-wider text-[var(--text-secondary)] font-bold">{t('profile.email')}</label>
+                          <input
+                            type="email"
+                            value={userEdits[u.id]?.email ?? ''}
+                            onChange={(e) => updateUserEdit(u.id, { email: e.target.value })}
+                            className="w-full px-3 py-2 rounded-lg bg-[var(--glass-bg-hover)] border border-[var(--glass-border)] text-sm"
+                          />
+                        </div>
+                        {u.accountStatus !== 'invited' ? (
+                        <div className="space-y-1">
                           <label className="text-[10px] uppercase tracking-wider text-[var(--text-secondary)] font-bold">{t('profile.username')}</label>
                           <input
                             value={userEdits[u.id]?.username ?? ''}
@@ -2148,6 +2177,13 @@ export default function ConfigModal({
                             placeholder={t('profile.username')}
                           />
                         </div>
+                        ) : (
+                          <div className="space-y-1">
+                            <label className="text-[10px] uppercase tracking-wider text-[var(--text-secondary)] font-bold">{t('profile.username')}</label>
+                            <input value={t('userMgmt.chosenByUser')} readOnly className="w-full px-3 py-2 rounded-lg bg-[var(--glass-bg)] border border-[var(--glass-border)] text-sm opacity-80" />
+                          </div>
+                        )}
+                        {u.accountStatus !== 'invited' ? (
                         <div className="space-y-1">
                           <label className="text-[10px] uppercase tracking-wider text-[var(--text-secondary)] font-bold">{t('userMgmt.newPasswordOptional')}</label>
                           <input
@@ -2158,6 +2194,7 @@ export default function ConfigModal({
                             placeholder={t('userMgmt.newPasswordOptional')}
                           />
                         </div>
+                        ) : null}
                         <div className="space-y-1">
                           <label className="text-[10px] uppercase tracking-wider text-[var(--text-secondary)] font-bold">{t('userMgmt.role')}</label>
                           <select

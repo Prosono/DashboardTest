@@ -125,6 +125,8 @@ const ensureUsersTable = () => {
         ha_token TEXT NOT NULL DEFAULT '',
         full_name TEXT NOT NULL DEFAULT '',
         email TEXT NOT NULL DEFAULT '',
+        account_status TEXT NOT NULL DEFAULT 'active',
+        activated_at TEXT,
         phone_country_code TEXT NOT NULL DEFAULT '+47',
         phone TEXT NOT NULL DEFAULT '',
         avatar_url TEXT NOT NULL DEFAULT '',
@@ -134,6 +136,7 @@ const ensureUsersTable = () => {
         UNIQUE (client_id, username)
       );
       CREATE INDEX IF NOT EXISTS idx_users_username ON users(client_id, username);
+      CREATE INDEX IF NOT EXISTS idx_users_email ON users(client_id, email);
     `);
     return;
   }
@@ -153,6 +156,8 @@ const ensureUsersTable = () => {
     const haTokenExpr = existingCols.includes('ha_token') ? "COALESCE(ha_token, '')" : "''";
     const fullNameExpr = existingCols.includes('full_name') ? "COALESCE(full_name, '')" : "''";
     const emailExpr = existingCols.includes('email') ? "COALESCE(email, '')" : "''";
+    const accountStatusExpr = existingCols.includes('account_status') ? "COALESCE(NULLIF(account_status, ''), 'active')" : "'active'";
+    const activatedAtExpr = existingCols.includes('activated_at') ? 'activated_at' : 'created_at';
     const phoneCountryCodeExpr = existingCols.includes('phone_country_code') ? "COALESCE(phone_country_code, '+47')" : "'+47'";
     const phoneExpr = existingCols.includes('phone') ? "COALESCE(phone, '')" : "''";
     const avatarExpr = existingCols.includes('avatar_url') ? "COALESCE(avatar_url, '')" : "''";
@@ -173,6 +178,8 @@ const ensureUsersTable = () => {
           ha_token TEXT NOT NULL DEFAULT '',
           full_name TEXT NOT NULL DEFAULT '',
           email TEXT NOT NULL DEFAULT '',
+          account_status TEXT NOT NULL DEFAULT 'active',
+          activated_at TEXT,
           phone_country_code TEXT NOT NULL DEFAULT '+47',
           phone TEXT NOT NULL DEFAULT '',
           avatar_url TEXT NOT NULL DEFAULT '',
@@ -183,7 +190,8 @@ const ensureUsersTable = () => {
         );
         INSERT INTO users (
           id, client_id, username, password_hash, role, assigned_dashboard_id,
-          ha_url, ha_token, full_name, email, phone_country_code, phone, avatar_url,
+          ha_url, ha_token, full_name, email, account_status, activated_at,
+          phone_country_code, phone, avatar_url,
           created_at, updated_at
         )
         SELECT
@@ -197,6 +205,8 @@ const ensureUsersTable = () => {
           ${haTokenExpr},
           ${fullNameExpr},
           ${emailExpr},
+          ${accountStatusExpr},
+          ${activatedAtExpr},
           ${phoneCountryCodeExpr},
           ${phoneExpr},
           ${avatarExpr},
@@ -205,6 +215,7 @@ const ensureUsersTable = () => {
         FROM users_old;
         DROP TABLE users_old;
         CREATE INDEX IF NOT EXISTS idx_users_username ON users(client_id, username);
+        CREATE INDEX IF NOT EXISTS idx_users_email ON users(client_id, email);
         COMMIT;
       `);
     } catch (error) {
@@ -223,11 +234,36 @@ const ensureUsersTable = () => {
   if (!userColumns.includes('ha_token')) db.prepare("ALTER TABLE users ADD COLUMN ha_token TEXT NOT NULL DEFAULT ''").run();
   if (!userColumns.includes('full_name')) db.prepare("ALTER TABLE users ADD COLUMN full_name TEXT NOT NULL DEFAULT ''").run();
   if (!userColumns.includes('email')) db.prepare("ALTER TABLE users ADD COLUMN email TEXT NOT NULL DEFAULT ''").run();
+  if (!userColumns.includes('account_status')) db.prepare("ALTER TABLE users ADD COLUMN account_status TEXT NOT NULL DEFAULT 'active'").run();
+  if (!userColumns.includes('activated_at')) db.prepare('ALTER TABLE users ADD COLUMN activated_at TEXT').run();
   if (!userColumns.includes('phone_country_code')) db.prepare("ALTER TABLE users ADD COLUMN phone_country_code TEXT NOT NULL DEFAULT '+47'").run();
   if (!userColumns.includes('phone')) db.prepare("ALTER TABLE users ADD COLUMN phone TEXT NOT NULL DEFAULT ''").run();
   if (!userColumns.includes('avatar_url')) db.prepare("ALTER TABLE users ADD COLUMN avatar_url TEXT NOT NULL DEFAULT ''").run();
 
   db.exec('CREATE INDEX IF NOT EXISTS idx_users_username ON users(client_id, username)');
+  db.exec('CREATE INDEX IF NOT EXISTS idx_users_email ON users(client_id, email)');
+};
+
+const ensureUserInvitationsTable = () => {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS user_invitations (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      token_hash TEXT NOT NULL UNIQUE,
+      email TEXT NOT NULL,
+      created_by TEXT,
+      expires_at TEXT NOT NULL,
+      sent_at TEXT,
+      used_at TEXT,
+      revoked_at TEXT,
+      created_at TEXT NOT NULL,
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    );
+    CREATE INDEX IF NOT EXISTS idx_user_invitations_user
+      ON user_invitations(user_id, created_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_user_invitations_expiry
+      ON user_invitations(expires_at);
+  `);
 };
 
 const ensureSessionsTable = () => {
@@ -468,6 +504,7 @@ ensureClientsTable();
 ensureDashboardsTable();
 ensureDashboardVersionsTable();
 ensureUsersTable();
+ensureUserInvitationsTable();
 ensureSessionsTable();
 ensureHaConfigTable();
 ensureProfilesTable();

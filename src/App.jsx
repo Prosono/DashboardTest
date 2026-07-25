@@ -72,6 +72,7 @@ import {
   updateProfile as updateCurrentProfile,
   listUsers as listServerUsers,
   createUser as createServerUser,
+  resendUserInvitation as resendServerUserInvitation,
   updateUser as updateServerUser,
   deleteUser as deleteServerUser,
   listClients as listServerClients,
@@ -87,6 +88,7 @@ import {
   fetchNetworkSite as fetchServerNetworkSite,
   saveNetworkSite as saveServerNetworkSite,
   applyNetworkSite as applyServerNetworkSite,
+  deleteNetworkSite as deleteServerNetworkSite,
   downloadNetworkUmrConfig as downloadServerNetworkUmrConfig,
   provisionClientBackupDirectory as provisionServerClientBackupDirectory,
   deleteClientBackupFile as deleteServerClientBackupFile,
@@ -124,6 +126,7 @@ import ModalOrchestrator from './rendering/ModalOrchestrator';
 import CardErrorBoundary from './components/ui/CardErrorBoundary';
 import EditOverlay from './components/ui/EditOverlay';
 import AuroraBackground from './components/effects/AuroraBackground';
+import InvitationAcceptance from './components/auth/InvitationAcceptance';
 import {
   appendLogoVersion,
   DEFAULT_LOGO_URL,
@@ -2744,7 +2747,6 @@ function AppContent({
             <div key={activePage} className={pageTransitionClass}>
               <SuperAdminNetworkPage
                 t={t}
-                language={language}
                 userAdminApi={userAdminApi}
                 isMobile={isMobile}
               />
@@ -3148,6 +3150,10 @@ export default function App() {
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [haConfigHydrated, setHaConfigHydrated] = useState(false);
+  const [invitationToken, setInvitationToken] = useState(() => {
+    if (typeof window === 'undefined') return '';
+    return new URLSearchParams(window.location.search).get('invite') || '';
+  });
 
   const { config, setConfig, currentTheme } = useConfig();
   const isLightTheme = currentTheme === 'light';
@@ -3426,6 +3432,7 @@ export default function App() {
   const userAdminApi = useMemo(() => ({
     listUsers: listServerUsers,
     createUser: createServerUser,
+    resendUserInvitation: resendServerUserInvitation,
     updateUser: async (id, user) => {
       const updated = await updateServerUser(id, user);
       if (updated?.id && currentUser?.id && updated.id === currentUser.id) {
@@ -3451,6 +3458,7 @@ export default function App() {
     fetchNetworkSite: fetchServerNetworkSite,
     saveNetworkSite: saveServerNetworkSite,
     applyNetworkSite: applyServerNetworkSite,
+    deleteNetworkSite: deleteServerNetworkSite,
     downloadNetworkUmrConfig: downloadServerNetworkUmrConfig,
     provisionClientBackupDirectory: provisionServerClientBackupDirectory,
     deleteClientBackupFile: deleteServerClientBackupFile,
@@ -3474,6 +3482,31 @@ export default function App() {
     clearAppActionHistory: clearServerAppActionHistory,
     deleteAppActionHistoryEntry: deleteServerAppActionHistoryEntry,
   }), [currentUser?.id]);
+
+  if (invitationToken) {
+    return (
+      <InvitationAcceptance
+        token={invitationToken}
+        logoUrl={loginLogoUrl}
+        appTitle={loginTitle}
+        onReturnToLogin={(account) => {
+          clearAuthToken();
+          setCurrentUser(null);
+          if (account?.clientId) {
+            setClientId(account.clientId);
+            setStoredClientId(account.clientId);
+          }
+          if (account?.username) setUsername(account.username);
+          if (typeof window !== 'undefined') {
+            const url = new URL(window.location.href);
+            url.searchParams.delete('invite');
+            window.history.replaceState({}, '', `${url.pathname}${url.search}${url.hash}`);
+          }
+          setInvitationToken('');
+        }}
+      />
+    );
+  }
 
   if (!authReady) {
     return <div className="min-h-screen flex items-center justify-center text-[var(--text-secondary)]">Loading…</div>;

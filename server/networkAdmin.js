@@ -1,6 +1,18 @@
 import { execFileSync } from 'child_process';
-import { generateKeyPairSync } from 'crypto';
-import { accessSync, constants, existsSync, mkdirSync, readFileSync, writeFileSync } from 'fs';
+import { generateKeyPairSync, randomUUID } from 'crypto';
+import {
+  accessSync,
+  chmodSync,
+  chownSync,
+  constants,
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  renameSync,
+  statSync,
+  unlinkSync,
+  writeFileSync,
+} from 'fs';
 import { dirname } from 'path';
 
 const normalizeLocationId = (value) => String(value ?? '')
@@ -17,20 +29,67 @@ const normalizeClientId = (value) => String(value ?? '')
 
 const normalizeIpv4 = (value) => String(value || '').trim();
 const normalizeSubnet = (value) => String(value || '').trim();
-const normalizeDomainLabel = (value) => normalizeLocationId(value);
+const normalizeDomainLabel = (value) => String(value ?? '')
+  .trim()
+  .toLowerCase()
+  .replace(/[^a-z0-9-]+/g, '-')
+  .replace(/^-+|-+$/g, '')
+  .slice(0, 63);
 const normalizeDisplayName = (value, fallback = '') => String(value || '').trim() || fallback;
 
-const DEFAULT_WG_CONFIG_PATH = process.env.NETWORK_WG_CONFIG_PATH || '/app/runtime/wireguard/wg0.conf';
-const DEFAULT_CADDY_CONFIG_PATH = process.env.NETWORK_CADDY_CONFIG_PATH || '/app/runtime/caddy/Caddyfile';
-const DEFAULT_DOMAIN_SUFFIX = String(process.env.NETWORK_DOMAIN_SUFFIX || 'smarti.dev').trim().replace(/^\.+|\.+$/g, '');
-const DEFAULT_SERVER_PUBLIC_HOST = String(process.env.NETWORK_SERVER_PUBLIC_HOST || '65.21.203.69').trim();
-const DEFAULT_WG_SERVER_PUBLIC_KEY = String(process.env.NETWORK_WG_SERVER_PUBLIC_KEY || '').trim();
-const DEFAULT_WG_LISTEN_PORT = Math.max(1, Math.min(65535, Number.parseInt(String(process.env.NETWORK_WG_LISTEN_PORT || '51820'), 10) || 51820));
-const DEFAULT_BACKUP_ROOT = String(process.env.HA_BACKUP_ROOT || process.env.NETWORK_BACKUP_ROOT || '/srv/ha-backups').trim();
-const WG_VALIDATE_COMMAND = String(process.env.NETWORK_WG_VALIDATE_COMMAND || '').trim();
-const WG_RELOAD_COMMAND = String(process.env.NETWORK_WG_RELOAD_COMMAND || '').trim();
-const CADDY_VALIDATE_COMMAND = String(process.env.NETWORK_CADDY_VALIDATE_COMMAND || '').trim();
-const CADDY_RELOAD_COMMAND = String(process.env.NETWORK_CADDY_RELOAD_COMMAND || '').trim();
+const parseIpv4Octets = (value) => {
+  const parts = String(value || '').trim().split('.');
+  if (parts.length !== 4) return null;
+  const octets = parts.map((part) => {
+    if (!/^\d{1,3}$/.test(part)) return Number.NaN;
+    return Number.parseInt(part, 10);
+  });
+  return octets.every((octet) => Number.isInteger(octet) && octet >= 0 && octet <= 255)
+    ? octets
+    : null;
+};
+
+export const isValidIpv4 = (value) => Boolean(parseIpv4Octets(value));
+
+export const isValidIpv4Cidr = (value) => {
+  const [address, prefix, ...rest] = String(value || '').trim().split('/');
+  if (rest.length || !isValidIpv4(address) || !/^\d{1,2}$/.test(prefix || '')) return false;
+  const parsedPrefix = Number.parseInt(prefix, 10);
+  return parsedPrefix >= 0 && parsedPrefix <= 32;
+};
+
+export const isValidDomainName = (value) => {
+  const domain = String(value || '').trim().toLowerCase();
+  if (!domain || domain.length > 253 || domain.includes('..')) return false;
+  return domain.split('.').every((label) => (
+    label.length >= 1
+    && label.length <= 63
+    && /^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/.test(label)
+  ));
+};
+
+export const validateNetworkSite = (site = {}) => {
+  const errors = [];
+  if (site.routerIp && !isValidIpv4(site.routerIp)) errors.push('Router IP must be a valid IPv4 address');
+  if (site.haIp && !isValidIpv4(site.haIp)) errors.push('HA IP must be a valid IPv4 address');
+  if (site.tunnelIp && !isValidIpv4(site.tunnelIp)) errors.push('Tunnel IP must be a valid IPv4 address');
+  if (site.lanSubnet && !isValidIpv4Cidr(site.lanSubnet)) errors.push('LAN subnet must be a valid IPv4 CIDR');
+  if (site.domainFqdn && !isValidDomainName(site.domainFqdn)) errors.push('Domain must be a valid fully qualified domain name');
+  return errors;
+};
+
+const env = globalThis.process?.env || {};
+const DEFAULT_WG_CONFIG_PATH = env.NETWORK_WG_CONFIG_PATH || '/app/runtime/wireguard/wg0.conf';
+const DEFAULT_CADDY_CONFIG_PATH = env.NETWORK_CADDY_CONFIG_PATH || '/app/runtime/caddy/Caddyfile';
+const DEFAULT_DOMAIN_SUFFIX = String(env.NETWORK_DOMAIN_SUFFIX || 'smarti.dev').trim().replace(/^\.+|\.+$/g, '');
+const DEFAULT_SERVER_PUBLIC_HOST = String(env.NETWORK_SERVER_PUBLIC_HOST || '65.21.203.69').trim();
+const DEFAULT_WG_SERVER_PUBLIC_KEY = String(env.NETWORK_WG_SERVER_PUBLIC_KEY || '').trim();
+const DEFAULT_WG_LISTEN_PORT = Math.max(1, Math.min(65535, Number.parseInt(String(env.NETWORK_WG_LISTEN_PORT || '51820'), 10) || 51820));
+const DEFAULT_BACKUP_ROOT = String(env.HA_BACKUP_ROOT || env.NETWORK_BACKUP_ROOT || '/srv/ha-backups').trim();
+const WG_VALIDATE_COMMAND = String(env.NETWORK_WG_VALIDATE_COMMAND || '').trim();
+const WG_RELOAD_COMMAND = String(env.NETWORK_WG_RELOAD_COMMAND || '').trim();
+const CADDY_VALIDATE_COMMAND = String(env.NETWORK_CADDY_VALIDATE_COMMAND || '').trim();
+const CADDY_RELOAD_COMMAND = String(env.NETWORK_CADDY_RELOAD_COMMAND || '').trim();
 
 const toBase64 = (value) => {
   const normalized = String(value || '').replace(/-/g, '+').replace(/_/g, '/');
@@ -69,7 +128,7 @@ const fileAccess = (filePath) => {
     readable = false;
   }
   try {
-    accessSync(normalizedPath, constants.W_OK);
+    accessSync(existsSync(normalizedPath) ? normalizedPath : dirname(normalizedPath), constants.W_OK);
     writable = true;
   } catch {
     writable = false;
@@ -119,27 +178,47 @@ const runShellCommand = (command) => {
   }
 };
 
-const parseWireGuardConfig = (rawValue) => {
+export const parseWireGuardConfig = (rawValue) => {
   const raw = String(rawValue || '').trim();
   if (!raw) return [];
   const sections = raw.split(/\n(?=\[Peer\])/g).filter((entry) => entry.includes('[Peer]'));
+  const managedBlocks = Array.from(raw.matchAll(
+    /^# BEGIN SMARTI NETWORK SITE ([^\r\n]+)\r?\n([\s\S]*?)^# END SMARTI NETWORK SITE \1\s*$/gm,
+  )).map((match) => {
+    const block = String(match[0] || '').trim();
+    const body = String(match[2] || '');
+    return {
+      marker: String(match[1] || '').trim(),
+      publicKey: body.match(/^\s*PublicKey\s*=\s*(.+)$/m)?.[1]?.trim() || '',
+      allowedIps: (body.match(/^\s*AllowedIPs\s*=\s*(.+)$/m)?.[1] || '')
+        .split(',')
+        .map((value) => value.trim())
+        .filter(Boolean),
+      raw: block,
+    };
+  });
+
   return sections.map((section, index) => {
     const publicKey = section.match(/^\s*PublicKey\s*=\s*(.+)$/m)?.[1]?.trim() || '';
     const allowed = section.match(/^\s*AllowedIPs\s*=\s*(.+)$/m)?.[1]?.trim() || '';
     const comment = section.match(/^\s*#\s*(.+)$/m)?.[1]?.trim() || '';
-    const marker = section.match(/^\s*#\s*BEGIN SMARTI NETWORK SITE ([^\n]+)$/m)?.[1]?.trim() || '';
+    const allowedIps = allowed ? allowed.split(',').map((value) => value.trim()).filter(Boolean) : [];
+    const managed = managedBlocks.find((entry) => (
+      (publicKey && entry.publicKey === publicKey)
+      || (allowedIps.length && entry.allowedIps.some((value) => allowedIps.includes(value)))
+    ));
     return {
       index,
       publicKey,
-      allowedIps: allowed ? allowed.split(',').map((value) => value.trim()).filter(Boolean) : [],
+      allowedIps,
       comment,
-      marker,
-      raw: section.trim(),
+      marker: managed?.marker || '',
+      raw: managed?.raw || section.trim(),
     };
   });
 };
 
-const parseCaddyConfig = (rawValue) => {
+export const parseCaddyConfig = (rawValue) => {
   const raw = String(rawValue || '');
   const lines = raw.split(/\r?\n/);
   const sites = [];
@@ -177,17 +256,33 @@ const parseCaddyConfig = (rawValue) => {
     }
   }
 
+  const managedBlocks = Array.from(raw.matchAll(
+    /^# BEGIN SMARTI NETWORK SITE ([^\r\n]+)\r?\n([\s\S]*?)^# END SMARTI NETWORK SITE \1\s*$/gm,
+  )).map((match) => {
+    const body = String(match[2] || '').trim();
+    const header = body.split(/\r?\n/, 1)[0].replace(/\{$/, '').trim();
+    return {
+      marker: String(match[1] || '').trim(),
+      hosts: header.split(',').map((value) => value.trim()).filter(Boolean),
+      reverseProxy: body.match(/^\s*reverse_proxy\s+([^\s#]+).*$/m)?.[1]?.trim() || '',
+      raw: String(match[0] || '').trim(),
+    };
+  });
+
   return sites.map((block, index) => {
     const header = block.split(/\r?\n/, 1)[0].replace(/\{$/, '').trim();
     const hosts = header.split(',').map((value) => value.trim()).filter(Boolean);
     const reverseProxy = block.match(/^\s*reverse_proxy\s+([^\s#]+).*$/m)?.[1]?.trim() || '';
-    const marker = block.match(/^\s*#\s*BEGIN SMARTI NETWORK SITE ([^\n]+)$/m)?.[1]?.trim() || '';
+    const managed = managedBlocks.find((entry) => (
+      entry.hosts.some((host) => hosts.includes(host))
+      || (reverseProxy && entry.reverseProxy === reverseProxy)
+    ));
     return {
       index,
       hosts,
       reverseProxy,
-      marker,
-      raw: block.trim(),
+      marker: managed?.marker || '',
+      raw: managed?.raw || block.trim(),
     };
   });
 };
@@ -201,6 +296,34 @@ const replaceManagedBlock = (content, startMarker, endMarker, block) => {
   }
   const suffix = content.endsWith('\n') ? '' : '\n';
   return `${content}${suffix}${block}`;
+};
+
+const removeManagedBlock = (content, startMarker, endMarker) => {
+  const escapedStart = startMarker.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const escapedEnd = endMarker.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const pattern = new RegExp(`${escapedStart}[\\s\\S]*?${escapedEnd}\\n?`, 'm');
+  return String(content || '').replace(pattern, '').replace(/\n{3,}/g, '\n\n');
+};
+
+const writeFileAtomic = (filePath, content) => {
+  ensureParentDirectory(filePath);
+  const tempPath = `${filePath}.tmp-${globalThis.process?.pid || 'network'}-${randomUUID()}`;
+  const existingStat = existsSync(filePath) ? statSync(filePath) : null;
+  try {
+    writeFileSync(tempPath, content, {
+      encoding: 'utf8',
+      mode: existingStat ? existingStat.mode & 0o777 : 0o640,
+    });
+    if (existingStat) {
+      chmodSync(tempPath, existingStat.mode & 0o777);
+      if (typeof globalThis.process?.getuid === 'function' && globalThis.process.getuid() === 0) {
+        chownSync(tempPath, existingStat.uid, existingStat.gid);
+      }
+    }
+    renameSync(tempPath, filePath);
+  } finally {
+    if (existsSync(tempPath)) unlinkSync(tempPath);
+  }
 };
 
 const buildSiteMarker = (site) => `${site.clientId}/${site.locationId}`;
@@ -242,7 +365,11 @@ const normalizeSiteRecord = (record = {}) => {
   const locationId = normalizeLocationId(record.locationId || record.location_id);
   const backupLocationId = normalizeLocationId(record.backupLocationId || record.backup_location_id || locationId);
   const displayName = normalizeDisplayName(record.displayName || record.display_name, locationId || clientId || 'Location');
-  const domainLabel = normalizeDomainLabel(record.domainLabel || record.domain_label || locationId);
+  const domainLabel = normalizeDomainLabel(
+    record.domainLabel
+      || record.domain_label
+      || [clientId, locationId].filter(Boolean).join('-'),
+  );
   const domainFqdn = String(record.domainFqdn || record.domain_fqdn || (domainLabel && DEFAULT_DOMAIN_SUFFIX ? `${domainLabel}.${DEFAULT_DOMAIN_SUFFIX}` : '')).trim().toLowerCase();
   return {
     clientId,
@@ -268,10 +395,16 @@ export const createNetworkSiteFromInput = (input = {}, fallback = {}) => {
   if (!normalized.locationId) throw new Error('Location ID is required');
   if (!normalized.backupLocationId) normalized.backupLocationId = normalized.locationId;
   if (!normalized.displayName) normalized.displayName = normalized.locationId;
-  if (!normalized.domainLabel && normalized.locationId) normalized.domainLabel = normalized.locationId;
+  if (!normalized.domainLabel && normalized.locationId) {
+    normalized.domainLabel = normalizeDomainLabel(
+      [normalized.clientId, normalized.locationId].filter(Boolean).join('-'),
+    );
+  }
   if (!normalized.domainFqdn && normalized.domainLabel && DEFAULT_DOMAIN_SUFFIX) {
     normalized.domainFqdn = `${normalized.domainLabel}.${DEFAULT_DOMAIN_SUFFIX}`;
   }
+  const validationErrors = validateNetworkSite(normalized);
+  if (validationErrors.length) throw new Error(validationErrors.join('. '));
   if ((!normalized.wireGuardPrivateKey || !normalized.wireGuardPublicKey) && normalized.tunnelIp) {
     const keys = createWireGuardKeyPair();
     normalized.wireGuardPrivateKey = keys.privateKey;
@@ -371,80 +504,163 @@ export const getNetworkRuntimeConfig = () => {
 export const deriveSiteRuntimeState = (site, runtimeConfig) => {
   const peers = Array.isArray(runtimeConfig?.active?.wireGuardPeers) ? runtimeConfig.active.wireGuardPeers : [];
   const caddySites = Array.isArray(runtimeConfig?.active?.caddySites) ? runtimeConfig.active.caddySites : [];
+  const marker = buildSiteMarker(site);
   const matchedPeer = peers.find((peer) => (
+    peer.marker === marker
+  )) || peers.find((peer) => (
     (site.wireGuardPublicKey && peer.publicKey === site.wireGuardPublicKey)
     || (site.tunnelIp && peer.allowedIps.includes(`${site.tunnelIp}/32`))
     || (site.lanSubnet && peer.allowedIps.includes(site.lanSubnet))
   )) || null;
   const matchedCaddy = caddySites.find((entry) => (
+    entry.marker === marker
+  )) || caddySites.find((entry) => (
     site.domainFqdn
       ? entry.hosts.includes(site.domainFqdn)
       : site.domainLabel && DEFAULT_DOMAIN_SUFFIX
         ? entry.hosts.includes(`${site.domainLabel}.${DEFAULT_DOMAIN_SUFFIX}`)
         : false
   )) || null;
+  const expectedAllowedIps = [`${site.tunnelIp}/32`, site.lanSubnet].filter(Boolean);
+  const wireGuardDrifted = Boolean(matchedPeer) && (
+    (site.wireGuardPublicKey && matchedPeer.publicKey !== site.wireGuardPublicKey)
+    || expectedAllowedIps.some((value) => !matchedPeer.allowedIps.includes(value))
+  );
+  const expectedReverseProxy = site.haIp ? `${site.haIp}:8123` : '';
+  const caddyDrifted = Boolean(matchedCaddy) && (
+    (site.domainFqdn && !matchedCaddy.hosts.includes(site.domainFqdn))
+    || (expectedReverseProxy && matchedCaddy.reverseProxy !== expectedReverseProxy)
+  );
 
   return {
     wireGuardApplied: Boolean(matchedPeer),
     caddyApplied: Boolean(matchedCaddy),
+    wireGuardDrifted,
+    caddyDrifted,
+    drifted: wireGuardDrifted || caddyDrifted,
     matchedPeer,
     matchedCaddy,
   };
 };
 
-export const applySiteToRuntimeConfig = (site, target = 'all') => {
+const mutateSiteRuntimeConfig = (site, target = 'all', mode = 'apply') => {
   const normalizedTarget = String(target || 'all').trim().toLowerCase();
+  if (!['all', 'wireguard', 'caddy'].includes(normalizedTarget)) {
+    throw new Error('Target must be all, wireguard or caddy');
+  }
   const runtimeConfig = getNetworkRuntimeConfig();
+  const marker = buildSiteMarker(site);
   const result = {
     target: normalizedTarget,
+    mode,
     updated: [],
     validate: {},
     reload: {},
     manualReloadRequired: [],
   };
-
+  const changes = [];
   if (normalizedTarget === 'all' || normalizedTarget === 'wireguard') {
-    if (!runtimeConfig.files.wireGuard.writable) {
-      throw new Error('WireGuard config is not writable from the app runtime');
+    const original = runtimeConfig.active.wireGuardRaw || '';
+    const next = mode === 'remove'
+      ? removeManagedBlock(
+        original,
+        `# BEGIN SMARTI NETWORK SITE ${marker}`,
+        `# END SMARTI NETWORK SITE ${marker}`,
+      )
+      : replaceManagedBlock(
+        original,
+        `# BEGIN SMARTI NETWORK SITE ${marker}`,
+        `# END SMARTI NETWORK SITE ${marker}`,
+        buildWireGuardPeerSnippet(site),
+      );
+    if (next !== original) {
+      changes.push({
+        key: 'wireGuard',
+        resultKey: 'wireguard',
+        path: DEFAULT_WG_CONFIG_PATH,
+        original,
+        existed: runtimeConfig.files.wireGuard.exists,
+        writable: runtimeConfig.files.wireGuard.writable,
+        next,
+        validateCommand: WG_VALIDATE_COMMAND,
+        reloadCommand: WG_RELOAD_COMMAND,
+      });
     }
-    const snippet = buildWireGuardPeerSnippet(site);
-    const marker = buildSiteMarker(site);
-    const next = replaceManagedBlock(
-      runtimeConfig.active.wireGuardRaw || '',
-      `# BEGIN SMARTI NETWORK SITE ${marker}`,
-      `# END SMARTI NETWORK SITE ${marker}`,
-      snippet,
-    );
-    ensureParentDirectory(DEFAULT_WG_CONFIG_PATH);
-    writeFileSync(DEFAULT_WG_CONFIG_PATH, next, 'utf8');
-    result.updated.push('wireguard');
-    result.validate.wireGuard = runShellCommand(WG_VALIDATE_COMMAND);
-    result.reload.wireGuard = runShellCommand(WG_RELOAD_COMMAND);
-    if (!result.reload.wireGuard.supported) result.manualReloadRequired.push('wireguard');
   }
 
   if (normalizedTarget === 'all' || normalizedTarget === 'caddy') {
-    if (!runtimeConfig.files.caddy.writable) {
-      throw new Error('Caddy config is not writable from the app runtime');
+    const original = runtimeConfig.active.caddyRaw || '';
+    const next = mode === 'remove'
+      ? removeManagedBlock(
+        original,
+        `# BEGIN SMARTI NETWORK SITE ${marker}`,
+        `# END SMARTI NETWORK SITE ${marker}`,
+      )
+      : replaceManagedBlock(
+        original,
+        `# BEGIN SMARTI NETWORK SITE ${marker}`,
+        `# END SMARTI NETWORK SITE ${marker}`,
+        buildCaddySiteSnippet(site),
+      );
+    if (next !== original) {
+      changes.push({
+        key: 'caddy',
+        resultKey: 'caddy',
+        path: DEFAULT_CADDY_CONFIG_PATH,
+        original,
+        existed: runtimeConfig.files.caddy.exists,
+        writable: runtimeConfig.files.caddy.writable,
+        next,
+        validateCommand: CADDY_VALIDATE_COMMAND,
+        reloadCommand: CADDY_RELOAD_COMMAND,
+      });
     }
-    const snippet = buildCaddySiteSnippet(site);
-    const marker = buildSiteMarker(site);
-    const next = replaceManagedBlock(
-      runtimeConfig.active.caddyRaw || '',
-      `# BEGIN SMARTI NETWORK SITE ${marker}`,
-      `# END SMARTI NETWORK SITE ${marker}`,
-      snippet,
-    );
-    ensureParentDirectory(DEFAULT_CADDY_CONFIG_PATH);
-    writeFileSync(DEFAULT_CADDY_CONFIG_PATH, next, 'utf8');
-    result.updated.push('caddy');
-    result.validate.caddy = runShellCommand(CADDY_VALIDATE_COMMAND);
-    result.reload.caddy = runShellCommand(CADDY_RELOAD_COMMAND);
-    if (!result.reload.caddy.supported) result.manualReloadRequired.push('caddy');
   }
 
+  const blocked = changes.find((change) => !change.writable);
+  if (blocked) throw new Error(`${blocked.resultKey === 'wireguard' ? 'WireGuard' : 'Caddy'} config is not writable from the app runtime`);
+
+  const written = [];
+  try {
+    changes.forEach((change) => {
+      writeFileAtomic(change.path, change.next);
+      written.push(change);
+      result.updated.push(change.resultKey);
+    });
+    changes.forEach((change) => {
+      const validation = runShellCommand(change.validateCommand);
+      result.validate[change.key] = validation;
+      if (validation.supported && !validation.ok) {
+        throw new Error(`${change.resultKey === 'wireguard' ? 'WireGuard' : 'Caddy'} validation failed: ${validation.error || validation.output || 'unknown error'}`);
+      }
+    });
+  } catch (error) {
+    [...written].reverse().forEach((change) => {
+      try {
+        if (change.existed) writeFileAtomic(change.path, change.original);
+        else if (existsSync(change.path)) unlinkSync(change.path);
+      } catch {
+        // Keep the original error. A failed rollback is visible in the runtime overview.
+      }
+    });
+    throw error;
+  }
+
+  changes.forEach((change) => {
+    const reload = runShellCommand(change.reloadCommand);
+    result.reload[change.key] = reload;
+    if (!reload.supported) result.manualReloadRequired.push(change.resultKey);
+  });
   return result;
 };
+
+export const applySiteToRuntimeConfig = (site, target = 'all') => (
+  mutateSiteRuntimeConfig(site, target, 'apply')
+);
+
+export const removeSiteFromRuntimeConfig = (site, target = 'all') => (
+  mutateSiteRuntimeConfig(site, target, 'remove')
+);
 
 export const networkDefaults = {
   backupRoot: DEFAULT_BACKUP_ROOT,

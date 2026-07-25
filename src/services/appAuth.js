@@ -198,6 +198,21 @@ export const loginWithPassword = async (clientId, username, password) => {
   return payload;
 };
 
+export const fetchInvitation = async (token) => {
+  const payload = await apiRequest(`/api/auth/invitations/${encodeURIComponent(token)}`, {
+    method: 'GET',
+  });
+  return payload?.invitation || null;
+};
+
+export const acceptInvitation = async (token, credentials) => {
+  const payload = await apiRequest(`/api/auth/invitations/${encodeURIComponent(token)}/accept`, {
+    method: 'POST',
+    body: JSON.stringify(credentials || {}),
+  });
+  return payload?.account || null;
+};
+
 export const logoutUser = async () => {
   try {
     await apiRequest('/api/auth/logout', { method: 'POST' });
@@ -256,6 +271,13 @@ export const createUser = async (user) => {
   const payload = await apiRequest('/api/users', {
     method: 'POST',
     body: JSON.stringify(user),
+  });
+  return payload?.user || null;
+};
+
+export const resendUserInvitation = async (id) => {
+  const payload = await apiRequest(`/api/users/${encodeURIComponent(id)}/resend-invitation`, {
+    method: 'POST',
   });
   return payload?.user || null;
 };
@@ -376,6 +398,17 @@ export const applyNetworkSite = async (clientId, locationId, target = 'all') => 
     },
   );
   return payload && typeof payload === 'object' ? payload : null;
+};
+
+export const deleteNetworkSite = async (clientId, locationId, removeRuntime = true) => {
+  const payload = await apiRequest(
+    `/api/clients/network/sites/${encodeURIComponent(clientId)}/${encodeURIComponent(locationId)}`,
+    {
+      method: 'DELETE',
+      body: JSON.stringify({ removeRuntime }),
+    },
+  );
+  return Boolean(payload?.success);
 };
 
 export const downloadNetworkUmrConfig = async (clientId, locationId) => {
