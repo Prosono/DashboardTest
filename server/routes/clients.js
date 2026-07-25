@@ -35,6 +35,11 @@ import {
 } from '../networkAdmin.js';
 import { getRemoteInstanceHealthOverview } from '../remoteInstanceHealthMonitor.js';
 import { PLATFORM_ADMIN_CLIENT_ID, isPlatformAdminClientId } from '../platformAdmin.js';
+import {
+  getUnifiMobilityDeviceSnapshot,
+  getUnifiMobilityStatus,
+  listUnifiMobilityInventory,
+} from '../unifiMobility.js';
 
 const router = Router();
 
@@ -165,7 +170,15 @@ const mapNetworkSiteRow = (row) => ({
   backupLocationId: String(row?.backup_location_id || '').trim(),
   lanSubnet: String(row?.lan_subnet || '').trim(),
   routerIp: String(row?.router_ip || '').trim(),
+  umrMac: String(row?.umr_mac || '').trim(),
+  mobilityWorkspaceId: String(row?.mobility_workspace_id || '').trim(),
+  mobilityDeviceId: String(row?.mobility_device_id || '').trim(),
+  switchIp: String(row?.switch_ip || '').trim(),
+  switchMac: String(row?.switch_mac || '').trim(),
   haIp: String(row?.ha_ip || '').trim(),
+  haMac: String(row?.ha_mac || '').trim(),
+  knxIp: String(row?.knx_ip || '').trim(),
+  knxMac: String(row?.knx_mac || '').trim(),
   tunnelIp: String(row?.tunnel_ip || '').trim(),
   domainLabel: String(row?.domain_label || '').trim(),
   domainFqdn: String(row?.domain_fqdn || '').trim(),
@@ -210,7 +223,15 @@ const mergeNetworkSiteRecord = (base = {}, saved = {}) => {
     backupLocationId,
     lanSubnet: String(saved.lanSubnet || base.lanSubnet || '').trim(),
     routerIp: String(saved.routerIp || base.routerIp || '').trim(),
+    umrMac: String(saved.umrMac || base.umrMac || '').trim(),
+    mobilityWorkspaceId: String(saved.mobilityWorkspaceId || base.mobilityWorkspaceId || '').trim(),
+    mobilityDeviceId: String(saved.mobilityDeviceId || base.mobilityDeviceId || '').trim(),
+    switchIp: String(saved.switchIp || base.switchIp || '').trim(),
+    switchMac: String(saved.switchMac || base.switchMac || '').trim(),
     haIp: String(saved.haIp || base.haIp || '').trim(),
+    haMac: String(saved.haMac || base.haMac || '').trim(),
+    knxIp: String(saved.knxIp || base.knxIp || '').trim(),
+    knxMac: String(saved.knxMac || base.knxMac || '').trim(),
     tunnelIp: String(saved.tunnelIp || base.tunnelIp || '').trim(),
     domainLabel,
     domainFqdn,
@@ -232,8 +253,9 @@ const toPublicNetworkSite = (site, runtimeConfig = null) => {
     ? `${backupRoot}/${site.clientId}/${site.backupLocationId}`
     : '';
   const checks = {
-    router: Boolean(site.routerIp && site.lanSubnet),
+    umr: Boolean(site.routerIp && site.lanSubnet),
     homeAssistant: Boolean(site.haIp),
+    knx: Boolean(site.knxIp),
     tunnel: Boolean(site.tunnelIp && site.lanSubnet && site.wireGuardPublicKey),
     domain: Boolean(site.domainFqdn),
     backup: Boolean(site.backupLocationId),
@@ -254,6 +276,7 @@ const toPublicNetworkSite = (site, runtimeConfig = null) => {
   const issues = [];
   if (!checks.tunnel) issues.push('tunnel_incomplete');
   if (!checks.domain || !checks.homeAssistant) issues.push('proxy_incomplete');
+  if (!checks.umr || !checks.knx) issues.push('site_hardware_incomplete');
   if (runtimeState.wireGuardDrifted) issues.push('wireguard_drift');
   if (runtimeState.caddyDrifted) issues.push('caddy_drift');
   return {
@@ -265,7 +288,16 @@ const toPublicNetworkSite = (site, runtimeConfig = null) => {
     backupLocationId: site.backupLocationId || site.locationId,
     lanSubnet: site.lanSubnet,
     routerIp: site.routerIp,
+    umrLanIp: site.routerIp,
+    umrMac: site.umrMac,
+    mobilityWorkspaceId: site.mobilityWorkspaceId,
+    mobilityDeviceId: site.mobilityDeviceId,
+    switchIp: site.switchIp,
+    switchMac: site.switchMac,
     haIp: site.haIp,
+    haMac: site.haMac,
+    knxIp: site.knxIp,
+    knxMac: site.knxMac,
     tunnelIp: site.tunnelIp,
     domainLabel: site.domainLabel,
     domainFqdn: site.domainFqdn,
@@ -318,7 +350,15 @@ const loadNetworkOverviewData = () => {
       backup_location_id,
       lan_subnet,
       router_ip,
+      umr_mac,
+      mobility_workspace_id,
+      mobility_device_id,
+      switch_ip,
+      switch_mac,
       ha_ip,
+      ha_mac,
+      knx_ip,
+      knx_mac,
       tunnel_ip,
       domain_label,
       domain_fqdn,
@@ -986,6 +1026,7 @@ router.get('/network/overview', (_req, res) => {
       files: runtime.files,
       active: runtime.active,
       commands: runtime.commands,
+      mobility: getUnifiMobilityStatus(),
       clients: overview.clients,
       diagnostics: {
         ...(overview.diagnostics || {}),
@@ -1000,6 +1041,39 @@ router.get('/network/overview', (_req, res) => {
     });
   } catch (error) {
     return res.status(500).json({ error: error?.message || 'Failed to load network overview' });
+  }
+});
+
+router.get('/network/mobility/inventory', async (req, res) => {
+  try {
+    const inventory = await listUnifiMobilityInventory({
+      force: String(req.query?.refresh || '') === '1',
+    });
+    return res.json(inventory);
+  } catch (error) {
+    return res.status(Number(error?.status) || 502).json({
+      error: error?.message || 'Failed to load UniFi Mobility inventory',
+      code: error?.code || 'MOBILITY_INVENTORY_FAILED',
+      traceId: error?.traceId || undefined,
+      configured: getUnifiMobilityStatus().configured,
+    });
+  }
+});
+
+router.get('/network/mobility/devices/:workspaceId/:deviceId', async (req, res) => {
+  try {
+    const snapshot = await getUnifiMobilityDeviceSnapshot(
+      req.params.workspaceId,
+      req.params.deviceId,
+    );
+    return res.json(snapshot);
+  } catch (error) {
+    return res.status(Number(error?.status) || 502).json({
+      error: error?.message || 'Failed to load UniFi Mobility device',
+      code: error?.code || 'MOBILITY_DEVICE_FAILED',
+      traceId: error?.traceId || undefined,
+      configured: getUnifiMobilityStatus().configured,
+    });
   }
 });
 
@@ -1021,7 +1095,15 @@ router.get('/network/sites/:clientId/:locationId', (req, res) => {
         backup_location_id,
         lan_subnet,
         router_ip,
+        umr_mac,
+        mobility_workspace_id,
+        mobility_device_id,
+        switch_ip,
+        switch_mac,
         ha_ip,
+        ha_mac,
+        knx_ip,
+        knx_mac,
         tunnel_ip,
         domain_label,
         domain_fqdn,
@@ -1043,6 +1125,7 @@ router.get('/network/sites/:clientId/:locationId', (req, res) => {
       persisted: Boolean(savedRow),
       artifacts,
       runtime: sanitizeRuntimeConfigForResponse(overview.runtimeConfig),
+      mobility: getUnifiMobilityStatus(),
     });
   } catch (error) {
     return res.status(500).json({ error: error?.message || 'Failed to load network location' });
@@ -1068,7 +1151,15 @@ router.post('/network/sites', (req, res) => {
         backup_location_id,
         lan_subnet,
         router_ip,
+        umr_mac,
+        mobility_workspace_id,
+        mobility_device_id,
+        switch_ip,
+        switch_mac,
         ha_ip,
+        ha_mac,
+        knx_ip,
+        knx_mac,
         tunnel_ip,
         domain_label,
         domain_fqdn,
@@ -1132,7 +1223,15 @@ router.post('/network/sites', (req, res) => {
         backup_location_id,
         lan_subnet,
         router_ip,
+        umr_mac,
+        mobility_workspace_id,
+        mobility_device_id,
+        switch_ip,
+        switch_mac,
         ha_ip,
+        ha_mac,
+        knx_ip,
+        knx_mac,
         tunnel_ip,
         domain_label,
         domain_fqdn,
@@ -1141,13 +1240,21 @@ router.post('/network/sites', (req, res) => {
         created_at,
         updated_at
       )
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(client_id, location_id) DO UPDATE SET
         display_name = excluded.display_name,
         backup_location_id = excluded.backup_location_id,
         lan_subnet = excluded.lan_subnet,
         router_ip = excluded.router_ip,
+        umr_mac = excluded.umr_mac,
+        mobility_workspace_id = excluded.mobility_workspace_id,
+        mobility_device_id = excluded.mobility_device_id,
+        switch_ip = excluded.switch_ip,
+        switch_mac = excluded.switch_mac,
         ha_ip = excluded.ha_ip,
+        ha_mac = excluded.ha_mac,
+        knx_ip = excluded.knx_ip,
+        knx_mac = excluded.knx_mac,
         tunnel_ip = excluded.tunnel_ip,
         domain_label = excluded.domain_label,
         domain_fqdn = excluded.domain_fqdn,
@@ -1161,7 +1268,15 @@ router.post('/network/sites', (req, res) => {
       nextSite.backupLocationId,
       nextSite.lanSubnet,
       nextSite.routerIp,
+      nextSite.umrMac,
+      nextSite.mobilityWorkspaceId,
+      nextSite.mobilityDeviceId,
+      nextSite.switchIp,
+      nextSite.switchMac,
       nextSite.haIp,
+      nextSite.haMac,
+      nextSite.knxIp,
+      nextSite.knxMac,
       nextSite.tunnelIp,
       nextSite.domainLabel,
       nextSite.domainFqdn,
@@ -1172,17 +1287,19 @@ router.post('/network/sites', (req, res) => {
     );
 
     const refreshedOverview = loadNetworkOverviewData();
-    const refreshedResolved = resolveNetworkSiteFromOverview(refreshedOverview, clientId, locationId);
     const artifacts = buildNetworkSiteArtifacts(nextSite);
     return res.json({
       client: {
         id: client.id,
         name: client.name,
       },
-      site: toPublicNetworkSite(refreshedResolved?.site || nextSite, refreshedOverview.runtimeConfig),
+      // Use the complete saved model here. Overview entries are already public
+      // projections and intentionally no longer contain the private key.
+      site: toPublicNetworkSite(nextSite, refreshedOverview.runtimeConfig),
       persisted: true,
       artifacts,
       runtime: sanitizeRuntimeConfigForResponse(refreshedOverview.runtimeConfig),
+      mobility: getUnifiMobilityStatus(),
     });
   } catch (error) {
     return res.status(400).json({ error: error?.message || 'Failed to save network location' });
@@ -1203,7 +1320,15 @@ router.post('/network/sites/:clientId/:locationId/apply', (req, res) => {
       backup_location_id,
       lan_subnet,
       router_ip,
+      umr_mac,
+      mobility_workspace_id,
+      mobility_device_id,
+      switch_ip,
+      switch_mac,
       ha_ip,
+      ha_mac,
+      knx_ip,
+      knx_mac,
       tunnel_ip,
       domain_label,
       domain_fqdn,
@@ -1233,10 +1358,9 @@ router.post('/network/sites/:clientId/:locationId/apply', (req, res) => {
   try {
     const result = applySiteToRuntimeConfig(site, target);
     const refreshedOverview = loadNetworkOverviewData();
-    const refreshedResolved = resolveNetworkSiteFromOverview(refreshedOverview, clientId, locationId);
     return res.json({
       success: true,
-      site: toPublicNetworkSite(refreshedResolved?.site || site, refreshedOverview.runtimeConfig),
+      site: toPublicNetworkSite(site, refreshedOverview.runtimeConfig),
       result,
       runtime: sanitizeRuntimeConfigForResponse(refreshedOverview.runtimeConfig),
     });
@@ -1259,7 +1383,15 @@ router.delete('/network/sites/:clientId/:locationId', (req, res) => {
       backup_location_id,
       lan_subnet,
       router_ip,
+      umr_mac,
+      mobility_workspace_id,
+      mobility_device_id,
+      switch_ip,
+      switch_mac,
       ha_ip,
+      ha_mac,
+      knx_ip,
+      knx_mac,
       tunnel_ip,
       domain_label,
       domain_fqdn,
@@ -1302,7 +1434,15 @@ router.get('/network/sites/:clientId/:locationId/umr-config', (req, res) => {
       backup_location_id,
       lan_subnet,
       router_ip,
+      umr_mac,
+      mobility_workspace_id,
+      mobility_device_id,
+      switch_ip,
+      switch_mac,
       ha_ip,
+      ha_mac,
+      knx_ip,
+      knx_mac,
       tunnel_ip,
       domain_label,
       domain_fqdn,

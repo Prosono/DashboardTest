@@ -29,6 +29,10 @@ const normalizeClientId = (value) => String(value ?? '')
 
 const normalizeIpv4 = (value) => String(value || '').trim();
 const normalizeSubnet = (value) => String(value || '').trim();
+const normalizeMacAddress = (value) => String(value || '')
+  .trim()
+  .toLowerCase()
+  .replace(/-/g, ':');
 const normalizeDomainLabel = (value) => String(value ?? '')
   .trim()
   .toLowerCase()
@@ -51,6 +55,10 @@ const parseIpv4Octets = (value) => {
 
 export const isValidIpv4 = (value) => Boolean(parseIpv4Octets(value));
 
+export const isValidMacAddress = (value) => (
+  /^([0-9a-f]{2}:){5}[0-9a-f]{2}$/i.test(normalizeMacAddress(value))
+);
+
 export const isValidIpv4Cidr = (value) => {
   const [address, prefix, ...rest] = String(value || '').trim().split('/');
   if (rest.length || !isValidIpv4(address) || !/^\d{1,2}$/.test(prefix || '')) return false;
@@ -71,10 +79,20 @@ export const isValidDomainName = (value) => {
 export const validateNetworkSite = (site = {}) => {
   const errors = [];
   if (site.routerIp && !isValidIpv4(site.routerIp)) errors.push('Router IP must be a valid IPv4 address');
+  if (site.switchIp && !isValidIpv4(site.switchIp)) errors.push('Switch IP must be a valid IPv4 address');
   if (site.haIp && !isValidIpv4(site.haIp)) errors.push('HA IP must be a valid IPv4 address');
+  if (site.knxIp && !isValidIpv4(site.knxIp)) errors.push('KNX IP must be a valid IPv4 address');
   if (site.tunnelIp && !isValidIpv4(site.tunnelIp)) errors.push('Tunnel IP must be a valid IPv4 address');
   if (site.lanSubnet && !isValidIpv4Cidr(site.lanSubnet)) errors.push('LAN subnet must be a valid IPv4 CIDR');
   if (site.domainFqdn && !isValidDomainName(site.domainFqdn)) errors.push('Domain must be a valid fully qualified domain name');
+  [
+    ['UMR MAC', site.umrMac],
+    ['Switch MAC', site.switchMac],
+    ['SMARTi Hub MAC', site.haMac],
+    ['KNX MAC', site.knxMac],
+  ].forEach(([label, value]) => {
+    if (value && !isValidMacAddress(value)) errors.push(`${label} must be a valid MAC address`);
+  });
   return errors;
 };
 
@@ -378,7 +396,15 @@ const normalizeSiteRecord = (record = {}) => {
     backupLocationId: backupLocationId || locationId,
     lanSubnet: normalizeSubnet(record.lanSubnet || record.lan_subnet),
     routerIp: normalizeIpv4(record.routerIp || record.router_ip),
+    umrMac: normalizeMacAddress(record.umrMac || record.umr_mac),
+    mobilityWorkspaceId: String(record.mobilityWorkspaceId || record.mobility_workspace_id || '').trim(),
+    mobilityDeviceId: String(record.mobilityDeviceId || record.mobility_device_id || '').trim(),
+    switchIp: normalizeIpv4(record.switchIp || record.switch_ip),
+    switchMac: normalizeMacAddress(record.switchMac || record.switch_mac),
     haIp: normalizeIpv4(record.haIp || record.ha_ip),
+    haMac: normalizeMacAddress(record.haMac || record.ha_mac),
+    knxIp: normalizeIpv4(record.knxIp || record.knx_ip),
+    knxMac: normalizeMacAddress(record.knxMac || record.knx_mac),
     tunnelIp: normalizeIpv4(record.tunnelIp || record.tunnel_ip),
     domainLabel,
     domainFqdn,
@@ -413,18 +439,22 @@ export const createNetworkSiteFromInput = (input = {}, fallback = {}) => {
   return normalized;
 };
 
-export const buildUmrConfigText = (site) => {
+export const buildUmrConfigText = (site, options = {}) => {
   if (!site?.tunnelIp) throw new Error('Tunnel IP is required to generate the UMR file');
   if (!site?.wireGuardPrivateKey) throw new Error('WireGuard private key is missing for this location');
-  const serverPublicKey = DEFAULT_WG_SERVER_PUBLIC_KEY;
+  const serverPublicKey = String(options.serverPublicKey || DEFAULT_WG_SERVER_PUBLIC_KEY).trim();
+  const serverPublicHost = String(options.serverPublicHost || DEFAULT_SERVER_PUBLIC_HOST).trim();
+  const listenPort = Number.parseInt(String(options.listenPort || DEFAULT_WG_LISTEN_PORT), 10)
+    || DEFAULT_WG_LISTEN_PORT;
   if (!serverPublicKey) throw new Error('Server public key is not configured');
   return `[Interface]
 Address = ${site.tunnelIp}/32
 PrivateKey = ${site.wireGuardPrivateKey}
+MTU = 1420
 
 [Peer]
 PublicKey = ${serverPublicKey}
-Endpoint = ${DEFAULT_SERVER_PUBLIC_HOST}:${DEFAULT_WG_LISTEN_PORT}
+Endpoint = ${serverPublicHost}:${listenPort}
 AllowedIPs = 10.88.0.0/24
 PersistentKeepalive = 25
 `;

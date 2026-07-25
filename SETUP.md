@@ -138,3 +138,17 @@ environment:
 ```
 
 `APP_PUBLIC_URL`, `SMTP_FROM`, and either `SMTP_URL` or `SMTP_HOST` are required. If email delivery fails, the pending user is rolled back instead of leaving an account without a usable invitation. Invitation tokens are stored as SHA-256 hashes, expire automatically, and can only be used once.
+
+### UniFi Mobility / UMR operational data
+
+The super-admin network page can link each sauna site to its UniFi Mobile Router and display UMR status, WAN/cellular data, VPN details, and connected clients. The backend also normalizes GPS and subscription data for future operational views.
+
+Create an API key at `https://mobility.ui.com/api-keys` with the `mobility` app scope and `read:mobility` permission, then add it to the server `.env`:
+
+```env
+UNIFI_MOBILITY_API_KEY=replace-with-a-read-only-key
+UNIFI_MOBILITY_API_URL=https://api.ui.com/v1/mobility
+UNIFI_MOBILITY_CACHE_TTL_MS=60000
+```
+
+The API key is used only by the backend and is never returned to the browser. Read access works without a cloud subscription. The generated WireGuard file is still imported manually in Mobility because the official Mobility API does not currently document an endpoint for creating VPN profiles.

@@ -449,7 +449,15 @@ const ensureNetworkSitesTable = () => {
       backup_location_id TEXT NOT NULL DEFAULT '',
       lan_subnet TEXT NOT NULL DEFAULT '',
       router_ip TEXT NOT NULL DEFAULT '',
+      umr_mac TEXT NOT NULL DEFAULT '',
+      mobility_workspace_id TEXT NOT NULL DEFAULT '',
+      mobility_device_id TEXT NOT NULL DEFAULT '',
+      switch_ip TEXT NOT NULL DEFAULT '',
+      switch_mac TEXT NOT NULL DEFAULT '',
       ha_ip TEXT NOT NULL DEFAULT '',
+      ha_mac TEXT NOT NULL DEFAULT '',
+      knx_ip TEXT NOT NULL DEFAULT '',
+      knx_mac TEXT NOT NULL DEFAULT '',
       tunnel_ip TEXT NOT NULL DEFAULT '',
       domain_label TEXT NOT NULL DEFAULT '',
       domain_fqdn TEXT NOT NULL DEFAULT '',
@@ -462,6 +470,23 @@ const ensureNetworkSitesTable = () => {
     );
     CREATE INDEX IF NOT EXISTS idx_network_sites_client ON network_sites(client_id, updated_at DESC);
   `);
+
+  const columns = db.prepare('PRAGMA table_info(network_sites)').all().map((column) => column.name);
+  const additions = [
+    ['umr_mac', "TEXT NOT NULL DEFAULT ''"],
+    ['mobility_workspace_id', "TEXT NOT NULL DEFAULT ''"],
+    ['mobility_device_id', "TEXT NOT NULL DEFAULT ''"],
+    ['switch_ip', "TEXT NOT NULL DEFAULT ''"],
+    ['switch_mac', "TEXT NOT NULL DEFAULT ''"],
+    ['ha_mac', "TEXT NOT NULL DEFAULT ''"],
+    ['knx_ip', "TEXT NOT NULL DEFAULT ''"],
+    ['knx_mac', "TEXT NOT NULL DEFAULT ''"],
+  ];
+  additions.forEach(([name, definition]) => {
+    if (!columns.includes(name)) {
+      db.prepare(`ALTER TABLE network_sites ADD COLUMN ${name} ${definition}`).run();
+    }
+  });
 };
 
 const ensureClientRecord = (clientId, displayName = '') => {

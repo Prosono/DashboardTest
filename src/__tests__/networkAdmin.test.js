@@ -1,10 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import {
   createNetworkSiteFromInput,
+  buildUmrConfigText,
   deriveSiteRuntimeState,
   isValidDomainName,
   isValidIpv4,
   isValidIpv4Cidr,
+  isValidMacAddress,
   parseCaddyConfig,
   parseWireGuardConfig,
   validateNetworkSite,
@@ -96,5 +98,31 @@ oslo.example.no {
     expect(first.domainLabel).toBe('client-a-primary');
     expect(second.domainLabel).toBe('client-b-primary');
     expect(first.domainFqdn).not.toBe(second.domainFqdn);
+  });
+
+  it('normalizes site equipment and emits a UMR-safe WireGuard profile', () => {
+    expect(isValidMacAddress('AA-BB-CC-DD-EE-FF')).toBe(true);
+    expect(isValidMacAddress('not-a-mac')).toBe(false);
+
+    const site = createNetworkSiteFromInput({
+      clientId: 'client-a',
+      locationId: 'oslo',
+      tunnelIp: '10.88.0.8',
+      lanSubnet: '192.168.80.0/24',
+      routerIp: '192.168.80.1',
+      switchIp: '192.168.80.2',
+      switchMac: 'AA-BB-CC-DD-EE-FF',
+      haIp: '192.168.80.120',
+      knxIp: '192.168.80.10',
+    });
+    const profile = buildUmrConfigText(site, {
+      serverPublicKey: 'server-public-key',
+      serverPublicHost: 'vpn.example.no',
+      listenPort: 51820,
+    });
+
+    expect(site.switchMac).toBe('aa:bb:cc:dd:ee:ff');
+    expect(profile).toContain('MTU = 1420');
+    expect(profile).toContain('PersistentKeepalive = 25');
   });
 });

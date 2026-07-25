@@ -381,6 +381,22 @@ export const fetchNetworkSite = async (clientId, locationId) => {
   return payload && typeof payload === 'object' ? payload : null;
 };
 
+export const fetchUnifiMobilityInventory = async (refresh = false) => {
+  const payload = await apiRequest(
+    `/api/clients/network/mobility/inventory${refresh ? '?refresh=1' : ''}`,
+    { method: 'GET' },
+  );
+  return payload && typeof payload === 'object' ? payload : null;
+};
+
+export const fetchUnifiMobilityDevice = async (workspaceId, deviceId) => {
+  const payload = await apiRequest(
+    `/api/clients/network/mobility/devices/${encodeURIComponent(workspaceId)}/${encodeURIComponent(deviceId)}`,
+    { method: 'GET' },
+  );
+  return payload && typeof payload === 'object' ? payload : null;
+};
+
 export const saveNetworkSite = async (site) => {
   const payload = await apiRequest('/api/clients/network/sites', {
     method: 'POST',
