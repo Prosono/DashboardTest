@@ -6,6 +6,7 @@ import {
   AlertTriangle,
   Archive,
   Bell,
+  BookOpen,
   Check,
   Edit2,
   LayoutGrid,
@@ -33,6 +34,7 @@ import {
   PageNavigation,
   PersonStatus,
   SuperAdminBackupsPage,
+  SuperAdminHowToPage,
   SuperAdminLoggingPage,
   SuperAdminNetworkPage,
   SuperAdminOverview,
@@ -142,6 +144,7 @@ import { normalizeHaConfig } from './utils/haConnections';
 import { DEFAULT_NOTIFICATION_CONFIG, normalizeNotificationConfig } from './utils/notificationConfig';
 
 const SUPER_ADMIN_OVERVIEW_PAGE_ID = '__super_admin_overview';
+const SUPER_ADMIN_HOW_TO_PAGE_ID = '__super_admin_how_to';
 const SUPER_ADMIN_BACKUPS_PAGE_ID = '__super_admin_backups';
 const SUPER_ADMIN_NETWORK_PAGE_ID = '__super_admin_network';
 const SUPER_ADMIN_LOGGING_PAGE_ID = '__super_admin_logging';
@@ -454,6 +457,7 @@ function AppContent({
   const currentUserRole = normalizeRole(currentUser?.role);
   const isLocalClientAdmin = currentUserRole === 'admin' && !isPlatformAdmin;
   const superAdminFixedPages = useMemo(() => ([
+    SUPER_ADMIN_HOW_TO_PAGE_ID,
     SUPER_ADMIN_NETWORK_PAGE_ID,
     SUPER_ADMIN_BACKUPS_PAGE_ID,
     SUPER_ADMIN_LOGGING_PAGE_ID,
@@ -2001,6 +2005,7 @@ function AppContent({
   const pageDefaults = {
     home: { label: t('page.home'), icon: LayoutGrid },
     [SUPER_ADMIN_OVERVIEW_PAGE_ID]: { label: t('superAdminOverview.pageLabel'), icon: Server },
+    [SUPER_ADMIN_HOW_TO_PAGE_ID]: { label: t('superAdminHowTo.pageLabel'), icon: BookOpen, locked: true },
     [SUPER_ADMIN_NETWORK_PAGE_ID]: { label: t('superAdminNetwork.pageLabel'), icon: Wifi, locked: true },
     [SUPER_ADMIN_BACKUPS_PAGE_ID]: { label: t('superAdminBackups.pageLabel'), icon: Archive, locked: true },
     [SUPER_ADMIN_LOGGING_PAGE_ID]: { label: t('superAdminLogging.pageLabel'), icon: LogIn, locked: true },
@@ -2024,6 +2029,7 @@ function AppContent({
   const activePageLabel = useMemo(() => {
     if (activePage === 'home') return t('page.home');
     if (activePage === SUPER_ADMIN_OVERVIEW_PAGE_ID) return t('superAdminOverview.pageLabel');
+    if (activePage === SUPER_ADMIN_HOW_TO_PAGE_ID) return t('superAdminHowTo.pageLabel');
     if (activePage === SUPER_ADMIN_NETWORK_PAGE_ID) return t('superAdminNetwork.pageLabel');
     if (activePage === SUPER_ADMIN_BACKUPS_PAGE_ID) return t('superAdminBackups.pageLabel');
     if (activePage === SUPER_ADMIN_LOGGING_PAGE_ID) return t('superAdminLogging.pageLabel');
@@ -2745,6 +2751,10 @@ function AppContent({
                 userAdminApi={userAdminApi}
                 isMobile={isMobile}
               />
+            </div>
+          ) : activePage === SUPER_ADMIN_HOW_TO_PAGE_ID && isPlatformAdmin ? (
+            <div key={activePage} className={pageTransitionClass}>
+              <SuperAdminHowToPage t={t} />
             </div>
           ) : activePage === SUPER_ADMIN_NETWORK_PAGE_ID && isPlatformAdmin ? (
             <div key={activePage} className={pageTransitionClass}>
