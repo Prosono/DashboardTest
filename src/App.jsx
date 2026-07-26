@@ -13,6 +13,7 @@ import {
   LogIn,
   Settings,
   Server,
+  Workflow,
   Wifi,
   Plus,
   Lock,
@@ -34,6 +35,7 @@ import {
   PageNavigation,
   PersonStatus,
   SuperAdminBackupsPage,
+  SuperAdminConfigGeneratorPage,
   SuperAdminHowToPage,
   SuperAdminLoggingPage,
   SuperAdminNetworkPage,
@@ -145,6 +147,7 @@ import { DEFAULT_NOTIFICATION_CONFIG, normalizeNotificationConfig } from './util
 
 const SUPER_ADMIN_OVERVIEW_PAGE_ID = '__super_admin_overview';
 const SUPER_ADMIN_HOW_TO_PAGE_ID = '__super_admin_how_to';
+const SUPER_ADMIN_CONFIG_GENERATOR_PAGE_ID = '__super_admin_config_generator';
 const SUPER_ADMIN_BACKUPS_PAGE_ID = '__super_admin_backups';
 const SUPER_ADMIN_NETWORK_PAGE_ID = '__super_admin_network';
 const SUPER_ADMIN_LOGGING_PAGE_ID = '__super_admin_logging';
@@ -458,6 +461,7 @@ function AppContent({
   const isLocalClientAdmin = currentUserRole === 'admin' && !isPlatformAdmin;
   const superAdminFixedPages = useMemo(() => ([
     SUPER_ADMIN_HOW_TO_PAGE_ID,
+    SUPER_ADMIN_CONFIG_GENERATOR_PAGE_ID,
     SUPER_ADMIN_NETWORK_PAGE_ID,
     SUPER_ADMIN_BACKUPS_PAGE_ID,
     SUPER_ADMIN_LOGGING_PAGE_ID,
@@ -2006,6 +2010,7 @@ function AppContent({
     home: { label: t('page.home'), icon: LayoutGrid },
     [SUPER_ADMIN_OVERVIEW_PAGE_ID]: { label: t('superAdminOverview.pageLabel'), icon: Server },
     [SUPER_ADMIN_HOW_TO_PAGE_ID]: { label: t('superAdminHowTo.pageLabel'), icon: BookOpen, locked: true },
+    [SUPER_ADMIN_CONFIG_GENERATOR_PAGE_ID]: { label: t('superAdminConfigGenerator.pageLabel'), icon: Workflow, locked: true },
     [SUPER_ADMIN_NETWORK_PAGE_ID]: { label: t('superAdminNetwork.pageLabel'), icon: Wifi, locked: true },
     [SUPER_ADMIN_BACKUPS_PAGE_ID]: { label: t('superAdminBackups.pageLabel'), icon: Archive, locked: true },
     [SUPER_ADMIN_LOGGING_PAGE_ID]: { label: t('superAdminLogging.pageLabel'), icon: LogIn, locked: true },
@@ -2030,6 +2035,7 @@ function AppContent({
     if (activePage === 'home') return t('page.home');
     if (activePage === SUPER_ADMIN_OVERVIEW_PAGE_ID) return t('superAdminOverview.pageLabel');
     if (activePage === SUPER_ADMIN_HOW_TO_PAGE_ID) return t('superAdminHowTo.pageLabel');
+    if (activePage === SUPER_ADMIN_CONFIG_GENERATOR_PAGE_ID) return t('superAdminConfigGenerator.pageLabel');
     if (activePage === SUPER_ADMIN_NETWORK_PAGE_ID) return t('superAdminNetwork.pageLabel');
     if (activePage === SUPER_ADMIN_BACKUPS_PAGE_ID) return t('superAdminBackups.pageLabel');
     if (activePage === SUPER_ADMIN_LOGGING_PAGE_ID) return t('superAdminLogging.pageLabel');
@@ -2755,6 +2761,10 @@ function AppContent({
           ) : activePage === SUPER_ADMIN_HOW_TO_PAGE_ID && isPlatformAdmin ? (
             <div key={activePage} className={pageTransitionClass}>
               <SuperAdminHowToPage t={t} />
+            </div>
+          ) : activePage === SUPER_ADMIN_CONFIG_GENERATOR_PAGE_ID && isPlatformAdmin ? (
+            <div key={activePage} className={pageTransitionClass}>
+              <SuperAdminConfigGeneratorPage t={t} />
             </div>
           ) : activePage === SUPER_ADMIN_NETWORK_PAGE_ID && isPlatformAdmin ? (
             <div key={activePage} className={pageTransitionClass}>

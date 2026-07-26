@@ -2021,5 +2021,21 @@
   "superAdminHowTo.checklist.item6": "Home Assistant can control a harmless test entity and receives expected sensor state.",
   "superAdminHowTo.checklist.item7": "A new backup uploads to the exact path and can be listed and downloaded in SmartSauna.",
   "superAdminHowTo.checklist.doneTitle": "Then document the handover",
-  "superAdminHowTo.checklist.doneText": "Record the site owner, commissioning date and any deliberate deviations. Never include private keys or SFTP passwords in the handover notes."
+  "superAdminHowTo.checklist.doneText": "Record the site owner, commissioning date and any deliberate deviations. Never include private keys or SFTP passwords in the handover notes.",
+  "superAdminConfigGenerator.pageLabel": "Config files",
+  "superAdminConfigGenerator.eyebrow": "Home Assistant package workshop",
+  "superAdminConfigGenerator.title": "Generate a complete sauna configuration",
+  "superAdminConfigGenerator.subtitle": "Import the KNX project, confirm the Periode booking IDs and download a component-aware Home Assistant package. Equipment that is not present in KNX is automatically left out.",
+  "superAdminConfigGenerator.trust.local.label": "Private by design",
+  "superAdminConfigGenerator.trust.local.value": "The KNX file is processed locally in your browser and is not uploaded to SmartSauna.",
+  "superAdminConfigGenerator.trust.output.label": "Complete output",
+  "superAdminConfigGenerator.trust.output.value": "Preview and download up to 12 coordinated YAML files.",
+  "superAdminConfigGenerator.trust.logic.label": "Equipment-aware",
+  "superAdminConfigGenerator.trust.logic.value": "Lights, heating, locks and monitoring are only included when detected.",
+  "superAdminConfigGenerator.runtime": "The original Smart-Sauna-Config-Generator runs isolated inside this super admin page.",
+  "superAdminConfigGenerator.ready": "Generator ready",
+  "superAdminConfigGenerator.loading": "Starting generator",
+  "superAdminConfigGenerator.downloadStarted": "Download started",
+  "superAdminConfigGenerator.instructions": "Recommended flow: upload knxproject.yaml, check the detected equipment, enter sauna name, merchant ID and the four booking IDs, then resolve every open item before downloading the files.",
+  "superAdminConfigGenerator.frameTitle": "Smart Sauna configuration generator"
 }

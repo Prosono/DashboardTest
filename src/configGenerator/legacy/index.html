@@ -1,0 +1,232 @@
+<!doctype html>
+<html lang="no">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Smart Sauna Config Generator</title>
+    <meta
+      name="description"
+      content="Last opp KNX-filen og generer Home Assistant-konfigurasjon for badstuer med minst mulig manuell input."
+    />
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div class="steam steam-a" aria-hidden="true"></div>
+    <div class="steam steam-b" aria-hidden="true"></div>
+    <div class="steam steam-c" aria-hidden="true"></div>
+
+    <main class="shell">
+      <header class="hero panel animate-in">
+        <div class="hero-copy">
+          <p class="eyebrow">Home Assistant package generator</p>
+          <h1>Last opp KNX. Fyll inn fem felt. Last ned YAML.</h1>
+          <p class="lede">
+            Generatoren prøver å hente resten fra KNX-filen automatisk. Det du
+            vanligvis bare trenger å legge inn er badstunavn, merchant id og
+            booking-id for felles, privat, aufguss og service. Utstyr som ikke
+            finnes i KNX-filen blir automatisk utelatt fra konfigurasjonen.
+          </p>
+        </div>
+
+        <div class="process-strip" aria-label="Arbeidsflyt">
+          <article class="process-step">
+            <p class="eyebrow">Steg 1</p>
+            <strong>Importer KNX</strong>
+            <span>Vi leser lys, klima, sensorer og tekstobjekter fra filen.</span>
+          </article>
+          <article class="process-step">
+            <p class="eyebrow">Steg 2</p>
+            <strong>Bekreft booking-id-er</strong>
+            <span>Kun badstunavn, merchant id og de fire booking-id-ene er normalt nok.</span>
+          </article>
+          <article class="process-step">
+            <p class="eyebrow">Steg 3</p>
+            <strong>Eksporter pakken</strong>
+            <span>Se YAML i sanntid og last ned alt samlet eller fil for fil.</span>
+          </article>
+        </div>
+
+        <div class="hero-actions">
+          <button class="button button-primary" id="pick-knx-file" type="button">
+            Velg KNX YAML
+          </button>
+          <button class="button" id="load-sample" type="button">
+            Last demo
+          </button>
+          <button class="button" id="load-blank" type="button">
+            Start tomt
+          </button>
+          <button class="button" id="download-all" type="button">
+            Last ned alle YAML
+          </button>
+        </div>
+
+        <input
+          id="knx-upload"
+          type="file"
+          accept=".yaml,.yml,text/yaml,text/plain"
+          hidden
+        />
+
+        <div class="summary-row" id="summary-chips"></div>
+      </header>
+
+      <section class="workspace">
+        <section class="form-column">
+          <section class="panel section-card animate-in upload-panel">
+            <div class="section-head">
+              <div>
+                <p class="section-number">01</p>
+                <h2>Importer KNX-filen</h2>
+              </div>
+              <p class="section-note">
+                Last opp <code>knxproject.yaml</code> eller en tilsvarende
+                KNX-konfig. Generatoren fyller inn KNX-tabellene og avleder
+                sentrale entity ids.
+              </p>
+            </div>
+
+            <div class="upload-layout">
+              <button
+                class="upload-dropzone"
+                id="upload-dropzone"
+                type="button"
+                aria-describedby="knx-import-status"
+              >
+                <span class="upload-kicker">Slipp fil her</span>
+                <strong>Velg eller dra inn KNX YAML</strong>
+                <span>
+                  Støtter <code>.yaml</code> og <code>.yml</code>. Generatoren
+                  prøver å hente resten automatisk.
+                </span>
+              </button>
+
+              <div class="upload-side">
+                <div class="upload-shell">
+                  <button class="button button-primary" id="pick-knx-file-inline" type="button">
+                    Velg KNX-fil
+                  </button>
+                  <button class="button" id="apply-autofill" type="button">
+                    Oppdater auto-fyll
+                  </button>
+                </div>
+
+                <div class="import-status" id="knx-import-status"></div>
+              </div>
+            </div>
+          </section>
+
+          <div id="primary-field-groups"></div>
+          <div id="styring-field-groups"></div>
+
+          <section class="panel section-card insight-panel animate-in">
+            <div class="section-head">
+              <div>
+                <p class="section-number">04</p>
+                <h2>Dette har generatoren forstått</h2>
+              </div>
+              <p class="section-note">
+                Auto-detect fra KNX og navn. Disse verdiene kan justeres i
+                avansert oppsett hvis noe ble feil. Komponenter merket «Ikke
+                med» blir heller ikke tatt med i YAML-pakken.
+              </p>
+            </div>
+            <div class="insight-grid" id="autofill-grid"></div>
+          </section>
+
+          <section class="panel section-card readiness-panel animate-in">
+            <div class="section-head">
+              <div>
+                <p class="section-number">05</p>
+                <h2>Klar til eksport?</h2>
+              </div>
+              <p class="section-note">
+                En rask oversikt over hva som er klart og hva som fortsatt mangler.
+              </p>
+            </div>
+            <div class="readiness-list" id="readiness-list"></div>
+          </section>
+
+          <details class="panel advanced-shell animate-in" id="advanced-shell">
+            <summary>Avansert oppsett og KNX-redigering</summary>
+            <div class="advanced-body">
+              <div id="advanced-field-groups"></div>
+
+              <section class="panel knx-panel">
+                <div class="section-head">
+                  <div>
+                    <p class="eyebrow">KNX-kart</p>
+                    <h2>Importer, sjekk og finjuster</h2>
+                  </div>
+                  <p class="section-note">
+                    Bruk denne kun hvis auto-fyllet må justeres eller hvis du vil
+                    legge til objekter manuelt.
+                  </p>
+                </div>
+                <div id="knx-groups"></div>
+              </section>
+            </div>
+          </details>
+        </section>
+
+        <aside class="preview-column">
+          <section class="panel animate-in preview-panel">
+            <div class="section-head preview-head">
+              <div>
+                <p class="eyebrow">Output</p>
+                <h2>Genererte filer</h2>
+              </div>
+              <div class="preview-actions">
+                <button class="button button-ghost" id="copy-current" type="button">
+                  Kopier aktiv fil
+                </button>
+                <button class="button button-ghost" id="download-current" type="button">
+                  Last ned aktiv fil
+                </button>
+                <button class="button button-ghost" id="export-profile" type="button">
+                  Last ned profil
+                </button>
+              </div>
+            </div>
+
+            <div class="tab-strip" id="file-tabs" aria-label="Genererte filer"></div>
+
+            <div class="preview-meta">
+              <div>
+                <p class="meta-label">Aktiv fil</p>
+                <strong id="active-file-name">webhooks.yaml</strong>
+              </div>
+              <div>
+                <p class="meta-label">Størrelse</p>
+                <strong id="active-file-size">0 linjer</strong>
+              </div>
+            </div>
+
+            <div class="file-overview" id="file-overview"></div>
+
+            <pre class="preview-code" id="preview-content"></pre>
+          </section>
+
+          <section class="panel animate-in notes-panel">
+            <div class="section-head">
+              <div>
+                <p class="eyebrow">Generatorlofter</p>
+                <h2>Hva verktøyet passer på</h2>
+              </div>
+            </div>
+            <ul class="notes-list" id="notes-list"></ul>
+          </section>
+        </aside>
+      </section>
+    </main>
+
+    <noscript>
+      <div class="noscript">
+        Denne generatoren trenger JavaScript for å bygge YAML-filene.
+      </div>
+    </noscript>
+
+    <script src="./src/templates.generated.js" defer></script>
+    <script src="./src/app.js" defer></script>
+  </body>
+</html>

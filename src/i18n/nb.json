@@ -2021,5 +2021,21 @@
   "superAdminHowTo.checklist.item6": "Home Assistant kan styre en ufarlig testentitet og mottar forventet sensorstatus.",
   "superAdminHowTo.checklist.item7": "En ny backup lastes opp til nøyaktig sti og kan listes og lastes ned i SmartSauna.",
   "superAdminHowTo.checklist.doneTitle": "Dokumenter deretter overleveringen",
-  "superAdminHowTo.checklist.doneText": "Registrer anleggseier, dato for idriftsettelse og eventuelle bevisste avvik. Private nøkler eller SFTP-passord skal aldri være med i overleveringsnotatene."
+  "superAdminHowTo.checklist.doneText": "Registrer anleggseier, dato for idriftsettelse og eventuelle bevisste avvik. Private nøkler eller SFTP-passord skal aldri være med i overleveringsnotatene.",
+  "superAdminConfigGenerator.pageLabel": "Configfiler",
+  "superAdminConfigGenerator.eyebrow": "Verksted for Home Assistant-pakker",
+  "superAdminConfigGenerator.title": "Generer komplett badstuekonfigurasjon",
+  "superAdminConfigGenerator.subtitle": "Importer KNX-prosjektet, bekreft booking-ID-ene fra Periode og last ned en komponentbevisst Home Assistant-pakke. Utstyr som ikke finnes i KNX blir automatisk utelatt.",
+  "superAdminConfigGenerator.trust.local.label": "Privat som standard",
+  "superAdminConfigGenerator.trust.local.value": "KNX-filen behandles lokalt i nettleseren og lastes ikke opp til SmartSauna.",
+  "superAdminConfigGenerator.trust.output.label": "Komplett resultat",
+  "superAdminConfigGenerator.trust.output.value": "Forhåndsvis og last ned inntil 12 koordinerte YAML-filer.",
+  "superAdminConfigGenerator.trust.logic.label": "Utstyrsbevisst",
+  "superAdminConfigGenerator.trust.logic.value": "Lys, varme, låser og overvåking tas bare med når de blir oppdaget.",
+  "superAdminConfigGenerator.runtime": "Den originale Smart-Sauna-Config-Generator kjører isolert inne på denne superadmin-siden.",
+  "superAdminConfigGenerator.ready": "Generator klar",
+  "superAdminConfigGenerator.loading": "Starter generator",
+  "superAdminConfigGenerator.downloadStarted": "Nedlasting startet",
+  "superAdminConfigGenerator.instructions": "Anbefalt flyt: last opp knxproject.yaml, kontroller oppdaget utstyr, fyll inn badstunavn, merchant-ID og de fire booking-ID-ene, og løs alle åpne punkter før du laster ned filene.",
+  "superAdminConfigGenerator.frameTitle": "Smart Sauna konfigurasjonsgenerator"
 }
