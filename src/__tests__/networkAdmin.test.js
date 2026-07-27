@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   createNetworkSiteFromInput,
   createWireGuardKeyPair,
+  buildNetworkSiteArtifacts,
   buildUmrConfigText,
   deriveSiteRuntimeState,
   isValidDomainName,
@@ -127,6 +128,34 @@ oslo.example.no {
     expect(site.switchMac).toBe('aa:bb:cc:dd:ee:ff');
     expect(profile).toContain('MTU = 1420');
     expect(profile).toContain('PersistentKeepalive = 25');
+  });
+
+  it('keeps legacy MQTT metadata without generating UMR or WireGuard artifacts', () => {
+    const site = createNetworkSiteFromInput({
+      clientId: 'smeigedag',
+      locationId: 'primary',
+      architectureType: 'legacy_mqtt',
+      knxIp: '192.168.10.20',
+      mqttBroker: 'Cedalo',
+      mqttTopicPrefix: 'smeigedag/#',
+      cloudHaHost: 'ha-smeigedag',
+      proxmoxHost: 'proxmox-01',
+      tunnelIp: '10.88.0.50',
+    });
+    const artifacts = buildNetworkSiteArtifacts(site);
+
+    expect(site).toMatchObject({
+      architectureType: 'legacy_mqtt',
+      mqttBroker: 'Cedalo',
+      mqttTopicPrefix: 'smeigedag/#',
+      cloudHaHost: 'ha-smeigedag',
+      proxmoxHost: 'proxmox-01',
+    });
+    expect(site.wireGuardPrivateKey).toBe('');
+    expect(site.wireGuardPublicKey).toBe('');
+    expect(artifacts.umrConfig).toBe('');
+    expect(artifacts.wireGuardPeer).toBe('');
+    expect(artifacts.caddySite).toBe('');
   });
 
   it('reconciles legacy and managed peers that claim the same routes', () => {

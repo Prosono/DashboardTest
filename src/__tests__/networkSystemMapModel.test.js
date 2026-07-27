@@ -136,4 +136,58 @@ describe('network system map model', () => {
     expect(map.edges).toHaveLength(9);
     expect(map.nodes.every((entry) => entry.status === 'unknown' || entry.id === 'server')).toBe(true);
   });
+
+  it('shows the legacy KNX to Cedalo and cloud Home Assistant topology', () => {
+    const map = buildNetworkSystemMap({
+      site: {
+        clientId: 'smeigedag',
+        locationId: 'primary',
+        architectureType: 'legacy_mqtt',
+        knxIp: '192.168.10.20',
+        knxMac: 'aa:bb:cc:dd:ee:10',
+        mqttBroker: 'Cedalo',
+        mqttTopicPrefix: 'smeigedag/#',
+        proxmoxHost: 'proxmox-01',
+        cloudHaHost: 'ha-smeigedag',
+        domainFqdn: 'smeigedag.smarti.dev',
+        backupDirectoryPath: '/srv/ha-backups/smeigedag/primary',
+      },
+      detail: {
+        operations: {
+          remoteHealth: {
+            status: 'up',
+            checkedUrl: 'https://smeigedag.smarti.dev',
+          },
+          backup: {
+            directoryExists: true,
+            fileCount: 2,
+          },
+        },
+      },
+    });
+
+    expect(map.architectureType).toBe('legacy_mqtt');
+    expect(map.nodes.map((entry) => entry.id)).toEqual([
+      'equipment',
+      'knx',
+      'cedalo',
+      'mqttTopics',
+      'proxmox',
+      'cloudHa',
+      'domain',
+      'backup',
+    ]);
+    expect(map.edges.map((entry) => entry.id)).toEqual([
+      'equipment-knx',
+      'knx-cedalo',
+      'cedalo-topics',
+      'topics-cloud-ha',
+      'proxmox-cloud-ha',
+      'cloud-ha-domain',
+      'cloud-ha-backup',
+    ]);
+    expect(map.nodes.find((entry) => entry.id === 'cloudHa')?.status).toBe('healthy');
+    expect(map.nodes.find((entry) => entry.id === 'cedalo')?.status).toBe('configured');
+    expect(map.nodes.some((entry) => ['umr', 'wireguard', 'hub'].includes(entry.id))).toBe(false);
+  });
 });

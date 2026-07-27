@@ -168,6 +168,7 @@ const mapNetworkSiteRow = (row) => ({
   clientId: String(row?.client_id || '').trim(),
   locationId: String(row?.location_id || '').trim(),
   displayName: String(row?.display_name || '').trim(),
+  architectureType: String(row?.architecture_type || 'edge_hub').trim() || 'edge_hub',
   backupLocationId: String(row?.backup_location_id || '').trim(),
   lanSubnet: String(row?.lan_subnet || '').trim(),
   routerIp: String(row?.router_ip || '').trim(),
@@ -185,6 +186,10 @@ const mapNetworkSiteRow = (row) => ({
   domainFqdn: String(row?.domain_fqdn || '').trim(),
   wireGuardPrivateKey: String(row?.wireguard_private_key || '').trim(),
   wireGuardPublicKey: String(row?.wireguard_public_key || '').trim(),
+  mqttBroker: String(row?.mqtt_broker || '').trim(),
+  mqttTopicPrefix: String(row?.mqtt_topic_prefix || '').trim(),
+  cloudHaHost: String(row?.cloud_ha_host || '').trim(),
+  proxmoxHost: String(row?.proxmox_host || '').trim(),
   createdAt: row?.created_at || null,
   updatedAt: row?.updated_at || null,
 });
@@ -221,6 +226,9 @@ const mergeNetworkSiteRecord = (base = {}, saved = {}) => {
     clientId,
     locationId,
     displayName,
+    architectureType: String(saved.architectureType || base.architectureType || 'edge_hub').trim() === 'legacy_mqtt'
+      ? 'legacy_mqtt'
+      : 'edge_hub',
     backupLocationId,
     lanSubnet: String(saved.lanSubnet || base.lanSubnet || '').trim(),
     routerIp: String(saved.routerIp || base.routerIp || '').trim(),
@@ -238,12 +246,18 @@ const mergeNetworkSiteRecord = (base = {}, saved = {}) => {
     domainFqdn,
     wireGuardPrivateKey: String(saved.wireGuardPrivateKey || base.wireGuardPrivateKey || '').trim(),
     wireGuardPublicKey: String(saved.wireGuardPublicKey || base.wireGuardPublicKey || '').trim(),
+    mqttBroker: String(saved.mqttBroker || base.mqttBroker || '').trim(),
+    mqttTopicPrefix: String(saved.mqttTopicPrefix || base.mqttTopicPrefix || '').trim(),
+    cloudHaHost: String(saved.cloudHaHost || base.cloudHaHost || '').trim(),
+    proxmoxHost: String(saved.proxmoxHost || base.proxmoxHost || '').trim(),
     createdAt: saved.createdAt || base.createdAt || null,
     updatedAt: saved.updatedAt || base.updatedAt || null,
   };
 };
 const toPublicNetworkSite = (site, runtimeConfig = null) => {
-  const runtimeState = runtimeConfig ? deriveSiteRuntimeState(site, runtimeConfig) : {
+  const architectureType = site.architectureType === 'legacy_mqtt' ? 'legacy_mqtt' : 'edge_hub';
+  const isLegacyMqtt = architectureType === 'legacy_mqtt';
+  const runtimeState = runtimeConfig && !isLegacyMqtt ? deriveSiteRuntimeState(site, runtimeConfig) : {
     wireGuardApplied: false,
     caddyApplied: false,
     matchedPeer: null,
@@ -253,39 +267,58 @@ const toPublicNetworkSite = (site, runtimeConfig = null) => {
   const backupDirectoryPath = site.clientId && site.backupLocationId
     ? `${backupRoot}/${site.clientId}/${site.backupLocationId}`
     : '';
-  const checks = {
-    umr: Boolean(site.routerIp && site.lanSubnet),
-    homeAssistant: Boolean(site.haIp),
-    knx: Boolean(site.knxIp),
-    tunnel: Boolean(site.tunnelIp && site.lanSubnet && site.wireGuardPublicKey),
-    domain: Boolean(site.domainFqdn),
-    backup: Boolean(site.backupLocationId),
-  };
+  const checks = isLegacyMqtt
+    ? {
+      knx: Boolean(site.knxIp),
+      mqtt: Boolean(site.mqttBroker && site.mqttTopicPrefix),
+      cloudHomeAssistant: Boolean(site.cloudHaHost),
+      proxmox: Boolean(site.proxmoxHost),
+      domain: Boolean(site.domainFqdn),
+      backup: Boolean(site.backupLocationId),
+    }
+    : {
+      umr: Boolean(site.routerIp && site.lanSubnet),
+      homeAssistant: Boolean(site.haIp),
+      knx: Boolean(site.knxIp),
+      tunnel: Boolean(site.tunnelIp && site.lanSubnet && site.wireGuardPublicKey),
+      domain: Boolean(site.domainFqdn),
+      backup: Boolean(site.backupLocationId),
+    };
   const completedChecks = Object.values(checks).filter(Boolean).length;
   const configurationPercent = Math.round((completedChecks / Object.keys(checks).length) * 100);
   const drifted = Boolean(runtimeState.drifted);
-  const liveLayers = Number(Boolean(runtimeState.wireGuardApplied)) + Number(Boolean(runtimeState.caddyApplied));
+  const liveLayers = isLegacyMqtt
+    ? 0
+    : Number(Boolean(runtimeState.wireGuardApplied)) + Number(Boolean(runtimeState.caddyApplied));
   const status = drifted
     ? 'drifted'
-    : liveLayers === 2
+    : !isLegacyMqtt && liveLayers === 2
       ? 'live'
-      : liveLayers === 1
+      : !isLegacyMqtt && liveLayers === 1
         ? 'partial'
         : configurationPercent === 100
           ? 'ready'
           : 'draft';
   const issues = [];
-  if (!checks.tunnel) issues.push('tunnel_incomplete');
-  if (!checks.domain || !checks.homeAssistant) issues.push('proxy_incomplete');
-  if (!checks.umr || !checks.knx) issues.push('site_hardware_incomplete');
-  if (runtimeState.wireGuardDrifted) issues.push('wireguard_drift');
-  if (runtimeState.caddyDrifted) issues.push('caddy_drift');
+  if (isLegacyMqtt) {
+    if (!checks.knx) issues.push('site_hardware_incomplete');
+    if (!checks.mqtt) issues.push('mqtt_incomplete');
+    if (!checks.cloudHomeAssistant || !checks.proxmox) issues.push('cloud_ha_incomplete');
+    if (!checks.domain) issues.push('domain_incomplete');
+  } else {
+    if (!checks.tunnel) issues.push('tunnel_incomplete');
+    if (!checks.domain || !checks.homeAssistant) issues.push('proxy_incomplete');
+    if (!checks.umr || !checks.knx) issues.push('site_hardware_incomplete');
+    if (runtimeState.wireGuardDrifted) issues.push('wireguard_drift');
+    if (runtimeState.caddyDrifted) issues.push('caddy_drift');
+  }
   return {
     clientId: site.clientId,
     locationId: site.locationId,
     id: site.locationId,
     name: site.displayName || site.locationId,
     displayName: site.displayName || site.locationId,
+    architectureType,
     backupLocationId: site.backupLocationId || site.locationId,
     lanSubnet: site.lanSubnet,
     routerIp: site.routerIp,
@@ -305,6 +338,10 @@ const toPublicNetworkSite = (site, runtimeConfig = null) => {
     backupDirectoryPath,
     hasWireGuardKeys: Boolean(site.wireGuardPrivateKey && site.wireGuardPublicKey),
     wireGuardPublicKey: site.wireGuardPublicKey || '',
+    mqttBroker: site.mqttBroker || '',
+    mqttTopicPrefix: site.mqttTopicPrefix || '',
+    cloudHaHost: site.cloudHaHost || '',
+    proxmoxHost: site.proxmoxHost || '',
     createdAt: site.createdAt || null,
     updatedAt: site.updatedAt || null,
     status,
@@ -359,6 +396,7 @@ const loadNetworkOverviewData = () => {
       client_id,
       location_id,
       display_name,
+      architecture_type,
       backup_location_id,
       lan_subnet,
       router_ip,
@@ -376,6 +414,10 @@ const loadNetworkOverviewData = () => {
       domain_fqdn,
       wireguard_private_key,
       wireguard_public_key,
+      mqtt_broker,
+      mqtt_topic_prefix,
+      cloud_ha_host,
+      proxmox_host,
       created_at,
       updated_at
     FROM network_sites
@@ -472,9 +514,11 @@ const loadNetworkOverviewData = () => {
     { field: 'wireGuardPublicKey', issue: 'duplicate_wireguard_key', label: 'WireGuard public key' },
   ];
   const conflicts = [];
+  const edgeOnlyConflictFields = new Set(['tunnelIp', 'lanSubnet', 'wireGuardPublicKey']);
   conflictDefinitions.forEach(({ field, issue, label }) => {
     const byValue = new Map();
     allLocations.forEach((location) => {
+      if (location.architectureType === 'legacy_mqtt' && edgeOnlyConflictFields.has(field)) return;
       const value = String(location?.[field] || '').trim().toLowerCase();
       if (!value) return;
       const entries = byValue.get(value) || [];
@@ -1105,6 +1149,7 @@ router.get('/network/sites/:clientId/:locationId', async (req, res) => {
         client_id,
         location_id,
         display_name,
+        architecture_type,
         backup_location_id,
         lan_subnet,
         router_ip,
@@ -1122,6 +1167,10 @@ router.get('/network/sites/:clientId/:locationId', async (req, res) => {
         domain_fqdn,
         wireguard_private_key,
         wireguard_public_key,
+        mqtt_broker,
+        mqtt_topic_prefix,
+        cloud_ha_host,
+        proxmox_host,
         created_at,
         updated_at
       FROM network_sites
@@ -1204,6 +1253,7 @@ router.post('/network/sites', (req, res) => {
         client_id,
         location_id,
         display_name,
+        architecture_type,
         backup_location_id,
         lan_subnet,
         router_ip,
@@ -1221,6 +1271,10 @@ router.post('/network/sites', (req, res) => {
         domain_fqdn,
         wireguard_private_key,
         wireguard_public_key,
+        mqtt_broker,
+        mqtt_topic_prefix,
+        cloud_ha_host,
+        proxmox_host,
         created_at,
         updated_at
       FROM network_sites
@@ -1242,10 +1296,10 @@ router.post('/network/sites', (req, res) => {
       locationId,
     }, fallback);
     const conflictChecks = [
-      ['tunnel_ip', nextSite.tunnelIp, 'Tunnel IP'],
-      ['lan_subnet', nextSite.lanSubnet, 'LAN subnet'],
+      ['tunnel_ip', nextSite.architectureType === 'legacy_mqtt' ? '' : nextSite.tunnelIp, 'Tunnel IP'],
+      ['lan_subnet', nextSite.architectureType === 'legacy_mqtt' ? '' : nextSite.lanSubnet, 'LAN subnet'],
       ['domain_fqdn', nextSite.domainFqdn, 'Domain'],
-      ['wireguard_public_key', nextSite.wireGuardPublicKey, 'WireGuard public key'],
+      ['wireguard_public_key', nextSite.architectureType === 'legacy_mqtt' ? '' : nextSite.wireGuardPublicKey, 'WireGuard public key'],
     ];
     for (const [column, value, label] of conflictChecks) {
       if (!value) continue;
@@ -1276,6 +1330,7 @@ router.post('/network/sites', (req, res) => {
         client_id,
         location_id,
         display_name,
+        architecture_type,
         backup_location_id,
         lan_subnet,
         router_ip,
@@ -1293,12 +1348,17 @@ router.post('/network/sites', (req, res) => {
         domain_fqdn,
         wireguard_private_key,
         wireguard_public_key,
+        mqtt_broker,
+        mqtt_topic_prefix,
+        cloud_ha_host,
+        proxmox_host,
         created_at,
         updated_at
       )
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(client_id, location_id) DO UPDATE SET
         display_name = excluded.display_name,
+        architecture_type = excluded.architecture_type,
         backup_location_id = excluded.backup_location_id,
         lan_subnet = excluded.lan_subnet,
         router_ip = excluded.router_ip,
@@ -1316,11 +1376,16 @@ router.post('/network/sites', (req, res) => {
         domain_fqdn = excluded.domain_fqdn,
         wireguard_private_key = excluded.wireguard_private_key,
         wireguard_public_key = excluded.wireguard_public_key,
+        mqtt_broker = excluded.mqtt_broker,
+        mqtt_topic_prefix = excluded.mqtt_topic_prefix,
+        cloud_ha_host = excluded.cloud_ha_host,
+        proxmox_host = excluded.proxmox_host,
         updated_at = excluded.updated_at
     `).run(
       nextSite.clientId,
       nextSite.locationId,
       nextSite.displayName,
+      nextSite.architectureType,
       nextSite.backupLocationId,
       nextSite.lanSubnet,
       nextSite.routerIp,
@@ -1338,6 +1403,10 @@ router.post('/network/sites', (req, res) => {
       nextSite.domainFqdn,
       nextSite.wireGuardPrivateKey,
       nextSite.wireGuardPublicKey,
+      nextSite.mqttBroker,
+      nextSite.mqttTopicPrefix,
+      nextSite.cloudHaHost,
+      nextSite.proxmoxHost,
       savedRow?.created_at || now,
       now,
     );
@@ -1373,6 +1442,7 @@ router.post('/network/sites/:clientId/:locationId/apply', (req, res) => {
       client_id,
       location_id,
       display_name,
+      architecture_type,
       backup_location_id,
       lan_subnet,
       router_ip,
@@ -1390,6 +1460,10 @@ router.post('/network/sites/:clientId/:locationId/apply', (req, res) => {
       domain_fqdn,
       wireguard_private_key,
       wireguard_public_key,
+      mqtt_broker,
+      mqtt_topic_prefix,
+      cloud_ha_host,
+      proxmox_host,
       created_at,
       updated_at
     FROM network_sites
@@ -1398,6 +1472,12 @@ router.post('/network/sites/:clientId/:locationId/apply', (req, res) => {
   if (!row) return res.status(404).json({ error: 'Save the network site before applying it to server config' });
 
   const site = mergeNetworkSiteRecord(mapNetworkSiteRow(row), mapNetworkSiteRow(row));
+  if (site.architectureType === 'legacy_mqtt') {
+    return res.status(400).json({
+      error: 'Legacy MQTT locations do not use the managed WireGuard and Caddy workflow',
+      code: 'LEGACY_RUNTIME_NOT_APPLICABLE',
+    });
+  }
   const shouldApplyWireGuard = target === 'all' || target === 'wireguard';
   const shouldApplyCaddy = target === 'all' || target === 'caddy';
   if (shouldApplyWireGuard) {
@@ -1444,6 +1524,7 @@ router.post('/network/sites/:clientId/:locationId/wireguard/rotate', (req, res) 
       client_id,
       location_id,
       display_name,
+      architecture_type,
       backup_location_id,
       lan_subnet,
       router_ip,
@@ -1461,6 +1542,10 @@ router.post('/network/sites/:clientId/:locationId/wireguard/rotate', (req, res) 
       domain_fqdn,
       wireguard_private_key,
       wireguard_public_key,
+      mqtt_broker,
+      mqtt_topic_prefix,
+      cloud_ha_host,
+      proxmox_host,
       created_at,
       updated_at
     FROM network_sites
@@ -1470,6 +1555,9 @@ router.post('/network/sites/:clientId/:locationId/wireguard/rotate', (req, res) 
 
   try {
     const previousSite = mapNetworkSiteRow(row);
+    if (previousSite.architectureType === 'legacy_mqtt') {
+      return res.status(400).json({ error: 'Legacy MQTT locations do not use WireGuard keys' });
+    }
     if (!previousSite.tunnelIp || !previousSite.lanSubnet) {
       return res.status(400).json({ error: 'Tunnel IP and LAN subnet are required before rotating keys' });
     }
@@ -1514,6 +1602,7 @@ router.delete('/network/sites/:clientId/:locationId', (req, res) => {
       client_id,
       location_id,
       display_name,
+      architecture_type,
       backup_location_id,
       lan_subnet,
       router_ip,
@@ -1531,6 +1620,10 @@ router.delete('/network/sites/:clientId/:locationId', (req, res) => {
       domain_fqdn,
       wireguard_private_key,
       wireguard_public_key,
+      mqtt_broker,
+      mqtt_topic_prefix,
+      cloud_ha_host,
+      proxmox_host,
       created_at,
       updated_at
     FROM network_sites
@@ -1565,6 +1658,7 @@ router.get('/network/sites/:clientId/:locationId/umr-config', (req, res) => {
       client_id,
       location_id,
       display_name,
+      architecture_type,
       backup_location_id,
       lan_subnet,
       router_ip,
@@ -1582,6 +1676,10 @@ router.get('/network/sites/:clientId/:locationId/umr-config', (req, res) => {
       domain_fqdn,
       wireguard_private_key,
       wireguard_public_key,
+      mqtt_broker,
+      mqtt_topic_prefix,
+      cloud_ha_host,
+      proxmox_host,
       created_at,
       updated_at
     FROM network_sites

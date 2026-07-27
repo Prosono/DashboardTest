@@ -28,6 +28,7 @@ const emptyForm = (clientId = '') => ({
   clientId,
   locationId: '',
   displayName: '',
+  architectureType: 'edge_hub',
   backupLocationId: '',
   lanSubnet: '',
   routerIp: '',
@@ -43,12 +44,17 @@ const emptyForm = (clientId = '') => ({
   tunnelIp: '',
   domainLabel: '',
   domainFqdn: '',
+  mqttBroker: 'Cedalo',
+  mqttTopicPrefix: '',
+  cloudHaHost: '',
+  proxmoxHost: '',
 });
 
 const formFromSite = (site) => ({
   clientId: String(site?.clientId || '').trim(),
   locationId: String(site?.locationId || '').trim(),
   displayName: String(site?.displayName || site?.name || '').trim(),
+  architectureType: site?.architectureType === 'legacy_mqtt' ? 'legacy_mqtt' : 'edge_hub',
   backupLocationId: String(site?.backupLocationId || '').trim(),
   lanSubnet: String(site?.lanSubnet || '').trim(),
   routerIp: String(site?.umrLanIp || site?.routerIp || '').trim(),
@@ -64,6 +70,10 @@ const formFromSite = (site) => ({
   tunnelIp: String(site?.tunnelIp || '').trim(),
   domainLabel: String(site?.domainLabel || '').trim(),
   domainFqdn: String(site?.domainFqdn || '').trim(),
+  mqttBroker: String(site?.mqttBroker || '').trim(),
+  mqttTopicPrefix: String(site?.mqttTopicPrefix || '').trim(),
+  cloudHaHost: String(site?.cloudHaHost || '').trim(),
+  proxmoxHost: String(site?.proxmoxHost || '').trim(),
 });
 
 const normalizeMac = (value) => String(value || '').trim().toLowerCase().replace(/-/g, ':');
@@ -367,13 +377,15 @@ export default function SuperAdminNetworkPage({ t, userAdminApi, isMobile }) {
     void loadDetail(selectedClient.id, selectedLocationId);
   }, [loadDetail, selectedClient, selectedLocationId]);
 
+  const isLegacyMqtt = form.architectureType === 'legacy_mqtt';
+
   useEffect(() => {
-    if (form.mobilityWorkspaceId && form.mobilityDeviceId) {
+    if (!isLegacyMqtt && form.mobilityWorkspaceId && form.mobilityDeviceId) {
       void loadMobilityDevice(form.mobilityWorkspaceId, form.mobilityDeviceId);
     } else {
       setMobilitySnapshot(null);
     }
-  }, [form.mobilityDeviceId, form.mobilityWorkspaceId, loadMobilityDevice]);
+  }, [form.mobilityDeviceId, form.mobilityWorkspaceId, isLegacyMqtt, loadMobilityDevice]);
 
   useEffect(() => {
     setActiveStep(1);
@@ -427,23 +439,34 @@ export default function SuperAdminNetworkPage({ t, userAdminApi, isMobile }) {
   const hubClient = mobilityClientsByMac.get(normalizeMac(form.haMac)) || null;
   const knxClient = mobilityClientsByMac.get(normalizeMac(form.knxMac)) || null;
 
-  const stepReady = useMemo(() => ({
+  const stepReady = useMemo(() => (isLegacyMqtt ? {
+    1: Boolean(form.locationId && form.displayName && form.knxIp),
+    2: Boolean(form.mqttBroker && form.mqttTopicPrefix),
+    3: Boolean(form.proxmoxHost && form.cloudHaHost && form.backupLocationId),
+    4: Boolean(detail?.operations?.remoteHealth?.status === 'up'),
+  } : {
     1: Boolean(form.locationId && form.displayName && form.lanSubnet && form.routerIp && form.haIp && form.knxIp),
     2: Boolean(form.tunnelIp && form.lanSubnet && detail?.site?.hasWireGuardKeys),
     3: Boolean(domainFqdn && form.haIp && form.backupLocationId),
     4: Boolean(wireGuardApplied && caddyApplied),
   }), [
     caddyApplied,
+    detail?.operations?.remoteHealth?.status,
     detail?.site?.hasWireGuardKeys,
     domainFqdn,
     form.backupLocationId,
+    form.cloudHaHost,
     form.displayName,
     form.haIp,
     form.knxIp,
     form.lanSubnet,
     form.locationId,
+    form.mqttBroker,
+    form.mqttTopicPrefix,
+    form.proxmoxHost,
     form.routerIp,
     form.tunnelIp,
+    isLegacyMqtt,
     wireGuardApplied,
   ]);
   const configurationPercent = Math.round(
@@ -472,6 +495,10 @@ export default function SuperAdminNetworkPage({ t, userAdminApi, isMobile }) {
         node.clientName,
         node.domainFqdn,
         node.tunnelIp,
+        node.mqttBroker,
+        node.mqttTopicPrefix,
+        node.cloudHaHost,
+        node.proxmoxHost,
         node.mobility?.name,
       ].some((value) => String(value || '').toLowerCase().includes(query));
       const matchesFilter = nodeFilter === 'all'
@@ -863,7 +890,12 @@ AllowedIPs = ${form.tunnelIp || '<tunnel-ip>'}/32, ${form.lanSubnet || '<lan-sub
                           {node.clientName} · {node.locationId}
                         </p>
                       </div>
-                      <NodeStatusBadge status={node.status} t={t} />
+                      <div className="flex shrink-0 flex-col items-end gap-1.5">
+                        <NodeStatusBadge status={node.status} t={t} />
+                        <span className="text-[9px] font-semibold uppercase tracking-[0.1em] text-[var(--text-muted)]">
+                          {t(`superAdminNetwork.architecture.${node.architectureType === 'legacy_mqtt' ? 'legacy_mqtt' : 'edge_hub'}.short`)}
+                        </span>
+                      </div>
                     </div>
                     <div className="mt-3 flex items-center justify-between gap-3">
                       <span className="truncate text-[11px] text-[var(--text-secondary)]">
@@ -896,7 +928,10 @@ AllowedIPs = ${form.tunnelIp || '<tunnel-ip>'}/32, ${form.lanSubnet || '<lan-sub
                   <div className="mt-1.5 flex flex-wrap items-center gap-2">
                     <h3 className="text-lg font-semibold text-[var(--text-primary)]">{locationName}</h3>
                     {!isNew ? <NodeStatusBadge status={detail?.site?.status || selectedSummary?.status} t={t} /> : null}
-                    {umrOnline ? <StatusBadge tone="good">{t('superAdminNetwork.mobility.umrOnline')}</StatusBadge> : null}
+                    <StatusBadge tone={isLegacyMqtt ? 'warning' : 'info'}>
+                      {t(`superAdminNetwork.architecture.${isLegacyMqtt ? 'legacy_mqtt' : 'edge_hub'}.short`)}
+                    </StatusBadge>
+                    {!isLegacyMqtt && umrOnline ? <StatusBadge tone="good">{t('superAdminNetwork.mobility.umrOnline')}</StatusBadge> : null}
                   </div>
                   <p className="mt-2 text-xs text-[var(--text-secondary)]">
                     {t('superAdminNetwork.configuration')}: {configurationPercent}%
@@ -953,24 +988,24 @@ AllowedIPs = ${form.tunnelIp || '<tunnel-ip>'}/32, ${form.lanSubnet || '<lan-sub
               <div className="flex snap-x snap-mandatory gap-2 overflow-x-auto pb-1">
                 <StepTab
                   step="1"
-                  title={t('superAdminNetwork.steps.site')}
-                  subtitle={t('superAdminNetwork.steps.siteHint')}
+                  title={t(isLegacyMqtt ? 'superAdminNetwork.steps.legacySite' : 'superAdminNetwork.steps.site')}
+                  subtitle={t(isLegacyMqtt ? 'superAdminNetwork.steps.legacySiteHint' : 'superAdminNetwork.steps.siteHint')}
                   ready={stepReady[1]}
                   active={activeStep === 1}
                   onClick={() => setActiveStep(1)}
                 />
                 <StepTab
                   step="2"
-                  title={t('superAdminNetwork.steps.wireGuard')}
-                  subtitle={t('superAdminNetwork.steps.wireGuardHint')}
+                  title={t(isLegacyMqtt ? 'superAdminNetwork.steps.mqtt' : 'superAdminNetwork.steps.wireGuard')}
+                  subtitle={t(isLegacyMqtt ? 'superAdminNetwork.steps.mqttHint' : 'superAdminNetwork.steps.wireGuardHint')}
                   ready={stepReady[2]}
                   active={activeStep === 2}
                   onClick={() => setActiveStep(2)}
                 />
                 <StepTab
                   step="3"
-                  title={t('superAdminNetwork.steps.server')}
-                  subtitle={t('superAdminNetwork.steps.serverHint')}
+                  title={t(isLegacyMqtt ? 'superAdminNetwork.steps.cloudHa' : 'superAdminNetwork.steps.server')}
+                  subtitle={t(isLegacyMqtt ? 'superAdminNetwork.steps.cloudHaHint' : 'superAdminNetwork.steps.serverHint')}
                   ready={stepReady[3]}
                   active={activeStep === 3}
                   onClick={() => setActiveStep(3)}
@@ -978,7 +1013,7 @@ AllowedIPs = ${form.tunnelIp || '<tunnel-ip>'}/32, ${form.lanSubnet || '<lan-sub
                 <StepTab
                   step="4"
                   title={t('superAdminNetwork.steps.operations')}
-                  subtitle={t('superAdminNetwork.steps.operationsHint')}
+                  subtitle={t(isLegacyMqtt ? 'superAdminNetwork.steps.legacyOperationsHint' : 'superAdminNetwork.steps.operationsHint')}
                   ready={stepReady[4]}
                   active={activeStep === 4}
                   onClick={() => setActiveStep(4)}
@@ -991,9 +1026,44 @@ AllowedIPs = ${form.tunnelIp || '<tunnel-ip>'}/32, ${form.lanSubnet || '<lan-sub
                 <div className="flex items-start justify-between gap-3">
                   <div>
                     <h3 className="text-sm font-semibold text-[var(--text-primary)]">{t('superAdminNetwork.siteSetup.title')}</h3>
-                    <p className="mt-1 text-xs leading-5 text-[var(--text-secondary)]">{t('superAdminNetwork.siteSetup.subtitle')}</p>
+                    <p className="mt-1 text-xs leading-5 text-[var(--text-secondary)]">
+                      {t(isLegacyMqtt ? 'superAdminNetwork.legacy.siteSubtitle' : 'superAdminNetwork.siteSetup.subtitle')}
+                    </p>
                   </div>
                   {loadingDetail ? <RefreshCw className="h-4 w-4 animate-spin text-[var(--text-muted)]" /> : <Wrench className="h-4 w-4 text-[var(--text-muted)]" />}
+                </div>
+
+                <div className="mt-5">
+                  <p className={labelClass}>{t('superAdminNetwork.architecture.label')}</p>
+                  <div className="mt-3 grid gap-3 md:grid-cols-2">
+                    {['edge_hub', 'legacy_mqtt'].map((architectureType) => {
+                      const selected = form.architectureType === architectureType;
+                      return (
+                        <button
+                          key={architectureType}
+                          type="button"
+                          aria-pressed={selected}
+                          onClick={() => setForm((current) => ({
+                            ...current,
+                            architectureType,
+                            ...(architectureType === 'legacy_mqtt' && !current.mqttBroker ? { mqttBroker: 'Cedalo' } : {}),
+                          }))}
+                          className={`min-h-28 rounded-2xl border p-4 text-left transition-colors ${focusClass} ${
+                            selected
+                              ? 'border-[var(--accent-color)] bg-[color-mix(in_srgb,var(--accent-color)_12%,var(--glass-bg))]'
+                              : 'border-[var(--glass-border)] bg-[var(--glass-bg)] hover:bg-[var(--glass-bg-hover)]'
+                          }`}
+                        >
+                          <span className="text-sm font-semibold text-[var(--text-primary)]">
+                            {t(`superAdminNetwork.architecture.${architectureType}.title`)}
+                          </span>
+                          <span className="mt-2 block text-xs leading-5 text-[var(--text-secondary)]">
+                            {t(`superAdminNetwork.architecture.${architectureType}.description`)}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
 
                 <div className="mt-5 grid grid-cols-1 gap-4 md:grid-cols-2">
@@ -1009,21 +1079,32 @@ AllowedIPs = ${form.tunnelIp || '<tunnel-ip>'}/32, ${form.lanSubnet || '<lan-sub
                     placeholder="oslo-sentrum"
                   />
                   <Field label={t('superAdminNetwork.form.displayName')} value={form.displayName} onChange={(value) => updateField('displayName', value)} placeholder="Oslo Sentrum" />
-                  <Field label={t('superAdminNetwork.form.lanSubnet')} value={form.lanSubnet} onChange={(value) => updateField('lanSubnet', value)} placeholder="192.168.107.0/24" />
-                  <Field label={t('superAdminNetwork.form.umrLanIp')} value={form.routerIp} onChange={(value) => updateField('routerIp', value)} placeholder="192.168.107.1" />
-                  <Field label={t('superAdminNetwork.form.umrMac')} value={form.umrMac} onChange={(value) => updateField('umrMac', value)} placeholder="aa:bb:cc:dd:ee:ff" />
-                  <div className="hidden md:block" />
+                  {!isLegacyMqtt ? (
+                    <>
+                      <Field label={t('superAdminNetwork.form.lanSubnet')} value={form.lanSubnet} onChange={(value) => updateField('lanSubnet', value)} placeholder="192.168.107.0/24" />
+                      <Field label={t('superAdminNetwork.form.umrLanIp')} value={form.routerIp} onChange={(value) => updateField('routerIp', value)} placeholder="192.168.107.1" />
+                      <Field label={t('superAdminNetwork.form.umrMac')} value={form.umrMac} onChange={(value) => updateField('umrMac', value)} placeholder="aa:bb:cc:dd:ee:ff" />
+                      <div className="hidden md:block" />
+                    </>
+                  ) : null}
                 </div>
 
                 <div className="my-5 border-t border-[var(--glass-border)]" />
-                <p className={labelClass}>{t('superAdminNetwork.siteSetup.equipment')}</p>
+                <p className={labelClass}>
+                  {t(isLegacyMqtt ? 'superAdminNetwork.legacy.siteEquipment' : 'superAdminNetwork.siteSetup.equipment')}
+                </p>
                 <div className="mt-3 grid grid-cols-1 gap-4 md:grid-cols-2">
-                  <Field label={t('superAdminNetwork.form.haIp')} value={form.haIp} onChange={(value) => updateField('haIp', value)} placeholder="192.168.107.120" />
-                  <Field label={t('superAdminNetwork.form.haMac')} value={form.haMac} onChange={(value) => updateField('haMac', value)} placeholder="aa:bb:cc:dd:ee:ff" />
+                  {!isLegacyMqtt ? (
+                    <>
+                      <Field label={t('superAdminNetwork.form.haIp')} value={form.haIp} onChange={(value) => updateField('haIp', value)} placeholder="192.168.107.120" />
+                      <Field label={t('superAdminNetwork.form.haMac')} value={form.haMac} onChange={(value) => updateField('haMac', value)} placeholder="aa:bb:cc:dd:ee:ff" />
+                    </>
+                  ) : null}
                   <Field label={t('superAdminNetwork.form.knxIp')} value={form.knxIp} onChange={(value) => updateField('knxIp', value)} placeholder="192.168.107.10" />
                   <Field label={t('superAdminNetwork.form.knxMac')} value={form.knxMac} onChange={(value) => updateField('knxMac', value)} placeholder="aa:bb:cc:dd:ee:ff" />
                 </div>
 
+                {!isLegacyMqtt ? (
                 <div className="mt-6 rounded-2xl border border-[var(--glass-border)] bg-[var(--glass-bg)] p-4">
                   <div className="flex items-start justify-between gap-3">
                     <div>
@@ -1088,16 +1169,63 @@ AllowedIPs = ${form.tunnelIp || '<tunnel-ip>'}/32, ${form.lanSubnet || '<lan-sub
                   {mobilityLoading ? <p className="mt-3 text-xs text-[var(--text-muted)]">{t('superAdminNetwork.mobility.loading')}</p> : null}
                   {mobilityError ? <p className="mt-3 text-xs text-red-200">{mobilityError}</p> : null}
                 </div>
+                ) : (
+                  <div className="mt-6 rounded-2xl border border-amber-400/25 bg-amber-400/[0.06] p-4 text-xs leading-5 text-[var(--text-secondary)]">
+                    {t('superAdminNetwork.legacy.noLocalHub')}
+                  </div>
+                )}
               </section>
             ) : null}
 
             {activeStep === 2 ? (
               <section className="popup-surface rounded-3xl border border-[var(--glass-border)] p-4 md:p-5">
                 <div>
-                  <h3 className="text-sm font-semibold text-[var(--text-primary)]">{t('superAdminNetwork.wireGuardSetup.title')}</h3>
-                  <p className="mt-1 text-xs leading-5 text-[var(--text-secondary)]">{t('superAdminNetwork.wireGuardSetup.subtitle')}</p>
+                  <h3 className="text-sm font-semibold text-[var(--text-primary)]">
+                    {t(isLegacyMqtt ? 'superAdminNetwork.legacy.mqttTitle' : 'superAdminNetwork.wireGuardSetup.title')}
+                  </h3>
+                  <p className="mt-1 text-xs leading-5 text-[var(--text-secondary)]">
+                    {t(isLegacyMqtt ? 'superAdminNetwork.legacy.mqttSubtitle' : 'superAdminNetwork.wireGuardSetup.subtitle')}
+                  </p>
                 </div>
 
+                {isLegacyMqtt ? (
+                  <>
+                    <div className="mt-5 grid grid-cols-1 gap-4 md:grid-cols-2">
+                      <Field
+                        label={t('superAdminNetwork.form.mqttBroker')}
+                        value={form.mqttBroker}
+                        onChange={(value) => updateField('mqttBroker', value)}
+                        placeholder="Cedalo"
+                      />
+                      <Field
+                        label={t('superAdminNetwork.form.mqttTopicPrefix')}
+                        value={form.mqttTopicPrefix}
+                        onChange={(value) => updateField('mqttTopicPrefix', value)}
+                        placeholder="smeigedag/#"
+                      />
+                    </div>
+                    <div className="mt-5 rounded-2xl border border-[var(--glass-border)] bg-[var(--glass-bg)] p-4">
+                      <p className={labelClass}>{t('superAdminNetwork.legacy.messageFlow')}</p>
+                      <div className="mt-4 grid gap-3 md:grid-cols-4">
+                        {[
+                          ['01', t('superAdminNetwork.legacy.flowKnx')],
+                          ['02', t('superAdminNetwork.legacy.flowBroker')],
+                          ['03', t('superAdminNetwork.legacy.flowTopic')],
+                          ['04', t('superAdminNetwork.legacy.flowHa')],
+                        ].map(([number, label]) => (
+                          <div key={number} className="rounded-xl border border-[var(--glass-border)] bg-[var(--bg-primary)]/30 p-3">
+                            <p className="text-[9px] font-bold uppercase tracking-[0.15em] text-[var(--accent-color)]">{number}</p>
+                            <p className="mt-2 text-xs font-semibold leading-5 text-[var(--text-primary)]">{label}</p>
+                          </div>
+                        ))}
+                      </div>
+                      <p className="mt-4 text-xs leading-5 text-[var(--text-secondary)]">
+                        {t('superAdminNetwork.legacy.mqttMonitoringNote')}
+                      </p>
+                    </div>
+                  </>
+                ) : (
+                <>
                 <div className="mt-5 grid grid-cols-1 gap-4 md:grid-cols-2">
                   <Field label={t('superAdminNetwork.form.tunnelIp')} value={form.tunnelIp} onChange={(value) => updateField('tunnelIp', value)} placeholder="10.88.0.5" />
                   <Field label={t('superAdminNetwork.form.lanSubnet')} value={form.lanSubnet} onChange={(value) => updateField('lanSubnet', value)} placeholder="192.168.107.0/24" />
@@ -1216,16 +1344,55 @@ AllowedIPs = ${form.tunnelIp || '<tunnel-ip>'}/32, ${form.lanSubnet || '<lan-sub
                     />
                   </div>
                 </div>
+                </>
+                )}
               </section>
             ) : null}
 
             {activeStep === 3 ? (
               <section className="popup-surface rounded-3xl border border-[var(--glass-border)] p-4 md:p-5">
                 <div>
-                  <h3 className="text-sm font-semibold text-[var(--text-primary)]">{t('superAdminNetwork.serverSetup.title')}</h3>
-                  <p className="mt-1 text-xs leading-5 text-[var(--text-secondary)]">{t('superAdminNetwork.serverSetup.subtitle')}</p>
+                  <h3 className="text-sm font-semibold text-[var(--text-primary)]">
+                    {t(isLegacyMqtt ? 'superAdminNetwork.legacy.cloudTitle' : 'superAdminNetwork.serverSetup.title')}
+                  </h3>
+                  <p className="mt-1 text-xs leading-5 text-[var(--text-secondary)]">
+                    {t(isLegacyMqtt ? 'superAdminNetwork.legacy.cloudSubtitle' : 'superAdminNetwork.serverSetup.subtitle')}
+                  </p>
                 </div>
 
+                {isLegacyMqtt ? (
+                  <>
+                    <div className="mt-5 grid grid-cols-1 gap-4 md:grid-cols-2">
+                      <Field
+                        label={t('superAdminNetwork.form.proxmoxHost')}
+                        value={form.proxmoxHost}
+                        onChange={(value) => updateField('proxmoxHost', value)}
+                        placeholder="proxmox-01"
+                      />
+                      <Field
+                        label={t('superAdminNetwork.form.cloudHaHost')}
+                        value={form.cloudHaHost}
+                        onChange={(value) => updateField('cloudHaHost', value)}
+                        placeholder="ha-smeigedag"
+                      />
+                      <Field label={t('superAdminNetwork.form.domainFqdn')} value={form.domainFqdn} onChange={(value) => updateField('domainFqdn', value)} placeholder="smeigedag.smarti.dev" />
+                      <Field label={t('superAdminNetwork.form.backupLocationId')} value={form.backupLocationId} onChange={(value) => updateField('backupLocationId', value)} placeholder={form.locationId} />
+                    </div>
+                    <div className="mt-5 grid gap-4 lg:grid-cols-2">
+                      <div className="rounded-2xl border border-[var(--glass-border)] bg-[var(--glass-bg)] p-4">
+                        <p className={labelClass}>{t('superAdminNetwork.legacy.instanceBoundary')}</p>
+                        <p className="mt-2 text-sm leading-6 text-[var(--text-secondary)]">
+                          {t('superAdminNetwork.legacy.instanceBoundaryText')}
+                        </p>
+                      </div>
+                      <div className="rounded-2xl border border-[var(--glass-border)] bg-[var(--glass-bg)] p-4">
+                        <p className={labelClass}>{t('superAdminNetwork.runtime.backupPath')}</p>
+                        <p className="mt-2 break-all text-sm text-[var(--text-primary)]">{backupPath}</p>
+                      </div>
+                    </div>
+                  </>
+                ) : (
+                <>
                 <div className="mt-5 grid grid-cols-1 gap-4 md:grid-cols-2">
                   <Field label={t('superAdminNetwork.form.domainLabel')} value={form.domainLabel} onChange={(value) => updateField('domainLabel', value)} placeholder="oslo-sentrum" />
                   <Field label={t('superAdminNetwork.form.domainFqdn')} value={form.domainFqdn} onChange={(value) => updateField('domainFqdn', value)} placeholder={domainSuffix ? `oslo-sentrum.${domainSuffix}` : 'oslo-sentrum.smarti.dev'} />
@@ -1270,6 +1437,8 @@ AllowedIPs = ${form.tunnelIp || '<tunnel-ip>'}/32, ${form.lanSubnet || '<lan-sub
                     empty={t('superAdminNetwork.preview.empty')}
                   />
                 </div>
+                </>
+                )}
               </section>
             ) : null}
 
@@ -1277,9 +1446,52 @@ AllowedIPs = ${form.tunnelIp || '<tunnel-ip>'}/32, ${form.lanSubnet || '<lan-sub
               <section className="popup-surface rounded-3xl border border-[var(--glass-border)] p-4 md:p-5">
                 <div>
                   <h3 className="text-sm font-semibold text-[var(--text-primary)]">{t('superAdminNetwork.operations.title')}</h3>
-                  <p className="mt-1 text-xs leading-5 text-[var(--text-secondary)]">{t('superAdminNetwork.operations.subtitle')}</p>
+                  <p className="mt-1 text-xs leading-5 text-[var(--text-secondary)]">
+                    {t(isLegacyMqtt ? 'superAdminNetwork.legacy.operationsSubtitle' : 'superAdminNetwork.operations.subtitle')}
+                  </p>
                 </div>
 
+                {isLegacyMqtt ? (
+                  <>
+                    <div className="mt-5 grid grid-cols-2 gap-3 lg:grid-cols-4">
+                      <Metric
+                        icon={Globe}
+                        label={t('superAdminNetwork.legacy.remoteHa')}
+                        value={detail?.operations?.remoteHealth?.status || '-'}
+                        hint={detail?.operations?.remoteHealth?.checkedUrl || form.cloudHaHost || '-'}
+                        tone={detail?.operations?.remoteHealth?.status === 'up' ? 'good' : 'neutral'}
+                      />
+                      <Metric
+                        icon={Radio}
+                        label={t('superAdminNetwork.form.mqttBroker')}
+                        value={form.mqttBroker || '-'}
+                        hint={t('superAdminNetwork.legacy.configurationStatus')}
+                      />
+                      <Metric
+                        icon={Activity}
+                        label={t('superAdminNetwork.form.mqttTopicPrefix')}
+                        value={form.mqttTopicPrefix || '-'}
+                        hint={t('superAdminNetwork.legacy.subscription')}
+                      />
+                      <Metric
+                        icon={HardDrive}
+                        label={t('superAdminNetwork.systemMap.node.backup')}
+                        value={String(detail?.operations?.backup?.fileCount || 0)}
+                        hint={detail?.operations?.backup?.latestBackupAt || backupPath}
+                        tone={detail?.operations?.backup?.fileCount > 0 ? 'good' : 'neutral'}
+                      />
+                    </div>
+                    <div className="mt-5 rounded-2xl border border-amber-400/25 bg-amber-400/[0.06] p-4">
+                      <p className="text-sm font-semibold text-[var(--text-primary)]">
+                        {t('superAdminNetwork.legacy.monitoringTitle')}
+                      </p>
+                      <p className="mt-2 text-xs leading-5 text-[var(--text-secondary)]">
+                        {t('superAdminNetwork.legacy.monitoringText')}
+                      </p>
+                    </div>
+                  </>
+                ) : (
+                <>
                 <div className="mt-5 grid grid-cols-2 gap-3 lg:grid-cols-4">
                   <Metric
                     icon={Radio}
@@ -1371,6 +1583,8 @@ AllowedIPs = ${form.tunnelIp || '<tunnel-ip>'}/32, ${form.lanSubnet || '<lan-sub
                     </div>
                   </div>
                 </div>
+                </>
+                )}
               </section>
             ) : null}
           </div>

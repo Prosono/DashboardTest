@@ -48,6 +48,221 @@ const node = ({
   facts,
 });
 
+const finalizeMap = (architectureType, nodes, edgeDefinitions, options = {}) => {
+  const nodeById = new Map(nodes.map((entry) => [entry.id, entry]));
+  const edges = edgeDefinitions.map(([id, from, to, labelKey]) => ({
+    id,
+    from,
+    to,
+    labelKey,
+    status: connectionStatus(nodeById.get(from)?.status, nodeById.get(to)?.status),
+  }));
+  const ignoredOperationalNodes = new Set(options.ignoredOperationalNodes || ['equipment']);
+  const operationalNodes = nodes.filter((entry) => !ignoredOperationalNodes.has(entry.id));
+  const counts = nodes.reduce((result, entry) => ({
+    ...result,
+    [entry.status]: Number(result[entry.status] || 0) + 1,
+  }), {});
+
+  return {
+    architectureType,
+    nodes,
+    edges,
+    counts,
+    status: selectWorstStatus(operationalNodes.map((entry) => entry.status)),
+  };
+};
+
+const buildLegacyMqttMap = ({
+  site,
+  detail,
+  knxClient,
+}) => {
+  const operations = detail?.operations && typeof detail.operations === 'object'
+    ? detail.operations
+    : {};
+  const remoteHealth = operations.remoteHealth || {};
+  const backup = operations.backup || {};
+  const remoteStatus = String(remoteHealth.status || 'not_monitored');
+  const remoteUp = remoteStatus === 'up';
+  const remoteDown = remoteStatus === 'down';
+  const knxStatus = knxClient?.online
+    ? 'healthy'
+    : (hasValue(site.knxIp) || hasValue(site.knxMac) ? 'configured' : 'unknown');
+  const equipmentStatus = ['healthy', 'configured'].includes(knxStatus) ? 'configured' : 'unknown';
+  const cedaloStatus = hasValue(site.mqttBroker) ? 'configured' : 'unknown';
+  const topicStatus = hasValue(site.mqttTopicPrefix) ? 'configured' : 'unknown';
+  const proxmoxStatus = hasValue(site.proxmoxHost) ? 'configured' : 'unknown';
+  const cloudHaStatus = remoteUp
+    ? 'healthy'
+    : remoteDown
+      ? 'offline'
+      : hasValue(site.cloudHaHost)
+        ? 'configured'
+        : 'unknown';
+  const domainStatus = remoteUp
+    ? 'healthy'
+    : remoteDown
+      ? 'offline'
+      : hasValue(site.domainFqdn)
+        ? 'configured'
+        : 'unknown';
+  const backupStatus = backup.error
+    ? 'degraded'
+    : backup.directoryExists && Number(backup.fileCount || 0) > 0
+      ? 'healthy'
+      : backup.directoryExists
+        ? 'configured'
+        : hasValue(backup.path || site.backupDirectoryPath)
+          ? 'configured'
+          : 'unknown';
+
+  const nodes = [
+    node({
+      id: 'equipment',
+      labelKey: 'superAdminNetwork.systemMap.node.equipment',
+      group: 'field',
+      icon: 'activity',
+      valueKey: 'superAdminNetwork.systemMap.equipmentShort',
+      status: equipmentStatus,
+      evidenceKey: 'superAdminNetwork.systemMap.evidence.gatewayOnly',
+      facts: [
+        { labelKey: 'superAdminNetwork.systemMap.fact.equipment', valueKey: 'superAdminNetwork.systemMap.equipmentList' },
+      ],
+    }),
+    node({
+      id: 'knx',
+      labelKey: 'superAdminNetwork.systemMap.node.knxMqtt',
+      group: 'site',
+      icon: 'zap',
+      value: site.knxIp || '',
+      detail: site.knxMac || knxClient?.name || '',
+      status: knxStatus,
+      evidenceKey: knxClient?.online
+        ? 'superAdminNetwork.systemMap.evidence.clientObserved'
+        : 'superAdminNetwork.systemMap.evidence.savedConfiguration',
+      facts: [
+        { labelKey: 'superAdminNetwork.systemMap.fact.lanIp', value: site.knxIp || knxClient?.ipAddress || '' },
+        { labelKey: 'superAdminNetwork.systemMap.fact.mac', value: site.knxMac || knxClient?.macAddress || '' },
+        { labelKey: 'superAdminNetwork.systemMap.fact.transport', value: 'MQTT' },
+      ],
+    }),
+    node({
+      id: 'cedalo',
+      labelKey: 'superAdminNetwork.systemMap.node.cedalo',
+      group: 'external',
+      icon: 'cloud',
+      value: site.mqttBroker || '',
+      detailKey: 'superAdminNetwork.systemMap.mqttBroker',
+      status: cedaloStatus,
+      evidenceKey: 'superAdminNetwork.systemMap.evidence.mqttConfigurationOnly',
+      facts: [
+        { labelKey: 'superAdminNetwork.systemMap.fact.broker', value: site.mqttBroker || '' },
+        { labelKey: 'superAdminNetwork.systemMap.fact.monitoring', valueKey: 'superAdminNetwork.systemMap.notLiveMonitored' },
+      ],
+    }),
+    node({
+      id: 'mqttTopics',
+      labelKey: 'superAdminNetwork.systemMap.node.mqttTopics',
+      group: 'external',
+      icon: 'radio',
+      value: site.mqttTopicPrefix || '',
+      detailKey: 'superAdminNetwork.systemMap.subscriptionScope',
+      status: topicStatus,
+      evidenceKey: 'superAdminNetwork.systemMap.evidence.topicConfigured',
+      facts: [
+        { labelKey: 'superAdminNetwork.systemMap.fact.topicPrefix', value: site.mqttTopicPrefix || '' },
+        { labelKey: 'superAdminNetwork.systemMap.fact.subscription', valueKey: 'superAdminNetwork.systemMap.subscriptionPerSite' },
+      ],
+    }),
+    node({
+      id: 'proxmox',
+      labelKey: 'superAdminNetwork.systemMap.node.proxmox',
+      group: 'server',
+      icon: 'server',
+      value: site.proxmoxHost || '',
+      detailKey: 'superAdminNetwork.systemMap.virtualizationHost',
+      status: proxmoxStatus,
+      evidenceKey: 'superAdminNetwork.systemMap.evidence.savedConfiguration',
+      facts: [
+        { labelKey: 'superAdminNetwork.systemMap.fact.host', value: site.proxmoxHost || '' },
+      ],
+    }),
+    node({
+      id: 'cloudHa',
+      labelKey: 'superAdminNetwork.systemMap.node.cloudHa',
+      group: 'server',
+      icon: 'cpu',
+      value: site.cloudHaHost || '',
+      detail: remoteHealth.host || '',
+      status: cloudHaStatus,
+      evidenceKey: remoteUp
+        ? 'superAdminNetwork.systemMap.evidence.remoteVerified'
+        : remoteDown
+          ? 'superAdminNetwork.systemMap.evidence.remoteFailed'
+          : 'superAdminNetwork.systemMap.evidence.savedConfiguration',
+      facts: [
+        { labelKey: 'superAdminNetwork.systemMap.fact.host', value: site.cloudHaHost || '' },
+        { labelKey: 'superAdminNetwork.systemMap.fact.checkedUrl', value: remoteHealth.checkedUrl || '' },
+        { labelKey: 'superAdminNetwork.systemMap.fact.lastChecked', value: remoteHealth.lastCheckedAt || '' },
+        { labelKey: 'superAdminNetwork.systemMap.fact.error', value: remoteHealth.error || '' },
+      ],
+    }),
+    node({
+      id: 'domain',
+      labelKey: 'superAdminNetwork.systemMap.node.domain',
+      group: 'external',
+      icon: 'globe',
+      value: site.domainFqdn || '',
+      detail: remoteHealth.host || '',
+      status: domainStatus,
+      evidenceKey: remoteUp
+        ? 'superAdminNetwork.systemMap.evidence.remoteVerified'
+        : remoteDown
+          ? 'superAdminNetwork.systemMap.evidence.remoteFailed'
+          : 'superAdminNetwork.systemMap.evidence.notMonitored',
+      facts: [
+        { labelKey: 'superAdminNetwork.systemMap.fact.checkedUrl', value: remoteHealth.checkedUrl || '' },
+        { labelKey: 'superAdminNetwork.systemMap.fact.lastChecked', value: remoteHealth.lastCheckedAt || '' },
+        { labelKey: 'superAdminNetwork.systemMap.fact.error', value: remoteHealth.error || '' },
+      ],
+    }),
+    node({
+      id: 'backup',
+      labelKey: 'superAdminNetwork.systemMap.node.backup',
+      group: 'server',
+      icon: 'archive',
+      value: Number(backup.fileCount || 0),
+      detailKey: 'superAdminNetwork.systemMap.filesStored',
+      status: backupStatus,
+      evidenceKey: backup.error
+        ? 'superAdminNetwork.systemMap.evidence.backupFailed'
+        : backup.directoryExists
+          ? 'superAdminNetwork.systemMap.evidence.backupObserved'
+          : 'superAdminNetwork.systemMap.evidence.savedConfiguration',
+      facts: [
+        { labelKey: 'superAdminNetwork.systemMap.fact.backupPath', value: backup.path || site.backupDirectoryPath || '' },
+        { labelKey: 'superAdminNetwork.systemMap.fact.backupFiles', value: Number(backup.fileCount || 0) },
+        { labelKey: 'superAdminNetwork.systemMap.fact.latestBackup', value: backup.latestBackupAt || '' },
+        { labelKey: 'superAdminNetwork.systemMap.fact.storage', value: Number(backup.totalBytes || 0), format: 'bytes' },
+        { labelKey: 'superAdminNetwork.systemMap.fact.error', value: backup.error || '' },
+      ],
+    }),
+  ];
+
+  return finalizeMap('legacy_mqtt', nodes, [
+    ['equipment-knx', 'equipment', 'knx', 'superAdminNetwork.systemMap.link.knxBus'],
+    ['knx-cedalo', 'knx', 'cedalo', 'superAdminNetwork.systemMap.link.mqttPublish'],
+    ['cedalo-topics', 'cedalo', 'mqttTopics', 'superAdminNetwork.systemMap.link.topicRoute'],
+    ['topics-cloud-ha', 'mqttTopics', 'cloudHa', 'superAdminNetwork.systemMap.link.mqttSubscribe'],
+    ['proxmox-cloud-ha', 'proxmox', 'cloudHa', 'superAdminNetwork.systemMap.link.virtualMachine'],
+    ['cloud-ha-domain', 'cloudHa', 'domain', 'superAdminNetwork.systemMap.link.https'],
+    ['cloud-ha-backup', 'cloudHa', 'backup', 'superAdminNetwork.systemMap.link.sftp'],
+  ], {
+    ignoredOperationalNodes: ['equipment', 'mqttTopics'],
+  });
+};
+
 export const buildNetworkSystemMap = ({
   site = {},
   overview = {},
@@ -57,6 +272,14 @@ export const buildNetworkSystemMap = ({
   hubClient = null,
   knxClient = null,
 } = {}) => {
+  if (site?.architectureType === 'legacy_mqtt') {
+    return buildLegacyMqttMap({
+      site,
+      detail,
+      knxClient,
+    });
+  }
+
   const runtime = site?.runtime && typeof site.runtime === 'object'
     ? site.runtime
     : detail?.site?.runtime || {};
@@ -311,36 +534,15 @@ export const buildNetworkSystemMap = ({
     }),
   ];
 
-  const nodeById = new Map(nodes.map((entry) => [entry.id, entry]));
-  const edge = (id, from, to, labelKey) => ({
-    id,
-    from,
-    to,
-    labelKey,
-    status: connectionStatus(nodeById.get(from)?.status, nodeById.get(to)?.status),
-  });
-  const edges = [
-    edge('cellular-umr', 'cellular', 'umr', 'superAdminNetwork.systemMap.link.mobile'),
-    edge('umr-hub', 'umr', 'hub', 'superAdminNetwork.systemMap.link.lan'),
-    edge('hub-knx', 'hub', 'knx', 'superAdminNetwork.systemMap.link.knxIp'),
-    edge('knx-equipment', 'knx', 'equipment', 'superAdminNetwork.systemMap.link.knxBus'),
-    edge('umr-wireguard', 'umr', 'wireguard', 'superAdminNetwork.systemMap.link.encrypted'),
-    edge('wireguard-server', 'wireguard', 'server', 'superAdminNetwork.systemMap.link.peer'),
-    edge('server-caddy', 'server', 'caddy', 'superAdminNetwork.systemMap.link.proxy'),
-    edge('caddy-domain', 'caddy', 'domain', 'superAdminNetwork.systemMap.link.https'),
-    edge('server-backup', 'server', 'backup', 'superAdminNetwork.systemMap.link.sftp'),
-  ];
-
-  const operationalNodes = nodes.filter((entry) => !['equipment'].includes(entry.id));
-  const counts = nodes.reduce((result, entry) => ({
-    ...result,
-    [entry.status]: Number(result[entry.status] || 0) + 1,
-  }), {});
-
-  return {
-    nodes,
-    edges,
-    counts,
-    status: selectWorstStatus(operationalNodes.map((entry) => entry.status)),
-  };
+  return finalizeMap('edge_hub', nodes, [
+    ['cellular-umr', 'cellular', 'umr', 'superAdminNetwork.systemMap.link.mobile'],
+    ['umr-hub', 'umr', 'hub', 'superAdminNetwork.systemMap.link.lan'],
+    ['hub-knx', 'hub', 'knx', 'superAdminNetwork.systemMap.link.knxIp'],
+    ['knx-equipment', 'knx', 'equipment', 'superAdminNetwork.systemMap.link.knxBus'],
+    ['umr-wireguard', 'umr', 'wireguard', 'superAdminNetwork.systemMap.link.encrypted'],
+    ['wireguard-server', 'wireguard', 'server', 'superAdminNetwork.systemMap.link.peer'],
+    ['server-caddy', 'server', 'caddy', 'superAdminNetwork.systemMap.link.proxy'],
+    ['caddy-domain', 'caddy', 'domain', 'superAdminNetwork.systemMap.link.https'],
+    ['server-backup', 'server', 'backup', 'superAdminNetwork.systemMap.link.sftp'],
+  ]);
 };

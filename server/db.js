@@ -446,6 +446,7 @@ const ensureNetworkSitesTable = () => {
       client_id TEXT NOT NULL,
       location_id TEXT NOT NULL,
       display_name TEXT NOT NULL DEFAULT '',
+      architecture_type TEXT NOT NULL DEFAULT 'edge_hub',
       backup_location_id TEXT NOT NULL DEFAULT '',
       lan_subnet TEXT NOT NULL DEFAULT '',
       router_ip TEXT NOT NULL DEFAULT '',
@@ -463,6 +464,10 @@ const ensureNetworkSitesTable = () => {
       domain_fqdn TEXT NOT NULL DEFAULT '',
       wireguard_private_key TEXT NOT NULL DEFAULT '',
       wireguard_public_key TEXT NOT NULL DEFAULT '',
+      mqtt_broker TEXT NOT NULL DEFAULT '',
+      mqtt_topic_prefix TEXT NOT NULL DEFAULT '',
+      cloud_ha_host TEXT NOT NULL DEFAULT '',
+      proxmox_host TEXT NOT NULL DEFAULT '',
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL,
       PRIMARY KEY (client_id, location_id),
@@ -473,6 +478,7 @@ const ensureNetworkSitesTable = () => {
 
   const columns = db.prepare('PRAGMA table_info(network_sites)').all().map((column) => column.name);
   const additions = [
+    ['architecture_type', "TEXT NOT NULL DEFAULT 'edge_hub'"],
     ['umr_mac', "TEXT NOT NULL DEFAULT ''"],
     ['mobility_workspace_id', "TEXT NOT NULL DEFAULT ''"],
     ['mobility_device_id', "TEXT NOT NULL DEFAULT ''"],
@@ -481,6 +487,10 @@ const ensureNetworkSitesTable = () => {
     ['ha_mac', "TEXT NOT NULL DEFAULT ''"],
     ['knx_ip', "TEXT NOT NULL DEFAULT ''"],
     ['knx_mac', "TEXT NOT NULL DEFAULT ''"],
+    ['mqtt_broker', "TEXT NOT NULL DEFAULT ''"],
+    ['mqtt_topic_prefix', "TEXT NOT NULL DEFAULT ''"],
+    ['cloud_ha_host', "TEXT NOT NULL DEFAULT ''"],
+    ['proxmox_host', "TEXT NOT NULL DEFAULT ''"],
   ];
   additions.forEach(([name, definition]) => {
     if (!columns.includes(name)) {

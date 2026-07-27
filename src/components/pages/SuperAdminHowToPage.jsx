@@ -373,6 +373,46 @@ export default function SuperAdminHowToPage({ t }) {
               </div>
             </div>
 
+            <div className="mt-3 rounded-2xl border border-amber-400/20 bg-amber-400/[0.05] p-4">
+              <p className="mb-1 text-[10px] font-bold uppercase tracking-[0.18em] text-amber-200">
+                {t('superAdminHowTo.architecture.legacy.label')}
+              </p>
+              <p className="mb-4 max-w-4xl text-xs leading-5 text-[var(--text-secondary)]">
+                {t('superAdminHowTo.architecture.legacy.text')}
+              </p>
+              <div className="flex flex-col items-stretch gap-2 lg:flex-row lg:items-center">
+                <ArchitectureNode
+                  icon={Zap}
+                  eyebrow="KNX"
+                  title={t('superAdminHowTo.architecture.legacy.gateway')}
+                  text={t('superAdminHowTo.architecture.legacy.gatewayText')}
+                />
+                <FlowArrow label="MQTT publish" />
+                <ArchitectureNode
+                  icon={Radio}
+                  eyebrow="Cedalo"
+                  title={t('superAdminHowTo.architecture.legacy.broker')}
+                  text={t('superAdminHowTo.architecture.legacy.brokerText')}
+                  tone="accent"
+                />
+                <FlowArrow label={t('superAdminHowTo.architecture.legacy.topics')} />
+                <ArchitectureNode
+                  icon={Cpu}
+                  eyebrow="Home Assistant"
+                  title={t('superAdminHowTo.architecture.legacy.cloudHa')}
+                  text={t('superAdminHowTo.architecture.legacy.cloudHaText')}
+                  tone="good"
+                />
+                <FlowArrow label={t('superAdminHowTo.architecture.legacy.hostedOn')} />
+                <ArchitectureNode
+                  icon={Server}
+                  eyebrow="Proxmox"
+                  title={t('superAdminHowTo.architecture.legacy.proxmox')}
+                  text={t('superAdminHowTo.architecture.legacy.proxmoxText')}
+                />
+              </div>
+            </div>
+
             <div className="mt-3 flex items-start gap-3 rounded-2xl border border-sky-400/20 bg-sky-400/[0.06] p-4">
               <Radio className="mt-0.5 h-4 w-4 shrink-0 text-sky-200" />
               <p className="text-xs leading-5 text-sky-100">{t('superAdminHowTo.architecture.switchNote')}</p>

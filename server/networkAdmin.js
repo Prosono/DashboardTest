@@ -40,6 +40,11 @@ const normalizeDomainLabel = (value) => String(value ?? '')
   .replace(/^-+|-+$/g, '')
   .slice(0, 63);
 const normalizeDisplayName = (value, fallback = '') => String(value || '').trim() || fallback;
+const normalizeArchitectureType = (value) => (
+  String(value || '').trim().toLowerCase() === 'legacy_mqtt'
+    ? 'legacy_mqtt'
+    : 'edge_hub'
+);
 
 const parseIpv4Octets = (value) => {
   const parts = String(value || '').trim().split('.');
@@ -78,6 +83,9 @@ export const isValidDomainName = (value) => {
 
 export const validateNetworkSite = (site = {}) => {
   const errors = [];
+  if (site.architectureType && !['edge_hub', 'legacy_mqtt'].includes(site.architectureType)) {
+    errors.push('Architecture type must be edge_hub or legacy_mqtt');
+  }
   if (site.routerIp && !isValidIpv4(site.routerIp)) errors.push('Router IP must be a valid IPv4 address');
   if (site.switchIp && !isValidIpv4(site.switchIp)) errors.push('Switch IP must be a valid IPv4 address');
   if (site.haIp && !isValidIpv4(site.haIp)) errors.push('HA IP must be a valid IPv4 address');
@@ -524,6 +532,7 @@ const normalizeSiteRecord = (record = {}) => {
     clientId,
     locationId,
     displayName,
+    architectureType: normalizeArchitectureType(record.architectureType || record.architecture_type),
     backupLocationId: backupLocationId || locationId,
     lanSubnet: normalizeSubnet(record.lanSubnet || record.lan_subnet),
     routerIp: normalizeIpv4(record.routerIp || record.router_ip),
@@ -541,6 +550,10 @@ const normalizeSiteRecord = (record = {}) => {
     domainFqdn,
     wireGuardPrivateKey: String(record.wireGuardPrivateKey || record.wireguard_private_key || '').trim(),
     wireGuardPublicKey: String(record.wireGuardPublicKey || record.wireguard_public_key || '').trim(),
+    mqttBroker: String(record.mqttBroker || record.mqtt_broker || '').trim(),
+    mqttTopicPrefix: String(record.mqttTopicPrefix || record.mqtt_topic_prefix || '').trim(),
+    cloudHaHost: String(record.cloudHaHost || record.cloud_ha_host || '').trim(),
+    proxmoxHost: String(record.proxmoxHost || record.proxmox_host || '').trim(),
     createdAt: String(record.createdAt || record.created_at || '').trim(),
     updatedAt: String(record.updatedAt || record.updated_at || '').trim(),
   };
@@ -562,7 +575,11 @@ export const createNetworkSiteFromInput = (input = {}, fallback = {}) => {
   }
   const validationErrors = validateNetworkSite(normalized);
   if (validationErrors.length) throw new Error(validationErrors.join('. '));
-  if ((!normalized.wireGuardPrivateKey || !normalized.wireGuardPublicKey) && normalized.tunnelIp) {
+  if (
+    normalized.architectureType === 'edge_hub'
+    && (!normalized.wireGuardPrivateKey || !normalized.wireGuardPublicKey)
+    && normalized.tunnelIp
+  ) {
     const keys = createWireGuardKeyPair();
     normalized.wireGuardPrivateKey = keys.privateKey;
     normalized.wireGuardPublicKey = keys.publicKey;
@@ -593,19 +610,24 @@ PersistentKeepalive = 25
 
 export const buildNetworkSiteArtifacts = (site) => {
   const normalizedSite = normalizeSiteRecord(site);
+  const isLegacyMqtt = normalizedSite.architectureType === 'legacy_mqtt';
   let umrConfig = '';
   let umrConfigError = '';
 
-  try {
-    umrConfig = buildUmrConfigText(normalizedSite);
-  } catch (error) {
-    umrConfig = '';
-    umrConfigError = String(error?.message || 'Unable to generate UMR config');
+  if (isLegacyMqtt) {
+    umrConfigError = 'Legacy MQTT locations do not use a UMR WireGuard profile';
+  } else {
+    try {
+      umrConfig = buildUmrConfigText(normalizedSite);
+    } catch (error) {
+      umrConfig = '';
+      umrConfigError = String(error?.message || 'Unable to generate UMR config');
+    }
   }
 
   return {
-    wireGuardPeer: buildWireGuardPeerSnippet(normalizedSite).trim(),
-    caddySite: buildCaddySiteSnippet(normalizedSite).trim(),
+    wireGuardPeer: isLegacyMqtt ? '' : buildWireGuardPeerSnippet(normalizedSite).trim(),
+    caddySite: isLegacyMqtt ? '' : buildCaddySiteSnippet(normalizedSite).trim(),
     umrConfig,
     umrConfigError,
     dnsRecord: {

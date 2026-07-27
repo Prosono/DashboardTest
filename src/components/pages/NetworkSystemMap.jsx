@@ -26,31 +26,44 @@ const ICONS = {
   zap: Zap,
 };
 
-const NODE_POSITIONS = {
-  cellular: { column: 1, row: 1, x: 10, y: 12.5 },
-  umr: { column: 2, row: 1, x: 30, y: 12.5 },
-  wireguard: { column: 3, row: 1, x: 50, y: 12.5 },
-  server: { column: 4, row: 1, x: 70, y: 12.5 },
-  caddy: { column: 5, row: 1, x: 90, y: 12.5 },
-  hub: { column: 2, row: 2, x: 30, y: 37.5 },
-  backup: { column: 4, row: 2, x: 70, y: 37.5 },
-  domain: { column: 5, row: 2, x: 90, y: 37.5 },
-  knx: { column: 2, row: 3, x: 30, y: 62.5 },
-  equipment: { column: 2, row: 4, x: 30, y: 87.5 },
+const TOPOLOGY_LAYOUTS = {
+  edge_hub: {
+    rows: 4,
+    minHeight: 680,
+    positions: {
+      cellular: { column: 1, row: 1, x: 10, y: 12.5 },
+      umr: { column: 2, row: 1, x: 30, y: 12.5 },
+      wireguard: { column: 3, row: 1, x: 50, y: 12.5 },
+      server: { column: 4, row: 1, x: 70, y: 12.5 },
+      caddy: { column: 5, row: 1, x: 90, y: 12.5 },
+      hub: { column: 2, row: 2, x: 30, y: 37.5 },
+      backup: { column: 4, row: 2, x: 70, y: 37.5 },
+      domain: { column: 5, row: 2, x: 90, y: 37.5 },
+      knx: { column: 2, row: 3, x: 30, y: 62.5 },
+      equipment: { column: 2, row: 4, x: 30, y: 87.5 },
+    },
+    mobileOrder: ['cellular', 'umr', 'hub', 'knx', 'equipment', 'wireguard', 'server', 'caddy', 'domain', 'backup'],
+  },
+  legacy_mqtt: {
+    rows: 3,
+    minHeight: 540,
+    positions: {
+      equipment: { column: 1, row: 1, x: 10, y: 16.7 },
+      knx: { column: 2, row: 1, x: 30, y: 16.7 },
+      cedalo: { column: 3, row: 1, x: 50, y: 16.7 },
+      mqttTopics: { column: 4, row: 1, x: 70, y: 16.7 },
+      cloudHa: { column: 5, row: 1, x: 90, y: 16.7 },
+      backup: { column: 4, row: 2, x: 70, y: 50 },
+      proxmox: { column: 5, row: 2, x: 90, y: 50 },
+      domain: { column: 5, row: 3, x: 90, y: 83.3 },
+    },
+    mobileOrder: ['equipment', 'knx', 'cedalo', 'mqttTopics', 'proxmox', 'cloudHa', 'domain', 'backup'],
+  },
 };
 
-const MOBILE_NODE_ORDER = [
-  'cellular',
-  'umr',
-  'hub',
-  'knx',
-  'equipment',
-  'wireguard',
-  'server',
-  'caddy',
-  'domain',
-  'backup',
-];
+const getTopologyLayout = (architectureType) => (
+  TOPOLOGY_LAYOUTS[architectureType] || TOPOLOGY_LAYOUTS.edge_hub
+);
 
 const statusClasses = {
   healthy: 'border-[var(--status-success-border)] bg-[var(--status-success-bg)] text-[var(--status-success-text)]',
@@ -113,7 +126,7 @@ function StatusLabel({ status, t, compact = false }) {
   );
 }
 
-function MapNode({ entry, selected, onSelect, t, compact = false }) {
+function MapNode({ entry, selected, onSelect, t, compact = false, positions = {} }) {
   const Icon = ICONS[entry.icon] || Activity;
   return (
     <button
@@ -128,8 +141,8 @@ function MapNode({ entry, selected, onSelect, t, compact = false }) {
         selected ? 'ring-2 ring-[var(--accent-color)] ring-offset-2 ring-offset-[var(--bg-primary)]' : ''
       }`}
       style={compact ? undefined : {
-        gridColumn: NODE_POSITIONS[entry.id]?.column,
-        gridRow: NODE_POSITIONS[entry.id]?.row,
+        gridColumn: positions[entry.id]?.column,
+        gridRow: positions[entry.id]?.row,
       }}
     >
       <div className="flex items-start justify-between gap-2">
@@ -156,6 +169,8 @@ function MapNode({ entry, selected, onSelect, t, compact = false }) {
 }
 
 function DesktopTopology({ map, selectedNodeId, onSelect, t }) {
+  const layout = getTopologyLayout(map.architectureType);
+  const innerMinHeight = layout.minHeight - 48;
   return (
     <div
       className="network-system-map__desktop overflow-hidden rounded-2xl border border-[var(--glass-border)] bg-[color-mix(in_srgb,var(--bg-primary)_72%,transparent)]"
@@ -164,7 +179,7 @@ function DesktopTopology({ map, selectedNodeId, onSelect, t }) {
         backgroundSize: '28px 28px',
       }}
     >
-      <div className="relative min-h-[680px] p-6">
+      <div className="relative p-6" style={{ minHeight: layout.minHeight }}>
         <svg
           className="pointer-events-none absolute inset-6 h-[calc(100%-3rem)] w-[calc(100%-3rem)]"
           viewBox="0 0 100 100"
@@ -174,8 +189,8 @@ function DesktopTopology({ map, selectedNodeId, onSelect, t }) {
         >
           <title>{t('superAdminNetwork.systemMap.connectionsAria')}</title>
           {map.edges.map((edge) => {
-            const from = NODE_POSITIONS[edge.from];
-            const to = NODE_POSITIONS[edge.to];
+            const from = layout.positions[edge.from];
+            const to = layout.positions[edge.to];
             if (!from || !to) return null;
             return (
               <line
@@ -194,7 +209,13 @@ function DesktopTopology({ map, selectedNodeId, onSelect, t }) {
           })}
         </svg>
 
-        <div className="relative grid min-h-[632px] grid-cols-5 grid-rows-4 gap-x-4 gap-y-6">
+        <div
+          className="relative grid grid-cols-5 gap-x-4 gap-y-6"
+          style={{
+            minHeight: innerMinHeight,
+            gridTemplateRows: `repeat(${layout.rows}, minmax(0, 1fr))`,
+          }}
+        >
           {map.nodes.map((entry) => (
             <MapNode
               key={entry.id}
@@ -202,6 +223,7 @@ function DesktopTopology({ map, selectedNodeId, onSelect, t }) {
               selected={entry.id === selectedNodeId}
               onSelect={onSelect}
               t={t}
+              positions={layout.positions}
             />
           ))}
         </div>
@@ -220,7 +242,8 @@ function DesktopTopology({ map, selectedNodeId, onSelect, t }) {
 }
 
 function MobileTopology({ map, selectedNodeId, onSelect, t }) {
-  const nodes = MOBILE_NODE_ORDER
+  const layout = getTopologyLayout(map.architectureType);
+  const nodes = layout.mobileOrder
     .map((id) => map.nodes.find((entry) => entry.id === id))
     .filter(Boolean);
   return (
@@ -366,11 +389,12 @@ export default function NetworkSystemMap({
     knxClient,
   }), [detail, hubClient, knxClient, mobilitySnapshot, mobilitySummary, overview, site]);
   const siteKey = `${site?.clientId || ''}:${site?.locationId || ''}`;
-  const [selectedNodeId, setSelectedNodeId] = useState('umr');
+  const defaultNodeId = map.architectureType === 'legacy_mqtt' ? 'knx' : 'umr';
+  const [selectedNodeId, setSelectedNodeId] = useState(defaultNodeId);
 
   useEffect(() => {
-    setSelectedNodeId('umr');
-  }, [siteKey]);
+    setSelectedNodeId(defaultNodeId);
+  }, [defaultNodeId, siteKey]);
 
   const selectedNode = map.nodes.find((entry) => entry.id === selectedNodeId) || map.nodes[0];
   const generatedAt = detail?.generatedAt || overview?.generatedAt || '';
@@ -379,14 +403,19 @@ export default function NetworkSystemMap({
     <section className="network-system-map popup-surface rounded-3xl border border-[var(--glass-border)] p-4 md:p-6">
       <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
         <div className="max-w-3xl">
-          <p className="text-[9px] font-bold uppercase tracking-[0.2em] text-[var(--accent-color)]">
-            {t('superAdminNetwork.systemMap.eyebrow')}
-          </p>
+          <div className="flex flex-wrap items-center gap-2">
+            <p className="text-[9px] font-bold uppercase tracking-[0.2em] text-[var(--accent-color)]">
+              {t('superAdminNetwork.systemMap.eyebrow')}
+            </p>
+            <span className="rounded-full border border-[var(--glass-border)] bg-[var(--glass-bg)] px-2.5 py-1 text-[9px] font-bold uppercase tracking-[0.12em] text-[var(--text-secondary)]">
+              {t(`superAdminNetwork.architecture.${map.architectureType}.short`)}
+            </span>
+          </div>
           <h3 className="mt-2 text-lg font-semibold tracking-tight text-[var(--text-primary)]">
             {t('superAdminNetwork.systemMap.title')}
           </h3>
           <p className="mt-2 text-xs leading-5 text-[var(--text-secondary)]">
-            {t('superAdminNetwork.systemMap.subtitle')}
+            {t(`superAdminNetwork.systemMap.subtitle.${map.architectureType}`)}
           </p>
         </div>
         <SystemMapLegend map={map} t={t} />
