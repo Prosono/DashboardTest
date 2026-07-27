@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Archive,
   BookOpen,
@@ -9,20 +9,49 @@ import {
 } from '../../icons';
 import generatorHtml from '../../configGenerator/legacy/index.html?raw';
 import generatorStyles from '../../configGenerator/legacy/styles.css?raw';
+import generatorAppTheme from '../../configGenerator/app-theme.css?raw';
 import generatorTemplates from '../../configGenerator/legacy/templates.generated.js?raw';
 import generatorApp from '../../configGenerator/legacy/app.js?raw';
 
 const FRAME_MESSAGE_TYPE = 'smart-sauna-config-generator:height';
 const DOWNLOAD_MESSAGE_TYPE = 'smart-sauna-config-generator:download';
 const COPY_MESSAGE_TYPE = 'smart-sauna-config-generator:copy';
+const THEME_MESSAGE_TYPE = 'smart-sauna-config-generator:theme';
 const MIN_FRAME_HEIGHT = 1200;
 const MAX_FRAME_HEIGHT = 20000;
 const MAX_DOWNLOAD_SIZE = 2_000_000;
+const THEME_PROPERTIES = [
+  '--bg-primary',
+  '--text-primary',
+  '--text-secondary',
+  '--text-muted',
+  '--card-bg',
+  '--glass-bg',
+  '--glass-bg-hover',
+  '--glass-border',
+  '--modal-surface',
+  '--modal-surface-hover',
+  '--modal-surface-shadow',
+  '--accent-color',
+  '--accent-bg',
+  '--status-success-bg',
+  '--status-success-border',
+  '--status-success-text',
+  '--status-warning-bg',
+  '--status-warning-border',
+  '--status-warning-text',
+  '--status-danger-bg',
+  '--status-danger-border',
+  '--status-danger-text',
+  '--status-neutral-bg',
+  '--status-neutral-border',
+  '--status-neutral-text',
+];
 
 const frameOverrides = `
   html {
     background: transparent;
-    scrollbar-color: color-mix(in srgb, var(--ember) 48%, transparent) transparent;
+    scrollbar-color: color-mix(in srgb, var(--accent-color) 48%, transparent) transparent;
   }
 
   body {
@@ -30,7 +59,7 @@ const frameOverrides = `
   }
 
   .shell {
-    padding-top: 0.75rem;
+    padding-top: 0;
   }
 
   .hero {
@@ -39,7 +68,7 @@ const frameOverrides = `
 
   @media (max-width: 760px) {
     .shell {
-      padding-top: 0.4rem;
+      padding-top: 0;
     }
   }
 `;
@@ -59,6 +88,19 @@ const frameBridge = `
 
     const observer = new ResizeObserver(sendHeight);
     if (document.body) observer.observe(document.body);
+    window.addEventListener("message", (event) => {
+      if (event.data?.type !== "${THEME_MESSAGE_TYPE}") return;
+      const tokens = event.data.tokens;
+      if (!tokens || typeof tokens !== "object") return;
+      Object.entries(tokens).forEach(([property, value]) => {
+        if (!property.startsWith("--") || typeof value !== "string") return;
+        document.documentElement.style.setProperty(property, value);
+      });
+      if (event.data.colorScheme === "light" || event.data.colorScheme === "dark") {
+        document.documentElement.style.colorScheme = event.data.colorScheme;
+      }
+      window.requestAnimationFrame(sendHeight);
+    });
     window.addEventListener("load", sendHeight);
     window.addEventListener("resize", sendHeight);
     document.addEventListener("click", () => window.setTimeout(sendHeight, 0));
@@ -107,7 +149,7 @@ const copyText = (content) => {
 };
 
 const buildGeneratorDocument = () => {
-  const combinedStyles = `${generatorStyles}\n${frameOverrides}`;
+  const combinedStyles = `${generatorStyles}\n${generatorAppTheme}\n${frameOverrides}`;
   const scripts = `
     <script>${escapeInlineScript(generatorTemplates)}</script>
     <script>${escapeInlineScript(generatorApp)}</script>
@@ -138,6 +180,20 @@ export default function SuperAdminConfigGeneratorPage({ t }) {
   const [ready, setReady] = useState(false);
   const [lastDownloadName, setLastDownloadName] = useState('');
   const srcDoc = useMemo(buildGeneratorDocument, []);
+  const syncFrameTheme = useCallback(() => {
+    const frameWindow = iframeRef.current?.contentWindow;
+    if (!frameWindow) return;
+    const rootStyles = globalThis.getComputedStyle(document.documentElement);
+    const tokens = Object.fromEntries(
+      THEME_PROPERTIES.map((property) => [property, rootStyles.getPropertyValue(property).trim()])
+        .filter(([, value]) => Boolean(value)),
+    );
+    frameWindow.postMessage({
+      type: THEME_MESSAGE_TYPE,
+      tokens,
+      colorScheme: rootStyles.colorScheme === 'light' ? 'light' : 'dark',
+    }, '*');
+  }, []);
 
   useEffect(() => {
     const onMessage = (event) => {
@@ -163,10 +219,29 @@ export default function SuperAdminConfigGeneratorPage({ t }) {
     return () => window.removeEventListener('message', onMessage);
   }, []);
 
+  useEffect(() => {
+    const root = document.documentElement;
+    let animationFrame = 0;
+    const scheduleSync = () => {
+      globalThis.cancelAnimationFrame(animationFrame);
+      animationFrame = globalThis.requestAnimationFrame(syncFrameTheme);
+    };
+    const observer = new globalThis.MutationObserver(scheduleSync);
+    observer.observe(root, {
+      attributes: true,
+      attributeFilter: ['class', 'data-theme', 'style'],
+    });
+    scheduleSync();
+    return () => {
+      observer.disconnect();
+      globalThis.cancelAnimationFrame(animationFrame);
+    };
+  }, [syncFrameTheme]);
+
   return (
-    <div className="mx-auto w-full max-w-[1600px] pb-16">
-      <header className="overflow-hidden rounded-[2rem] border border-[var(--glass-border)] bg-[color-mix(in_srgb,var(--card-bg)_84%,transparent)]">
-        <div className="grid gap-6 p-5 sm:p-7 lg:grid-cols-[minmax(0,1fr)_minmax(420px,0.82fr)] lg:p-8">
+    <div className="page-transition mx-auto flex w-full max-w-[1600px] flex-col gap-4 pb-16 md:gap-5">
+      <header className="popup-surface overflow-hidden rounded-3xl border border-[var(--glass-border)]">
+        <div className="grid gap-6 p-4 md:p-6 lg:grid-cols-[minmax(0,1fr)_minmax(420px,0.82fr)]">
           <div className="max-w-3xl">
             <div className="flex items-center gap-2">
               <BookOpen className="h-4 w-4 text-[var(--accent-color)]" />
@@ -174,7 +249,7 @@ export default function SuperAdminConfigGeneratorPage({ t }) {
                 {t('superAdminConfigGenerator.eyebrow')}
               </p>
             </div>
-            <h1 className="mt-4 text-2xl font-semibold tracking-tight text-[var(--text-primary)] sm:text-3xl">
+            <h1 className="mt-3 text-lg font-semibold uppercase tracking-[0.13em] text-[var(--text-primary)] md:text-xl">
               {t('superAdminConfigGenerator.title')}
             </h1>
             <p className="mt-3 max-w-2xl text-sm leading-6 text-[var(--text-secondary)]">
@@ -219,7 +294,7 @@ export default function SuperAdminConfigGeneratorPage({ t }) {
         </div>
       </header>
 
-      <section className="mt-5 overflow-hidden rounded-[2rem] border border-[var(--glass-border)] bg-[color-mix(in_srgb,var(--card-bg)_70%,transparent)]">
+      <section className="popup-surface overflow-hidden rounded-3xl border border-[var(--glass-border)]">
         <div className="flex items-start gap-3 border-b border-[var(--glass-border)] px-5 py-4 sm:px-7">
           <Check className="mt-0.5 h-4 w-4 shrink-0 text-emerald-300" />
           <p className="text-xs leading-5 text-[var(--text-secondary)]">
@@ -231,7 +306,10 @@ export default function SuperAdminConfigGeneratorPage({ t }) {
           title={t('superAdminConfigGenerator.frameTitle')}
           srcDoc={srcDoc}
           sandbox="allow-scripts allow-downloads"
-          onLoad={() => setReady(true)}
+          onLoad={() => {
+            setReady(true);
+            syncFrameTheme();
+          }}
           className="block w-full border-0 bg-transparent transition-opacity duration-300"
           style={{ height: `${frameHeight}px`, opacity: ready ? 1 : 0.35 }}
         />
