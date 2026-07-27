@@ -28,7 +28,9 @@ const node = ({
   group,
   icon,
   value = '',
+  valueKey = '',
   detail = '',
+  detailKey = '',
   status = 'unknown',
   evidenceKey,
   facts = [],
@@ -38,7 +40,9 @@ const node = ({
   group,
   icon,
   value,
+  valueKey,
   detail,
+  detailKey,
   status,
   evidenceKey,
   facts,
@@ -276,7 +280,7 @@ export const buildNetworkSystemMap = ({
       labelKey: 'superAdminNetwork.systemMap.node.equipment',
       group: 'field',
       icon: 'activity',
-      value: '',
+      valueKey: 'superAdminNetwork.systemMap.equipmentShort',
       detail: '',
       status: equipmentStatus,
       evidenceKey: 'superAdminNetwork.systemMap.evidence.gatewayOnly',
@@ -289,8 +293,8 @@ export const buildNetworkSystemMap = ({
       labelKey: 'superAdminNetwork.systemMap.node.backup',
       group: 'server',
       icon: 'archive',
-      value: backup.path || site.backupDirectoryPath || '',
-      detail: backup.latestBackupAt || '',
+      value: Number(backup.fileCount || 0),
+      detailKey: 'superAdminNetwork.systemMap.filesStored',
       status: backupStatus,
       evidenceKey: backup.error
         ? 'superAdminNetwork.systemMap.evidence.backupFailed'
@@ -298,6 +302,7 @@ export const buildNetworkSystemMap = ({
           ? 'superAdminNetwork.systemMap.evidence.backupObserved'
           : 'superAdminNetwork.systemMap.evidence.savedConfiguration',
       facts: [
+        { labelKey: 'superAdminNetwork.systemMap.fact.backupPath', value: backup.path || site.backupDirectoryPath || '' },
         { labelKey: 'superAdminNetwork.systemMap.fact.backupFiles', value: Number(backup.fileCount || 0) },
         { labelKey: 'superAdminNetwork.systemMap.fact.latestBackup', value: backup.latestBackupAt || '' },
         { labelKey: 'superAdminNetwork.systemMap.fact.storage', value: Number(backup.totalBytes || 0), format: 'bytes' },

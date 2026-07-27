@@ -136,6 +136,59 @@
 .popup-surface-divider {
   background: color-mix(in srgb, var(--glass-border) 35%, transparent);
 }
+
+/* Superadmin network map adapts to its actual content column, not the viewport. */
+.network-system-map {
+  container-type: inline-size;
+}
+
+.network-system-map__desktop {
+  display: none;
+}
+
+.network-system-map__compact-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 12px;
+}
+
+.network-system-map__details-grid {
+  display: grid;
+  gap: 24px;
+}
+
+.network-system-map__details-section {
+  border-top: 1px solid var(--glass-border);
+  padding-top: 20px;
+}
+
+@container (min-width: 920px) {
+  .network-system-map__desktop {
+    display: block;
+  }
+
+  .network-system-map__compact-grid {
+    display: none;
+  }
+}
+
+@container (min-width: 880px) {
+  .network-system-map__details-grid {
+    grid-template-columns:
+      minmax(220px, 0.85fr)
+      minmax(280px, 1.2fr)
+      minmax(240px, 0.95fr);
+    gap: 28px;
+  }
+
+  .network-system-map__details-section {
+    border-top: 0;
+    border-left: 1px solid var(--glass-border);
+    padding-top: 0;
+    padding-left: 28px;
+  }
+}
+
 .popup-anim {
   border-color: var(--modal-border, var(--glass-border));
   box-shadow: var(--modal-shadow, 0 20px 40px rgba(0, 0, 0, 0.35));
