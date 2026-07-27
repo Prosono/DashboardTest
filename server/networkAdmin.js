@@ -110,6 +110,14 @@ const CADDY_VALIDATE_COMMAND = String(env.NETWORK_CADDY_VALIDATE_COMMAND || '').
 const CADDY_RELOAD_COMMAND = String(env.NETWORK_CADDY_RELOAD_COMMAND || '').trim();
 const WG_SYNC_STATUS_PATH = String(env.NETWORK_WG_SYNC_STATUS_PATH || '').trim();
 const CADDY_SYNC_STATUS_PATH = String(env.NETWORK_CADDY_SYNC_STATUS_PATH || '').trim();
+const WG_RUNTIME_COMMAND = String(env.NETWORK_WG_RUNTIME_COMMAND || 'wg show all dump').trim();
+const WG_HANDSHAKE_HEALTH_SECONDS = Math.max(
+  30,
+  Math.min(
+    3600,
+    Number.parseInt(String(env.NETWORK_WG_HANDSHAKE_HEALTH_SECONDS || '180'), 10) || 180,
+  ),
+);
 
 const toBase64 = (value) => {
   const normalized = String(value || '').replace(/-/g, '+').replace(/_/g, '/');
@@ -221,6 +229,65 @@ const runShellCommand = (command) => {
       error: String(error?.stderr || error?.message || '').trim(),
     };
   }
+};
+
+export const parseWireGuardRuntimeDump = (
+  rawValue,
+  nowMs = Date.now(),
+  healthyAgeSeconds = WG_HANDSHAKE_HEALTH_SECONDS,
+) => {
+  const safeNowMs = Number.isFinite(Number(nowMs)) ? Number(nowMs) : Date.now();
+  const safeHealthyAgeSeconds = Math.max(1, Number(healthyAgeSeconds) || WG_HANDSHAKE_HEALTH_SECONDS);
+  return String(rawValue || '')
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map((line) => line.split('\t'))
+    .filter((parts) => parts.length === 8 || parts.length >= 9)
+    .map((parts) => {
+      const hasInterfaceName = parts.length >= 9;
+      const offset = hasInterfaceName ? 1 : 0;
+      const latestHandshakeEpoch = Number.parseInt(String(parts[offset + 4] || '0'), 10) || 0;
+      const lastHandshakeAt = latestHandshakeEpoch > 0
+        ? new Date(latestHandshakeEpoch * 1000).toISOString()
+        : null;
+      const handshakeAgeSeconds = latestHandshakeEpoch > 0
+        ? Math.max(0, Math.round((safeNowMs - (latestHandshakeEpoch * 1000)) / 1000))
+        : null;
+      return {
+        interfaceName: hasInterfaceName ? String(parts[0] || '').trim() : '',
+        publicKey: String(parts[offset] || '').trim(),
+        endpoint: String(parts[offset + 2] || '').trim(),
+        allowedIps: String(parts[offset + 3] || '')
+          .split(',')
+          .map((value) => value.trim())
+          .filter(Boolean),
+        lastHandshakeAt,
+        handshakeAgeSeconds,
+        handshakeRecent: handshakeAgeSeconds !== null && handshakeAgeSeconds <= safeHealthyAgeSeconds,
+        transferRxBytes: Math.max(0, Number.parseInt(String(parts[offset + 5] || '0'), 10) || 0),
+        transferTxBytes: Math.max(0, Number.parseInt(String(parts[offset + 6] || '0'), 10) || 0),
+        persistentKeepaliveSeconds: Math.max(0, Number.parseInt(String(parts[offset + 7] || '0'), 10) || 0),
+      };
+    })
+    .filter((peer) => Boolean(peer.publicKey));
+};
+
+const getWireGuardRuntimeStatus = () => {
+  const checkedAt = new Date().toISOString();
+  const commandResult = runShellCommand(WG_RUNTIME_COMMAND);
+  const peers = commandResult.ok
+    ? parseWireGuardRuntimeDump(commandResult.output, Date.now(), WG_HANDSHAKE_HEALTH_SECONDS)
+    : [];
+  return {
+    configured: Boolean(WG_RUNTIME_COMMAND),
+    available: Boolean(commandResult.ok),
+    checkedAt,
+    error: commandResult.ok ? '' : String(commandResult.error || '').slice(0, 400),
+    handshakeHealthySeconds: WG_HANDSHAKE_HEALTH_SECONDS,
+    peerCount: peers.length,
+    peers,
+  };
 };
 
 export const parseWireGuardConfig = (rawValue) => {
@@ -558,6 +625,7 @@ export const getNetworkRuntimeConfig = () => {
   const caddyInfo = fileAccess(DEFAULT_CADDY_CONFIG_PATH);
   const wgRaw = wgInfo.readable ? readOptionalFile(DEFAULT_WG_CONFIG_PATH) : '';
   const caddyRaw = caddyInfo.readable ? readOptionalFile(DEFAULT_CADDY_CONFIG_PATH) : '';
+  const wireGuardRuntime = getWireGuardRuntimeStatus();
   return {
     server: {
       publicHost: DEFAULT_SERVER_PUBLIC_HOST,
@@ -582,9 +650,20 @@ export const getNetworkRuntimeConfig = () => {
     },
     active: {
       wireGuardPeers: parseWireGuardConfig(wgRaw),
+      wireGuardRuntimePeers: wireGuardRuntime.peers,
       caddySites: parseCaddyConfig(caddyRaw),
       wireGuardRaw: wgRaw,
       caddyRaw,
+    },
+    runtime: {
+      wireGuard: {
+        configured: wireGuardRuntime.configured,
+        available: wireGuardRuntime.available,
+        checkedAt: wireGuardRuntime.checkedAt,
+        error: wireGuardRuntime.error,
+        handshakeHealthySeconds: wireGuardRuntime.handshakeHealthySeconds,
+        peerCount: wireGuardRuntime.peerCount,
+      },
     },
     commands: {
       wireGuardValidate: Boolean(WG_VALIDATE_COMMAND),
@@ -601,6 +680,9 @@ export const getNetworkRuntimeConfig = () => {
 
 export const deriveSiteRuntimeState = (site, runtimeConfig) => {
   const peers = Array.isArray(runtimeConfig?.active?.wireGuardPeers) ? runtimeConfig.active.wireGuardPeers : [];
+  const runtimePeers = Array.isArray(runtimeConfig?.active?.wireGuardRuntimePeers)
+    ? runtimeConfig.active.wireGuardRuntimePeers
+    : [];
   const caddySites = Array.isArray(runtimeConfig?.active?.caddySites) ? runtimeConfig.active.caddySites : [];
   const marker = buildSiteMarker(site);
   const matchingPeers = peers.filter((peer) => (
@@ -613,6 +695,9 @@ export const deriveSiteRuntimeState = (site, runtimeConfig) => {
   const matchedPeer = matchingPeers.find((peer) => peer.marker === marker)
     || matchingPeers[0]
     || null;
+  const matchedRuntimePeer = runtimePeers.find((peer) => (
+    site.wireGuardPublicKey && peer.publicKey === site.wireGuardPublicKey
+  )) || null;
   const wireGuardDuplicate = matchingPeers.length > 1;
   const matchedCaddy = caddySites.find((entry) => (
     entry.marker === marker
@@ -643,6 +728,13 @@ export const deriveSiteRuntimeState = (site, runtimeConfig) => {
     caddyDrifted,
     drifted: wireGuardDrifted || caddyDrifted,
     matchedPeer,
+    matchedRuntimePeer,
+    wireGuardRuntimeAvailable: Boolean(runtimeConfig?.runtime?.wireGuard?.available),
+    wireGuardHandshakeAt: matchedRuntimePeer?.lastHandshakeAt || null,
+    wireGuardHandshakeAgeSeconds: matchedRuntimePeer?.handshakeAgeSeconds ?? null,
+    wireGuardHandshakeRecent: Boolean(matchedRuntimePeer?.handshakeRecent),
+    wireGuardTransferRxBytes: Number(matchedRuntimePeer?.transferRxBytes || 0),
+    wireGuardTransferTxBytes: Number(matchedRuntimePeer?.transferTxBytes || 0),
     matchedCaddy,
   };
 };

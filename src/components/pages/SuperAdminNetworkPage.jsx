@@ -4,17 +4,14 @@ import {
   AlertTriangle,
   Check,
   ChevronDown,
-  Cpu,
   Download,
   Globe,
   HardDrive,
   Key,
-  MapPin,
   Monitor,
   Plus,
   Radio,
   RefreshCw,
-  Router,
   Search,
   Server,
   Shield,
@@ -23,6 +20,7 @@ import {
   Wrench,
   Zap,
 } from '../../icons';
+import NetworkSystemMap from './NetworkSystemMap';
 
 const NEW_LOCATION_KEY = '__new__';
 
@@ -132,48 +130,6 @@ function Metric({ icon: Icon, label, value, hint, tone = 'neutral', className = 
         </div>
         <Icon className="mt-0.5 h-4 w-4 shrink-0 text-[var(--text-muted)]" />
       </div>
-    </div>
-  );
-}
-
-function DeviceNode({
-  icon: Icon,
-  label,
-  value,
-  detail,
-  status,
-  ready = false,
-  emphasized = false,
-}) {
-  return (
-    <div className={`min-w-0 rounded-2xl border px-4 py-4 ${
-      emphasized
-        ? 'border-[color-mix(in_srgb,var(--accent-color)_42%,var(--glass-border))] bg-[color-mix(in_srgb,var(--accent-color)_10%,var(--glass-bg))]'
-        : ready
-          ? 'border-emerald-400/25 bg-emerald-400/[0.06]'
-          : 'border-[var(--glass-border)] bg-[var(--glass-bg)]'
-    }`}>
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <p className="text-[9px] font-semibold uppercase tracking-[0.17em] text-[var(--text-muted)]">{label}</p>
-          <p className="mt-2 truncate text-sm font-semibold text-[var(--text-primary)]">{value || '-'}</p>
-          <p className="mt-1 truncate text-[11px] text-[var(--text-secondary)]">{detail || '-'}</p>
-        </div>
-        <Icon className="h-4 w-4 shrink-0 text-[var(--text-secondary)]" />
-      </div>
-      <div className="mt-3">
-        <StatusBadge tone={ready ? 'good' : 'neutral'}>{status}</StatusBadge>
-      </div>
-    </div>
-  );
-}
-
-function Connector({ label, active = false }) {
-  return (
-    <div className="hidden min-w-12 items-center gap-2 xl:flex">
-      <div className={`h-px flex-1 ${active ? 'bg-emerald-400/55' : 'bg-[var(--glass-border)]'}`} />
-      <span className="text-[9px] font-semibold uppercase tracking-[0.12em] text-[var(--text-muted)]">{label}</span>
-      <div className={`h-px flex-1 ${active ? 'bg-emerald-400/55' : 'bg-[var(--glass-border)]'}`} />
     </div>
   );
 }
@@ -977,91 +933,21 @@ AllowedIPs = ${form.tunnelIp || '<tunnel-ip>'}/32, ${form.lanSubnet || '<lan-sub
               </div>
             </section>
 
-            <section className="popup-surface rounded-3xl border border-[var(--glass-border)] p-4 md:p-5">
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <h3 className="text-xs font-bold uppercase tracking-[0.18em] text-[var(--text-secondary)]">
-                    {t('superAdminNetwork.physical.title')}
-                  </h3>
-                  <p className="mt-1 text-xs leading-5 text-[var(--text-muted)]">
-                    {t('superAdminNetwork.physical.subtitle')}
-                  </p>
-                </div>
-                <MapPin className="h-4 w-4 text-[var(--text-muted)]" />
-              </div>
-
-              <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:flex xl:flex-row xl:items-stretch">
-                <DeviceNode
-                  icon={Radio}
-                  label={t('superAdminNetwork.physical.mobile')}
-                  value={mobilitySnapshot?.device?.cellular?.carrier || t('superAdminNetwork.physical.fourG')}
-                  detail={mobilitySnapshot?.device?.cellular?.technology || mobilitySnapshot?.device?.wan?.ipAddress}
-                  status={umrOnline ? t('superAdminNetwork.map.live') : t('superAdminNetwork.map.missing')}
-                  ready={umrOnline}
-                />
-                <Connector label="4G" active={umrOnline} />
-                <DeviceNode
-                  icon={Router}
-                  label="UMR"
-                  value={selectedMobilitySummary?.name || form.routerIp}
-                  detail={form.umrMac || form.lanSubnet}
-                  status={umrOnline
-                    ? t('superAdminNetwork.mobility.umrOnline')
-                    : (form.routerIp || form.umrMac
-                      ? t('superAdminNetwork.map.configured')
-                      : t('superAdminNetwork.map.missing'))}
-                  ready={Boolean(form.routerIp)}
-                  emphasized
-                />
-                <Connector label="LAN" active={Boolean(form.routerIp && form.lanSubnet)} />
-                <div className="grid min-w-0 flex-[1.4] grid-cols-1 gap-3 sm:col-span-2 sm:grid-cols-2 xl:col-span-1">
-                  <DeviceNode
-                    icon={Cpu}
-                    label="SMARTi Hub / HA"
-                    value={form.haIp}
-                    detail={form.haMac}
-                    status={hubClient?.online
-                      ? t('superAdminNetwork.map.live')
-                      : (form.haIp || form.haMac
-                        ? t('superAdminNetwork.map.configured')
-                        : t('superAdminNetwork.map.missing'))}
-                    ready={Boolean(hubClient?.online || form.haIp)}
-                  />
-                  <DeviceNode
-                    icon={Zap}
-                    label={t('superAdminNetwork.physical.knx')}
-                    value={form.knxIp}
-                    detail={form.knxMac}
-                    status={knxClient?.online
-                      ? t('superAdminNetwork.map.live')
-                      : (form.knxIp || form.knxMac
-                        ? t('superAdminNetwork.map.configured')
-                        : t('superAdminNetwork.map.missing'))}
-                    ready={Boolean(knxClient?.online || form.knxIp)}
-                  />
-                </div>
-              </div>
-
-              <div className="mt-4 grid grid-cols-1 gap-3 rounded-2xl border border-[var(--glass-border)] bg-[color-mix(in_srgb,var(--bg-primary)_72%,transparent)] p-4 md:grid-cols-[1fr_auto_1fr_auto_1fr] md:items-center">
-                <div>
-                  <p className={labelClass}>{t('superAdminNetwork.logical.tunnel')}</p>
-                  <p className="mt-1.5 text-sm text-[var(--text-primary)]">{form.tunnelIp || '-'} → {overview?.server?.publicHost || '-'}</p>
-                </div>
-                <span className="hidden text-[var(--text-muted)] md:block">→</span>
-                <div>
-                  <p className={labelClass}>{t('superAdminNetwork.logical.server')}</p>
-                  <div className="mt-1.5 flex gap-2">
-                    <StatusBadge tone={wireGuardApplied ? 'good' : 'neutral'}>WireGuard</StatusBadge>
-                    <StatusBadge tone={caddyApplied ? 'good' : 'neutral'}>Caddy</StatusBadge>
-                  </div>
-                </div>
-                <span className="hidden text-[var(--text-muted)] md:block">→</span>
-                <div>
-                  <p className={labelClass}>{t('superAdminNetwork.logical.access')}</p>
-                  <p className="mt-1.5 truncate text-sm text-[var(--text-primary)]">{domainFqdn || '-'} → {form.haIp || '-'}:8123</p>
-                </div>
-              </div>
-            </section>
+            <NetworkSystemMap
+              t={t}
+              site={{
+                ...form,
+                hasWireGuardKeys: Boolean(detail?.site?.hasWireGuardKeys),
+                runtime: detail?.site?.runtime || {},
+                backupDirectoryPath: detail?.site?.backupDirectoryPath || '',
+              }}
+              overview={overview}
+              detail={detail}
+              mobilitySummary={selectedMobilitySummary}
+              mobilitySnapshot={mobilitySnapshot}
+              hubClient={hubClient}
+              knxClient={knxClient}
+            />
 
             <section className="popup-surface rounded-3xl border border-[var(--glass-border)] p-3 md:p-4">
               <div className="flex snap-x snap-mandatory gap-2 overflow-x-auto pb-1">

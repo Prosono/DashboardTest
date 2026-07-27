@@ -318,6 +318,12 @@ const toPublicNetworkSite = (site, runtimeConfig = null) => {
       caddyDrifted: Boolean(runtimeState.caddyDrifted),
       drifted,
       matchedPeer: runtimeState.matchedPeer || null,
+      wireGuardRuntimeAvailable: Boolean(runtimeState.wireGuardRuntimeAvailable),
+      wireGuardHandshakeAt: runtimeState.wireGuardHandshakeAt || null,
+      wireGuardHandshakeAgeSeconds: runtimeState.wireGuardHandshakeAgeSeconds ?? null,
+      wireGuardHandshakeRecent: Boolean(runtimeState.wireGuardHandshakeRecent),
+      wireGuardTransferRxBytes: Number(runtimeState.wireGuardTransferRxBytes || 0),
+      wireGuardTransferTxBytes: Number(runtimeState.wireGuardTransferTxBytes || 0),
       matchedCaddy: runtimeState.matchedCaddy || null,
     },
   };
@@ -326,9 +332,13 @@ const sanitizeRuntimeConfigForResponse = (runtimeConfig = {}) => ({
   server: runtimeConfig?.server || {},
   files: runtimeConfig?.files || {},
   commands: runtimeConfig?.commands || {},
+  runtime: runtimeConfig?.runtime || {},
   syncStatus: runtimeConfig?.syncStatus || {},
   active: {
     wireGuardPeers: Array.isArray(runtimeConfig?.active?.wireGuardPeers) ? runtimeConfig.active.wireGuardPeers : [],
+    wireGuardRuntimePeers: Array.isArray(runtimeConfig?.active?.wireGuardRuntimePeers)
+      ? runtimeConfig.active.wireGuardRuntimePeers
+      : [],
     caddySites: Array.isArray(runtimeConfig?.active?.caddySites) ? runtimeConfig.active.caddySites : [],
   },
 });
@@ -1080,7 +1090,7 @@ router.get('/network/mobility/devices/:workspaceId/:deviceId', async (req, res) 
   }
 });
 
-router.get('/network/sites/:clientId/:locationId', (req, res) => {
+router.get('/network/sites/:clientId/:locationId', async (req, res) => {
   const clientId = normalizeClientId(req.params.clientId);
   const locationId = normalizeLocationId(req.params.locationId);
   if (!clientId || !locationId) return res.status(400).json({ error: 'Valid clientId and locationId are required' });
@@ -1119,7 +1129,46 @@ router.get('/network/sites/:clientId/:locationId', (req, res) => {
     `).get(clientId, locationId);
     const mergedSite = mergeNetworkSiteRecord(resolved.site, savedRow ? mapNetworkSiteRow(savedRow) : {});
     const artifacts = buildNetworkSiteArtifacts(mergedSite);
+    const remoteHealthOverview = getRemoteInstanceHealthOverview();
+    const remoteHealth = (Array.isArray(remoteHealthOverview?.instances) ? remoteHealthOverview.instances : [])
+      .find((instance) => (
+        getRemoteInstanceKey(instance.clientId, instance.connectionId)
+        === getRemoteInstanceKey(clientId, locationId)
+      )) || {
+      clientId,
+      connectionId: locationId,
+      host: mergedSite.domainFqdn || '',
+      checkedUrl: '',
+      lastCheckedAt: null,
+      monitored: false,
+      status: 'not_monitored',
+      error: '',
+    };
+    let backup = {
+      available: false,
+      directoryExists: false,
+      fileCount: 0,
+      totalBytes: 0,
+      latestBackupAt: null,
+      path: artifacts.backupPath || '',
+      error: '',
+    };
+    try {
+      const backupInfo = await listClientBackupFiles(clientId, mergedSite.backupLocationId || locationId);
+      backup = {
+        available: true,
+        directoryExists: Boolean(backupInfo.exists),
+        fileCount: Number(backupInfo.fileCount || 0),
+        totalBytes: Number(backupInfo.totalBytes || 0),
+        latestBackupAt: backupInfo.latestBackupAt || null,
+        path: backupInfo.displayDirectoryPath || artifacts.backupPath || '',
+        error: '',
+      };
+    } catch (backupError) {
+      backup.error = String(backupError?.message || 'Backup status unavailable').slice(0, 300);
+    }
     return res.json({
+      generatedAt: new Date().toISOString(),
       client: {
         id: resolved.client.id,
         name: resolved.client.name,
@@ -1129,6 +1178,10 @@ router.get('/network/sites/:clientId/:locationId', (req, res) => {
       artifacts,
       runtime: sanitizeRuntimeConfigForResponse(overview.runtimeConfig),
       mobility: getUnifiMobilityStatus(),
+      operations: {
+        remoteHealth,
+        backup,
+      },
     });
   } catch (error) {
     return res.status(500).json({ error: error?.message || 'Failed to load network location' });

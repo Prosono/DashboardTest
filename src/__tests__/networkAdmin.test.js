@@ -10,6 +10,7 @@ import {
   isValidMacAddress,
   parseCaddyConfig,
   parseWireGuardConfig,
+  parseWireGuardRuntimeDump,
   reconcileWireGuardSiteConfig,
   validateNetworkSite,
 } from '../../server/networkAdmin.js';
@@ -200,6 +201,72 @@ AllowedIPs = 10.88.0.5/32, 192.168.107.0/24
       wireGuardDuplicate: true,
       wireGuardDrifted: true,
       drifted: true,
+    });
+  });
+
+  it('maps WireGuard dump handshakes without exposing private runtime fields', () => {
+    const nowMs = Date.parse('2026-07-27T10:00:00.000Z');
+    const latestHandshakeEpoch = Math.floor((nowMs - 45_000) / 1000);
+    const peers = parseWireGuardRuntimeDump(
+      `wg0\tpeer-public-key\t(hidden)\t100.69.1.2:51820\t10.88.0.5/32,192.168.107.0/24\t${latestHandshakeEpoch}\t2048\t4096\t25`,
+      nowMs,
+      180,
+    );
+
+    expect(peers).toEqual([expect.objectContaining({
+      interfaceName: 'wg0',
+      publicKey: 'peer-public-key',
+      endpoint: '100.69.1.2:51820',
+      allowedIps: ['10.88.0.5/32', '192.168.107.0/24'],
+      handshakeAgeSeconds: 45,
+      handshakeRecent: true,
+      transferRxBytes: 2048,
+      transferTxBytes: 4096,
+      persistentKeepaliveSeconds: 25,
+    })]);
+    expect(peers[0]).not.toHaveProperty('privateKey');
+    expect(peers[0]).not.toHaveProperty('presharedKey');
+  });
+
+  it('adds verified handshake state to a configured network site', () => {
+    const site = {
+      clientId: 'obf',
+      locationId: 'sofienborg',
+      wireGuardPublicKey: 'obf-public-key',
+      tunnelIp: '10.88.0.5',
+      lanSubnet: '192.168.107.0/24',
+    };
+    const runtimeConfig = {
+      active: {
+        wireGuardPeers: [{
+          marker: 'obf/sofienborg',
+          publicKey: 'obf-public-key',
+          allowedIps: ['10.88.0.5/32', '192.168.107.0/24'],
+        }],
+        wireGuardRuntimePeers: [{
+          publicKey: 'obf-public-key',
+          lastHandshakeAt: '2026-07-27T09:59:15.000Z',
+          handshakeAgeSeconds: 45,
+          handshakeRecent: true,
+          transferRxBytes: 2048,
+          transferTxBytes: 4096,
+        }],
+        caddySites: [],
+      },
+      runtime: {
+        wireGuard: {
+          available: true,
+        },
+      },
+    };
+
+    expect(deriveSiteRuntimeState(site, runtimeConfig)).toMatchObject({
+      wireGuardApplied: true,
+      wireGuardRuntimeAvailable: true,
+      wireGuardHandshakeRecent: true,
+      wireGuardHandshakeAgeSeconds: 45,
+      wireGuardTransferRxBytes: 2048,
+      wireGuardTransferTxBytes: 4096,
     });
   });
 
