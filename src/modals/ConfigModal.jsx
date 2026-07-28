@@ -40,6 +40,8 @@ import {
   LogOut,
   Key,
   Search,
+  Clock,
+  UserCheck,
   Type,
   AlignLeft,
 } from '../icons';
@@ -52,6 +54,12 @@ import {
 } from '../utils/haConnections';
 import { DEFAULT_NOTIFICATION_CONFIG, normalizeNotificationConfig } from '../utils/notificationConfig';
 import { getPhoneCountryCodeOptions, normalizePhoneCountryCode } from '../constants/phoneCountryCodes';
+import {
+  formatInvitationDateTime,
+  getPendingInvitationStatus,
+  getPendingInvitationUsers,
+  summarizePendingInvitations,
+} from '../utils/userInvitationOverview';
 
 const stripRichTextToPlain = (input) => String(input || '')
   .replace(/<br\s*\/?>/gi, '\n')
@@ -1212,6 +1220,48 @@ export default function ConfigModal({
       return value === key ? fallback : value;
     };
     const canImportExportDashboards = canManageAdministration;
+    const invitationOverviewNow = Date.now();
+    const pendingInvitationUsers = getPendingInvitationUsers(users, invitationOverviewNow);
+    const pendingInvitationSummary = summarizePendingInvitations(users, invitationOverviewNow);
+    const listedUsers = isPlatformAdmin
+      ? users.filter((user) => user?.accountStatus !== 'invited')
+      : users;
+    const getClientLabel = (clientId) => {
+      const normalizedClientId = String(clientId || '').trim();
+      const client = clients.find((entry) => String(entry?.id || '').trim() === normalizedClientId);
+      return client?.name
+        ? `${client.name} · ${normalizedClientId}`
+        : (normalizedClientId || '—');
+    };
+    const getInvitationStatusMeta = (user) => {
+      const status = getPendingInvitationStatus(user, invitationOverviewNow);
+      if (status === 'expired') {
+        return {
+          label: t('userMgmt.invitationStatusExpired'),
+          className: 'border-red-500/30 bg-red-500/10 text-red-300',
+          dotClassName: 'bg-red-400',
+        };
+      }
+      if (status === 'expiringSoon') {
+        return {
+          label: t('userMgmt.invitationStatusExpiringSoon'),
+          className: 'border-amber-400/30 bg-amber-400/10 text-amber-200',
+          dotClassName: 'bg-amber-300',
+        };
+      }
+      if (status === 'notSent') {
+        return {
+          label: t('userMgmt.invitationStatusNotSent'),
+          className: 'border-red-500/30 bg-red-500/10 text-red-300',
+          dotClassName: 'bg-red-400',
+        };
+      }
+      return {
+        label: t('userMgmt.invitationStatusWaiting'),
+        className: 'border-sky-400/30 bg-sky-400/10 text-sky-200',
+        dotClassName: 'bg-sky-300',
+      };
+    };
 
     const syncUsers = (nextUsers) => {
       const normalized = Array.isArray(nextUsers) ? nextUsers : [];
@@ -2000,25 +2050,148 @@ export default function ConfigModal({
 
         {storageSection === 'users' && canManageAdministration && (
           <div className={isEmbeddedPage
-            ? `${embeddedPageSurfaceClass} p-4 md:p-5 space-y-3`
+            ? `${embeddedPageSurfaceClass} p-4 md:p-6 space-y-5`
             : 'space-y-3 pt-2 border-t border-[var(--glass-border)]'
           }>
-              <h4 className="text-xs uppercase font-bold tracking-wider text-[var(--text-secondary)]">{t('userMgmt.userAccounts')}</h4>
+              <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+                <div className="max-w-2xl">
+                  <h4 className="text-xs uppercase font-bold tracking-[0.16em] text-[var(--text-secondary)]">{t('userMgmt.userAccounts')}</h4>
+                  <p className="mt-2 text-sm leading-6 text-[var(--text-secondary)]">{t('userMgmt.userAccountsDescription')}</p>
+                </div>
+                <button
+                  onClick={() => setShowCreateUserModal(true)}
+                  className="shrink-0 px-5 py-3 rounded-xl bg-blue-500 hover:bg-blue-600 text-white text-xs font-bold uppercase tracking-[0.12em] shadow-lg shadow-blue-500/20 transition-colors"
+                >
+                  {t('userMgmt.createNewUser')}
+                </button>
+              </div>
 
-              <button
-                onClick={() => setShowCreateUserModal(true)}
-                className="w-full py-4 rounded-xl bg-indigo-500 hover:bg-indigo-600 text-white text-sm font-bold uppercase tracking-wider shadow-lg shadow-indigo-500/20"
-              >
-                {t('userMgmt.createNewUser')}
-              </button>
+              {isPlatformAdmin && (
+                <section className="overflow-hidden rounded-2xl border border-[var(--glass-border)] bg-[color-mix(in_srgb,var(--glass-bg)_86%,transparent)]">
+                  <div className="flex flex-col gap-4 border-b border-[var(--glass-border)] px-4 py-4 md:flex-row md:items-center md:justify-between md:px-5">
+                    <div className="flex items-start gap-3">
+                      <div className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-amber-400/25 bg-amber-400/10 text-amber-200">
+                        <Clock className="h-4 w-4" />
+                      </div>
+                      <div>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <h5 className="text-sm font-semibold text-[var(--text-primary)]">{t('userMgmt.pendingInvitationsTitle')}</h5>
+                          <span className="rounded-full border border-amber-400/25 bg-amber-400/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.12em] text-amber-200">
+                            {pendingInvitationSummary.total}
+                          </span>
+                        </div>
+                        <p className="mt-1 text-xs leading-5 text-[var(--text-secondary)]">{t('userMgmt.pendingInvitationsDescription')}</p>
+                      </div>
+                    </div>
+                    {pendingInvitationSummary.total > 0 && (
+                      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-[var(--text-secondary)]">
+                        <span><strong className="font-semibold text-[var(--text-primary)]">{pendingInvitationSummary.pending}</strong> {t('userMgmt.invitationValid')}</span>
+                        <span aria-hidden="true" className="text-[var(--glass-border)]">•</span>
+                        <span><strong className="font-semibold text-amber-300">{pendingInvitationSummary.expiringSoon}</strong> {t('userMgmt.invitationExpiring')}</span>
+                        <span aria-hidden="true" className="text-[var(--glass-border)]">•</span>
+                        <span><strong className="font-semibold text-red-300">{pendingInvitationSummary.expired + pendingInvitationSummary.notSent}</strong> {t('userMgmt.invitationNeedsAttention')}</span>
+                      </div>
+                    )}
+                  </div>
+
+                  {pendingInvitationUsers.length === 0 ? (
+                    <div className="flex items-center gap-3 px-4 py-7 md:px-5">
+                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-emerald-400/10 text-emerald-300">
+                        <UserCheck className="h-4.5 w-4.5" />
+                      </div>
+                      <div>
+                        <p className="text-sm font-semibold text-[var(--text-primary)]">{t('userMgmt.noPendingInvitations')}</p>
+                        <p className="mt-1 text-xs text-[var(--text-secondary)]">{t('userMgmt.noPendingInvitationsDescription')}</p>
+                      </div>
+                    </div>
+                  ) : (
+                    <div>
+                      <div className="hidden grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)_minmax(10rem,.9fr)_minmax(10rem,1fr)_auto] gap-4 border-b border-[var(--glass-border)] px-5 py-2.5 text-[9px] font-bold uppercase tracking-[0.15em] text-[var(--text-muted)] md:grid">
+                        <span>{t('userMgmt.invitationRecipient')}</span>
+                        <span>{t('userMgmt.client')}</span>
+                        <span>{t('userMgmt.invitationSentAt')}</span>
+                        <span>{t('userMgmt.invitationStatus')}</span>
+                        <span className="text-right">{t('userMgmt.invitationActions')}</span>
+                      </div>
+
+                      {pendingInvitationUsers.map((u) => {
+                        const statusMeta = getInvitationStatusMeta(u);
+                        const sendCount = Math.max(1, Number(u.invitationSendCount || 0));
+                        return (
+                          <div
+                            key={`pending-${u.id}`}
+                            className="grid gap-4 border-b border-[var(--glass-border)] px-4 py-4 last:border-b-0 md:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)_minmax(10rem,.9fr)_minmax(10rem,1fr)_auto] md:items-center md:px-5"
+                          >
+                            <div className="min-w-0">
+                              <p className="truncate text-sm font-semibold text-[var(--text-primary)]">{u.fullName || u.email}</p>
+                              <p className="mt-1 truncate text-xs text-[var(--text-secondary)]">{u.email || '—'}</p>
+                            </div>
+                            <div className="min-w-0">
+                              <p className="mb-1 text-[9px] font-bold uppercase tracking-[0.14em] text-[var(--text-muted)] md:hidden">{t('userMgmt.client')}</p>
+                              <p className="truncate text-xs font-medium text-[var(--text-secondary)]">{getClientLabel(u.clientId)}</p>
+                              <p className="mt-1 text-[10px] text-[var(--text-muted)]">{roleLabel(u.role)} · {u.assignedDashboardId || 'default'}</p>
+                            </div>
+                            <div>
+                              <p className="mb-1 text-[9px] font-bold uppercase tracking-[0.14em] text-[var(--text-muted)] md:hidden">{t('userMgmt.invitationSentAt')}</p>
+                              <p className="text-xs font-medium text-[var(--text-primary)]">{formatInvitationDateTime(u.invitationSentAt)}</p>
+                              <p className="mt-1 text-[10px] text-[var(--text-muted)]">
+                                {sendCount > 1
+                                  ? t('userMgmt.invitationSentCount').replace('{count}', String(sendCount))
+                                  : t('userMgmt.invitationSentOnce')}
+                              </p>
+                            </div>
+                            <div>
+                              <p className="mb-1 text-[9px] font-bold uppercase tracking-[0.14em] text-[var(--text-muted)] md:hidden">{t('userMgmt.invitationStatus')}</p>
+                              <span className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[9px] font-bold uppercase tracking-[0.12em] ${statusMeta.className}`}>
+                                <span className={`h-1.5 w-1.5 rounded-full ${statusMeta.dotClassName}`} />
+                                {statusMeta.label}
+                              </span>
+                              <p className="mt-1.5 text-[10px] text-[var(--text-muted)]">
+                                {t('userMgmt.expires')}: {formatInvitationDateTime(u.invitationExpiresAt)}
+                              </p>
+                            </div>
+                            <div className="flex flex-wrap items-center gap-2 md:justify-end">
+                              <button
+                                onClick={() => handleResendInvitation(u.id)}
+                                disabled={!!resendingUserIds[u.id]}
+                                className="px-3 py-2 rounded-lg border border-amber-400/30 bg-amber-400/10 text-amber-100 text-[10px] font-bold uppercase tracking-[0.1em] hover:bg-amber-400/15 disabled:opacity-50"
+                              >
+                                {resendingUserIds[u.id] ? t('userMgmt.sending') : t('userMgmt.resendInvitation')}
+                              </button>
+                              <button
+                                onClick={() => openEditUser(u)}
+                                className="px-3 py-2 rounded-lg border border-[var(--glass-border)] text-[10px] font-bold uppercase tracking-[0.1em] text-[var(--text-secondary)] hover:bg-[var(--glass-bg-hover)] hover:text-[var(--text-primary)]"
+                              >
+                                {t('menu.edit')}
+                              </button>
+                              <button
+                                onClick={() => handleDeleteUser(u.id)}
+                                disabled={!!deletingUserIds[u.id]}
+                                className="px-3 py-2 rounded-lg text-[10px] font-bold uppercase tracking-[0.1em] text-red-300 hover:bg-red-500/10 disabled:opacity-40"
+                              >
+                                {deletingUserIds[u.id] ? t('common.deleting') : t('common.delete')}
+                              </button>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </section>
+              )}
 
               <div className="rounded-xl border border-[var(--glass-border)] bg-[var(--glass-bg)] p-3 space-y-2">
                 <div className="flex items-center justify-between">
-                  <p className="text-[11px] uppercase tracking-wider text-[var(--text-secondary)] font-bold">{t('userMgmt.existingUsers')}</p>
-                  <span className="text-[10px] text-[var(--text-secondary)]">{users.length} {t('userMgmt.total')}</span>
+                  <p className="text-[11px] uppercase tracking-wider text-[var(--text-secondary)] font-bold">
+                    {isPlatformAdmin ? t('userMgmt.activeUsers') : t('userMgmt.existingUsers')}
+                  </p>
+                  <span className="text-[10px] text-[var(--text-secondary)]">{listedUsers.length} {t('userMgmt.total')}</span>
                 </div>
                 <div className="space-y-2 max-h-[26rem] overflow-auto pr-1">
-                  {users.map((u) => {
+                  {listedUsers.length === 0 && (
+                    <p className="px-2 py-6 text-center text-xs text-[var(--text-secondary)]">{t('userMgmt.noActiveUsers')}</p>
+                  )}
+                  {listedUsers.map((u) => {
                     const isInvited = u.accountStatus === 'invited';
                     return (
                       <div key={u.id} className="rounded-lg border border-[var(--glass-border)] bg-[var(--glass-bg-hover)] px-3 py-2 space-y-2">

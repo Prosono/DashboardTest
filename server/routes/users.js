@@ -51,7 +51,12 @@ const invitationFieldsSql = `
     WHERE i.user_id = users.id AND i.used_at IS NULL AND i.revoked_at IS NULL
     ORDER BY i.created_at DESC
     LIMIT 1
-  ) AS invitation_sent_at
+  ) AS invitation_sent_at,
+  (
+    SELECT COUNT(*)
+    FROM user_invitations i
+    WHERE i.user_id = users.id AND i.sent_at IS NOT NULL
+  ) AS invitation_send_count
 `;
 
 const loadUserWithInvitation = (id, clientId = '') => (
@@ -301,7 +306,7 @@ router.put('/:id', (req, res) => {
     db.prepare('DELETE FROM sessions WHERE user_id = ?').run(id);
   }
 
-  const user = db.prepare('SELECT * FROM users WHERE id = ? AND client_id = ?').get(id, clientId);
+  const user = loadUserWithInvitation(id, clientId);
   res.json({ user: safeUser(user) });
 });
 

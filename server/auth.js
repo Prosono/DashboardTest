@@ -268,6 +268,7 @@ export const safeUser = (userRow) => ({
   activatedAt: userRow.activated_at || null,
   invitationExpiresAt: userRow.invitation_expires_at || null,
   invitationSentAt: userRow.invitation_sent_at || null,
+  invitationSendCount: Math.max(0, Number(userRow.invitation_send_count || 0)),
   phoneCountryCode: userRow.phone_country_code || '+47',
   phone: userRow.phone || '',
   avatarUrl: userRow.avatar_url || '',
