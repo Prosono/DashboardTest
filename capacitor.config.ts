@@ -17,6 +17,7 @@ const config: CapacitorConfig = {
     scrollEnabled: true,
   },
   plugins: {
+    PushNotifications: { presentationOptions: ['sound', 'alert'] },
     StatusBar: {
       overlaysWebView: true,
       backgroundColor: '#00000000',
